@@ -1,16 +1,13 @@
 # Writing specs
 
-For the location of a spec and its two files, read `spec/00_structure.md`.
+This repository is the framework.
+A document in this repository describes the framework.
+Do not write business logic in this repository.
 
-## Add a spec
+For the structure of this repository, read `spec/00_structure.md`.
+To add a feature spec in a project, read `template/spec/writing-specs.md`.
 
-- Make a folder with the name `NN_kebab-name/`. `NN` is the next number in the sequence of that package folder.
-- Write `business-logic.md` first.
-- If a fact can change when the code is refactored, put that fact in `code-impl.md`.
-- Add a row to the `## Specs` section of `spec/<package>/00_context.md` of that package.
-- If the package has no specs, make the `## Specs` section when you add the first spec.
-
-## Write a spec
+## Write a framework document
 
 Write all spec text in ASD-STE100 (Simplified Technical English).
 
@@ -19,12 +16,10 @@ Write all spec text in ASD-STE100 (Simplified Technical English).
 - If all items have the same small set of fields, use a table.
 - Write in English. Use Traditional Chinese only when you quote a user-facing string exactly.
 
-## Refer to spec/shared/
+Do not add a feature spec, `business-logic.md`, or `code-impl.md` in this repository.
 
-A rule in `spec/shared/` applies to all apps.
+## Refer to a file
 
-- Before you write a rule, make sure that `spec/shared/` does not already contain it.
-- If `spec/shared/` contains the rule, write the path to that rule. Do not write the rule again.
-- When a spec refers to a different markdown file, write the full path from the repo root. For example: `spec/shared/00_context.md`.
+- When a document refers to a different markdown file, write the full path from the repo root. For example: `spec/rules/coding-style.md`.
 - Do not write only the filename.
 - Do not add a `[label](path)` link.

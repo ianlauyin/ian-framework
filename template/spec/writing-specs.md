@@ -1,5 +1,11 @@
 # Writing specs
 
+This file is for a project. A project contains the business logic.
+Each feature spec has `business-logic.md` and `code-impl.md`.
+
+The framework repository contains the shared rules.
+Do not put business logic in the framework repository.
+
 For the location of a spec and its two files, read `spec/00_structure.md`.
 
 ## Add a spec

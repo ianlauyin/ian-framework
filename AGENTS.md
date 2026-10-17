@@ -1,6 +1,11 @@
-# {project name}
+# Framework
 
-project structure: `spec/00_structure.md`
+This repository is the framework. A project contains the business logic.
+Do not put business logic in this repository.
+
+A project copies the files in `template/`.
+
+framework structure: `spec/00_structure.md`
 
 ## Things to do
 

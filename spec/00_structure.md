@@ -1,35 +1,37 @@
-# Spec
+# Framework
 
-A spec records the key design decisions, the behaviour, and the requirements. Implementation details stay in the code. A spec refers to the source code. It does not repeat the source code.
+This repository is the framework.
+A project contains the business logic.
+Do not put business logic in this repository.
 
-Each spec has one folder. The spec tree has the same structure as the package paths.
+## Contents
 
-- Put a spec where the user sees the behaviour. Do not put it where the code is.
-- If a flow occurs in two apps, write one spec for each app. Use the same `NN_kebab-name/` folder name in each app. Each spec gives only the data for its app. Each spec refers to the spec for the other app.
-- `spec/shared/` contains rules that have no UI.
+| path                    | contains                                  |
+| ----------------------- | ----------------------------------------- |
+| `spec/rules/`           | shared rules for agents                   |
+| `spec/writing-specs.md` | how to write a document in this framework |
+| `spec/00_structure.md`  | this file                                 |
+| `template/`             | the files that a project copies           |
 
-Each spec has two files:
+`spec/rules/` contains `coding-style.md`, `git-convention.md`, and `spec-update.md`.
 
-| file                | contains                                                                                    | read it when                        |
-| ------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `business-logic.md` | what the feature does and the rules that it must obey: user-visible behaviour, the contract | you decide if a change is permitted |
-| `code-impl.md`      | how the current code does it: Prototype, Layout, Persist, Do not                            | you make the change                 |
+A project copies the files in `template/`.
+`template/spec/` is the spec structure for that project.
 
-- `business-logic.md` stays correct after a rewrite of the feature. `code-impl.md` does not stay correct.
-- If more than one package uses a term, define the term one time in `spec/shared/00_context.md`.
-- If only one package uses a term, define the term in `spec/<package>/00_context.md` of that package.
-- Other specs refer to the file that defines the term.
+## Business logic
+
+In a project, each feature spec has `business-logic.md` and `code-impl.md`.
+Read `template/spec/00_structure.md` for those two files.
+
+Do not add these items in this repository:
+
+- a feature package
+- `business-logic.md`
+- `code-impl.md`
+- `spec/shared/`
+- `spec/<package>/00_context.md`
 
 ## Procedures
 
-To add or write a spec, read `spec/writing-specs.md`.
-
-## Specs
-
-Each package folder has a `spec/<package>/00_context.md` file. This file contains the Vocab of the package, then the list of its specs.
-
-Before you make the first edit in a package, read `spec/<package>/00_context.md` of that package. Do this for each package that the change touches.
-
-| package                     | scope                                 |
-| --------------------------- | ------------------------------------- |
-| `spec/shared/00_context.md` | terms that more than one package uses |
+To write a document in this repository, read `spec/writing-specs.md`.
+To add a feature spec in a project, read `template/spec/writing-specs.md`.

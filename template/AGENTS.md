@@ -1,5 +1,8 @@
 # {project name}
 
+This repository is a project. It contains the business logic.
+Do not put business logic in the framework repository.
+
 project structure: `spec/00_structure.md`
 
 ## Things to do

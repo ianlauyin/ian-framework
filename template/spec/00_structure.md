@@ -1,5 +1,10 @@
 # Spec
 
+This file is for a project. A project contains the business logic.
+
+The framework repository contains the shared rules.
+Do not put business logic in the framework repository.
+
 A spec records the key design decisions, the behaviour, and the requirements. Implementation details stay in the code. A spec refers to the source code. It does not repeat the source code.
 
 Each spec has one folder. The spec tree has the same structure as the package paths.
