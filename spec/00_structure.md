@@ -18,19 +18,6 @@ Do not put business logic in this repository.
 A project copies the files in `template/`.
 `template/spec/` is the spec structure for that project.
 
-## Business logic
-
-In a project, each feature spec has `business-logic.md` and `code-impl.md`.
-Read `template/spec/00_structure.md` for those two files.
-
-Do not add these items in this repository:
-
-- a feature package
-- `business-logic.md`
-- `code-impl.md`
-- `spec/shared/`
-- `spec/<package>/00_context.md`
-
 ## Procedures
 
 To write a document in this repository, read `spec/writing-specs.md`.

@@ -4,9 +4,6 @@ This repository is the framework.
 A document in this repository describes the framework.
 Do not write business logic in this repository.
 
-For the structure of this repository, read `spec/00_structure.md`.
-To add a feature spec in a project, read `template/spec/writing-specs.md`.
-
 ## Write a framework document
 
 Write all spec text in ASD-STE100 (Simplified Technical English).
