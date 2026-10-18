@@ -6,6 +6,12 @@
 - If simple logic occurs in only a small number of locations, keep it as it is.
 - Do not move duplicated logic into a shared helper, a generic type, or a new abstraction only to remove the duplication.
 
+## Comments
+
+- Use the minimum number of comments.
+- Make the code clear without comments.
+- Write a comment only when the code cannot show the reason.
+
 ## Backend (Rust + Axum)
 
 Use functional programming. Do not use object-oriented programming.
