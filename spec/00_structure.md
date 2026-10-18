@@ -14,7 +14,8 @@ Do not put business logic in this repository.
 | `template/`             | the files that a project copies           |
 | `Cargo.toml`            | the Rust workspace                        |
 | `crates/ian_framework/` | the Rust library crate                    |
-| `README.md`             | how to build the Rust library             |
+| `spec/framework/`       | documents for optional Rust features      |
+| `spec/framework/gcs.md` | the Google Cloud Storage client           |
 | `rust-toolchain.toml`   | the Rust version for this repository      |
 
 `spec/rules/` contains `coding-style.md`, `git-convention.md`, and `spec-update.md`.
@@ -31,7 +32,7 @@ The default features are empty.
 The `gcs` feature contains the Google Cloud Storage client.
 A project sets the Cargo feature `gcs` to compile that client.
 The client does not contain product business logic.
-Read `README.md` for the build commands.
+Read `spec/framework/gcs.md` for the client and the build commands.
 
 ## Procedures
 
