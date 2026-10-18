@@ -1,6 +1,6 @@
 # Writing specs
 
-For the location of a spec and its two files, read `spec/00_structure.md`.
+For the location of a spec and its two files, read `spec/structure.md`.
 
 ## Add a spec
 

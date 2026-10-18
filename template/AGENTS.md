@@ -1,6 +1,6 @@
 # {project name}
 
-project structure: `spec/00_structure.md`
+project structure: `spec/structure.md`
 
 ## Things to do
 
