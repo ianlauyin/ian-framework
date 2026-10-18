@@ -13,8 +13,6 @@ Write all spec text in ASD-STE100 (Simplified Technical English).
 - If all items have the same small set of fields, use a table.
 - Write in English. Use Traditional Chinese only when you quote a user-facing string exactly.
 
-Do not add a feature spec, `business-logic.md`, or `code-impl.md` in this repository.
-
 ## Refer to a file
 
 - When a document refers to a different markdown file, write the full path from the repo root. For example: `spec/rules/coding-style.md`.
