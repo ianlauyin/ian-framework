@@ -10,7 +10,7 @@ Do not put business logic in this repository.
 | ----------------------- | ----------------------------------------- |
 | `spec/rules/`           | shared rules for agents                   |
 | `spec/writing-specs.md` | how to write a document in this framework |
-| `spec/00_structure.md`  | this file                                 |
+| `spec/structure.md`  | this file                                 |
 | `spec/framework/`       | documents for optional Rust features      |
 | `spec/framework/gcs.md` | the Google Cloud Storage client           |
 
