@@ -7,7 +7,7 @@ A project copies the files in `template/`.
 
 The Rust library is `framework/`.
 
-framework structure: `spec/structure.md`
+framework structure: `spec/framework.md`
 
 ## Things to do
 
