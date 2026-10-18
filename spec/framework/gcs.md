@@ -2,7 +2,8 @@
 
 This document describes the Google Cloud Storage client in the framework.
 This client is not product business logic.
-The spec map is `spec/00_structure.md`.
+The spec map is `spec/structure.md`.
+The feature index is `spec/framework/feature.md`.
 
 ## Crate
 
