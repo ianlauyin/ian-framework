@@ -2,7 +2,6 @@
 
 This document describes the Google Cloud Storage client in the framework.
 This client is not product business logic.
-The feature index is `spec/framework.md`.
 
 ## Crate
 
