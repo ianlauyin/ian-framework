@@ -1,7 +1,5 @@
 # Writing specs
 
-For the location of a spec and its two files, read `spec/00_structure.md`.
-
 ## Add a spec
 
 - Make a folder with the name `NN_kebab-name/`. `NN` is the next number in the sequence of that package folder.
