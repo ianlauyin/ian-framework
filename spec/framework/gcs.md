@@ -8,7 +8,7 @@ The feature index is `spec/framework/feature.md`.
 ## Crate
 
 The package name is `ian_framework`.
-The crate path is `crates/ian_framework/`.
+The crate path is `framework/`.
 The module path is `ian_framework::gcs`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
@@ -27,7 +27,7 @@ Put this block in the project `Cargo.toml`:
 ian_framework = { version = "0.1", features = ["gcs"] }
 ```
 
-Use these commands in this repository:
+Use these commands in `framework/`:
 
 ```sh
 cargo check

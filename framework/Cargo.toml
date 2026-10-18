@@ -2,8 +2,6 @@
 name = "ian_framework"
 version = "0.1.0"
 edition = "2021"
-description = "Framework library. The gcs feature is a Google Cloud Storage client."
-repository = "https://github.com/ianlauyin/ian_framework"
 
 [features]
 # The default build does not include the GCS client.

@@ -5,8 +5,7 @@ Do not put business logic in this repository.
 
 A project copies the files in `template/`.
 
-The Rust library is `crates/ian_framework`.
-The default Cargo features do not include `gcs`.
+The Rust library is `framework/`.
 
 framework structure: `spec/structure.md`
 
