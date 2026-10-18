@@ -1,6 +1,7 @@
 mod cred;
 mod encode;
 mod object;
+mod ops;
 mod signed_url;
 mod token;
 
@@ -15,7 +16,7 @@ pub use signed_url::{sign_blob, signed_get_url};
 
 use std::fmt;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::gcs::token::CachedToken;
 
@@ -34,6 +35,7 @@ struct Inner {
     auth: Auth,
     http: reqwest::Client,
     token: tokio::sync::Mutex<Option<CachedToken>>,
+    ops_log: std::sync::Mutex<Option<crate::logging::LogShipper>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +57,10 @@ pub struct GcsError {
 impl GcsError {
     pub fn kind(&self) -> GcsErrorKind {
         self.kind
+    }
+
+    pub(crate) fn status(&self) -> Option<u16> {
+        self.status
     }
 
     pub(crate) fn new(kind: GcsErrorKind, message: impl Into<String>) -> Self {
@@ -151,8 +157,23 @@ pub async fn gcs_backend(
             auth,
             http,
             token: tokio::sync::Mutex::new(None),
+            ops_log: std::sync::Mutex::new(None),
         }),
     })
+}
+
+pub fn attach_ops_log(backend: &GcsBackend, shipper: crate::logging::LogShipper) {
+    *lock_ops(&backend.inner.ops_log) = Some(shipper);
+}
+
+pub(crate) fn ops_shipper(backend: &GcsBackend) -> Option<crate::logging::LogShipper> {
+    lock_ops(&backend.inner.ops_log).clone()
+}
+
+fn lock_ops(
+    slot: &std::sync::Mutex<Option<crate::logging::LogShipper>>,
+) -> std::sync::MutexGuard<'_, Option<crate::logging::LogShipper>> {
+    slot.lock().unwrap_or_else(|err| err.into_inner())
 }
 
 pub async fn gcs_from_adc(bucket_name: impl Into<String>) -> Result<GcsBackend, GcsError> {
@@ -236,18 +257,62 @@ pub(crate) async fn send(backend: &GcsBackend, call: &Call) -> Result<reqwest::R
         } else if let Some(bytes) = &call.bytes {
             request = request.body(bytes.clone());
         }
-        let response = request.send().await.map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Transport, "GCS request failed", err)
-        })?;
+        let started = Instant::now();
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(err) => {
+                let error_text = ops::logged_error(&err);
+                ops::record_op(
+                    backend,
+                    ops::OpsRecord {
+                        level: crate::logging::LogLevel::Warn,
+                        message: "gcs request failed",
+                        method: call.method.as_str(),
+                        url: &call.url,
+                        status: None,
+                        latency_ms: Some(ops::millis_since(started)),
+                        extra: &[("error", &error_text)],
+                    },
+                );
+                return Err(GcsError::with_source(
+                    GcsErrorKind::Transport,
+                    "GCS request failed",
+                    err,
+                ));
+            }
+        };
         let status = response.status().as_u16();
-        tracing::debug!(method = %call.method, url = %call.url, status, "gcs response");
+        let latency_ms = ops::millis_since(started);
         if status == 401 && !retried {
             retried = true;
             let _ = response.bytes().await;
             token::invalidate(backend).await;
-            tracing::debug!("gcs access token rejected; refreshing");
+            ops::record_op(
+                backend,
+                ops::OpsRecord {
+                    level: crate::logging::LogLevel::Warn,
+                    message: "gcs access token rejected",
+                    method: call.method.as_str(),
+                    url: &call.url,
+                    status: Some(status),
+                    latency_ms: Some(latency_ms),
+                    extra: &[],
+                },
+            );
             continue;
         }
+        ops::record_op(
+            backend,
+            ops::OpsRecord {
+                level: ops::level_for_status(status),
+                message: "gcs response",
+                method: call.method.as_str(),
+                url: &call.url,
+                status: Some(status),
+                latency_ms: Some(latency_ms),
+                extra: &[],
+            },
+        );
         if response.status().is_success() || call.extra_status.contains(&status) {
             return Ok(response);
         }
@@ -375,5 +440,100 @@ mod tests {
             GcsErrorKind::Config,
             "config"
         )));
+    }
+
+    #[tokio::test]
+    async fn ops_log_writes_the_bucket_and_omits_the_query() {
+        let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
+        let mut config = crate::logging::shipper_config("demo", "storage");
+        config.minimum_level = crate::logging::LogLevel::Debug;
+        let shipper = crate::logging::log_shipper(config).unwrap();
+        attach_ops_log(&backend, shipper.clone());
+        ops::record_op(
+            &backend,
+            ops::OpsRecord {
+                level: crate::logging::LogLevel::Debug,
+                message: "gcs response",
+                method: "GET",
+                url:
+                    "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file?upload_id=secret",
+                status: Some(200),
+                latency_ms: Some(3),
+                extra: &[],
+            },
+        );
+        let events = crate::logging::buffered_events(&shipper);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].project, "demo");
+        assert_eq!(events[0].service, "storage");
+        assert_eq!(events[0].method, "GET");
+        assert_eq!(events[0].path, "/storage/v1/b/my-bucket/o/file");
+        assert_eq!(events[0].status, Some(200));
+        assert_eq!(events[0].latency_ms, Some(3));
+        assert_eq!(
+            events[0]
+                .extra
+                .get("bucket")
+                .and_then(|value| value.as_str()),
+            Some("my-bucket")
+        );
+        let line = crate::logging::to_json_line(&events[0]).unwrap();
+        assert!(!line.contains("secret"));
+        assert!(!line.contains("upload_id"));
+    }
+
+    #[tokio::test]
+    async fn ops_debug_is_hidden_at_the_default_minimum() {
+        let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
+        let shipper =
+            crate::logging::log_shipper(crate::logging::shipper_config("demo", "storage")).unwrap();
+        attach_ops_log(&backend, shipper.clone());
+        ops::record_op(
+            &backend,
+            ops::OpsRecord {
+                level: crate::logging::LogLevel::Debug,
+                message: "gcs response",
+                method: "GET",
+                url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file",
+                status: Some(200),
+                latency_ms: Some(1),
+                extra: &[],
+            },
+        );
+        assert_eq!(crate::logging::buffered_len(&shipper), 0);
+        ops::record_op(
+            &backend,
+            ops::OpsRecord {
+                level: crate::logging::LogLevel::Warn,
+                message: "gcs request failed",
+                method: "GET",
+                url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file",
+                status: None,
+                latency_ms: None,
+                extra: &[],
+            },
+        );
+        assert_eq!(crate::logging::buffered_len(&shipper), 1);
+        assert_eq!(
+            crate::logging::buffered_events(&shipper)[0].message,
+            "gcs request failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn ops_log_without_a_shipper_does_not_panic() {
+        let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
+        ops::record_op(
+            &backend,
+            ops::OpsRecord {
+                level: crate::logging::LogLevel::Warn,
+                message: "gcs request failed",
+                method: "GET",
+                url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file",
+                status: None,
+                latency_ms: None,
+                extra: &[],
+            },
+        );
     }
 }

@@ -1,0 +1,198 @@
+# Request logging
+
+This document describes request and event logging in the framework.
+This feature is not product business logic.
+
+## Crate
+
+The package name is `ian_framework`.
+The crate path is `framework/`.
+The module path is `ian_framework::logging`.
+`rust-toolchain.toml` gives the Rust version for this repository.
+
+## Feature `logging`
+
+The Cargo feature name is `logging`.
+`logging` is a default feature.
+A default build compiles this feature.
+A project gets this feature with no extra feature flag.
+The `gcs` feature is optional.
+The `gcs` feature enables `logging`.
+The Google Cloud Storage client is `spec/framework/gcs.md`.
+
+Put this block in the project `Cargo.toml`:
+
+```toml
+[dependencies]
+ian_framework = "0.1"
+```
+
+Use these commands in `framework/`:
+
+```sh
+cargo check
+cargo test
+cargo check --features gcs
+cargo test --features gcs
+```
+
+`cargo check` checks the default build.
+The default build includes `logging`.
+`cargo test` runs the default tests.
+`cargo check --features gcs` checks the build with the `gcs` feature.
+`cargo test --features gcs` runs the tests with the `gcs` feature.
+
+## Event
+
+`event` builds one event.
+One event has these fields:
+
+| field | value |
+| --- | --- |
+| `ts` | UTC time in RFC 3339 |
+| `project` | project name |
+| `service` | service name |
+| `request_id` | request id, or an empty string |
+| `method` | HTTP method, or an empty string |
+| `path` | URL path, or an empty string |
+| `status` | HTTP status, or null |
+| `latency_ms` | latency in milliseconds, or null |
+| `level` | `debug`, `info`, `warn`, or `error` |
+| `message` | short text |
+| `extra` | one JSON object |
+
+`to_json_line` writes one event as one JSON object on one line.
+`parse_json_line` reads that line.
+`to_jsonl` writes one batch.
+Each event in the batch is one JSON object and ends with a newline.
+`parse_jsonl` reads that batch.
+`parse_jsonl` skips a blank line.
+A line has every field in the table.
+`status` is null when the event has no HTTP status.
+`latency_ms` is null when the event has no latency.
+A line that omits a field is an encode error.
+
+## Shipper
+
+`shipper_config` builds one `ShipperConfig` for one project and one service.
+That config has no endpoint.
+`minimum_level` starts at `info`.
+`capacity` starts at 10000 events.
+`batch_size` starts at 100 events.
+`DEFAULT_CAPACITY` is 10000.
+`DEFAULT_BATCH_SIZE` is 100.
+`DEFAULT_SHIP_EVERY` is 5 seconds.
+`SHIP_TIMEOUT` is 10 seconds.
+
+`log_shipper` builds one shipper from that config.
+One shipper has one project and one service.
+A project name has 1 to 64 characters.
+A service name has 1 to 64 characters.
+The name starts with a letter or a digit.
+The other characters are letters, digits, `.`, `_`, or `-`.
+An empty name is a configuration error.
+A forbidden character is a configuration error.
+`capacity` of zero is a configuration error.
+`batch_size` of zero is a configuration error.
+`batch_size` above `capacity` is a configuration error.
+
+`record` stores one event in the local buffer.
+`record` sets `project` and `service` from the shipper when those fields are empty.
+`record` rejects an event whose project does not match the shipper.
+`record` rejects an event whose service does not match the shipper.
+`record` does not store an event below `minimum_level`.
+The stored `message` is at most `MAX_MESSAGE_BYTES` bytes.
+`MAX_MESSAGE_BYTES` is 4096.
+The stored `path` is at most `MAX_PATH_BYTES` bytes.
+`MAX_PATH_BYTES` is 2048.
+The stored `request_id` is at most `MAX_REQUEST_ID_BYTES` bytes.
+`MAX_REQUEST_ID_BYTES` is 128.
+The shipper cuts a long value on a character boundary.
+The buffer keeps at most `capacity` events.
+When the buffer is full, a new event removes the oldest event.
+`dropped` counts removed events.
+`buffered_len` returns the number of buffered events.
+`buffered_events` returns a copy of the buffered events.
+
+`ship_batch` sends one batch to the log server.
+The HTTP method is POST.
+The URL is `{endpoint}/projects/{project}/logs`.
+The content type is `application/x-ndjson`.
+The request has the header `x-project`.
+The body is the JSON batch for that project.
+One batch contains at most `batch_size` events.
+The shipper takes the batch out of the buffer before the POST.
+A response status from 200 through 299 leaves that batch out of the buffer.
+A transport error puts that batch back at the front of the buffer.
+An HTTP error status puts that batch back at the front of the buffer.
+When that return makes the buffer larger than `capacity`, the shipper removes the newest events above the capacity.
+The ship request time limit is 10 seconds.
+`spawn_ship_loop` calls `ship_batch` on an interval.
+An interval of zero is a configuration error.
+The caller runs `spawn_ship_loop` on a Tokio runtime.
+A ship error does not stop the loop.
+An empty buffer with an endpoint does not send an HTTP request.
+The result mode is `Empty`.
+The result mode for a sent batch is `Sent`.
+
+## Buffer-only mode
+
+An unset endpoint selects buffer-only mode.
+An empty endpoint selects buffer-only mode.
+An endpoint that has only spaces selects buffer-only mode.
+`shipper_config` selects buffer-only mode.
+Buffer-only mode does not build an HTTP client.
+Buffer-only mode does not open an HTTP connection.
+`ship_batch` in buffer-only mode returns success.
+The result mode is `BufferOnly`.
+`ship_batch` in buffer-only mode does not remove buffered events.
+`spawn_ship_loop` in buffer-only mode does not open an HTTP connection.
+A missing log server does not panic the shipper.
+An `http` or `https` endpoint sends batches.
+The shipper removes a trailing slash from that URL.
+An endpoint with a query is a configuration error.
+An endpoint with a fragment is a configuration error.
+An endpoint with whitespace is a configuration error.
+A scheme other than `http` or `https` is a configuration error.
+
+## Axum middleware
+
+`log_request` is the Axum middleware function.
+Use it with `axum::middleware::from_fn_with_state` and one shipper.
+
+```rust
+let shipper = log_shipper(shipper_config("demo", "api"))?;
+let app = Router::new().layer(middleware::from_fn_with_state(
+    shipper,
+    ian_framework::logging::log_request,
+));
+```
+
+The middleware reads the header `x-request-id`.
+A valid `x-request-id` has 1 to 128 characters.
+Each character is a letter, a digit, `.`, `_`, `-`, or `:`.
+A missing header gets a new id.
+An invalid header gets a new id.
+The middleware writes `x-request-id` on the response.
+The middleware records one event after the inner handler returns.
+The event uses the shipper project and the shipper service.
+`method` is the request method.
+`path` is the request path.
+An empty path is stored as `/`.
+The path does not include the query string.
+`status` is the response status.
+`latency_ms` is the handler time in milliseconds.
+`message` is `request`.
+A status of 500 or higher has level `error`.
+A status from 400 through 499 has level `warn`.
+A status below 400 has level `info`.
+A log failure does not change the HTTP response.
+
+## Out of scope
+
+This feature does not include these items:
+
+- A log server process.
+- Authentication to the log server.
+- A product log policy.
+- Trash rules, browse caps, or upload gates.
