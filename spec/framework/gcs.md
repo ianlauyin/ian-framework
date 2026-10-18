@@ -2,7 +2,7 @@
 
 This document describes the Google Cloud Storage client in the framework.
 This client is not product business logic.
-The repository map is `spec/00_structure.md`.
+The spec map is `spec/00_structure.md`.
 
 ## Crate
 
@@ -84,6 +84,49 @@ A project can put those keys in the map.
 The client builds a V4 signed GET URL.
 The signature comes from IAM `signBlob`.
 Each path segment uses `encode_seg`.
+`signed_get_url` takes an optional lifetime.
+A missing lifetime is an authentication error.
+A lifetime of zero is an authentication error.
+A lifetime below 1 second is an authentication error.
+The client does not sign `X-Goog-Expires=0`.
+The maximum lifetime is 604800 seconds.
+A lifetime above that maximum is a configuration error.
+
+## Transfer time limit
+
+`TRANSFER_TIMEOUT` is 180 seconds.
+The Linux HTTP client sets `TCP_USER_TIMEOUT` to `TRANSFER_TIMEOUT`.
+Each resumable chunk request uses `TRANSFER_TIMEOUT`.
+Each session probe uses `TRANSFER_TIMEOUT`.
+
+## Resumable upload
+
+The client uploads bytes with a resumable session.
+A chunk that is not the last chunk is 8 MiB.
+The last chunk can be shorter.
+The client retries a chunk in these cases:
+
+- The transport fails.
+- The HTTP status is 408, 429, 500, 502, 503, or 504.
+
+The client probes the session after one of those failures.
+The probe request has an empty body.
+The probe uses `Content-Range: bytes */{total}` when the object size is known.
+The probe uses `Content-Range: bytes */*` when the object size is not known.
+A probe response with status 308 can include `Range: bytes=START-END`.
+The next byte offset is `END + 1`.
+A probe response with status 308 and no `Range` header means offset 0.
+The client makes up to 5 attempts for one offset.
+The client resets that count when the committed offset increases.
+A byte stream cannot send bytes that it has already dropped.
+If the session offset moves before those bytes, the upload fails.
+
+## Copy and rewrite
+
+`copy_object` copies an object in the same bucket with one `copyTo` call.
+`rewrite_object` copies an object in the same bucket with the JSON rewrite API.
+`rewrite_object` sends `rewriteToken` again until `done` is true.
+If `rewriteToken` does not change, `rewrite_object` returns an error.
 
 ## Operations
 
@@ -95,7 +138,8 @@ The client gives these operations:
 - List one page.
 - Delete one object.
 - Patch the metadata map.
-- Copy an object in the same bucket.
+- Copy an object in the same bucket with `copyTo`.
+- Rewrite an object in the same bucket with `rewriteToken`.
 - Build a V4 signed GET URL.
 
 ## Out of scope
@@ -104,5 +148,10 @@ The client does not include these items:
 
 - Trash rules.
 - Browse caps.
-- Axum.
-- A product Store.
+- Upload gates.
+- Part stores and Cloudflare uploads.
+- Thumbnails and media rules.
+- Move and rename policy.
+- Axum and a product Store.
+- Extra access-token caches. The client keeps one access-token cache.
+- `Content-Disposition` for attachments.

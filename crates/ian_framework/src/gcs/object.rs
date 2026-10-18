@@ -7,16 +7,22 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::pin::Pin;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use futures_util::{Stream, StreamExt};
 use serde::Deserialize;
 
 use super::encode::{encode_object_id, encode_seg};
-use super::{bucket, send, Call, GcsBackend, GcsError, GcsErrorKind};
+use super::{
+    bucket, is_retryable, send, Call, GcsBackend, GcsError, GcsErrorKind, TRANSFER_TIMEOUT,
+};
 
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
 const CHUNK_SIZE: usize = 8 * 1024 * 1024;
+const CHUNK_ALIGN: u64 = 256 * 1024;
+const CHUNK_ATTEMPTS: u32 = 5;
+const CHUNK_BACKOFF: Duration = Duration::from_millis(200);
 const API_ROOT: &str = "https://storage.googleapis.com/storage/v1";
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
 
@@ -68,6 +74,9 @@ pub struct ObjectReader {
 }
 
 /// Upload bytes with a resumable session.
+///
+/// The body is sent in 8 MiB chunks. Each chunk request uses [`TRANSFER_TIMEOUT`].
+/// A transport failure or HTTP status 408, 429, 500, 502, 503, or 504 retries that chunk.
 pub async fn put_bytes(
     backend: &GcsBackend,
     name: &str,
@@ -77,22 +86,44 @@ pub async fn put_bytes(
     validate_object_name(name)?;
     let content_type = content_type_of(options)?;
     validate_metadata(&options.metadata)?;
-    let location = start_resumable(
-        backend,
-        name,
-        &content_type,
-        &options.metadata,
-        Some(bytes.len() as u64),
-    )
-    .await?;
-    if bytes.is_empty() {
-        return finished(
-            upload_chunk(backend, &location, &content_type, b"", "bytes */0", true).await?,
+    let total = bytes.len() as u64;
+    let location =
+        start_resumable(backend, name, &content_type, &options.metadata, Some(total)).await?;
+    if total == 0 {
+        return expect_done(
+            put_chunk_retrying(backend, &location, &content_type, b"", 0, Some(0), true).await?,
         );
     }
-    let end = bytes.len() - 1;
-    let range = format!("bytes 0-{end}/{}", bytes.len());
-    finished(upload_chunk(backend, &location, &content_type, bytes, &range, true).await?)
+    let mut offset = 0u64;
+    let mut rewinds = 0u32;
+    while offset < total {
+        let remaining = total - offset;
+        let is_last = remaining <= CHUNK_SIZE as u64;
+        let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
+        let start = usize::try_from(offset)
+            .map_err(|_| GcsError::new(GcsErrorKind::Api, "object is too large"))?;
+        let chunk = &bytes[start..start + len];
+        match put_chunk_retrying(
+            backend,
+            &location,
+            &content_type,
+            chunk,
+            offset,
+            Some(total),
+            is_last,
+        )
+        .await?
+        {
+            UploadStep::Done(meta) => return Ok(meta),
+            UploadStep::Continue { next } => {
+                advance_offset(&mut offset, &mut rewinds, next, total)?;
+            }
+        }
+    }
+    Err(GcsError::new(
+        GcsErrorKind::Api,
+        "finished upload did not return object metadata",
+    ))
 }
 
 /// Upload a file. The content type comes from `options`, not from the file name.
@@ -129,30 +160,55 @@ pub async fn put_file(
     let location =
         start_resumable(backend, name, &content_type, &options.metadata, Some(total)).await?;
     if total == 0 {
-        return finished(
-            upload_chunk(backend, &location, &content_type, b"", "bytes */0", true).await?,
+        return expect_done(
+            put_chunk_retrying(backend, &location, &content_type, b"", 0, Some(0), true).await?,
         );
     }
-    let mut sent = 0u64;
-    loop {
-        let remaining = total - sent;
-        let want = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
-        let chunk = read_exact_n(&mut file, want).await?;
-        let is_last = sent + chunk.len() as u64 == total;
-        let end = sent + chunk.len() as u64 - 1;
-        let range = format!("bytes {sent}-{end}/{total}");
-        let meta = upload_chunk(backend, &location, &content_type, &chunk, &range, is_last).await?;
-        sent += chunk.len() as u64;
-        if is_last {
-            return finished(meta);
+    let mut offset = 0u64;
+    let mut rewinds = 0u32;
+    use tokio::io::AsyncSeekExt;
+    while offset < total {
+        let remaining = total - offset;
+        let is_last = remaining <= CHUNK_SIZE as u64;
+        let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
+        file.seek(std::io::SeekFrom::Start(offset))
+            .await
+            .map_err(|err| {
+                GcsError::with_source(
+                    GcsErrorKind::Transport,
+                    "cannot seek in the upload file",
+                    err,
+                )
+            })?;
+        let chunk = read_exact_n(&mut file, len).await?;
+        match put_chunk_retrying(
+            backend,
+            &location,
+            &content_type,
+            &chunk,
+            offset,
+            Some(total),
+            is_last,
+        )
+        .await?
+        {
+            UploadStep::Done(meta) => return Ok(meta),
+            UploadStep::Continue { next } => {
+                advance_offset(&mut offset, &mut rewinds, next, total)?;
+            }
         }
     }
+    Err(GcsError::new(
+        GcsErrorKind::Api,
+        "finished upload did not return object metadata",
+    ))
 }
 
 /// Upload a stream of byte chunks.
 ///
 /// The length does not need to be known. Chunks sent before the last one are 8 MiB.
-/// The last chunk can be shorter.
+/// The last chunk can be shorter. The client keeps bytes that GCS has not committed.
+/// If the session offset moves before those bytes, the upload fails.
 pub async fn put_stream<S, E>(
     backend: &GcsBackend,
     name: &str,
@@ -169,36 +225,92 @@ where
     let location = start_resumable(backend, name, &content_type, &options.metadata, None).await?;
     let mut pending = Vec::new();
     let mut stream = Box::pin(stream);
-    let mut current = pull_chunk(&mut stream, &mut pending, CHUNK_SIZE).await?;
-    if current.is_empty() {
-        return finished(
-            upload_chunk(backend, &location, &content_type, b"", "bytes */0", true).await?,
-        );
-    }
-    let mut sent = 0u64;
+    let mut buf = Vec::new();
+    let mut origin = 0u64;
+    let mut eof = false;
     loop {
-        let next = pull_chunk(&mut stream, &mut pending, CHUNK_SIZE).await?;
-        let is_last = next.is_empty();
-        let end = sent + current.len() as u64 - 1;
-        if !is_last && current.len() % (256 * 1024) != 0 {
+        while !eof && buf.len() < CHUNK_SIZE {
+            let need = CHUNK_SIZE - buf.len();
+            let piece = pull_chunk(&mut stream, &mut pending, need).await?;
+            if piece.is_empty() {
+                eof = true;
+                break;
+            }
+            buf.extend(piece);
+        }
+        if buf.is_empty() {
+            if origin != 0 {
+                return Err(GcsError::new(
+                    GcsErrorKind::Api,
+                    "finished upload did not return object metadata",
+                ));
+            }
+            return expect_done(
+                put_chunk_retrying(backend, &location, &content_type, b"", 0, Some(0), true)
+                    .await?,
+            );
+        }
+        let is_last = eof;
+        let send_len = if is_last {
+            buf.len()
+        } else if !buf.len().is_multiple_of(CHUNK_ALIGN as usize) {
             return Err(GcsError::new(
                 GcsErrorKind::Api,
                 "resumable chunk is not a multiple of 256 KiB",
             ));
-        }
-        let range = if is_last {
-            let total = sent + current.len() as u64;
-            format!("bytes {sent}-{end}/{total}")
         } else {
-            format!("bytes {sent}-{end}/*")
+            CHUNK_SIZE.min(buf.len())
         };
-        let meta =
-            upload_chunk(backend, &location, &content_type, &current, &range, is_last).await?;
-        sent += current.len() as u64;
-        if is_last {
-            return finished(meta);
+        let total = if is_last {
+            Some(origin + send_len as u64)
+        } else {
+            None
+        };
+        match put_chunk_retrying(
+            backend,
+            &location,
+            &content_type,
+            &buf[..send_len],
+            origin,
+            total,
+            is_last,
+        )
+        .await?
+        {
+            UploadStep::Done(meta) => return Ok(meta),
+            UploadStep::Continue { next } => {
+                let end = origin + buf.len() as u64;
+                if next < origin {
+                    return Err(GcsError::new(
+                        GcsErrorKind::Transport,
+                        "resumable session dropped bytes that are not in memory",
+                    ));
+                }
+                if next > end {
+                    return Err(GcsError::new(
+                        GcsErrorKind::Api,
+                        "resumable session is ahead of the buffered bytes",
+                    ));
+                }
+                if next == origin {
+                    return Err(GcsError::new(
+                        GcsErrorKind::Api,
+                        "resumable upload did not advance",
+                    ));
+                }
+                let drop_n = usize::try_from(next - origin).map_err(|_| {
+                    GcsError::new(GcsErrorKind::Api, "resumable offset is too large")
+                })?;
+                buf.drain(..drop_n);
+                origin = next;
+                if buf.is_empty() && eof {
+                    return Err(GcsError::new(
+                        GcsErrorKind::Api,
+                        "finished upload did not return object metadata",
+                    ));
+                }
+            }
         }
-        current = next;
     }
 }
 
@@ -221,6 +333,7 @@ pub async fn open_object(backend: &GcsBackend, name: &str) -> Result<ObjectReade
             json: None,
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
@@ -258,6 +371,7 @@ pub async fn stat(backend: &GcsBackend, name: &str) -> Result<ObjectMeta, GcsErr
             json: None,
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
@@ -275,6 +389,7 @@ pub async fn list(backend: &GcsBackend, query: &ListQuery) -> Result<ListPage, G
             json: None,
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
@@ -296,6 +411,7 @@ pub async fn delete_object(backend: &GcsBackend, name: &str) -> Result<(), GcsEr
             json: None,
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
@@ -322,6 +438,7 @@ pub async fn patch_metadata(
             json: Some(serde_json::json!({ "metadata": metadata })),
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
@@ -351,10 +468,63 @@ pub async fn copy_object(
             json: Some(serde_json::json!({})),
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
     meta_from_response(response).await
+}
+
+/// Rewrite one object onto another name in the same bucket.
+///
+/// Large objects can take more than one call. The client follows `rewriteToken`
+/// until `done` is true. [`copy_object`] remains a single `copyTo` call.
+pub async fn rewrite_object(
+    backend: &GcsBackend,
+    from: &str,
+    to: &str,
+) -> Result<ObjectMeta, GcsError> {
+    validate_object_name(from)?;
+    validate_object_name(to)?;
+    let mut token: Option<String> = None;
+    loop {
+        let response = send(
+            backend,
+            &Call {
+                method: reqwest::Method::POST,
+                url: rewrite_url(bucket(backend), from, to, token.as_deref()),
+                headers: Vec::new(),
+                json: Some(serde_json::json!({})),
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            },
+        )
+        .await?;
+        let bytes = response.bytes().await.map_err(|err| {
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                "rewrite response is not bytes",
+                err,
+            )
+        })?;
+        let step = rewrite_step_from_slice(&bytes)?;
+        if step.done {
+            return step.resource.ok_or_else(|| {
+                GcsError::new(GcsErrorKind::Api, "rewrite did not return object metadata")
+            });
+        }
+        let next = step
+            .rewrite_token
+            .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "rewrite did not return a token"))?;
+        if token.as_deref() == Some(next.as_str()) {
+            return Err(GcsError::new(
+                GcsErrorKind::Api,
+                "rewrite token did not change",
+            ));
+        }
+        token = Some(next);
+    }
 }
 
 pub(crate) fn validate_object_name(name: &str) -> Result<(), GcsError> {
@@ -400,6 +570,20 @@ fn object_url(bucket_name: &str, name: &str) -> String {
         encode_seg(bucket_name),
         encode_object_id(name),
     )
+}
+
+fn rewrite_url(bucket_name: &str, from: &str, to: &str, token: Option<&str>) -> String {
+    let mut url = format!(
+        "{}/rewriteTo/b/{}/o/{}",
+        object_url(bucket_name, from),
+        encode_seg(bucket_name),
+        encode_object_id(to),
+    );
+    if let Some(token) = token {
+        url.push_str("?rewriteToken=");
+        url.push_str(&encode_seg(token));
+    }
+    url
 }
 
 fn list_url(bucket_name: &str, query: &ListQuery) -> String {
@@ -473,6 +657,7 @@ async fn start_resumable(
             json: Some(body),
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
@@ -499,23 +684,213 @@ async fn start_resumable(
     Ok(location)
 }
 
-fn finished(meta: Option<ObjectMeta>) -> Result<ObjectMeta, GcsError> {
-    meta.ok_or_else(|| {
-        GcsError::new(
+fn expect_done(step: UploadStep) -> Result<ObjectMeta, GcsError> {
+    match step {
+        UploadStep::Done(meta) => Ok(meta),
+        UploadStep::Continue { .. } => Err(GcsError::new(
             GcsErrorKind::Api,
             "finished upload did not return object metadata",
-        )
-    })
+        )),
+    }
 }
 
-async fn upload_chunk(
+enum UploadStep {
+    Done(ObjectMeta),
+    Continue { next: u64 },
+}
+
+enum Sent {
+    Done(ObjectMeta),
+    Accepted { next: u64 },
+}
+
+enum Probe {
+    Complete(ObjectMeta),
+    Incomplete { next: u64 },
+}
+
+fn retry_delay(attempt: u32) -> Duration {
+    CHUNK_BACKOFF.saturating_mul(u32::max(attempt, 1))
+}
+
+fn advance_offset(
+    offset: &mut u64,
+    rewinds: &mut u32,
+    next: u64,
+    total: u64,
+) -> Result<(), GcsError> {
+    if next > total {
+        return Err(GcsError::new(
+            GcsErrorKind::Api,
+            "resumable offset is past the end of the object",
+        ));
+    }
+    if next > *offset {
+        *rewinds = 0;
+        *offset = next;
+        return Ok(());
+    }
+    if next < *offset {
+        *rewinds += 1;
+        if *rewinds > CHUNK_ATTEMPTS {
+            return Err(GcsError::new(
+                GcsErrorKind::Transport,
+                "resumable session did not keep uploaded bytes",
+            ));
+        }
+        *offset = next;
+        return Ok(());
+    }
+    Err(GcsError::new(
+        GcsErrorKind::Api,
+        "resumable upload did not advance",
+    ))
+}
+
+/// Bytes from `offset` that can be sent as one resumable request.
+///
+/// `Some(0)` is only the empty object. `None` means this buffer cannot supply
+/// a legal chunk at `offset`, so the caller resumes from there.
+fn chunk_suffix_len(chunk_len: u64, start: u64, offset: u64, finished: bool) -> Option<u64> {
+    if offset < start || offset > start + chunk_len {
+        return None;
+    }
+    let suffix = start + chunk_len - offset;
+    if suffix == 0 {
+        if finished && chunk_len == 0 && offset == start {
+            return Some(0);
+        }
+        return None;
+    }
+    if finished || suffix.is_multiple_of(CHUNK_ALIGN) {
+        return Some(suffix);
+    }
+    None
+}
+
+fn chunk_content_range(start: u64, len: u64, total: Option<u64>) -> String {
+    if len == 0 {
+        return format!("bytes */{}", total.unwrap_or(0));
+    }
+    let end = start + len - 1;
+    match total {
+        Some(total) => format!("bytes {start}-{end}/{total}"),
+        None => format!("bytes {start}-{end}/*"),
+    }
+}
+
+fn probe_content_range(total: Option<u64>) -> String {
+    match total {
+        Some(total) => format!("bytes */{total}"),
+        None => "bytes */*".to_string(),
+    }
+}
+
+fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
+    let header = header.trim();
+    let rest = header
+        .strip_prefix("bytes=")
+        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    let rest = rest.split(',').next().unwrap_or(rest).trim();
+    let (start, end) = rest
+        .split_once('-')
+        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    let start: u64 = start
+        .trim()
+        .parse()
+        .map_err(|_| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    let end: u64 = end
+        .trim()
+        .parse()
+        .map_err(|_| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    if end < start {
+        return Err(GcsError::new(
+            GcsErrorKind::Api,
+            "resumable Range header is invalid",
+        ));
+    }
+    end.checked_add(1)
+        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))
+}
+
+async fn put_chunk_retrying(
     backend: &GcsBackend,
     location: &str,
     content_type: &str,
     chunk: &[u8],
-    range: &str,
+    start: u64,
+    total: Option<u64>,
     finished: bool,
-) -> Result<Option<ObjectMeta>, GcsError> {
+) -> Result<UploadStep, GcsError> {
+    let chunk_len = chunk.len() as u64;
+    let mut offset = start;
+    let mut attempt = 0u32;
+    loop {
+        if chunk_suffix_len(chunk_len, start, offset, finished).is_none() {
+            return Ok(UploadStep::Continue { next: offset });
+        }
+        attempt += 1;
+        if attempt > CHUNK_ATTEMPTS {
+            return Err(GcsError::new(
+                GcsErrorKind::Transport,
+                "resumable chunk failed after retries",
+            ));
+        }
+        if attempt > 1 {
+            tokio::time::sleep(retry_delay(attempt - 1)).await;
+        }
+        let piece = &chunk[(offset - start) as usize..];
+        let sent = upload_chunk_once(backend, location, content_type, piece, offset, total).await;
+        match sent {
+            Ok(Sent::Done(meta)) => return Ok(UploadStep::Done(meta)),
+            Ok(Sent::Accepted { next }) => {
+                if next >= start + chunk_len {
+                    return Ok(UploadStep::Continue { next });
+                }
+                if next > offset {
+                    offset = next;
+                    attempt = 0;
+                    continue;
+                }
+            }
+            Err(err) if !is_retryable(&err) => return Err(err),
+            Err(err) => {
+                tracing::debug!(attempt, offset, error = %err, "gcs resumable chunk failed");
+            }
+        }
+        match probe_session(backend, location, total).await {
+            Ok(Probe::Complete(meta)) => return Ok(UploadStep::Done(meta)),
+            Ok(Probe::Incomplete { next }) => {
+                tracing::debug!(attempt, offset, next, "gcs resumable probe");
+                if next < start || next >= start + chunk_len {
+                    return Ok(UploadStep::Continue { next });
+                }
+                if next > offset {
+                    offset = next;
+                    attempt = 0;
+                    continue;
+                }
+                if next < offset {
+                    offset = next;
+                }
+            }
+            Err(err) if !is_retryable(&err) => return Err(err),
+            Err(err) => {
+                tracing::debug!(attempt, offset, error = %err, "gcs resumable probe failed");
+            }
+        }
+    }
+}
+
+async fn upload_chunk_once(
+    backend: &GcsBackend,
+    location: &str,
+    content_type: &str,
+    chunk: &[u8],
+    offset: u64,
+    total: Option<u64>,
+) -> Result<Sent, GcsError> {
+    let range = chunk_content_range(offset, chunk.len() as u64, total);
     let response = send(
         backend,
         &Call {
@@ -523,19 +898,66 @@ async fn upload_chunk(
             url: location.to_string(),
             headers: vec![
                 (reqwest::header::CONTENT_TYPE, content_type.to_string()),
-                (reqwest::header::CONTENT_RANGE, range.to_string()),
+                (reqwest::header::CONTENT_RANGE, range),
             ],
             json: None,
             bytes: Some(chunk.to_vec()),
-            extra_status: if finished { &[] } else { &[308] },
+            extra_status: &[308],
+            timeout: Some(TRANSFER_TIMEOUT),
         },
     )
     .await?;
-    if !finished {
-        let _ = response.bytes().await;
-        return Ok(None);
+    if response.status().is_success() {
+        return Ok(Sent::Done(meta_from_response(response).await?));
     }
-    meta_from_response(response).await.map(Some)
+    let header = response
+        .headers()
+        .get(reqwest::header::RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let _ = response.bytes().await;
+    let next = match header {
+        Some(value) => next_offset_from_range(&value)?,
+        None => offset + chunk.len() as u64,
+    };
+    Ok(Sent::Accepted { next })
+}
+
+async fn probe_session(
+    backend: &GcsBackend,
+    location: &str,
+    total: Option<u64>,
+) -> Result<Probe, GcsError> {
+    let response = send(
+        backend,
+        &Call {
+            method: reqwest::Method::PUT,
+            url: location.to_string(),
+            headers: vec![
+                (reqwest::header::CONTENT_RANGE, probe_content_range(total)),
+                (reqwest::header::CONTENT_LENGTH, "0".to_string()),
+            ],
+            json: None,
+            bytes: Some(Vec::new()),
+            extra_status: &[308],
+            timeout: Some(TRANSFER_TIMEOUT),
+        },
+    )
+    .await?;
+    if response.status().is_success() {
+        return Ok(Probe::Complete(meta_from_response(response).await?));
+    }
+    let header = response
+        .headers()
+        .get(reqwest::header::RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let _ = response.bytes().await;
+    let next = match header {
+        Some(value) => next_offset_from_range(&value)?,
+        None => 0,
+    };
+    Ok(Probe::Incomplete { next })
 }
 
 async fn meta_from_response(response: reqwest::Response) -> Result<ObjectMeta, GcsError> {
@@ -602,6 +1024,43 @@ where
     Ok(out)
 }
 
+struct RewriteStep {
+    done: bool,
+    rewrite_token: Option<String>,
+    resource: Option<ObjectMeta>,
+}
+
+fn rewrite_step_from_slice(bytes: &[u8]) -> Result<RewriteStep, GcsError> {
+    let raw: RawRewrite = serde_json::from_slice(bytes)
+        .map_err(|err| GcsError::with_source(GcsErrorKind::Api, "rewrite JSON is invalid", err))?;
+    let resource = match raw.resource {
+        Some(object) => Some(object.into_meta()?),
+        None => None,
+    };
+    if raw.done && resource.is_none() {
+        return Err(GcsError::new(
+            GcsErrorKind::Api,
+            "rewrite did not return object metadata",
+        ));
+    }
+    if !raw.done {
+        match raw.rewrite_token.as_deref() {
+            Some(token) if !token.is_empty() => {}
+            _ => {
+                return Err(GcsError::new(
+                    GcsErrorKind::Api,
+                    "rewrite did not return a token",
+                ));
+            }
+        }
+    }
+    Ok(RewriteStep {
+        done: raw.done,
+        rewrite_token: raw.rewrite_token.filter(|token| !token.is_empty()),
+        resource,
+    })
+}
+
 fn object_meta_from_slice(bytes: &[u8]) -> Result<ObjectMeta, GcsError> {
     let raw: RawObject = serde_json::from_slice(bytes)
         .map_err(|err| GcsError::with_source(GcsErrorKind::Api, "object JSON is invalid", err))?;
@@ -659,6 +1118,16 @@ impl RawObject {
             metadata: self.metadata,
         })
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct RawRewrite {
+    #[serde(default)]
+    done: bool,
+    #[serde(rename = "rewriteToken", default)]
+    rewrite_token: Option<String>,
+    #[serde(default)]
+    resource: Option<RawObject>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -834,5 +1303,95 @@ mod tests {
             content_type_of(&options).unwrap(),
             "application/octet-stream"
         );
+    }
+
+    #[test]
+    fn probe_and_chunk_ranges_match_the_upload_shape() {
+        assert_eq!(probe_content_range(Some(0)), "bytes */0");
+        assert_eq!(probe_content_range(Some(12)), "bytes */12");
+        assert_eq!(probe_content_range(None), "bytes */*");
+        assert_eq!(chunk_content_range(0, 0, Some(0)), "bytes */0");
+        assert_eq!(chunk_content_range(0, 4, Some(4)), "bytes 0-3/4");
+        assert_eq!(chunk_content_range(8, 4, None), "bytes 8-11/*");
+    }
+
+    #[test]
+    fn resume_range_is_the_end_plus_one() {
+        assert_eq!(next_offset_from_range("bytes=0-42").unwrap(), 43);
+        assert_eq!(next_offset_from_range("bytes=0-0").unwrap(), 1);
+        assert!(next_offset_from_range("bytes=*").is_err());
+        assert!(next_offset_from_range("0-1").is_err());
+    }
+
+    #[test]
+    fn non_final_suffix_must_be_a_multiple_of_256_kib() {
+        let align = CHUNK_ALIGN;
+        assert_eq!(chunk_suffix_len(align, 0, 0, false), Some(align));
+        assert_eq!(chunk_suffix_len(align, 0, 1, false), None);
+        assert_eq!(chunk_suffix_len(align, 0, 1, true), Some(align - 1));
+        assert_eq!(chunk_suffix_len(0, 0, 0, true), Some(0));
+        assert_eq!(chunk_suffix_len(align, 0, align, false), None);
+    }
+
+    #[test]
+    fn advance_offset_rewinds_then_resets_after_progress() {
+        let mut offset = 10u64;
+        let mut rewinds = 0u32;
+        advance_offset(&mut offset, &mut rewinds, 4, 100).unwrap();
+        assert_eq!(offset, 4);
+        assert_eq!(rewinds, 1);
+        let stalled = advance_offset(&mut offset, &mut rewinds, 4, 100).unwrap_err();
+        assert_eq!(stalled.kind(), GcsErrorKind::Api);
+        advance_offset(&mut offset, &mut rewinds, 20, 100).unwrap();
+        assert_eq!(offset, 20);
+        assert_eq!(rewinds, 0);
+        let past = advance_offset(&mut offset, &mut rewinds, 101, 100).unwrap_err();
+        assert_eq!(past.kind(), GcsErrorKind::Api);
+    }
+
+    #[test]
+    fn advance_offset_stops_after_repeated_rewinds() {
+        let mut offset = 8u64;
+        let mut rewinds = 0u32;
+        for _ in 0..CHUNK_ATTEMPTS {
+            advance_offset(&mut offset, &mut rewinds, 0, 100).unwrap();
+            offset = 8;
+        }
+        let err = advance_offset(&mut offset, &mut rewinds, 0, 100).unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Transport);
+    }
+
+    #[test]
+    fn rewrite_step_reads_a_token_until_done() {
+        let step = rewrite_step_from_slice(br#"{"done":false,"rewriteToken":"abc"}"#).unwrap();
+        assert!(!step.done);
+        assert_eq!(step.rewrite_token.as_deref(), Some("abc"));
+        assert!(step.resource.is_none());
+        let done = rewrite_step_from_slice(br#"{"done":true,"resource":{"name":"b","size":"3"}}"#)
+            .unwrap();
+        assert!(done.done);
+        let resource = done.resource.unwrap();
+        assert_eq!(resource.name, "b");
+        assert_eq!(resource.size, 3);
+        assert!(rewrite_step_from_slice(br#"{"done":false}"#).is_err());
+        assert!(rewrite_step_from_slice(br#"{"done":true}"#).is_err());
+        assert!(rewrite_step_from_slice(br#"{"done":false,"rewriteToken":""}"#).is_err());
+    }
+
+    #[test]
+    fn rewrite_url_sets_the_token_query() {
+        assert_eq!(
+            rewrite_url("buck", "a/b", "c d", None),
+            "https://storage.googleapis.com/storage/v1/b/buck/o/a%2Fb/rewriteTo/b/buck/o/c%20d"
+        );
+        let url = rewrite_url("buck", "a", "c", Some("tok/en"));
+        assert!(url.ends_with("?rewriteToken=tok%2Fen"));
+    }
+
+    #[test]
+    fn chunk_retry_uses_the_transfer_timeout() {
+        assert_eq!(TRANSFER_TIMEOUT, Duration::from_secs(180));
+        assert_eq!(retry_delay(1), Duration::from_millis(200));
+        assert_eq!(retry_delay(3), Duration::from_millis(600));
     }
 }

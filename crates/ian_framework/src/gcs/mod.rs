@@ -17,8 +17,8 @@ pub use cred::Auth;
 pub use encode::{encode_object_id, encode_object_path, encode_seg};
 pub use object::{
     byte_stream, copy_object, delete_object, get_bytes, list, open_object, patch_metadata,
-    put_bytes, put_file, put_stream, read_to_vec, stat, ListPage, ListQuery, ObjectMeta,
-    ObjectReader, PutOptions,
+    put_bytes, put_file, put_stream, read_to_vec, rewrite_object, stat, ListPage, ListQuery,
+    ObjectMeta, ObjectReader, PutOptions,
 };
 pub use signed_url::{sign_blob, signed_get_url};
 
@@ -28,11 +28,12 @@ use std::time::Duration;
 
 use crate::gcs::token::CachedToken;
 
-/// Linux socket limit for data that has been sent and not acknowledged.
+/// Limit for one resumable chunk, one session probe, and unacknowledged TCP data.
 ///
 /// The HTTP client sets `TCP_USER_TIMEOUT` to this value on Linux.
-/// A long healthy transfer is not cancelled by this limit.
-pub const TRANSFER_TIMEOUT: Duration = Duration::from_secs(60);
+/// A resumable chunk request uses this same limit.
+/// A session probe uses this same limit.
+pub const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -65,6 +66,7 @@ pub enum GcsErrorKind {
 /// Error from the GCS client.
 pub struct GcsError {
     kind: GcsErrorKind,
+    status: Option<u16>,
     message: String,
     source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
@@ -77,6 +79,16 @@ impl GcsError {
     pub(crate) fn new(kind: GcsErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
+            status: None,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub(crate) fn with_status(kind: GcsErrorKind, status: u16, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            status: Some(status),
             message: message.into(),
             source: None,
         }
@@ -89,6 +101,7 @@ impl GcsError {
     ) -> Self {
         Self {
             kind,
+            status: None,
             message: message.into(),
             source: Some(Box::new(source)),
         }
@@ -99,6 +112,7 @@ impl fmt::Debug for GcsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GcsError")
             .field("kind", &self.kind)
+            .field("status", &self.status)
             .field("message", &self.message)
             .finish_non_exhaustive()
     }
@@ -246,6 +260,15 @@ pub(crate) struct Call {
     pub bytes: Option<Vec<u8>>,
     /// Status codes that are success in addition to 2xx. `308` is used by resumable upload.
     pub extra_status: &'static [u16],
+    /// Total time for this request. `None` does not add a request timeout.
+    pub timeout: Option<Duration>,
+}
+
+pub(crate) fn is_retryable(err: &GcsError) -> bool {
+    if err.kind == GcsErrorKind::Transport {
+        return true;
+    }
+    matches!(err.status, Some(408 | 429 | 500 | 502 | 503 | 504))
 }
 
 pub(crate) async fn send(backend: &GcsBackend, call: &Call) -> Result<reqwest::Response, GcsError> {
@@ -256,6 +279,9 @@ pub(crate) async fn send(backend: &GcsBackend, call: &Call) -> Result<reqwest::R
         request = request.bearer_auth(&token);
         for (name, value) in &call.headers {
             request = request.header(name, value);
+        }
+        if let Some(timeout) = call.timeout {
+            request = request.timeout(timeout);
         }
         if let Some(json) = &call.json {
             request = request.json(json);
@@ -291,7 +317,7 @@ async fn error_from_response(response: reqwest::Response) -> GcsError {
         404 => GcsErrorKind::NotFound,
         _ => GcsErrorKind::Api,
     };
-    GcsError::new(kind, format!("status {status}: {detail}"))
+    GcsError::with_status(kind, status, format!("status {status}: {detail}"))
 }
 
 fn api_detail(body: &str) -> Option<String> {
@@ -367,5 +393,39 @@ mod tests {
     fn api_detail_reads_the_gcs_message() {
         let body = r#"{"error":{"code":404,"message":"No such object"}}"#;
         assert_eq!(api_detail(body).as_deref(), Some("No such object"));
+    }
+
+    #[test]
+    fn transfer_timeout_is_180_seconds() {
+        assert_eq!(TRANSFER_TIMEOUT, Duration::from_secs(180));
+    }
+
+    #[test]
+    fn retryable_status_codes_match_the_upload_policy() {
+        assert!(is_retryable(&GcsError::new(
+            GcsErrorKind::Transport,
+            "reset"
+        )));
+        for status in [408_u16, 429, 500, 502, 503, 504] {
+            assert!(is_retryable(&GcsError::with_status(
+                GcsErrorKind::Api,
+                status,
+                "retry"
+            )));
+        }
+        assert!(!is_retryable(&GcsError::with_status(
+            GcsErrorKind::NotFound,
+            404,
+            "missing"
+        )));
+        assert!(!is_retryable(&GcsError::with_status(
+            GcsErrorKind::Api,
+            400,
+            "bad"
+        )));
+        assert!(!is_retryable(&GcsError::new(
+            GcsErrorKind::Config,
+            "config"
+        )));
     }
 }

@@ -39,6 +39,7 @@ pub async fn sign_blob(backend: &GcsBackend, payload: &[u8]) -> Result<Vec<u8>, 
             json: Some(serde_json::json!({ "payload": encoded })),
             bytes: None,
             extra_status: &[],
+            timeout: None,
         },
     )
     .await?;
@@ -73,20 +74,17 @@ pub async fn sign_blob(backend: &GcsBackend, payload: &[u8]) -> Result<Vec<u8>, 
 
 /// V4 signed `GET` URL for one object.
 ///
-/// `expires_in` is whole seconds, from 1 through 604800 (7 days).
+/// `expires_in` is the URL lifetime.
+/// `None`, zero, and a value below one second are [`GcsErrorKind::Auth`].
+/// The client does not sign `X-Goog-Expires=0`.
+/// A lifetime above 604800 seconds is [`GcsErrorKind::Config`].
 pub async fn signed_get_url(
     backend: &GcsBackend,
     name: &str,
-    expires_in: Duration,
+    expires_in: Option<Duration>,
 ) -> Result<String, GcsError> {
     super::object::validate_object_name(name)?;
-    let seconds = expires_in.as_secs();
-    if seconds == 0 || seconds > MAX_SIGNED_URL_SECONDS {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "signed URL lifetime must be from 1 second through 604800 seconds",
-        ));
-    }
+    let seconds = signed_lifetime_seconds(expires_in)?;
     let parts = v4_get_parts(
         bucket(backend),
         name,
@@ -100,6 +98,29 @@ pub async fn signed_get_url(
         parts.url_prefix,
         hex::encode(signature)
     ))
+}
+
+fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError> {
+    let Some(expires_in) = expires_in else {
+        return Err(GcsError::new(
+            GcsErrorKind::Auth,
+            "signed URL lifetime is missing",
+        ));
+    };
+    let seconds = expires_in.as_secs();
+    if seconds == 0 {
+        return Err(GcsError::new(
+            GcsErrorKind::Auth,
+            "signed URL lifetime must be at least 1 second",
+        ));
+    }
+    if seconds > MAX_SIGNED_URL_SECONDS {
+        return Err(GcsError::new(
+            GcsErrorKind::Config,
+            "signed URL lifetime must be at most 604800 seconds",
+        ));
+    }
+    Ok(seconds)
 }
 
 fn v4_get_parts(
@@ -219,9 +240,39 @@ UNSIGNED-PAYLOAD";
         )
         .await
         .unwrap();
-        let err = signed_get_url(&backend, "a", Duration::from_secs(604_801))
+        let err = signed_get_url(&backend, "a", Some(Duration::from_secs(604_801)))
             .await
             .unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
+    }
+
+    #[tokio::test]
+    async fn signed_url_rejects_a_missing_or_zero_lifetime() {
+        let backend = gcs_backend(
+            "my-bucket",
+            Auth::User {
+                client_id: "id".to_string(),
+                client_secret: "secret".to_string(),
+                refresh_token: "refresh".to_string(),
+                signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        for lifetime in [None, Some(Duration::ZERO), Some(Duration::from_millis(500))] {
+            let err = signed_get_url(&backend, "a", lifetime).await.unwrap_err();
+            assert_eq!(err.kind(), GcsErrorKind::Auth);
+        }
+    }
+
+    #[test]
+    fn signed_lifetime_never_returns_zero() {
+        assert!(signed_lifetime_seconds(None).is_err());
+        assert!(signed_lifetime_seconds(Some(Duration::ZERO)).is_err());
+        assert!(signed_lifetime_seconds(Some(Duration::from_millis(999))).is_err());
+        assert_eq!(
+            signed_lifetime_seconds(Some(Duration::from_secs(1))).unwrap(),
+            1
+        );
     }
 }
