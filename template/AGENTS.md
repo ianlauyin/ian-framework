@@ -8,3 +8,4 @@ Read `spec/rules/coding-style.md` before the first edit.
 Read `spec/rules/git-convention.md` before make git commit.
 Read `spec/rules/spec-update.md` after making code changes.
 Do not change the files in `template/` unless the user tells you to.
+If the code is not business logic, ask the user to update the framework.
