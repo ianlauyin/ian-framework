@@ -17,7 +17,3 @@ Do not put business logic in this repository.
 `spec/rules/` contains `coding-style.md`, `git-convention.md`, and `spec-update.md`.
 
 The feature documents are listed in `spec/framework/feature.md`.
-
-## Procedures
-
-To write a document in this repository, read `spec/writing-specs.md`.
