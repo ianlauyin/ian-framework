@@ -805,13 +805,49 @@ async fn put_chunk_retrying(
             }
             Err(err) if !is_retryable(&err) => return Err(err),
             Err(err) => {
-                tracing::debug!(attempt, offset, error = %err, "gcs resumable chunk failed");
+                let attempt_text = attempt.to_string();
+                let offset_text = offset.to_string();
+                let error_text = super::ops::logged_error(&err);
+                super::ops::record_op(
+                    backend,
+                    super::ops::OpsRecord {
+                        level: crate::logging::LogLevel::Warn,
+                        message: "gcs resumable chunk failed",
+                        method: "PUT",
+                        url: location,
+                        status: err.status(),
+                        latency_ms: None,
+                        extra: &[
+                            ("attempt", &attempt_text),
+                            ("offset", &offset_text),
+                            ("error", &error_text),
+                        ],
+                    },
+                );
             }
         }
         match probe_session(backend, location, total).await {
             Ok(Probe::Complete(meta)) => return Ok(UploadStep::Done(meta)),
             Ok(Probe::Incomplete { next }) => {
-                tracing::debug!(attempt, offset, next, "gcs resumable probe");
+                let attempt_text = attempt.to_string();
+                let offset_text = offset.to_string();
+                let next_text = next.to_string();
+                super::ops::record_op(
+                    backend,
+                    super::ops::OpsRecord {
+                        level: crate::logging::LogLevel::Debug,
+                        message: "gcs resumable probe",
+                        method: "PUT",
+                        url: location,
+                        status: None,
+                        latency_ms: None,
+                        extra: &[
+                            ("attempt", &attempt_text),
+                            ("offset", &offset_text),
+                            ("next", &next_text),
+                        ],
+                    },
+                );
                 if next < start || next >= start + chunk_len {
                     return Ok(UploadStep::Continue { next });
                 }
@@ -826,7 +862,25 @@ async fn put_chunk_retrying(
             }
             Err(err) if !is_retryable(&err) => return Err(err),
             Err(err) => {
-                tracing::debug!(attempt, offset, error = %err, "gcs resumable probe failed");
+                let attempt_text = attempt.to_string();
+                let offset_text = offset.to_string();
+                let error_text = super::ops::logged_error(&err);
+                super::ops::record_op(
+                    backend,
+                    super::ops::OpsRecord {
+                        level: crate::logging::LogLevel::Warn,
+                        message: "gcs resumable probe failed",
+                        method: "PUT",
+                        url: location,
+                        status: err.status(),
+                        latency_ms: None,
+                        extra: &[
+                            ("attempt", &attempt_text),
+                            ("offset", &offset_text),
+                            ("error", &error_text),
+                        ],
+                    },
+                );
             }
         }
     }

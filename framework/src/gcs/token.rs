@@ -23,7 +23,39 @@ pub(crate) async fn access_token(backend: &GcsBackend) -> Result<String, GcsErro
             return Ok(cached.value.clone());
         }
     }
-    let (value, expires_at) = fetch_token(http(backend), auth(backend)).await?;
+    let message = match auth(backend) {
+        Auth::Metadata => "request metadata server access token",
+        Auth::User { .. } => "refresh user access token",
+    };
+    super::ops::record_op(
+        backend,
+        super::ops::OpsRecord {
+            level: crate::logging::LogLevel::Debug,
+            message,
+            method: "",
+            url: "",
+            status: None,
+            latency_ms: None,
+            extra: &[],
+        },
+    );
+    let fetched = fetch_token(http(backend), auth(backend)).await;
+    if let Err(err) = &fetched {
+        let error_text = super::ops::logged_error(err);
+        super::ops::record_op(
+            backend,
+            super::ops::OpsRecord {
+                level: crate::logging::LogLevel::Warn,
+                message: "access token request failed",
+                method: "",
+                url: "",
+                status: err.status(),
+                latency_ms: None,
+                extra: &[("error", &error_text)],
+            },
+        );
+    }
+    let (value, expires_at) = fetched?;
     *guard = Some(CachedToken {
         value: value.clone(),
         expires_at,
@@ -77,7 +109,6 @@ async fn metadata_token(http: &reqwest::Client) -> Result<(String, Instant), Gcs
         "{METADATA_ROOT}/token?scopes={}",
         super::encode::encode_seg(CLOUD_PLATFORM_SCOPE),
     );
-    tracing::debug!("request metadata server access token");
     let response = metadata_get(http, &url).await?;
     token_from_response(response).await
 }
@@ -88,7 +119,6 @@ async fn user_token(
     client_secret: &str,
     refresh_token: &str,
 ) -> Result<(String, Instant), GcsError> {
-    tracing::debug!("refresh user access token");
     let response = http
         .post(TOKEN_URL)
         .timeout(TOKEN_HTTP_TIMEOUT)

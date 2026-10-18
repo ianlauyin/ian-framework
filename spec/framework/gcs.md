@@ -13,10 +13,12 @@ The module path is `ian_framework::gcs`.
 ## Feature `gcs`
 
 The Cargo feature name is `gcs`.
-The default features are empty.
+The `gcs` feature is optional.
 The default build does not compile this client.
 A project sets the Cargo feature `gcs` to compile this client.
 A project can select the dependency feature `ian_framework/gcs`.
+The `gcs` feature enables the `logging` feature.
+The logging feature is `spec/framework/logging.md`.
 
 Put this block in the project `Cargo.toml`:
 
@@ -140,6 +142,47 @@ The client gives these operations:
 - Copy an object in the same bucket with `copyTo`.
 - Rewrite an object in the same bucket with `rewriteToken`.
 - Build a V4 signed GET URL.
+
+## Operations log
+
+The client writes operations records through the logging feature.
+`attach_ops_log` connects one log shipper to one client.
+A second call replaces that shipper.
+The records use the project and the service of that shipper.
+A client with no shipper writes no operations record.
+A logging failure does not change the storage result.
+The client does not write product rules in these records.
+The client does not write access tokens.
+The record `path` is the URL path.
+The client does not write the URL query.
+A token record has an empty method and an empty path.
+Each record has `bucket` in `extra`.
+The value is the bucket name.
+
+| case | level | message |
+| --- | --- | --- |
+| HTTP status 500 or higher | `error` | `gcs response` |
+| HTTP status 400 through 499 | `warn` | `gcs response` |
+| other HTTP response | `debug` | `gcs response` |
+| HTTP transport failure | `warn` | `gcs request failed` |
+| first HTTP 401 for one call | `warn` | `gcs access token rejected` |
+| resumable chunk failure | `warn` | `gcs resumable chunk failed` |
+| resumable probe failure | `warn` | `gcs resumable probe failed` |
+| resumable probe | `debug` | `gcs resumable probe` |
+| metadata token request | `debug` | `request metadata server access token` |
+| user token refresh | `debug` | `refresh user access token` |
+| token request failure | `warn` | `access token request failed` |
+
+The first HTTP 401 does not also write `gcs response`.
+The client requests a new access token and sends that call again.
+A later HTTP 401 writes `gcs response`.
+A failure record can include `error` in `extra`.
+An `error` value does not contain a URL query.
+A resumable chunk record includes `attempt` and `offset` in `extra`.
+The `gcs resumable probe` record includes `attempt`, `offset`, and `next` in `extra`.
+The shipper `minimum_level` selects which records stay in the buffer.
+The default minimum is `info`.
+A `debug` record stays out of the buffer.
 
 ## Out of scope
 
