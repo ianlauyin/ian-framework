@@ -1,0 +1,39 @@
+[package]
+name = "ian_framework"
+version = "0.1.0"
+edition = "2021"
+description = "Framework library. The gcs feature is a Google Cloud Storage client."
+repository = "https://github.com/ianlauyin/ian_framework"
+readme = "../../README.md"
+
+[features]
+# The default build does not include the GCS client.
+# Enable it with `--features gcs` or with the dependency feature `ian_framework/gcs`.
+default = []
+gcs = [
+    "dep:base64",
+    "dep:chrono",
+    "dep:futures-util",
+    "dep:hex",
+    "dep:reqwest",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:sha2",
+    "dep:tokio",
+    "dep:tracing",
+]
+
+[dependencies]
+base64 = { version = "0.22", optional = true }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"], optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std", "async-await"], optional = true }
+hex = { version = "0.4", optional = true }
+reqwest = { version = "0.12.20", default-features = false, features = ["json", "rustls-tls", "stream"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+sha2 = { version = "0.10", optional = true }
+tokio = { version = "1", default-features = false, features = ["fs", "io-util", "sync", "time"], optional = true }
+tracing = { version = "0.1", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

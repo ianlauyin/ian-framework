@@ -1,0 +1,71 @@
+//! Percent-encoding for object names and signed URL query values.
+
+/// Percent-encode one URL path segment.
+///
+/// Unreserved characters from RFC 3986 stay as they are.
+/// Hex digits are uppercase.
+/// `/` is encoded, so pass one segment, or use [`encode_object_path`] when
+/// slashes are separators.
+///
+/// ```
+/// use ian_framework::gcs::encode_seg;
+/// assert_eq!(encode_seg("a b"), "a%20b");
+/// assert_eq!(encode_seg("a/b"), "a%2Fb");
+/// assert_eq!(encode_seg("~"), "~");
+/// ```
+pub fn encode_seg(segment: &str) -> String {
+    let mut out = String::with_capacity(segment.len());
+    for byte in segment.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(byte as char);
+            }
+            _ => push_hex(&mut out, byte),
+        }
+    }
+    out
+}
+
+/// Encode an object name for a V4 signed URL path.
+///
+/// Slashes stay as slashes. Each segment is encoded with [`encode_seg`].
+pub fn encode_object_path(name: &str) -> String {
+    name.split('/')
+        .map(encode_seg)
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Encode an object name for the JSON API `o/` path segment.
+///
+/// Slashes become `%2F` because the object name is one URL segment.
+pub fn encode_object_id(name: &str) -> String {
+    encode_seg(name)
+}
+
+fn push_hex(out: &mut String, byte: u8) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    out.push('%');
+    out.push(HEX[(byte >> 4) as usize] as char);
+    out.push(HEX[(byte & 0x0f) as usize] as char);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_keeps_slashes_and_id_encodes_them() {
+        assert_eq!(
+            encode_object_path("photos/my cat.jpeg"),
+            "photos/my%20cat.jpeg"
+        );
+        assert_eq!(
+            encode_object_id("photos/my cat.jpeg"),
+            "photos%2Fmy%20cat.jpeg"
+        );
+        assert_eq!(encode_object_path("a//b"), "a//b");
+        assert_eq!(encode_seg("é"), "%C3%A9");
+        assert_eq!(encode_seg("+"), "%2B");
+    }
+}
