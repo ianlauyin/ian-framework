@@ -5,7 +5,9 @@ Do not put business logic in this repository.
 
 A project copies the files in `template/`.
 
-framework structure: `spec/00_structure.md`
+The Rust library is `framework/`.
+
+framework structure: `spec/framework.md`
 
 ## Things to do
 
