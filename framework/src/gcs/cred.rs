@@ -1,16 +1,3 @@
-//! Application Default Credentials for the GCS client.
-//!
-//! Accepted:
-//!
-//! - The metadata server service account on a VM (`Auth::Metadata`).
-//! - User ADC (`type` = `authorized_user`) when `GCS_SIGNER_EMAIL` is set.
-//!
-//! Rejected:
-//!
-//! - Service account JSON keys (`type` = `service_account`).
-//! - Impersonated ADC (`type` = `impersonated_service_account`).
-//! - Any other ADC type.
-
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -20,15 +7,10 @@ use super::{GcsError, GcsErrorKind};
 
 const ADC_FILE_LIMIT: u64 = 1024 * 1024;
 
-/// How the client obtains an access token and a signer email.
 #[derive(Clone)]
 pub enum Auth {
-    /// VM metadata server. The attached service account is the signer.
     Metadata,
-    /// End-user ADC (`authorized_user`).
-    ///
-    /// `signer_email` is the service account that `signBlob` uses.
-    /// The refresh token is not a service account key.
+
     User {
         client_id: String,
         client_secret: String,
@@ -82,10 +64,6 @@ pub(crate) fn validate_signer_email(email: &str) -> Result<(), GcsError> {
     Ok(())
 }
 
-/// Load ADC from the environment.
-///
-/// `Ok(None)` means no credentials file is configured, so the caller uses the metadata server.
-/// A set `GOOGLE_APPLICATION_CREDENTIALS` that does not point at a file is an error.
 pub(crate) async fn load_adc_auth() -> Result<Option<Auth>, GcsError> {
     if let Ok(path) = env::var("GOOGLE_APPLICATION_CREDENTIALS") {
         if !path.is_empty() {

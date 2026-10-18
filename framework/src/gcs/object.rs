@@ -1,9 +1,3 @@
-//! JSON API object calls.
-//!
-//! Results keep `name`, `size`, `content_type`, `updated`, and the raw metadata map.
-//! List pages also keep `prefixes` and `next_page_token`.
-//! This module does not hide names and it does not apply a page cap.
-
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::pin::Pin;
@@ -26,18 +20,12 @@ const CHUNK_BACKOFF: Duration = Duration::from_millis(200);
 const API_ROOT: &str = "https://storage.googleapis.com/storage/v1";
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
 
-/// Custom metadata and content type for an upload.
-///
-/// `metadata` is stored as given. This crate does not insert `uploaded-by`
-/// or `uploaded-by-id`. A project that wants those keys sets them here.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PutOptions {
-    /// Value stored as `contentType`. `None` stores `application/octet-stream`.
     pub content_type: Option<String>,
     pub metadata: BTreeMap<String, String>,
 }
 
-/// One object, without product file or folder types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectMeta {
     pub name: String,
@@ -47,9 +35,6 @@ pub struct ObjectMeta {
     pub metadata: BTreeMap<String, String>,
 }
 
-/// One page from `objects.list`.
-///
-/// `prefixes` is the raw delimiter list from GCS. Nothing is filtered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListPage {
     pub objects: Vec<ObjectMeta>,
@@ -57,9 +42,6 @@ pub struct ListPage {
     pub next_page_token: Option<String>,
 }
 
-/// Query for one list call.
-///
-/// `max_results` is sent as `maxResults` when set. This crate does not pick a default cap.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListQuery {
     pub prefix: Option<String>,
@@ -68,15 +50,10 @@ pub struct ListQuery {
     pub max_results: Option<u32>,
 }
 
-/// Open object body from `alt=media`.
 pub struct ObjectReader {
     response: reqwest::Response,
 }
 
-/// Upload bytes with a resumable session.
-///
-/// The body is sent in 8 MiB chunks. Each chunk request uses [`TRANSFER_TIMEOUT`].
-/// A transport failure or HTTP status 408, 429, 500, 502, 503, or 504 retries that chunk.
 pub async fn put_bytes(
     backend: &GcsBackend,
     name: &str,
@@ -126,7 +103,6 @@ pub async fn put_bytes(
     ))
 }
 
-/// Upload a file. The content type comes from `options`, not from the file name.
 pub async fn put_file(
     backend: &GcsBackend,
     name: &str,
@@ -204,11 +180,6 @@ pub async fn put_file(
     ))
 }
 
-/// Upload a stream of byte chunks.
-///
-/// The length does not need to be known. Chunks sent before the last one are 8 MiB.
-/// The last chunk can be shorter. The client keeps bytes that GCS has not committed.
-/// If the session offset moves before those bytes, the upload fails.
 pub async fn put_stream<S, E>(
     backend: &GcsBackend,
     name: &str,
@@ -314,14 +285,10 @@ where
     }
 }
 
-/// Download the object body into memory.
-///
-/// For a large object, use [`open_object`] and [`byte_stream`] instead.
 pub async fn get_bytes(backend: &GcsBackend, name: &str) -> Result<Vec<u8>, GcsError> {
     read_to_vec(open_object(backend, name).await?).await
 }
 
-/// Open the object body without buffering it.
 pub async fn open_object(backend: &GcsBackend, name: &str) -> Result<ObjectReader, GcsError> {
     validate_object_name(name)?;
     let response = send(
@@ -340,7 +307,6 @@ pub async fn open_object(backend: &GcsBackend, name: &str) -> Result<ObjectReade
     Ok(ObjectReader { response })
 }
 
-/// Read an open object into memory.
 pub async fn read_to_vec(reader: ObjectReader) -> Result<Vec<u8>, GcsError> {
     let bytes = reader.response.bytes().await.map_err(|err| {
         GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
@@ -348,7 +314,6 @@ pub async fn read_to_vec(reader: ObjectReader) -> Result<Vec<u8>, GcsError> {
     Ok(bytes.to_vec())
 }
 
-/// Stream an open object as `Vec<u8>` chunks.
 pub fn byte_stream(
     reader: ObjectReader,
 ) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, GcsError>> + Send>> {
@@ -359,7 +324,6 @@ pub fn byte_stream(
     }))
 }
 
-/// Read object metadata.
 pub async fn stat(backend: &GcsBackend, name: &str) -> Result<ObjectMeta, GcsError> {
     validate_object_name(name)?;
     let response = send(
@@ -378,7 +342,6 @@ pub async fn stat(backend: &GcsBackend, name: &str) -> Result<ObjectMeta, GcsErr
     meta_from_response(response).await
 }
 
-/// List one page. Follow `next_page_token` to continue. No cap is applied here.
 pub async fn list(backend: &GcsBackend, query: &ListQuery) -> Result<ListPage, GcsError> {
     let response = send(
         backend,
@@ -399,7 +362,6 @@ pub async fn list(backend: &GcsBackend, query: &ListQuery) -> Result<ListPage, G
     list_page_from_slice(&bytes)
 }
 
-/// Delete one object. A missing object is [`GcsErrorKind::NotFound`].
 pub async fn delete_object(backend: &GcsBackend, name: &str) -> Result<(), GcsError> {
     validate_object_name(name)?;
     let response = send(
@@ -419,9 +381,6 @@ pub async fn delete_object(backend: &GcsBackend, name: &str) -> Result<(), GcsEr
     Ok(())
 }
 
-/// Patch custom metadata. GCS merges the keys in `metadata`.
-///
-/// This does not rewrite `uploaded-by` on its own. Pass the keys you want to set.
 pub async fn patch_metadata(
     backend: &GcsBackend,
     name: &str,
@@ -445,7 +404,6 @@ pub async fn patch_metadata(
     meta_from_response(response).await
 }
 
-/// Copy one object to another name in the same bucket.
 pub async fn copy_object(
     backend: &GcsBackend,
     from: &str,
@@ -475,10 +433,6 @@ pub async fn copy_object(
     meta_from_response(response).await
 }
 
-/// Rewrite one object onto another name in the same bucket.
-///
-/// Large objects can take more than one call. The client follows `rewriteToken`
-/// until `done` is true. [`copy_object`] remains a single `copyTo` call.
 pub async fn rewrite_object(
     backend: &GcsBackend,
     from: &str,
@@ -747,10 +701,6 @@ fn advance_offset(
     ))
 }
 
-/// Bytes from `offset` that can be sent as one resumable request.
-///
-/// `Some(0)` is only the empty object. `None` means this buffer cannot supply
-/// a legal chunk at `offset`, so the caller resumes from there.
 fn chunk_suffix_len(chunk_len: u64, start: u64, offset: u64, finished: bool) -> Option<u64> {
     if offset < start || offset > start + chunk_len {
         return None;

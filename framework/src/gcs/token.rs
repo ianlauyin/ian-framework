@@ -1,8 +1,3 @@
-//! Access tokens for Cloud Storage and IAM `signBlob`.
-//!
-//! The metadata server token uses the `cloud-platform` scope.
-//! One cache entry is enough for object calls and `signBlob`.
-
 use std::time::{Duration, Instant};
 
 use super::cred::Auth;

@@ -1,12 +1,3 @@
-//! Google Cloud Storage client.
-//!
-//! Build a backend with [`gcs_from_adc`] or [`gcs_backend`].
-//! The default crate features do not compile this module.
-//! Select the `gcs` Cargo feature to compile it.
-//!
-//! This module is a bucket client. It does not include a product store,
-//! trash rules, browse limits, or an HTTP framework.
-
 mod cred;
 mod encode;
 mod object;
@@ -28,18 +19,10 @@ use std::time::Duration;
 
 use crate::gcs::token::CachedToken;
 
-/// Limit for one resumable chunk, one session probe, and unacknowledged TCP data.
-///
-/// The HTTP client sets `TCP_USER_TIMEOUT` to this value on Linux.
-/// A resumable chunk request uses this same limit.
-/// A session probe uses this same limit.
 pub const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Bucket client.
-///
-/// Clone shares the HTTP client and the access-token cache.
 #[derive(Clone)]
 pub struct GcsBackend {
     inner: Arc<Inner>,
@@ -53,7 +36,6 @@ struct Inner {
     token: tokio::sync::Mutex<Option<CachedToken>>,
 }
 
-/// Why a GCS call failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GcsErrorKind {
     Auth,
@@ -63,7 +45,6 @@ pub enum GcsErrorKind {
     Transport,
 }
 
-/// Error from the GCS client.
 pub struct GcsError {
     kind: GcsErrorKind,
     status: Option<u16>,
@@ -143,29 +124,14 @@ impl fmt::Debug for GcsBackend {
     }
 }
 
-/// Bucket name stored on the backend.
 pub fn bucket(backend: &GcsBackend) -> &str {
     &backend.inner.bucket
 }
 
-/// Service account email used for V4 signatures.
 pub fn signer_email(backend: &GcsBackend) -> &str {
     &backend.inner.email
 }
 
-/// Build a backend from an explicit auth value.
-///
-/// `Auth::Metadata` reads the VM service account email from the metadata server.
-/// `Auth::User` does not contact the network during construction.
-///
-/// ```no_run
-/// # async fn demo() -> Result<(), ian_framework::gcs::GcsError> {
-/// use ian_framework::gcs::{self, Auth};
-/// let backend = gcs::gcs_backend("my-bucket", Auth::Metadata).await?;
-/// let _ = gcs::signer_email(&backend);
-/// # Ok(())
-/// # }
-/// ```
 pub async fn gcs_backend(
     bucket_name: impl Into<String>,
     auth: Auth,
@@ -189,24 +155,6 @@ pub async fn gcs_backend(
     })
 }
 
-/// Build a backend from Application Default Credentials.
-///
-/// Order:
-///
-/// 1. `GOOGLE_APPLICATION_CREDENTIALS`, when the variable is set and not empty.
-/// 2. The well-known `application_default_credentials.json` file.
-/// 3. The VM metadata server.
-///
-/// A service account JSON key is an error. Impersonated ADC is an error.
-/// User ADC requires `GCS_SIGNER_EMAIL`.
-///
-/// ```no_run
-/// # async fn demo() -> Result<(), ian_framework::gcs::GcsError> {
-/// let backend = ian_framework::gcs::gcs_from_adc("my-bucket").await?;
-/// let _ = ian_framework::gcs::bucket(&backend);
-/// # Ok(())
-/// # }
-/// ```
 pub async fn gcs_from_adc(bucket_name: impl Into<String>) -> Result<GcsBackend, GcsError> {
     let auth = match cred::load_adc_auth().await? {
         Some(auth) => auth,
@@ -258,9 +206,9 @@ pub(crate) struct Call {
     pub headers: Vec<(reqwest::header::HeaderName, String)>,
     pub json: Option<serde_json::Value>,
     pub bytes: Option<Vec<u8>>,
-    /// Status codes that are success in addition to 2xx. `308` is used by resumable upload.
+
     pub extra_status: &'static [u16],
-    /// Total time for this request. `None` does not add a request timeout.
+
     pub timeout: Option<Duration>,
 }
 

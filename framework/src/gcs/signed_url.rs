@@ -1,9 +1,3 @@
-//! V4 signed `GET` URLs.
-//!
-//! The signature is an IAM `signBlob` signature over the string-to-sign.
-//! The object path encodes each segment with [`encode_seg`].
-//! The host is `storage.googleapis.com` (path-style URL).
-
 use std::time::Duration;
 
 use base64::Engine;
@@ -21,9 +15,6 @@ struct SignedParts {
     url_prefix: String,
 }
 
-/// Sign `payload` with the backend signer via IAM `signBlob`.
-///
-/// The returned bytes are the raw signature, not hex and not base64.
 pub async fn sign_blob(backend: &GcsBackend, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
     let url = format!(
         "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",
@@ -72,12 +63,6 @@ pub async fn sign_blob(backend: &GcsBackend, payload: &[u8]) -> Result<Vec<u8>, 
     Ok(signature)
 }
 
-/// V4 signed `GET` URL for one object.
-///
-/// `expires_in` is the URL lifetime.
-/// `None`, zero, and a value below one second are [`GcsErrorKind::Auth`].
-/// The client does not sign `X-Goog-Expires=0`.
-/// A lifetime above 604800 seconds is [`GcsErrorKind::Config`].
 pub async fn signed_get_url(
     backend: &GcsBackend,
     name: &str,

@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-# The default build does not include the GCS client.
-# Enable it with `--features gcs` or with the dependency feature `ian_framework/gcs`.
 default = []
 gcs = [
     "dep:base64",

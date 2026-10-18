@@ -1,18 +1,3 @@
-//! Percent-encoding for object names and signed URL query values.
-
-/// Percent-encode one URL path segment.
-///
-/// Unreserved characters from RFC 3986 stay as they are.
-/// Hex digits are uppercase.
-/// `/` is encoded, so pass one segment, or use [`encode_object_path`] when
-/// slashes are separators.
-///
-/// ```
-/// use ian_framework::gcs::encode_seg;
-/// assert_eq!(encode_seg("a b"), "a%20b");
-/// assert_eq!(encode_seg("a/b"), "a%2Fb");
-/// assert_eq!(encode_seg("~"), "~");
-/// ```
 pub fn encode_seg(segment: &str) -> String {
     let mut out = String::with_capacity(segment.len());
     for byte in segment.bytes() {
@@ -26,9 +11,6 @@ pub fn encode_seg(segment: &str) -> String {
     out
 }
 
-/// Encode an object name for a V4 signed URL path.
-///
-/// Slashes stay as slashes. Each segment is encoded with [`encode_seg`].
 pub fn encode_object_path(name: &str) -> String {
     name.split('/')
         .map(encode_seg)
@@ -36,9 +18,6 @@ pub fn encode_object_path(name: &str) -> String {
         .join("/")
 }
 
-/// Encode an object name for the JSON API `o/` path segment.
-///
-/// Slashes become `%2F` because the object name is one URL segment.
 pub fn encode_object_id(name: &str) -> String {
     encode_seg(name)
 }
