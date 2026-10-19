@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::event::{level_rank, to_jsonl};
+use super::event::level_rank;
 use super::{truncate, LogError, LogErrorKind, LogEvent, LogLevel};
 
 pub const DEFAULT_CAPACITY: usize = 10_000;
@@ -244,12 +244,14 @@ async fn post_batch(
     app: &str,
     events: &[LogEvent],
 ) -> Result<(), LogError> {
-    let body = to_jsonl(events)?;
+    let body = serde_json::to_string(events).map_err(|err| {
+        LogError::with_source(LogErrorKind::Encode, "cannot encode a log batch", err)
+    })?;
     let url = batch_url(endpoint, app);
     let response = client
         .post(&url)
         .timeout(SHIP_TIMEOUT)
-        .header(reqwest::header::CONTENT_TYPE, "application/x-ndjson")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(body)
         .send()
         .await
@@ -352,7 +354,6 @@ fn http_client() -> Result<reqwest::Client, LogError> {
 mod tests {
     use super::*;
     use crate::logging::event;
-    use crate::logging::event::{parse_jsonl, to_json_line};
 
     fn buffer_only() -> LogShipper {
         log_shipper(shipper_config("api")).unwrap()
@@ -455,7 +456,7 @@ mod tests {
         assert_eq!(events[0].message, "kept");
         assert_eq!(app(&shipper), "api");
         assert_eq!(project(&shipper), "demo");
-        assert_no_scope_keys(&to_json_line(&events[0]).unwrap());
+        assert_no_scope_keys(&serde_json::to_string(&events[0]).unwrap());
     }
 
     #[test]
@@ -535,7 +536,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ship_batch_posts_ndjson_to_the_app_path() {
+    async fn ship_batch_posts_json_to_the_app_path() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
         let mut config = shipper_config("cs");
         config.project = "demo".to_string();
@@ -553,16 +554,16 @@ mod tests {
         let captured = rx.recv().await.unwrap();
         assert_eq!(captured.app, "cs");
         assert_eq!(captured.path, "/log/cs");
-        assert_eq!(captured.content_type, "application/x-ndjson");
+        assert_eq!(captured.content_type, "application/json");
         assert!(!captured.has_project_header);
         let events = parse_body(&captured.body);
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].message, "one");
         assert_eq!(events[1].message, "two");
-        for line in captured.body.lines() {
-            if !line.trim().is_empty() {
-                assert_no_scope_keys(line);
-            }
+        let body: serde_json::Value = serde_json::from_str(&captured.body).unwrap();
+        for item in body.as_array().unwrap() {
+            assert!(item.get("app").is_none());
+            assert!(item.get("project").is_none());
         }
         let second = ship_batch(&shipper).await.unwrap();
         assert_eq!(second.shipped, 1);
@@ -658,7 +659,7 @@ mod tests {
     }
 
     fn parse_body(body: &str) -> Vec<LogEvent> {
-        parse_jsonl(body).unwrap()
+        serde_json::from_str(body).unwrap()
     }
 
     fn assert_no_scope_keys(line: &str) {
