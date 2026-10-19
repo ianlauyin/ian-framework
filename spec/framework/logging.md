@@ -44,20 +44,13 @@ The default build includes `logging`.
 
 ## Event
 
-`event` builds one event for one app.
-`project` starts empty.
-A caller can set `project` on the event.
-`project` is a descriptive name.
-`project` is not the routing name.
-`app` is the routing name.
+`event` builds one event.
 
 One event has these fields:
 
 | field | value |
 | --- | --- |
 | `ts` | UTC time in RFC 3339 |
-| `app` | app name |
-| `project` | descriptive project name, or an empty string |
 | `id` | event id, or an empty string |
 | `ip` | client address, or an empty string |
 | `user_agent` | `user-agent` header, or an empty string |
@@ -67,6 +60,9 @@ One event has these fields:
 | `level` | `debug`, `info`, `warn`, or `error` |
 | `message` | short text |
 | `extra` | one JSON object |
+
+The event has no `app` field.
+The event has no `project` field.
 
 `request` is one string.
 The shape is `{method} {path}`.
@@ -84,6 +80,8 @@ Each event in the batch is one JSON object and ends with a newline.
 `parse_jsonl` reads that batch.
 `parse_jsonl` skips a blank line.
 A line has every field in the table.
+A line has no `app` key.
+A line has no `project` key.
 `status` is null when the event has no HTTP status.
 `latency_ms` is null when the event has no latency.
 A line that omits a field is an encode error.
@@ -93,6 +91,8 @@ A line that omits a field is an encode error.
 `shipper_config` builds one `ShipperConfig` for one app.
 The project on that config starts empty.
 A caller can set `project` on the config.
+That project stays on the shipper.
+That project is not an event field.
 That config has no endpoint.
 `minimum_level` starts at `info`.
 `capacity` starts at 10000 events.
@@ -118,12 +118,8 @@ A forbidden character in that project is a configuration error.
 `batch_size` above `capacity` is a configuration error.
 
 `record` stores one event in the local buffer.
-`record` sets `app` from the shipper when `app` is empty.
-`record` rejects an event whose app does not match the shipper.
-This check applies at every level.
-`record` sets `project` from the shipper when `project` is empty.
-`record` keeps a project that is not empty.
-`record` accepts an event when `project` does not match the shipper project.
+`record` does not write `app` into the event.
+`record` does not write `project` into the event.
 `record` does not store an event below `minimum_level`.
 The stored `message` is at most `MAX_MESSAGE_BYTES` bytes.
 `MAX_MESSAGE_BYTES` is 4096.
@@ -174,9 +170,7 @@ The result mode for a sent batch is `Sent`.
 
 The path app selects the log stream.
 A log server stores its project from the path app.
-The event `project` does not select the path.
-A consumer splits logs by the app.
-A consumer does not split logs by the event `project`.
+A consumer splits logs by the app in the path.
 
 ## Adapter
 
@@ -225,10 +219,8 @@ An invalid header gets a new id.
 The middleware stores that id in the event field `id`.
 The middleware writes that id into the response header `x-request-id`.
 The middleware records one event after the inner handler returns.
-The middleware builds the event with an empty app and an empty project.
-`record` sets the app from the shipper.
-`record` sets the project from the shipper.
-The shipper project can be empty.
+The middleware does not set `app` on the event.
+The middleware does not set `project` on the event.
 `request` is `{method} {path}`.
 One space separates the method and the path.
 `method` is the request method.

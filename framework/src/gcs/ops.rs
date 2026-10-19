@@ -16,7 +16,7 @@ pub(crate) fn record_op(backend: &GcsBackend, op: OpsRecord<'_>) {
     let Some(shipper) = ops_shipper(backend) else {
         return;
     };
-    let mut event = event("", op.level, op.message);
+    let mut event = event(op.level, op.message);
     event.request = crate::logging::request_line(op.method, &path_only(op.url));
     event.status = op.status;
     event.latency_ms = op.latency_ms;

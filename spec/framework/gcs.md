@@ -148,10 +148,8 @@ The client gives these operations:
 The client writes operations records through the logging feature.
 `attach_ops_log` connects one log shipper to one client.
 A second call replaces that shipper.
-The records use the app of that shipper.
-An empty record `project` gets the shipper project.
-The shipper project can be empty.
-`project` is not the log route.
+An operations record has no `app` field.
+An operations record has no `project` field.
 The log route is `spec/framework/logging.md`.
 A client with no shipper writes no operations record.
 A logging failure does not change the storage result.

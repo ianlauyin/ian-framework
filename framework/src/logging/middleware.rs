@@ -25,7 +25,7 @@ pub async fn log_request(
     if let Ok(value) = HeaderValue::from_str(&id) {
         response.headers_mut().insert("x-request-id", value);
     }
-    let mut event = event("", level_for_status(status), "request");
+    let mut event = event(level_for_status(status), "request");
     event.id = id;
     event.ip = ip;
     event.user_agent = user_agent;
@@ -172,8 +172,6 @@ mod tests {
         let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         let event = &events[0];
-        assert_eq!(event.app, "api");
-        assert_eq!(event.project, "demo");
         assert_eq!(event.id, "req-1");
         assert_eq!(event.request, "GET /status/204");
         assert_eq!(event.ip, "");
@@ -183,6 +181,9 @@ mod tests {
         assert_eq!(event.level, LogLevel::Info);
         assert_eq!(event.message, "request");
         let line = crate::logging::to_json_line(event).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert!(value.get("app").is_none());
+        assert!(value.get("project").is_none());
         assert!(!line.contains("secret"));
         assert!(!line.contains("token"));
     }

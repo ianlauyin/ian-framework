@@ -18,8 +18,6 @@ pub enum LogLevel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     pub ts: DateTime<Utc>,
-    pub app: String,
-    pub project: String,
     pub id: String,
     pub ip: String,
     pub user_agent: String,
@@ -31,11 +29,9 @@ pub struct LogEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
-pub fn event(app: impl Into<String>, level: LogLevel, message: impl Into<String>) -> LogEvent {
+pub fn event(level: LogLevel, message: impl Into<String>) -> LogEvent {
     LogEvent {
         ts: Utc::now(),
-        app: app.into(),
-        project: String::new(),
         id: String::new(),
         ip: String::new(),
         user_agent: String::new(),
@@ -102,11 +98,10 @@ mod tests {
     use serde_json::json;
 
     fn sample() -> LogEvent {
-        let mut event = event("cs", LogLevel::Info, "request");
+        let mut event = event(LogLevel::Info, "request");
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        event.project = "demo".to_string();
         event.id = "req-1".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "demo-agent".to_string();
@@ -123,8 +118,6 @@ mod tests {
         let value: Value = serde_json::from_str(&line).unwrap();
         for key in [
             "ts",
-            "app",
-            "project",
             "id",
             "ip",
             "user_agent",
@@ -137,12 +130,12 @@ mod tests {
         ] {
             assert!(value.get(key).is_some(), "{key}");
         }
+        assert!(value.get("app").is_none());
+        assert!(value.get("project").is_none());
         assert!(value["ts"]
             .as_str()
             .unwrap()
             .contains("2026-10-18T12:00:00"));
-        assert_eq!(value["app"], "cs");
-        assert_eq!(value["project"], "demo");
         assert_eq!(value["id"], "req-1");
         assert_eq!(value["ip"], "203.0.113.8");
         assert_eq!(value["user_agent"], "demo-agent");
@@ -161,10 +154,10 @@ mod tests {
 
     #[test]
     fn empty_http_fields_are_null_or_empty() {
-        let line = to_json_line(&event("cs", LogLevel::Warn, "note")).unwrap();
+        let line = to_json_line(&event(LogLevel::Warn, "note")).unwrap();
         let value: Value = serde_json::from_str(&line).unwrap();
-        assert_eq!(value["app"], "cs");
-        assert_eq!(value["project"], "");
+        assert!(value.get("app").is_none());
+        assert!(value.get("project").is_none());
         assert_eq!(value["id"], "");
         assert_eq!(value["ip"], "");
         assert_eq!(value["user_agent"], "");
@@ -184,7 +177,7 @@ mod tests {
 
     #[test]
     fn jsonl_round_trips_and_skips_blank_lines() {
-        let events = vec![sample(), event("cs", LogLevel::Error, "down")];
+        let events = vec![sample(), event(LogLevel::Error, "down")];
         let body = format!("\n{}\n", to_jsonl(&events).unwrap());
         let parsed = parse_jsonl(&body).unwrap();
         assert_eq!(parsed, events);
@@ -200,7 +193,7 @@ mod tests {
 
     #[test]
     fn a_missing_schema_field_is_rejected() {
-        let line = r#"{"ts":"2026-10-18T12:00:00Z","project":"demo"}"#;
+        let line = r#"{"ts":"2026-10-18T12:00:00Z","message":"note"}"#;
         let err = parse_json_line(line).unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Encode);
     }

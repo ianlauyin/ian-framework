@@ -465,8 +465,6 @@ mod tests {
         );
         let events = crate::logging::buffered_events(&shipper);
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].app, "storage");
-        assert_eq!(events[0].project, "demo");
         assert_eq!(events[0].request, "GET /storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");
         assert_eq!(events[0].ip, "");
@@ -481,6 +479,9 @@ mod tests {
             Some("my-bucket")
         );
         let line = crate::logging::to_json_line(&events[0]).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert!(value.get("app").is_none());
+        assert!(value.get("project").is_none());
         assert!(!line.contains("secret"));
         assert!(!line.contains("upload_id"));
     }
