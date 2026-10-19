@@ -11,8 +11,10 @@ pub const DEFAULT_BATCH_SIZE: usize = 100;
 pub const DEFAULT_SHIP_EVERY: Duration = Duration::from_secs(5);
 pub const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 pub const MAX_MESSAGE_BYTES: usize = 4096;
-pub const MAX_PATH_BYTES: usize = 2048;
-pub const MAX_REQUEST_ID_BYTES: usize = 128;
+pub const MAX_REQUEST_BYTES: usize = 2080;
+pub const MAX_ID_BYTES: usize = 128;
+pub const MAX_IP_BYTES: usize = 64;
+pub const MAX_USER_AGENT_BYTES: usize = 1024;
 
 const MAX_SCOPE_LEN: usize = 64;
 
@@ -164,8 +166,10 @@ pub fn record(shipper: &LogShipper, mut event: LogEvent) -> Result<(), LogError>
         event.project = shipper.inner.project.clone();
     }
     event.message = truncate(&event.message, MAX_MESSAGE_BYTES).to_string();
-    event.path = truncate(&event.path, MAX_PATH_BYTES).to_string();
-    event.request_id = truncate(&event.request_id, MAX_REQUEST_ID_BYTES).to_string();
+    event.request = truncate(&event.request, MAX_REQUEST_BYTES).to_string();
+    event.id = truncate(&event.id, MAX_ID_BYTES).to_string();
+    event.ip = truncate(&event.ip, MAX_IP_BYTES).to_string();
+    event.user_agent = truncate(&event.user_agent, MAX_USER_AGENT_BYTES).to_string();
     push_event(&shipper.inner, event);
     Ok(())
 }
@@ -506,6 +510,29 @@ mod tests {
             .collect();
         assert_eq!(messages, ["b", "c"]);
         assert_eq!(dropped(&shipper), 1);
+    }
+
+    #[test]
+    fn record_truncates_id_request_ip_and_user_agent() {
+        let shipper = buffer_only();
+        let mut event = event("api", LogLevel::Info, "ok");
+        event.id = "i".repeat(MAX_ID_BYTES + 8);
+        event.request = format!("GET /{}", "p".repeat(MAX_REQUEST_BYTES));
+        event.ip = "1".repeat(MAX_IP_BYTES + 8);
+        event.user_agent = "é".repeat(MAX_USER_AGENT_BYTES);
+        record(&shipper, event).unwrap();
+        let stored = buffered_events(&shipper).remove(0);
+        assert_eq!(stored.id.len(), MAX_ID_BYTES);
+        assert!(stored.request.len() <= MAX_REQUEST_BYTES);
+        assert!(stored.request.len() > MAX_REQUEST_BYTES - 4);
+        assert!(stored.request.is_char_boundary(stored.request.len()));
+        assert_eq!(stored.ip.len(), MAX_IP_BYTES);
+        assert!(stored.user_agent.len() <= MAX_USER_AGENT_BYTES);
+        assert!(stored.user_agent.is_char_boundary(stored.user_agent.len()));
+        assert_eq!(MAX_ID_BYTES, 128);
+        assert_eq!(MAX_REQUEST_BYTES, 2080);
+        assert_eq!(MAX_IP_BYTES, 64);
+        assert_eq!(MAX_USER_AGENT_BYTES, 1024);
     }
 
     #[test]

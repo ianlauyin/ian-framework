@@ -467,8 +467,10 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].app, "storage");
         assert_eq!(events[0].project, "demo");
-        assert_eq!(events[0].method, "GET");
-        assert_eq!(events[0].path, "/storage/v1/b/my-bucket/o/file");
+        assert_eq!(events[0].request, "GET /storage/v1/b/my-bucket/o/file");
+        assert_eq!(events[0].id, "");
+        assert_eq!(events[0].ip, "");
+        assert_eq!(events[0].user_agent, "");
         assert_eq!(events[0].status, Some(200));
         assert_eq!(events[0].latency_ms, Some(3));
         assert_eq!(

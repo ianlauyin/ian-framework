@@ -157,9 +157,14 @@ A client with no shipper writes no operations record.
 A logging failure does not change the storage result.
 The client does not write product rules in these records.
 The client does not write access tokens.
-The record `path` is the URL path.
+The record `request` is `{method} {path}`.
+One space separates the method and the path.
+The path is the URL path.
 The client does not write the URL query.
-A token record has an empty method and an empty path.
+A token record has an empty `request`.
+An operations record has an empty `id`.
+An operations record has an empty `ip`.
+An operations record has an empty `user_agent`.
 Each record has `bucket` in `extra`.
 The value is the bucket name.
 
