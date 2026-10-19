@@ -95,10 +95,10 @@ A lifetime above that maximum is a configuration error.
 
 ## Transfer time limit
 
-`TRANSFER_TIMEOUT` is 180 seconds.
-The Linux HTTP client sets `TCP_USER_TIMEOUT` to `TRANSFER_TIMEOUT`.
-Each resumable chunk request uses `TRANSFER_TIMEOUT`.
-Each session probe uses `TRANSFER_TIMEOUT`.
+The transfer time limit is 180 seconds.
+The Linux HTTP client sets `TCP_USER_TIMEOUT` to the transfer time limit.
+Each resumable chunk request uses the transfer time limit.
+Each session probe uses the transfer time limit.
 
 ## Resumable upload
 

@@ -45,6 +45,17 @@ The default build includes `logging`.
 ## Event
 
 `event` builds one event.
+The first argument is `action`.
+The second argument is `message`.
+The third argument is `level`.
+`event` writes the first argument into `action`.
+`ts` is the current UTC time.
+`id` starts empty.
+`ip` starts empty.
+`user_agent` starts empty.
+`status` starts null.
+`latency_ms` starts null.
+`extra` starts empty.
 
 One event has these fields:
 
@@ -83,10 +94,8 @@ That config has no endpoint.
 `minimum_level` starts at `info`.
 `capacity` starts at 10000 events.
 `batch_size` starts at 100 events.
-`DEFAULT_CAPACITY` is 10000.
-`DEFAULT_BATCH_SIZE` is 100.
-`DEFAULT_SHIP_EVERY` is 5 seconds.
-`SHIP_TIMEOUT` is 10 seconds.
+The default ship interval is 5 seconds.
+The ship request time limit is 10 seconds.
 
 `LogShipper::new` builds one shipper from that config.
 One shipper has one app.
