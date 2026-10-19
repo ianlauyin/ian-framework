@@ -465,7 +465,7 @@ mod tests {
         );
         let events = crate::logging::buffered_events(&shipper);
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].request, "GET /storage/v1/b/my-bucket/o/file");
+        assert_eq!(events[0].action, "GET /storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");
         assert_eq!(events[0].ip, "");
         assert_eq!(events[0].user_agent, "");

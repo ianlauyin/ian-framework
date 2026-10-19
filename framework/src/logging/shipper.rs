@@ -488,18 +488,18 @@ mod tests {
         let shipper = buffer_only();
         let mut event = event(LogLevel::Info, "é".repeat(5000));
         event.id = "i".repeat(200);
-        event.request = format!("GET /{}", "p".repeat(3000));
+        event.action = format!("GET /{}", "p".repeat(3000));
         event.ip = "1".repeat(80);
         event.user_agent = "é".repeat(2000);
         let message = event.message.clone();
-        let request = event.request.clone();
+        let action = event.action.clone();
         let id = event.id.clone();
         let ip = event.ip.clone();
         let user_agent = event.user_agent.clone();
         record(&shipper, event).unwrap();
         let stored = buffered_events(&shipper).remove(0);
         assert_eq!(stored.message, message);
-        assert_eq!(stored.request, request);
+        assert_eq!(stored.action, action);
         assert_eq!(stored.id, id);
         assert_eq!(stored.ip, ip);
         assert_eq!(stored.user_agent, user_agent);
@@ -574,6 +574,8 @@ mod tests {
         for item in body["events"].as_array().unwrap() {
             assert!(item.get("app").is_none());
             assert!(item.get("project").is_none());
+            assert!(item.get("action").is_some());
+            assert!(item.get("request").is_none());
         }
         assert!(serde_json::from_str::<Vec<LogEvent>>(&captured.body).is_err());
         let second = ship_batch(&shipper).await.unwrap();
