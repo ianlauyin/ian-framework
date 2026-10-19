@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
 use super::encode::{encode_object_path, encode_seg};
-use super::{bucket, send, signer_email, Call, GcsBackend, GcsError, GcsErrorKind};
+use super::{send, Call, GcsBackend, GcsError, GcsErrorKind};
 
 const HOST: &str = "storage.googleapis.com";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
@@ -15,74 +15,76 @@ struct SignedParts {
     url_prefix: String,
 }
 
-pub async fn sign_blob(backend: &GcsBackend, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
-    let url = format!(
-        "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",
-        encode_seg(signer_email(backend)),
-    );
-    let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::POST,
-            url,
-            headers: Vec::new(),
-            json: Some(serde_json::json!({ "payload": encoded })),
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    let bytes = response.bytes().await.map_err(|err| {
-        GcsError::with_source(
-            GcsErrorKind::Transport,
-            "signBlob response is not bytes",
-            err,
+impl GcsBackend {
+    pub async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
+        let url = format!(
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",
+            encode_seg(self.signer_email()),
+        );
+        let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
+        let response = send(
+            self,
+            &Call {
+                method: reqwest::Method::POST,
+                url,
+                headers: Vec::new(),
+                json: Some(serde_json::json!({ "payload": encoded })),
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            },
         )
-    })?;
-    let parsed: SignBlobResponse = serde_json::from_slice(&bytes).map_err(|err| {
-        GcsError::with_source(GcsErrorKind::Api, "signBlob response is not JSON", err)
-    })?;
-    let cleaned: String = parsed
-        .signed_blob
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect();
-    let signature = base64::engine::general_purpose::STANDARD
-        .decode(cleaned)
-        .map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Api, "signBlob signature is not base64", err)
+        .await?;
+        let bytes = response.bytes().await.map_err(|err| {
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                "signBlob response is not bytes",
+                err,
+            )
         })?;
-    if signature.is_empty() {
-        return Err(GcsError::new(
-            GcsErrorKind::Api,
-            "signBlob returned an empty signature",
-        ));
+        let parsed: SignBlobResponse = serde_json::from_slice(&bytes).map_err(|err| {
+            GcsError::with_source(GcsErrorKind::Api, "signBlob response is not JSON", err)
+        })?;
+        let cleaned: String = parsed
+            .signed_blob
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .collect();
+        let signature = base64::engine::general_purpose::STANDARD
+            .decode(cleaned)
+            .map_err(|err| {
+                GcsError::with_source(GcsErrorKind::Api, "signBlob signature is not base64", err)
+            })?;
+        if signature.is_empty() {
+            return Err(GcsError::new(
+                GcsErrorKind::Api,
+                "signBlob returned an empty signature",
+            ));
+        }
+        Ok(signature)
     }
-    Ok(signature)
-}
 
-pub async fn signed_get_url(
-    backend: &GcsBackend,
-    name: &str,
-    expires_in: Option<Duration>,
-) -> Result<String, GcsError> {
-    super::object::validate_object_name(name)?;
-    let seconds = signed_lifetime_seconds(expires_in)?;
-    let parts = v4_get_parts(
-        bucket(backend),
-        name,
-        signer_email(backend),
-        Utc::now(),
-        seconds,
-    );
-    let signature = sign_blob(backend, parts.string_to_sign.as_bytes()).await?;
-    Ok(format!(
-        "{}&X-Goog-Signature={}",
-        parts.url_prefix,
-        hex::encode(signature)
-    ))
+    pub async fn signed_get_url(
+        &self,
+        name: &str,
+        expires_in: Option<Duration>,
+    ) -> Result<String, GcsError> {
+        super::object::validate_object_name(name)?;
+        let seconds = signed_lifetime_seconds(expires_in)?;
+        let parts = v4_get_parts(
+            self.bucket(),
+            name,
+            self.signer_email(),
+            Utc::now(),
+            seconds,
+        );
+        let signature = self.sign_blob(parts.string_to_sign.as_bytes()).await?;
+        Ok(format!(
+            "{}&X-Goog-Signature={}",
+            parts.url_prefix,
+            hex::encode(signature)
+        ))
+    }
 }
 
 fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError> {
@@ -157,7 +159,7 @@ struct SignBlobResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gcs::{gcs_backend, Auth};
+    use crate::gcs::{Auth, GcsBackend};
 
     #[test]
     fn v4_get_matches_the_canonical_request() {
@@ -214,7 +216,7 @@ UNSIGNED-PAYLOAD";
 
     #[tokio::test]
     async fn signed_url_rejects_a_lifetime_over_seven_days() {
-        let backend = gcs_backend(
+        let backend = GcsBackend::new(
             "my-bucket",
             Auth::User {
                 client_id: "id".to_string(),
@@ -225,7 +227,8 @@ UNSIGNED-PAYLOAD";
         )
         .await
         .unwrap();
-        let err = signed_get_url(&backend, "a", Some(Duration::from_secs(604_801)))
+        let err = backend
+            .signed_get_url("a", Some(Duration::from_secs(604_801)))
             .await
             .unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
@@ -233,7 +236,7 @@ UNSIGNED-PAYLOAD";
 
     #[tokio::test]
     async fn signed_url_rejects_a_missing_or_zero_lifetime() {
-        let backend = gcs_backend(
+        let backend = GcsBackend::new(
             "my-bucket",
             Auth::User {
                 client_id: "id".to_string(),
@@ -245,7 +248,7 @@ UNSIGNED-PAYLOAD";
         .await
         .unwrap();
         for lifetime in [None, Some(Duration::ZERO), Some(Duration::from_millis(500))] {
-            let err = signed_get_url(&backend, "a", lifetime).await.unwrap_err();
+            let err = backend.signed_get_url("a", lifetime).await.unwrap_err();
             assert_eq!(err.kind(), GcsErrorKind::Auth);
         }
     }

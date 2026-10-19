@@ -1,6 +1,6 @@
-use crate::logging::{event, record, LogLevel};
+use crate::logging::{event, LogLevel};
 
-use super::{bucket, ops_shipper, GcsBackend};
+use super::GcsBackend;
 
 pub(crate) struct OpsRecord<'a> {
     pub level: LogLevel,
@@ -13,7 +13,7 @@ pub(crate) struct OpsRecord<'a> {
 }
 
 pub(crate) fn record_op(backend: &GcsBackend, op: OpsRecord<'_>) {
-    let Some(shipper) = ops_shipper(backend) else {
+    let Some(shipper) = backend.ops_shipper() else {
         return;
     };
     let mut event = event(op.level, op.message);
@@ -31,9 +31,9 @@ pub(crate) fn record_op(backend: &GcsBackend, op: OpsRecord<'_>) {
     }
     event.extra.insert(
         "bucket".to_string(),
-        serde_json::Value::String(bucket(backend).to_string()),
+        serde_json::Value::String(backend.bucket().to_string()),
     );
-    let _ = record(&shipper, event);
+    let _ = shipper.record(event);
 }
 
 pub(crate) fn millis_since(started: std::time::Instant) -> u64 {

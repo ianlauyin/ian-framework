@@ -8,9 +8,7 @@ use futures_util::{Stream, StreamExt};
 use serde::Deserialize;
 
 use super::encode::{encode_object_id, encode_seg};
-use super::{
-    bucket, is_retryable, send, Call, GcsBackend, GcsError, GcsErrorKind, TRANSFER_TIMEOUT,
-};
+use super::{is_retryable, send, Call, GcsBackend, GcsError, GcsErrorKind, TRANSFER_TIMEOUT};
 
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
 const CHUNK_SIZE: usize = 8 * 1024 * 1024;
@@ -54,399 +52,354 @@ pub struct ObjectReader {
     response: reqwest::Response,
 }
 
-pub async fn put_bytes(
-    backend: &GcsBackend,
-    name: &str,
-    bytes: &[u8],
-    options: &PutOptions,
-) -> Result<ObjectMeta, GcsError> {
-    validate_object_name(name)?;
-    let content_type = content_type_of(options)?;
-    validate_metadata(&options.metadata)?;
-    let total = bytes.len() as u64;
-    let location =
-        start_resumable(backend, name, &content_type, &options.metadata, Some(total)).await?;
-    if total == 0 {
-        return expect_done(
-            put_chunk_retrying(backend, &location, &content_type, b"", 0, Some(0), true).await?,
-        );
-    }
-    let mut offset = 0u64;
-    let mut rewinds = 0u32;
-    while offset < total {
-        let remaining = total - offset;
-        let is_last = remaining <= CHUNK_SIZE as u64;
-        let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
-        let start = usize::try_from(offset)
-            .map_err(|_| GcsError::new(GcsErrorKind::Api, "object is too large"))?;
-        let chunk = &bytes[start..start + len];
-        match put_chunk_retrying(
-            backend,
-            &location,
-            &content_type,
-            chunk,
-            offset,
-            Some(total),
-            is_last,
-        )
-        .await?
-        {
-            UploadStep::Done(meta) => return Ok(meta),
-            UploadStep::Continue { next } => {
-                advance_offset(&mut offset, &mut rewinds, next, total)?;
-            }
-        }
-    }
-    Err(GcsError::new(
-        GcsErrorKind::Api,
-        "finished upload did not return object metadata",
-    ))
-}
-
-pub async fn put_file(
-    backend: &GcsBackend,
-    name: &str,
-    path: &Path,
-    options: &PutOptions,
-) -> Result<ObjectMeta, GcsError> {
-    validate_object_name(name)?;
-    let content_type = content_type_of(options)?;
-    validate_metadata(&options.metadata)?;
-    let mut file = tokio::fs::File::open(path).await.map_err(|err| {
-        GcsError::with_source(
-            GcsErrorKind::Transport,
-            format!("cannot open {}", path.display()),
-            err,
-        )
-    })?;
-    let meta = file.metadata().await.map_err(|err| {
-        GcsError::with_source(
-            GcsErrorKind::Transport,
-            format!("cannot read metadata for {}", path.display()),
-            err,
-        )
-    })?;
-    if !meta.is_file() {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            format!("{} is not a file", path.display()),
-        ));
-    }
-    let total = meta.len();
-    let location =
-        start_resumable(backend, name, &content_type, &options.metadata, Some(total)).await?;
-    if total == 0 {
-        return expect_done(
-            put_chunk_retrying(backend, &location, &content_type, b"", 0, Some(0), true).await?,
-        );
-    }
-    let mut offset = 0u64;
-    let mut rewinds = 0u32;
-    use tokio::io::AsyncSeekExt;
-    while offset < total {
-        let remaining = total - offset;
-        let is_last = remaining <= CHUNK_SIZE as u64;
-        let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
-        file.seek(std::io::SeekFrom::Start(offset))
-            .await
-            .map_err(|err| {
-                GcsError::with_source(
-                    GcsErrorKind::Transport,
-                    "cannot seek in the upload file",
-                    err,
-                )
-            })?;
-        let chunk = read_exact_n(&mut file, len).await?;
-        match put_chunk_retrying(
-            backend,
-            &location,
-            &content_type,
-            &chunk,
-            offset,
-            Some(total),
-            is_last,
-        )
-        .await?
-        {
-            UploadStep::Done(meta) => return Ok(meta),
-            UploadStep::Continue { next } => {
-                advance_offset(&mut offset, &mut rewinds, next, total)?;
-            }
-        }
-    }
-    Err(GcsError::new(
-        GcsErrorKind::Api,
-        "finished upload did not return object metadata",
-    ))
-}
-
-pub async fn put_stream<S, E>(
-    backend: &GcsBackend,
-    name: &str,
-    stream: S,
-    options: &PutOptions,
-) -> Result<ObjectMeta, GcsError>
-where
-    S: Stream<Item = Result<Vec<u8>, E>> + Send,
-    E: std::fmt::Display,
-{
-    validate_object_name(name)?;
-    let content_type = content_type_of(options)?;
-    validate_metadata(&options.metadata)?;
-    let location = start_resumable(backend, name, &content_type, &options.metadata, None).await?;
-    let mut pending = Vec::new();
-    let mut stream = Box::pin(stream);
-    let mut buf = Vec::new();
-    let mut origin = 0u64;
-    let mut eof = false;
-    loop {
-        while !eof && buf.len() < CHUNK_SIZE {
-            let need = CHUNK_SIZE - buf.len();
-            let piece = pull_chunk(&mut stream, &mut pending, need).await?;
-            if piece.is_empty() {
-                eof = true;
-                break;
-            }
-            buf.extend(piece);
-        }
-        if buf.is_empty() {
-            if origin != 0 {
-                return Err(GcsError::new(
-                    GcsErrorKind::Api,
-                    "finished upload did not return object metadata",
-                ));
-            }
+impl GcsBackend {
+    pub async fn put_bytes(
+        &self,
+        name: &str,
+        bytes: &[u8],
+        options: &PutOptions,
+    ) -> Result<ObjectMeta, GcsError> {
+        validate_object_name(name)?;
+        let content_type = content_type_of(options)?;
+        validate_metadata(&options.metadata)?;
+        let total = bytes.len() as u64;
+        let location =
+            start_resumable(self, name, &content_type, &options.metadata, Some(total)).await?;
+        if total == 0 {
             return expect_done(
-                put_chunk_retrying(backend, &location, &content_type, b"", 0, Some(0), true)
-                    .await?,
+                put_chunk_retrying(self, &location, &content_type, b"", 0, Some(0), true).await?,
             );
         }
-        let is_last = eof;
-        let send_len = if is_last {
-            buf.len()
-        } else if !buf.len().is_multiple_of(CHUNK_ALIGN as usize) {
+        let mut offset = 0u64;
+        let mut rewinds = 0u32;
+        while offset < total {
+            let remaining = total - offset;
+            let is_last = remaining <= CHUNK_SIZE as u64;
+            let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
+            let start = usize::try_from(offset)
+                .map_err(|_| GcsError::new(GcsErrorKind::Api, "object is too large"))?;
+            let chunk = &bytes[start..start + len];
+            match put_chunk_retrying(
+                self,
+                &location,
+                &content_type,
+                chunk,
+                offset,
+                Some(total),
+                is_last,
+            )
+            .await?
+            {
+                UploadStep::Done(meta) => return Ok(meta),
+                UploadStep::Continue { next } => {
+                    advance_offset(&mut offset, &mut rewinds, next, total)?;
+                }
+            }
+        }
+        Err(GcsError::new(
+            GcsErrorKind::Api,
+            "finished upload did not return object metadata",
+        ))
+    }
+
+    pub async fn put_file(
+        &self,
+        name: &str,
+        path: &Path,
+        options: &PutOptions,
+    ) -> Result<ObjectMeta, GcsError> {
+        validate_object_name(name)?;
+        let content_type = content_type_of(options)?;
+        validate_metadata(&options.metadata)?;
+        let mut file = tokio::fs::File::open(path).await.map_err(|err| {
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                format!("cannot open {}", path.display()),
+                err,
+            )
+        })?;
+        let meta = file.metadata().await.map_err(|err| {
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                format!("cannot read metadata for {}", path.display()),
+                err,
+            )
+        })?;
+        if !meta.is_file() {
             return Err(GcsError::new(
-                GcsErrorKind::Api,
-                "resumable chunk is not a multiple of 256 KiB",
+                GcsErrorKind::Config,
+                format!("{} is not a file", path.display()),
             ));
-        } else {
-            CHUNK_SIZE.min(buf.len())
-        };
-        let total = if is_last {
-            Some(origin + send_len as u64)
-        } else {
-            None
-        };
-        match put_chunk_retrying(
-            backend,
-            &location,
-            &content_type,
-            &buf[..send_len],
-            origin,
-            total,
-            is_last,
-        )
-        .await?
-        {
-            UploadStep::Done(meta) => return Ok(meta),
-            UploadStep::Continue { next } => {
-                let end = origin + buf.len() as u64;
-                if next < origin {
-                    return Err(GcsError::new(
+        }
+        let total = meta.len();
+        let location =
+            start_resumable(self, name, &content_type, &options.metadata, Some(total)).await?;
+        if total == 0 {
+            return expect_done(
+                put_chunk_retrying(self, &location, &content_type, b"", 0, Some(0), true).await?,
+            );
+        }
+        let mut offset = 0u64;
+        let mut rewinds = 0u32;
+        use tokio::io::AsyncSeekExt;
+        while offset < total {
+            let remaining = total - offset;
+            let is_last = remaining <= CHUNK_SIZE as u64;
+            let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
+            file.seek(std::io::SeekFrom::Start(offset))
+                .await
+                .map_err(|err| {
+                    GcsError::with_source(
                         GcsErrorKind::Transport,
-                        "resumable session dropped bytes that are not in memory",
-                    ));
-                }
-                if next > end {
-                    return Err(GcsError::new(
-                        GcsErrorKind::Api,
-                        "resumable session is ahead of the buffered bytes",
-                    ));
-                }
-                if next == origin {
-                    return Err(GcsError::new(
-                        GcsErrorKind::Api,
-                        "resumable upload did not advance",
-                    ));
-                }
-                let drop_n = usize::try_from(next - origin).map_err(|_| {
-                    GcsError::new(GcsErrorKind::Api, "resumable offset is too large")
+                        "cannot seek in the upload file",
+                        err,
+                    )
                 })?;
-                buf.drain(..drop_n);
-                origin = next;
-                if buf.is_empty() && eof {
+            let chunk = read_exact_n(&mut file, len).await?;
+            match put_chunk_retrying(
+                self,
+                &location,
+                &content_type,
+                &chunk,
+                offset,
+                Some(total),
+                is_last,
+            )
+            .await?
+            {
+                UploadStep::Done(meta) => return Ok(meta),
+                UploadStep::Continue { next } => {
+                    advance_offset(&mut offset, &mut rewinds, next, total)?;
+                }
+            }
+        }
+        Err(GcsError::new(
+            GcsErrorKind::Api,
+            "finished upload did not return object metadata",
+        ))
+    }
+
+    pub async fn put_stream<S, E>(
+        &self,
+        name: &str,
+        stream: S,
+        options: &PutOptions,
+    ) -> Result<ObjectMeta, GcsError>
+    where
+        S: Stream<Item = Result<Vec<u8>, E>> + Send,
+        E: std::fmt::Display,
+    {
+        validate_object_name(name)?;
+        let content_type = content_type_of(options)?;
+        validate_metadata(&options.metadata)?;
+        let location = start_resumable(self, name, &content_type, &options.metadata, None).await?;
+        let mut pending = Vec::new();
+        let mut stream = Box::pin(stream);
+        let mut buf = Vec::new();
+        let mut origin = 0u64;
+        let mut eof = false;
+        loop {
+            while !eof && buf.len() < CHUNK_SIZE {
+                let need = CHUNK_SIZE - buf.len();
+                let piece = pull_chunk(&mut stream, &mut pending, need).await?;
+                if piece.is_empty() {
+                    eof = true;
+                    break;
+                }
+                buf.extend(piece);
+            }
+            if buf.is_empty() {
+                if origin != 0 {
                     return Err(GcsError::new(
                         GcsErrorKind::Api,
                         "finished upload did not return object metadata",
                     ));
                 }
+                return expect_done(
+                    put_chunk_retrying(self, &location, &content_type, b"", 0, Some(0), true)
+                        .await?,
+                );
+            }
+            let is_last = eof;
+            let send_len = if is_last {
+                buf.len()
+            } else if !buf.len().is_multiple_of(CHUNK_ALIGN as usize) {
+                return Err(GcsError::new(
+                    GcsErrorKind::Api,
+                    "resumable chunk is not a multiple of 256 KiB",
+                ));
+            } else {
+                CHUNK_SIZE.min(buf.len())
+            };
+            let total = if is_last {
+                Some(origin + send_len as u64)
+            } else {
+                None
+            };
+            match put_chunk_retrying(
+                self,
+                &location,
+                &content_type,
+                &buf[..send_len],
+                origin,
+                total,
+                is_last,
+            )
+            .await?
+            {
+                UploadStep::Done(meta) => return Ok(meta),
+                UploadStep::Continue { next } => {
+                    let end = origin + buf.len() as u64;
+                    if next < origin {
+                        return Err(GcsError::new(
+                            GcsErrorKind::Transport,
+                            "resumable session dropped bytes that are not in memory",
+                        ));
+                    }
+                    if next > end {
+                        return Err(GcsError::new(
+                            GcsErrorKind::Api,
+                            "resumable session is ahead of the buffered bytes",
+                        ));
+                    }
+                    if next == origin {
+                        return Err(GcsError::new(
+                            GcsErrorKind::Api,
+                            "resumable upload did not advance",
+                        ));
+                    }
+                    let drop_n = usize::try_from(next - origin).map_err(|_| {
+                        GcsError::new(GcsErrorKind::Api, "resumable offset is too large")
+                    })?;
+                    buf.drain(..drop_n);
+                    origin = next;
+                    if buf.is_empty() && eof {
+                        return Err(GcsError::new(
+                            GcsErrorKind::Api,
+                            "finished upload did not return object metadata",
+                        ));
+                    }
+                }
             }
         }
     }
-}
 
-pub async fn get_bytes(backend: &GcsBackend, name: &str) -> Result<Vec<u8>, GcsError> {
-    read_to_vec(open_object(backend, name).await?).await
-}
+    pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, GcsError> {
+        self.open_object(name).await?.read_to_vec().await
+    }
 
-pub async fn open_object(backend: &GcsBackend, name: &str) -> Result<ObjectReader, GcsError> {
-    validate_object_name(name)?;
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::GET,
-            url: format!("{}?alt=media", object_url(bucket(backend), name)),
-            headers: Vec::new(),
-            json: None,
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    Ok(ObjectReader { response })
-}
-
-pub async fn read_to_vec(reader: ObjectReader) -> Result<Vec<u8>, GcsError> {
-    let bytes = reader.response.bytes().await.map_err(|err| {
-        GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
-    })?;
-    Ok(bytes.to_vec())
-}
-
-pub fn byte_stream(
-    reader: ObjectReader,
-) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, GcsError>> + Send>> {
-    Box::pin(reader.response.bytes_stream().map(|item| {
-        item.map(|chunk| chunk.to_vec()).map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
-        })
-    }))
-}
-
-pub async fn stat(backend: &GcsBackend, name: &str) -> Result<ObjectMeta, GcsError> {
-    validate_object_name(name)?;
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::GET,
-            url: object_url(bucket(backend), name),
-            headers: Vec::new(),
-            json: None,
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    meta_from_response(response).await
-}
-
-pub async fn list(backend: &GcsBackend, query: &ListQuery) -> Result<ListPage, GcsError> {
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::GET,
-            url: list_url(bucket(backend), query),
-            headers: Vec::new(),
-            json: None,
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    let bytes = response.bytes().await.map_err(|err| {
-        GcsError::with_source(GcsErrorKind::Transport, "list response is not bytes", err)
-    })?;
-    list_page_from_slice(&bytes)
-}
-
-pub async fn delete_object(backend: &GcsBackend, name: &str) -> Result<(), GcsError> {
-    validate_object_name(name)?;
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::DELETE,
-            url: object_url(bucket(backend), name),
-            headers: Vec::new(),
-            json: None,
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    let _ = response.bytes().await;
-    Ok(())
-}
-
-pub async fn patch_metadata(
-    backend: &GcsBackend,
-    name: &str,
-    metadata: &BTreeMap<String, String>,
-) -> Result<ObjectMeta, GcsError> {
-    validate_object_name(name)?;
-    validate_metadata(metadata)?;
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::PATCH,
-            url: object_url(bucket(backend), name),
-            headers: Vec::new(),
-            json: Some(serde_json::json!({ "metadata": metadata })),
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    meta_from_response(response).await
-}
-
-pub async fn copy_object(
-    backend: &GcsBackend,
-    from: &str,
-    to: &str,
-) -> Result<ObjectMeta, GcsError> {
-    validate_object_name(from)?;
-    validate_object_name(to)?;
-    let url = format!(
-        "{}/copyTo/b/{}/o/{}",
-        object_url(bucket(backend), from),
-        encode_seg(bucket(backend)),
-        encode_object_id(to),
-    );
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::POST,
-            url,
-            headers: Vec::new(),
-            json: Some(serde_json::json!({})),
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    meta_from_response(response).await
-}
-
-pub async fn rewrite_object(
-    backend: &GcsBackend,
-    from: &str,
-    to: &str,
-) -> Result<ObjectMeta, GcsError> {
-    validate_object_name(from)?;
-    validate_object_name(to)?;
-    let mut token: Option<String> = None;
-    loop {
+    pub async fn open_object(&self, name: &str) -> Result<ObjectReader, GcsError> {
+        validate_object_name(name)?;
         let response = send(
-            backend,
+            self,
+            &Call {
+                method: reqwest::Method::GET,
+                url: format!("{}?alt=media", object_url(self.bucket(), name)),
+                headers: Vec::new(),
+                json: None,
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            },
+        )
+        .await?;
+        Ok(ObjectReader { response })
+    }
+
+    pub async fn stat(&self, name: &str) -> Result<ObjectMeta, GcsError> {
+        validate_object_name(name)?;
+        let response = send(
+            self,
+            &Call {
+                method: reqwest::Method::GET,
+                url: object_url(self.bucket(), name),
+                headers: Vec::new(),
+                json: None,
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            },
+        )
+        .await?;
+        meta_from_response(response).await
+    }
+
+    pub async fn list(&self, query: &ListQuery) -> Result<ListPage, GcsError> {
+        let response = send(
+            self,
+            &Call {
+                method: reqwest::Method::GET,
+                url: list_url(self.bucket(), query),
+                headers: Vec::new(),
+                json: None,
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            },
+        )
+        .await?;
+        let bytes = response.bytes().await.map_err(|err| {
+            GcsError::with_source(GcsErrorKind::Transport, "list response is not bytes", err)
+        })?;
+        list_page_from_slice(&bytes)
+    }
+
+    pub async fn delete_object(&self, name: &str) -> Result<(), GcsError> {
+        validate_object_name(name)?;
+        let response = send(
+            self,
+            &Call {
+                method: reqwest::Method::DELETE,
+                url: object_url(self.bucket(), name),
+                headers: Vec::new(),
+                json: None,
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            },
+        )
+        .await?;
+        let _ = response.bytes().await;
+        Ok(())
+    }
+
+    pub async fn patch_metadata(
+        &self,
+        name: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> Result<ObjectMeta, GcsError> {
+        validate_object_name(name)?;
+        validate_metadata(metadata)?;
+        let response = send(
+            self,
+            &Call {
+                method: reqwest::Method::PATCH,
+                url: object_url(self.bucket(), name),
+                headers: Vec::new(),
+                json: Some(serde_json::json!({ "metadata": metadata })),
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            },
+        )
+        .await?;
+        meta_from_response(response).await
+    }
+
+    pub async fn copy_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
+        validate_object_name(from)?;
+        validate_object_name(to)?;
+        let url = format!(
+            "{}/copyTo/b/{}/o/{}",
+            object_url(self.bucket(), from),
+            encode_seg(self.bucket()),
+            encode_object_id(to),
+        );
+        let response = send(
+            self,
             &Call {
                 method: reqwest::Method::POST,
-                url: rewrite_url(bucket(backend), from, to, token.as_deref()),
+                url,
                 headers: Vec::new(),
                 json: Some(serde_json::json!({})),
                 bytes: None,
@@ -455,29 +408,68 @@ pub async fn rewrite_object(
             },
         )
         .await?;
-        let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
-                "rewrite response is not bytes",
-                err,
+        meta_from_response(response).await
+    }
+
+    pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
+        validate_object_name(from)?;
+        validate_object_name(to)?;
+        let mut token: Option<String> = None;
+        loop {
+            let response = send(
+                self,
+                &Call {
+                    method: reqwest::Method::POST,
+                    url: rewrite_url(self.bucket(), from, to, token.as_deref()),
+                    headers: Vec::new(),
+                    json: Some(serde_json::json!({})),
+                    bytes: None,
+                    extra_status: &[],
+                    timeout: None,
+                },
             )
+            .await?;
+            let bytes = response.bytes().await.map_err(|err| {
+                GcsError::with_source(
+                    GcsErrorKind::Transport,
+                    "rewrite response is not bytes",
+                    err,
+                )
+            })?;
+            let step = rewrite_step_from_slice(&bytes)?;
+            if step.done {
+                return step.resource.ok_or_else(|| {
+                    GcsError::new(GcsErrorKind::Api, "rewrite did not return object metadata")
+                });
+            }
+            let next = step.rewrite_token.ok_or_else(|| {
+                GcsError::new(GcsErrorKind::Api, "rewrite did not return a token")
+            })?;
+            if token.as_deref() == Some(next.as_str()) {
+                return Err(GcsError::new(
+                    GcsErrorKind::Api,
+                    "rewrite token did not change",
+                ));
+            }
+            token = Some(next);
+        }
+    }
+}
+
+impl ObjectReader {
+    pub async fn read_to_vec(self) -> Result<Vec<u8>, GcsError> {
+        let bytes = self.response.bytes().await.map_err(|err| {
+            GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
         })?;
-        let step = rewrite_step_from_slice(&bytes)?;
-        if step.done {
-            return step.resource.ok_or_else(|| {
-                GcsError::new(GcsErrorKind::Api, "rewrite did not return object metadata")
-            });
-        }
-        let next = step
-            .rewrite_token
-            .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "rewrite did not return a token"))?;
-        if token.as_deref() == Some(next.as_str()) {
-            return Err(GcsError::new(
-                GcsErrorKind::Api,
-                "rewrite token did not change",
-            ));
-        }
-        token = Some(next);
+        Ok(bytes.to_vec())
+    }
+
+    pub fn byte_stream(self) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, GcsError>> + Send>> {
+        Box::pin(self.response.bytes_stream().map(|item| {
+            item.map(|chunk| chunk.to_vec()).map_err(|err| {
+                GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
+            })
+        }))
     }
 }
 
@@ -581,7 +573,7 @@ async fn start_resumable(
 ) -> Result<String, GcsError> {
     let url = format!(
         "{UPLOAD_ROOT}/b/{}/o?uploadType=resumable",
-        encode_seg(bucket(backend)),
+        encode_seg(backend.bucket()),
     );
     let mut body = serde_json::json!({
         "name": name,

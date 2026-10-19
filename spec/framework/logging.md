@@ -74,7 +74,7 @@ An empty method gives an empty `action`.
 
 ## Shipper
 
-`shipper_config` builds one `ShipperConfig` for one app.
+`ShipperConfig::new` builds one `ShipperConfig` for one app.
 The project on that config starts empty.
 A caller can set `project` on the config.
 That project stays on the shipper.
@@ -88,7 +88,7 @@ That config has no endpoint.
 `DEFAULT_SHIP_EVERY` is 5 seconds.
 `SHIP_TIMEOUT` is 10 seconds.
 
-`log_shipper` builds one shipper from that config.
+`LogShipper::new` builds one shipper from that config.
 One shipper has one app.
 The app is the routing name.
 An app name has 1 to 64 characters.
@@ -103,22 +103,27 @@ A forbidden character in that project is a configuration error.
 `batch_size` of zero is a configuration error.
 `batch_size` above `capacity` is a configuration error.
 
-`record` stores one event in the local buffer.
-`record` does not write `app` into the event.
-`record` does not write `project` into the event.
-`record` does not store an event below `minimum_level`.
-`record` stores the full `message`.
-`record` stores the full `action`.
-`record` stores the full `id`.
-`record` stores the full `ip`.
-`record` stores the full `user_agent`.
+`LogShipper::app` returns the app name.
+`LogShipper::project` returns the project name.
+`LogShipper::endpoint` returns the endpoint.
+`LogShipper::minimum_level` returns the minimum level.
+
+`LogShipper::record` stores one event in the local buffer.
+`LogShipper::record` does not write `app` into the event.
+`LogShipper::record` does not write `project` into the event.
+`LogShipper::record` does not store an event below `minimum_level`.
+`LogShipper::record` stores the full `message`.
+`LogShipper::record` stores the full `action`.
+`LogShipper::record` stores the full `id`.
+`LogShipper::record` stores the full `ip`.
+`LogShipper::record` stores the full `user_agent`.
 The buffer keeps at most `capacity` events.
 When the buffer is full, a new event removes the oldest event.
-`dropped` counts removed events.
-`buffered_len` returns the number of buffered events.
-`buffered_events` returns a copy of the buffered events.
+`LogShipper::dropped` counts removed events.
+`LogShipper::buffered_len` returns the number of buffered events.
+`LogShipper::buffered_events` returns a copy of the buffered events.
 
-`ship_batch` sends one batch to the log server.
+`LogShipper::ship_batch` sends one batch to the log server.
 The HTTP method is POST.
 The URL is `{endpoint}/log/{app}`.
 `{app}` is the shipper app.
@@ -140,9 +145,9 @@ A transport error puts that batch back at the front of the buffer.
 An HTTP error status puts that batch back at the front of the buffer.
 When that return makes the buffer larger than `capacity`, the shipper removes the newest events above the capacity.
 The ship request time limit is 10 seconds.
-`spawn_ship_loop` calls `ship_batch` on an interval.
+`LogShipper::spawn_ship_loop` calls `LogShipper::ship_batch` on an interval.
 An interval of zero is a configuration error.
-The caller runs `spawn_ship_loop` on a Tokio runtime.
+The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
 A ship error does not stop the loop.
 An empty buffer with an endpoint does not send an HTTP request.
 The result mode is `Empty`.
@@ -163,13 +168,13 @@ The adapter is outside this shipper.
 An unset endpoint selects buffer-only mode.
 An empty endpoint selects buffer-only mode.
 An endpoint that has only spaces selects buffer-only mode.
-`shipper_config` selects buffer-only mode.
+`ShipperConfig::new` selects buffer-only mode.
 Buffer-only mode does not build an HTTP client.
 Buffer-only mode does not open an HTTP connection.
-`ship_batch` in buffer-only mode returns success.
+`LogShipper::ship_batch` in buffer-only mode returns success.
 The result mode is `BufferOnly`.
-`ship_batch` in buffer-only mode does not remove buffered events.
-`spawn_ship_loop` in buffer-only mode does not open an HTTP connection.
+`LogShipper::ship_batch` in buffer-only mode does not remove buffered events.
+`LogShipper::spawn_ship_loop` in buffer-only mode does not open an HTTP connection.
 A missing log server does not panic the shipper.
 An `http` or `https` endpoint sends batches.
 The shipper removes a trailing slash from that URL.
@@ -184,7 +189,7 @@ A scheme other than `http` or `https` is a configuration error.
 Use it with `axum::middleware::from_fn_with_state` and one shipper.
 
 ```rust
-let shipper = log_shipper(shipper_config("cs"))?;
+let shipper = LogShipper::new(ShipperConfig::new("cs"))?;
 let router = Router::new().layer(middleware::from_fn_with_state(
     shipper,
     ian_framework::logging::log_request,

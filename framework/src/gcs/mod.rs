@@ -7,12 +7,7 @@ mod token;
 
 pub use cred::Auth;
 pub use encode::{encode_object_id, encode_object_path, encode_seg};
-pub use object::{
-    byte_stream, copy_object, delete_object, get_bytes, list, open_object, patch_metadata,
-    put_bytes, put_file, put_stream, read_to_vec, rewrite_object, stat, ListPage, ListQuery,
-    ObjectMeta, ObjectReader, PutOptions,
-};
-pub use signed_url::{sign_blob, signed_get_url};
+pub use object::{ListPage, ListQuery, ObjectMeta, ObjectReader, PutOptions};
 
 use std::fmt;
 use std::sync::Arc;
@@ -130,70 +125,69 @@ impl fmt::Debug for GcsBackend {
     }
 }
 
-pub fn bucket(backend: &GcsBackend) -> &str {
-    &backend.inner.bucket
-}
+impl GcsBackend {
+    pub async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
+        let bucket_name = bucket_name.into();
+        validate_bucket(&bucket_name)?;
+        cred::validate_auth(&auth)?;
+        let http = http_client()?;
+        let email = match &auth {
+            Auth::Metadata => token::metadata_email(&http).await?,
+            Auth::User { signer_email, .. } => signer_email.clone(),
+        };
+        Ok(Self {
+            inner: Arc::new(Inner {
+                bucket: bucket_name,
+                email,
+                auth,
+                http,
+                token: tokio::sync::Mutex::new(None),
+                ops_log: std::sync::Mutex::new(None),
+            }),
+        })
+    }
 
-pub fn signer_email(backend: &GcsBackend) -> &str {
-    &backend.inner.email
-}
+    pub async fn from_adc(bucket_name: impl Into<String>) -> Result<Self, GcsError> {
+        let auth = match cred::load_adc_auth().await? {
+            Some(auth) => auth,
+            None => Auth::Metadata,
+        };
+        Self::new(bucket_name, auth).await
+    }
 
-pub async fn gcs_backend(
-    bucket_name: impl Into<String>,
-    auth: Auth,
-) -> Result<GcsBackend, GcsError> {
-    let bucket_name = bucket_name.into();
-    validate_bucket(&bucket_name)?;
-    cred::validate_auth(&auth)?;
-    let http = http_client()?;
-    let email = match &auth {
-        Auth::Metadata => token::metadata_email(&http).await?,
-        Auth::User { signer_email, .. } => signer_email.clone(),
-    };
-    Ok(GcsBackend {
-        inner: Arc::new(Inner {
-            bucket: bucket_name,
-            email,
-            auth,
-            http,
-            token: tokio::sync::Mutex::new(None),
-            ops_log: std::sync::Mutex::new(None),
-        }),
-    })
-}
+    pub fn bucket(&self) -> &str {
+        &self.inner.bucket
+    }
 
-pub fn attach_ops_log(backend: &GcsBackend, shipper: crate::logging::LogShipper) {
-    *lock_ops(&backend.inner.ops_log) = Some(shipper);
-}
+    pub fn signer_email(&self) -> &str {
+        &self.inner.email
+    }
 
-pub(crate) fn ops_shipper(backend: &GcsBackend) -> Option<crate::logging::LogShipper> {
-    lock_ops(&backend.inner.ops_log).clone()
+    pub fn attach_ops_log(&self, shipper: crate::logging::LogShipper) {
+        *lock_ops(&self.inner.ops_log) = Some(shipper);
+    }
+
+    pub(crate) fn ops_shipper(&self) -> Option<crate::logging::LogShipper> {
+        lock_ops(&self.inner.ops_log).clone()
+    }
+
+    pub(crate) fn http(&self) -> &reqwest::Client {
+        &self.inner.http
+    }
+
+    pub(crate) fn auth(&self) -> &Auth {
+        &self.inner.auth
+    }
+
+    pub(crate) fn token_cache(&self) -> &tokio::sync::Mutex<Option<CachedToken>> {
+        &self.inner.token
+    }
 }
 
 fn lock_ops(
     slot: &std::sync::Mutex<Option<crate::logging::LogShipper>>,
 ) -> std::sync::MutexGuard<'_, Option<crate::logging::LogShipper>> {
     slot.lock().unwrap_or_else(|err| err.into_inner())
-}
-
-pub async fn gcs_from_adc(bucket_name: impl Into<String>) -> Result<GcsBackend, GcsError> {
-    let auth = match cred::load_adc_auth().await? {
-        Some(auth) => auth,
-        None => Auth::Metadata,
-    };
-    gcs_backend(bucket_name, auth).await
-}
-
-pub(crate) fn http(backend: &GcsBackend) -> &reqwest::Client {
-    &backend.inner.http
-}
-
-pub(crate) fn auth(backend: &GcsBackend) -> &Auth {
-    &backend.inner.auth
-}
-
-pub(crate) fn token_cache(backend: &GcsBackend) -> &tokio::sync::Mutex<Option<CachedToken>> {
-    &backend.inner.token
 }
 
 fn validate_bucket(bucket_name: &str) -> Result<(), GcsError> {
@@ -244,7 +238,7 @@ pub(crate) async fn send(backend: &GcsBackend, call: &Call) -> Result<reqwest::R
     let mut retried = false;
     loop {
         let token = token::access_token(backend).await?;
-        let mut request = http(backend).request(call.method.clone(), &call.url);
+        let mut request = backend.http().request(call.method.clone(), &call.url);
         request = request.bearer_auth(&token);
         for (name, value) in &call.headers {
             request = request.header(name, value);
@@ -374,19 +368,19 @@ mod tests {
 
     #[tokio::test]
     async fn user_backend_keeps_bucket_and_signer() {
-        let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
-        assert_eq!(bucket(&backend), "my-bucket");
+        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
+        assert_eq!(backend.bucket(), "my-bucket");
         assert_eq!(
-            signer_email(&backend),
+            backend.signer_email(),
             "signer@example.iam.gserviceaccount.com"
         );
         let cloned = backend.clone();
-        assert_eq!(bucket(&cloned), "my-bucket");
+        assert_eq!(cloned.bucket(), "my-bucket");
     }
 
     #[tokio::test]
     async fn backend_rejects_an_empty_bucket() {
-        let err = gcs_backend(" ", user_auth()).await.unwrap_err();
+        let err = GcsBackend::new(" ", user_auth()).await.unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
     }
 
@@ -398,7 +392,7 @@ mod tests {
             refresh_token: "refresh".to_string(),
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         };
-        let err = gcs_backend("my-bucket", auth).await.unwrap_err();
+        let err = GcsBackend::new("my-bucket", auth).await.unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
     }
 
@@ -444,12 +438,12 @@ mod tests {
 
     #[tokio::test]
     async fn ops_log_writes_the_bucket_and_omits_the_query() {
-        let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
-        let mut config = crate::logging::shipper_config("storage");
+        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
+        let mut config = crate::logging::ShipperConfig::new("storage");
         config.project = "demo".to_string();
         config.minimum_level = crate::logging::LogLevel::Debug;
-        let shipper = crate::logging::log_shipper(config).unwrap();
-        attach_ops_log(&backend, shipper.clone());
+        let shipper = crate::logging::LogShipper::new(config).unwrap();
+        backend.attach_ops_log(shipper.clone());
         ops::record_op(
             &backend,
             ops::OpsRecord {
@@ -463,7 +457,7 @@ mod tests {
                 extra: &[],
             },
         );
-        let events = crate::logging::buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].action, "GET /storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");
@@ -488,10 +482,10 @@ mod tests {
 
     #[tokio::test]
     async fn ops_debug_is_hidden_at_the_default_minimum() {
-        let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
+        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
         let shipper =
-            crate::logging::log_shipper(crate::logging::shipper_config("storage")).unwrap();
-        attach_ops_log(&backend, shipper.clone());
+            crate::logging::LogShipper::new(crate::logging::ShipperConfig::new("storage")).unwrap();
+        backend.attach_ops_log(shipper.clone());
         ops::record_op(
             &backend,
             ops::OpsRecord {
@@ -504,7 +498,7 @@ mod tests {
                 extra: &[],
             },
         );
-        assert_eq!(crate::logging::buffered_len(&shipper), 0);
+        assert_eq!(shipper.buffered_len(), 0);
         ops::record_op(
             &backend,
             ops::OpsRecord {
@@ -517,16 +511,13 @@ mod tests {
                 extra: &[],
             },
         );
-        assert_eq!(crate::logging::buffered_len(&shipper), 1);
-        assert_eq!(
-            crate::logging::buffered_events(&shipper)[0].message,
-            "gcs request failed"
-        );
+        assert_eq!(shipper.buffered_len(), 1);
+        assert_eq!(shipper.buffered_events()[0].message, "gcs request failed");
     }
 
     #[tokio::test]
     async fn ops_log_without_a_shipper_does_not_panic() {
-        let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
+        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
         ops::record_op(
             &backend,
             ops::OpsRecord {
