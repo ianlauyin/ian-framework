@@ -1,4 +1,4 @@
-use crate::logging::{event, request_line, LogLevel};
+use crate::logging::{event, LogLevel};
 
 use super::GcsBackend;
 
@@ -16,11 +16,7 @@ pub(crate) fn record_op(backend: &GcsBackend, op: OpsRecord<'_>) {
     let Some(shipper) = backend.ops_shipper() else {
         return;
     };
-    let mut event = event(
-        request_line(op.method, &path_only(op.url)),
-        op.message,
-        op.level,
-    );
+    let mut event = event(action(op.method, op.url), op.message, op.level);
     event.status = op.status;
     event.latency_ms = op.latency_ms;
     for (key, value) in op.extra {
@@ -76,6 +72,15 @@ pub(crate) fn level_for_status(status: u16) -> LogLevel {
     } else {
         LogLevel::Debug
     }
+}
+
+fn action(method: &str, url: &str) -> String {
+    if method.is_empty() {
+        return String::new();
+    }
+    let path = path_only(url);
+    let path = if path.is_empty() { "/" } else { path.as_str() };
+    format!("{method} {path}")
 }
 
 pub(crate) fn path_only(url: &str) -> String {

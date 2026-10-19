@@ -2,7 +2,6 @@ mod event;
 mod middleware;
 mod shipper;
 
-pub(crate) use event::request_line;
 pub use event::{event, LogEvent, LogLevel};
 pub use middleware::log_request;
 pub use shipper::{LogShipper, ShipMode, ShipResult, ShipperConfig};

@@ -42,14 +42,6 @@ pub fn event(action: impl Into<String>, message: impl Into<String>, level: LogLe
     }
 }
 
-pub(crate) fn request_line(method: &str, path: &str) -> String {
-    if method.is_empty() {
-        return String::new();
-    }
-    let path = if path.is_empty() { "/" } else { path };
-    format!("{method} {path}")
-}
-
 pub(super) fn level_rank(level: LogLevel) -> u8 {
     match level {
         LogLevel::Debug => 0,
@@ -162,14 +154,6 @@ mod tests {
         assert!(value.as_object().is_some());
         assert!(value["events"].is_array());
         assert!(serde_json::from_str::<Vec<LogEvent>>(&body).is_err());
-    }
-
-    #[test]
-    fn request_line_joins_method_and_path() {
-        assert_eq!(request_line("GET", "/api/foo"), "GET /api/foo");
-        assert_eq!(request_line("POST", ""), "POST /");
-        assert_eq!(request_line("", "/api/foo"), "");
-        assert_eq!(request_line("", ""), "");
     }
 
     #[test]

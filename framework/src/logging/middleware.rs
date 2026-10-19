@@ -6,7 +6,7 @@ use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 
-use super::{event, request_line, LogLevel, LogShipper};
+use super::{event, LogLevel, LogShipper};
 
 pub async fn log_request(
     State(shipper): State<LogShipper>,
@@ -21,7 +21,7 @@ pub async fn log_request(
     let response = next.run(request).await;
     let status = response.status().as_u16();
     let mut event = event(
-        request_line(&method, &path),
+        action(&method, &path),
         "request",
         level_for_status(status),
     );
@@ -31,6 +31,14 @@ pub async fn log_request(
     event.latency_ms = Some(millis_since(started));
     let _ = shipper.record(event);
     response
+}
+
+fn action(method: &str, path: &str) -> String {
+    if method.is_empty() {
+        return String::new();
+    }
+    let path = if path.is_empty() { "/" } else { path };
+    format!("{method} {path}")
 }
 
 fn request_path(path: &str) -> String {
@@ -118,6 +126,14 @@ mod tests {
         app.oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
             .await
             .unwrap()
+    }
+
+    #[test]
+    fn action_joins_method_and_path() {
+        assert_eq!(action("GET", "/api/foo"), "GET /api/foo");
+        assert_eq!(action("POST", ""), "POST /");
+        assert_eq!(action("", "/api/foo"), "");
+        assert_eq!(action("", ""), "");
     }
 
     #[tokio::test]
