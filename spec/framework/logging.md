@@ -125,10 +125,13 @@ The URL is `{endpoint}/log/{app}`.
 `{app}` is the shipper app.
 For app `cs`, the path is `/log/cs`.
 The content type is `application/json`.
-The body is one JSON array of event objects.
-Each object has every field in the event table.
-Each object has no `app` key.
-Each object has no `project` key.
+The body is one JSON object.
+The body shape is `{"events":[...]}`.
+The body is not a bare JSON array.
+`events` is one JSON array of event objects.
+Each event object has every field in the event table.
+Each event object has no `app` key.
+Each event object has no `project` key.
 The shipper does not put `project` in that URL.
 The shipper does not send a project header.
 One batch contains at most `batch_size` events.

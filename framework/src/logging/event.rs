@@ -144,14 +144,23 @@ mod tests {
     }
 
     #[test]
-    fn json_array_round_trips() {
+    fn request_json_round_trips() {
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        struct RequestJson {
+            events: Vec<LogEvent>,
+        }
+
         let events = vec![sample(), event(LogLevel::Error, "down")];
-        let body = serde_json::to_string(&events).unwrap();
-        let parsed: Vec<LogEvent> = serde_json::from_str(&body).unwrap();
-        assert_eq!(parsed, events);
-        assert!(serde_json::from_str::<serde_json::Value>(&body)
-            .unwrap()
-            .is_array());
+        let body = serde_json::to_string(&RequestJson {
+            events: events.clone(),
+        })
+        .unwrap();
+        let parsed: RequestJson = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed.events, events);
+        let value: Value = serde_json::from_str(&body).unwrap();
+        assert!(value.as_object().is_some());
+        assert!(value["events"].is_array());
+        assert!(serde_json::from_str::<Vec<LogEvent>>(&body).is_err());
     }
 
     #[test]
