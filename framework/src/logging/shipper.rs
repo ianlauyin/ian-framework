@@ -26,7 +26,7 @@ impl ShipperConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestJson {
     pub events: Vec<LogEvent>,
 }
@@ -144,7 +144,7 @@ impl LogShipper {
         self.lock_buffer().iter().cloned().collect()
     }
 
-    pub(crate) fn record(&self, event: LogEvent) {
+    pub fn record(&self, event: LogEvent) {
         let capacity = self.inner.capacity;
         let mut buffer = self.lock_buffer();
         while buffer.len() >= capacity {

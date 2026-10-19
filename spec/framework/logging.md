@@ -89,7 +89,7 @@ An empty app returns no shipper.
 A forbidden character in the app returns no shipper.
 `capacity` of zero returns no shipper.
 
-The shipper stores one event in the local buffer.
+`LogShipper::record` stores one event in the local buffer.
 The shipper does not write `app` into the event.
 The shipper stores the full `message`.
 The shipper stores the full `action`.
