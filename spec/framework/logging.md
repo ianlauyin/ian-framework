@@ -107,6 +107,7 @@ The URL is `{endpoint}/log/{app}`.
 For app `cs`, the path is `/log/cs`.
 The content type is `application/json`.
 The body is one JSON object.
+The body type is `RequestJson`.
 The body shape is `{"events":[...]}`.
 The body is not a bare JSON array.
 `events` is one JSON array of event objects.

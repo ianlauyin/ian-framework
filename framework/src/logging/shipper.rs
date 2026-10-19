@@ -2,9 +2,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde::Serialize;
-
-use super::LogEvent;
+use super::{LogEvent, RequestJson};
 
 const DEFAULT_CAPACITY: usize = 10_000;
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -165,7 +163,9 @@ impl LogShipper {
             return;
         };
         let url = self.batch_url(&endpoint);
-        let posted = match serde_json::to_string(&RequestJson { events: &batch }) {
+        let posted = match serde_json::to_string(&RequestJson {
+            events: batch.clone(),
+        }) {
             Ok(body) => match client
                 .post(&url)
                 .timeout(SHIP_TIMEOUT)
@@ -205,11 +205,6 @@ impl LogShipper {
     fn batch_url(&self, endpoint: &str) -> String {
         format!("{endpoint}/log/{}", self.inner.app)
     }
-}
-
-#[derive(Serialize)]
-struct RequestJson<'a> {
-    events: &'a [LogEvent],
 }
 
 #[cfg(test)]
@@ -457,10 +452,6 @@ mod tests {
     }
 
     fn parse_body(body: &str) -> Vec<LogEvent> {
-        #[derive(serde::Deserialize)]
-        struct RequestJson {
-            events: Vec<LogEvent>,
-        }
         serde_json::from_str::<RequestJson>(body).unwrap().events
     }
 

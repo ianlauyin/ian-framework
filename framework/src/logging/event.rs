@@ -41,6 +41,11 @@ pub(crate) fn event(action: impl Into<String>, message: impl Into<String>, level
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequestJson {
+    pub events: Vec<LogEvent>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,11 +133,6 @@ mod tests {
 
     #[test]
     fn request_json_round_trips() {
-        #[derive(Debug, PartialEq, Serialize, Deserialize)]
-        struct RequestJson {
-            events: Vec<LogEvent>,
-        }
-
         let events = vec![sample(), event("", "down", LogLevel::Error)];
         let body = serde_json::to_string(&RequestJson {
             events: events.clone(),
