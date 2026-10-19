@@ -7,7 +7,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use uuid::Uuid;
 
-use super::{event, record, request_line, LogLevel, LogShipper, MAX_ID_BYTES};
+use super::{event, record, request_line, LogLevel, LogShipper};
 
 pub async fn log_request(
     State(shipper): State<LogShipper>,
@@ -55,7 +55,7 @@ fn incoming_request_id(headers: &HeaderMap) -> Option<String> {
 
 fn valid_request_id(value: &str) -> bool {
     !value.is_empty()
-        && value.len() <= MAX_ID_BYTES
+        && value.chars().count() <= 128
         && value
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | ':'))
@@ -119,6 +119,7 @@ fn millis_since(started: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::event::to_json_line;
     use crate::logging::{buffered_events, log_shipper, shipper_config};
     use axum::body::Body;
     use axum::extract::Path;
@@ -180,7 +181,7 @@ mod tests {
         assert!(event.latency_ms.is_some());
         assert_eq!(event.level, LogLevel::Info);
         assert_eq!(event.message, "request");
-        let line = crate::logging::to_json_line(event).unwrap();
+        let line = to_json_line(event).unwrap();
         let value: serde_json::Value = serde_json::from_str(&line).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());

@@ -73,19 +73,6 @@ An empty path with a method is `/`.
 An empty method gives an empty `request`.
 The HTTP header for `id` is `x-request-id`.
 
-`to_json_line` writes one event as one JSON object on one line.
-`parse_json_line` reads that line.
-`to_jsonl` writes one batch.
-Each event in the batch is one JSON object and ends with a newline.
-`parse_jsonl` reads that batch.
-`parse_jsonl` skips a blank line.
-A line has every field in the table.
-A line has no `app` key.
-A line has no `project` key.
-`status` is null when the event has no HTTP status.
-`latency_ms` is null when the event has no latency.
-A line that omits a field is an encode error.
-
 ## Shipper
 
 `shipper_config` builds one `ShipperConfig` for one app.
@@ -121,21 +108,11 @@ A forbidden character in that project is a configuration error.
 `record` does not write `app` into the event.
 `record` does not write `project` into the event.
 `record` does not store an event below `minimum_level`.
-The stored `message` is at most `MAX_MESSAGE_BYTES` bytes.
-`MAX_MESSAGE_BYTES` is 4096.
-The stored `request` is at most `MAX_REQUEST_BYTES` bytes.
-`MAX_REQUEST_BYTES` is 2080.
-This size is 31 bytes, one space, and 2048 bytes.
-The 31 bytes are for the method.
-The 2048 bytes are for the path.
-The stored `id` is at most `MAX_ID_BYTES` bytes.
-`MAX_ID_BYTES` is 128.
-The stored `ip` is at most `MAX_IP_BYTES` bytes.
-`MAX_IP_BYTES` is 64.
-This size covers one IPv6 address.
-The stored `user_agent` is at most `MAX_USER_AGENT_BYTES` bytes.
-`MAX_USER_AGENT_BYTES` is 1024.
-The shipper cuts a long value on a character boundary.
+`record` stores the full `message`.
+`record` stores the full `request`.
+`record` stores the full `id`.
+`record` stores the full `ip`.
+`record` stores the full `user_agent`.
 The buffer keeps at most `capacity` events.
 When the buffer is full, a new event removes the oldest event.
 `dropped` counts removed events.
@@ -151,6 +128,9 @@ The content type is `application/x-ndjson`.
 The body is one NDJSON batch.
 NDJSON is the special body for this route.
 Each event in the body is one JSON object and ends with a newline.
+Each object has every field in the event table.
+Each object has no `app` key.
+Each object has no `project` key.
 The shipper does not put `project` in that URL.
 The shipper does not send a project header.
 One batch contains at most `batch_size` events.

@@ -3,18 +3,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::event::level_rank;
-use super::{to_jsonl, truncate, LogError, LogErrorKind, LogEvent, LogLevel};
+use super::event::{level_rank, to_jsonl};
+use super::{truncate, LogError, LogErrorKind, LogEvent, LogLevel};
 
 pub const DEFAULT_CAPACITY: usize = 10_000;
 pub const DEFAULT_BATCH_SIZE: usize = 100;
 pub const DEFAULT_SHIP_EVERY: Duration = Duration::from_secs(5);
 pub const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
-pub const MAX_MESSAGE_BYTES: usize = 4096;
-pub const MAX_REQUEST_BYTES: usize = 2080;
-pub const MAX_ID_BYTES: usize = 128;
-pub const MAX_IP_BYTES: usize = 64;
-pub const MAX_USER_AGENT_BYTES: usize = 1024;
 
 const MAX_SCOPE_LEN: usize = 64;
 
@@ -151,15 +146,10 @@ pub fn dropped(shipper: &LogShipper) -> u64 {
     shipper.inner.dropped.load(Ordering::Relaxed)
 }
 
-pub fn record(shipper: &LogShipper, mut event: LogEvent) -> Result<(), LogError> {
+pub fn record(shipper: &LogShipper, event: LogEvent) -> Result<(), LogError> {
     if level_rank(event.level) < level_rank(shipper.inner.minimum_level) {
         return Ok(());
     }
-    event.message = truncate(&event.message, MAX_MESSAGE_BYTES).to_string();
-    event.request = truncate(&event.request, MAX_REQUEST_BYTES).to_string();
-    event.id = truncate(&event.id, MAX_ID_BYTES).to_string();
-    event.ip = truncate(&event.ip, MAX_IP_BYTES).to_string();
-    event.user_agent = truncate(&event.user_agent, MAX_USER_AGENT_BYTES).to_string();
     push_event(&shipper.inner, event);
     Ok(())
 }
@@ -362,6 +352,7 @@ fn http_client() -> Result<reqwest::Client, LogError> {
 mod tests {
     use super::*;
     use crate::logging::event;
+    use crate::logging::event::{parse_jsonl, to_json_line};
 
     fn buffer_only() -> LogShipper {
         log_shipper(shipper_config("api")).unwrap()
@@ -464,7 +455,7 @@ mod tests {
         assert_eq!(events[0].message, "kept");
         assert_eq!(app(&shipper), "api");
         assert_eq!(project(&shipper), "demo");
-        assert_no_scope_keys(&crate::logging::to_json_line(&events[0]).unwrap());
+        assert_no_scope_keys(&to_json_line(&events[0]).unwrap());
     }
 
     #[test]
@@ -485,37 +476,25 @@ mod tests {
     }
 
     #[test]
-    fn record_truncates_id_request_ip_and_user_agent() {
+    fn record_keeps_long_message_request_id_ip_and_user_agent() {
         let shipper = buffer_only();
-        let mut event = event(LogLevel::Info, "ok");
-        event.id = "i".repeat(MAX_ID_BYTES + 8);
-        event.request = format!("GET /{}", "p".repeat(MAX_REQUEST_BYTES));
-        event.ip = "1".repeat(MAX_IP_BYTES + 8);
-        event.user_agent = "é".repeat(MAX_USER_AGENT_BYTES);
+        let mut event = event(LogLevel::Info, "é".repeat(5000));
+        event.id = "i".repeat(200);
+        event.request = format!("GET /{}", "p".repeat(3000));
+        event.ip = "1".repeat(80);
+        event.user_agent = "é".repeat(2000);
+        let message = event.message.clone();
+        let request = event.request.clone();
+        let id = event.id.clone();
+        let ip = event.ip.clone();
+        let user_agent = event.user_agent.clone();
         record(&shipper, event).unwrap();
         let stored = buffered_events(&shipper).remove(0);
-        assert_eq!(stored.id.len(), MAX_ID_BYTES);
-        assert!(stored.request.len() <= MAX_REQUEST_BYTES);
-        assert!(stored.request.len() > MAX_REQUEST_BYTES - 4);
-        assert!(stored.request.is_char_boundary(stored.request.len()));
-        assert_eq!(stored.ip.len(), MAX_IP_BYTES);
-        assert!(stored.user_agent.len() <= MAX_USER_AGENT_BYTES);
-        assert!(stored.user_agent.is_char_boundary(stored.user_agent.len()));
-        assert_eq!(MAX_ID_BYTES, 128);
-        assert_eq!(MAX_REQUEST_BYTES, 2080);
-        assert_eq!(MAX_IP_BYTES, 64);
-        assert_eq!(MAX_USER_AGENT_BYTES, 1024);
-    }
-
-    #[test]
-    fn message_is_truncated_on_a_char_boundary() {
-        let shipper = buffer_only();
-        let message = "é".repeat(3000);
-        record(&shipper, event(LogLevel::Info, message)).unwrap();
-        let stored = buffered_events(&shipper).remove(0).message;
-        assert!(stored.len() <= MAX_MESSAGE_BYTES);
-        assert!(stored.is_char_boundary(stored.len()));
-        assert!(stored.chars().next().is_some());
+        assert_eq!(stored.message, message);
+        assert_eq!(stored.request, request);
+        assert_eq!(stored.id, id);
+        assert_eq!(stored.ip, ip);
+        assert_eq!(stored.user_agent, user_agent);
     }
 
     #[tokio::test]
@@ -679,7 +658,7 @@ mod tests {
     }
 
     fn parse_body(body: &str) -> Vec<LogEvent> {
-        crate::logging::parse_jsonl(body).unwrap()
+        parse_jsonl(body).unwrap()
     }
 
     fn assert_no_scope_keys(line: &str) {
