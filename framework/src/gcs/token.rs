@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use super::cred::Auth;
-use super::{auth, http, token_cache, GcsBackend, GcsError, GcsErrorKind};
+use super::{GcsBackend, GcsError, GcsErrorKind};
 
 const METADATA_ROOT: &str =
     "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default";
@@ -17,13 +17,13 @@ pub(crate) struct CachedToken {
 }
 
 pub(crate) async fn access_token(backend: &GcsBackend) -> Result<String, GcsError> {
-    let mut guard = token_cache(backend).lock().await;
+    let mut guard = backend.token_cache().lock().await;
     if let Some(cached) = guard.as_ref() {
         if Instant::now() < cached.expires_at && !cached.value.is_empty() {
             return Ok(cached.value.clone());
         }
     }
-    let message = match auth(backend) {
+    let message = match backend.auth() {
         Auth::Metadata => "request metadata server access token",
         Auth::User { .. } => "refresh user access token",
     };
@@ -39,7 +39,7 @@ pub(crate) async fn access_token(backend: &GcsBackend) -> Result<String, GcsErro
             extra: &[],
         },
     );
-    let fetched = fetch_token(http(backend), auth(backend)).await;
+    let fetched = fetch_token(backend.http(), backend.auth()).await;
     if let Err(err) = &fetched {
         let error_text = super::ops::logged_error(err);
         super::ops::record_op(
@@ -64,7 +64,7 @@ pub(crate) async fn access_token(backend: &GcsBackend) -> Result<String, GcsErro
 }
 
 pub(crate) async fn invalidate(backend: &GcsBackend) {
-    *token_cache(backend).lock().await = None;
+    *backend.token_cache().lock().await = None;
 }
 
 pub(crate) async fn metadata_email(http: &reqwest::Client) -> Result<String, GcsError> {

@@ -6,9 +6,8 @@ pub(crate) use event::request_line;
 pub use event::{event, LogEvent, LogLevel};
 pub use middleware::log_request;
 pub use shipper::{
-    app, buffered_events, buffered_len, dropped, endpoint, log_shipper, minimum_level, project,
-    record, ship_batch, shipper_config, spawn_ship_loop, LogShipper, ShipMode, ShipResult,
-    ShipperConfig, DEFAULT_BATCH_SIZE, DEFAULT_CAPACITY, DEFAULT_SHIP_EVERY, SHIP_TIMEOUT,
+    LogShipper, ShipMode, ShipResult, ShipperConfig, DEFAULT_BATCH_SIZE, DEFAULT_CAPACITY,
+    DEFAULT_SHIP_EVERY, SHIP_TIMEOUT,
 };
 
 use std::fmt;

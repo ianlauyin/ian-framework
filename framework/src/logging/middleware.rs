@@ -6,7 +6,7 @@ use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 
-use super::{event, record, request_line, LogLevel, LogShipper};
+use super::{event, request_line, LogLevel, LogShipper};
 
 pub async fn log_request(
     State(shipper): State<LogShipper>,
@@ -26,7 +26,7 @@ pub async fn log_request(
     event.action = request_line(&method, &path);
     event.status = Some(status);
     event.latency_ms = Some(millis_since(started));
-    let _ = record(&shipper, event);
+    let _ = shipper.record(event);
     response
 }
 
@@ -92,7 +92,7 @@ fn millis_since(started: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::{buffered_events, log_shipper, shipper_config};
+    use crate::logging::{LogShipper, ShipperConfig};
     use axum::body::Body;
     use axum::extract::Path;
     use axum::http::{Request, StatusCode};
@@ -119,9 +119,9 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_records_the_request_schema() {
-        let mut config = shipper_config("api");
+        let mut config = ShipperConfig::new("api");
         config.project = "demo".to_string();
-        let shipper = log_shipper(config).unwrap();
+        let shipper = LogShipper::new(config).unwrap();
         let response = app(shipper.clone())
             .oneshot(
                 Request::builder()
@@ -134,7 +134,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         assert!(response.headers().get("x-request-id").is_none());
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
         let event = &events[0];
         assert_eq!(event.id, "");
@@ -159,7 +159,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_levels_follow_the_status() {
-        let shipper = log_shipper(shipper_config("api")).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
         let router = app(shipper.clone());
         assert_eq!(
             send(router.clone(), "/status/404").await.status(),
@@ -169,7 +169,7 @@ mod tests {
             send(router, "/status/503").await.status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events[0].level, LogLevel::Warn);
         assert_eq!(events[0].status, Some(404));
         assert_eq!(events[1].level, LogLevel::Error);
@@ -178,7 +178,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_reads_ip_and_user_agent() {
-        let shipper = log_shipper(shipper_config("api")).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
         let response = app(shipper.clone())
             .oneshot(
                 Request::builder()
@@ -193,7 +193,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let event = &buffered_events(&shipper)[0];
+        let event = &shipper.buffered_events()[0];
         assert_eq!(event.ip, "203.0.113.8");
         assert_eq!(event.user_agent, "demo-agent");
         assert_eq!(event.action, "GET /status/200");
@@ -201,7 +201,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_uses_real_ip_then_the_socket_host() {
-        let shipper = log_shipper(shipper_config("api")).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
         let router = app(shipper.clone());
         router
             .clone()
@@ -225,7 +225,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events[0].ip, "198.51.100.4");
         assert_eq!(events[0].user_agent, "");
         assert_eq!(events[1].ip, "192.0.2.10");

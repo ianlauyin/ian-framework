@@ -43,8 +43,8 @@ cargo test --features gcs
 
 The client has two constructors.
 
-- `gcs_from_adc` reads Application Default Credentials for one bucket.
-- `gcs_backend` takes one bucket and an explicit auth value.
+- `GcsBackend::from_adc` reads Application Default Credentials for one bucket.
+- `GcsBackend::new` takes one bucket and an explicit auth value.
 
 ## Authentication
 
@@ -85,7 +85,7 @@ A project can put those keys in the map.
 The client builds a V4 signed GET URL.
 The signature comes from IAM `signBlob`.
 Each path segment uses `encode_seg`.
-`signed_get_url` takes an optional lifetime.
+`GcsBackend::signed_get_url` takes an optional lifetime.
 A missing lifetime is an authentication error.
 A lifetime of zero is an authentication error.
 A lifetime below 1 second is an authentication error.
@@ -124,29 +124,40 @@ If the session offset moves before those bytes, the upload fails.
 
 ## Copy and rewrite
 
-`copy_object` copies an object in the same bucket with one `copyTo` call.
-`rewrite_object` copies an object in the same bucket with the JSON rewrite API.
-`rewrite_object` sends `rewriteToken` again until `done` is true.
-If `rewriteToken` does not change, `rewrite_object` returns an error.
+`GcsBackend::copy_object` copies an object in the same bucket with one `copyTo` call.
+`GcsBackend::rewrite_object` copies an object in the same bucket with the JSON rewrite API.
+`GcsBackend::rewrite_object` sends `rewriteToken` again until `done` is true.
+If `rewriteToken` does not change, `GcsBackend::rewrite_object` returns an error.
 
 ## Operations
 
-The client gives these operations:
+These methods are on `GcsBackend`:
 
-- Put bytes, a file path, or a byte stream.
-- Get the object bytes.
-- Read object data.
-- List one page.
-- Delete one object.
-- Patch the metadata map.
-- Copy an object in the same bucket with `copyTo`.
-- Rewrite an object in the same bucket with `rewriteToken`.
-- Build a V4 signed GET URL.
+- `put_bytes` puts bytes.
+- `put_file` puts a file path.
+- `put_stream` puts a byte stream.
+- `get_bytes` gets the object bytes.
+- `open_object` opens the object data.
+- `stat` reads the object metadata.
+- `list` lists one page.
+- `delete_object` deletes one object.
+- `patch_metadata` patches the metadata map.
+- `copy_object` copies an object in the same bucket with `copyTo`.
+- `rewrite_object` copies an object in the same bucket with `rewriteToken`.
+- `signed_get_url` builds a V4 signed GET URL.
+- `sign_blob` signs bytes with IAM `signBlob`.
+- `bucket` returns the bucket name.
+- `signer_email` returns the signer email.
+
+These methods are on `ObjectReader`:
+
+- `read_to_vec` reads the object bytes.
+- `byte_stream` reads the object data as a byte stream.
 
 ## Operations log
 
 The client writes operations records through the logging feature.
-`attach_ops_log` connects one log shipper to one client.
+`GcsBackend::attach_ops_log` connects one log shipper to one client.
 A second call replaces that shipper.
 An operations record has no `app` field.
 An operations record has no `project` field.
