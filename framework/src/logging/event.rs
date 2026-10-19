@@ -19,7 +19,7 @@ pub struct LogEvent {
     pub id: String,
     pub ip: String,
     pub user_agent: String,
-    pub request: String,
+    pub action: String,
     pub status: Option<u16>,
     pub latency_ms: Option<u64>,
     pub level: LogLevel,
@@ -33,7 +33,7 @@ pub fn event(level: LogLevel, message: impl Into<String>) -> LogEvent {
         id: String::new(),
         ip: String::new(),
         user_agent: String::new(),
-        request: String::new(),
+        action: String::new(),
         status: None,
         latency_ms: None,
         level,
@@ -72,7 +72,7 @@ mod tests {
         event.id = "req-1".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "demo-agent".to_string();
-        event.request = "GET /health".to_string();
+        event.action = "GET /health".to_string();
         event.status = Some(204);
         event.latency_ms = Some(12);
         event.extra.insert("region".to_string(), json!("asia"));
@@ -88,7 +88,7 @@ mod tests {
             "id",
             "ip",
             "user_agent",
-            "request",
+            "action",
             "status",
             "latency_ms",
             "level",
@@ -106,7 +106,8 @@ mod tests {
         assert_eq!(value["id"], "req-1");
         assert_eq!(value["ip"], "203.0.113.8");
         assert_eq!(value["user_agent"], "demo-agent");
-        assert_eq!(value["request"], "GET /health");
+        assert_eq!(value["action"], "GET /health");
+        assert!(value.get("request").is_none());
         assert!(value.get("request_id").is_none());
         assert!(value.get("method").is_none());
         assert!(value.get("path").is_none());
@@ -128,7 +129,8 @@ mod tests {
         assert_eq!(value["id"], "");
         assert_eq!(value["ip"], "");
         assert_eq!(value["user_agent"], "");
-        assert_eq!(value["request"], "");
+        assert_eq!(value["action"], "");
+        assert!(value.get("request").is_none());
         assert!(value["status"].is_null());
         assert!(value["latency_ms"].is_null());
         assert_eq!(value["level"], "warn");

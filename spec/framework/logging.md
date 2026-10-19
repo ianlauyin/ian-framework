@@ -54,7 +54,7 @@ One event has these fields:
 | `id` | event id, or an empty string |
 | `ip` | client address, or an empty string |
 | `user_agent` | `user-agent` header, or an empty string |
-| `request` | `{method} {path}`, or an empty string |
+| `action` | `{method} {path}`, or an empty string |
 | `status` | HTTP status, or null |
 | `latency_ms` | latency in milliseconds, or null |
 | `level` | `debug`, `info`, `warn`, or `error` |
@@ -64,13 +64,13 @@ One event has these fields:
 The event has no `app` field.
 The event has no `project` field.
 
-`request` is one string.
+`action` is one string.
 The shape is `{method} {path}`.
 One space separates the method and the path.
 An example is `GET /api/foo`.
 The path does not include the query string.
 An empty path with a method is `/`.
-An empty method gives an empty `request`.
+An empty method gives an empty `action`.
 The HTTP header for `id` is `x-request-id`.
 
 ## Shipper
@@ -109,7 +109,7 @@ A forbidden character in that project is a configuration error.
 `record` does not write `project` into the event.
 `record` does not store an event below `minimum_level`.
 `record` stores the full `message`.
-`record` stores the full `request`.
+`record` stores the full `action`.
 `record` stores the full `id`.
 `record` stores the full `ip`.
 `record` stores the full `user_agent`.
@@ -202,7 +202,7 @@ The middleware writes that id into the response header `x-request-id`.
 The middleware records one event after the inner handler returns.
 The middleware does not set `app` on the event.
 The middleware does not set `project` on the event.
-`request` is `{method} {path}`.
+`action` is `{method} {path}`.
 One space separates the method and the path.
 `method` is the request method.
 `path` is the request path.

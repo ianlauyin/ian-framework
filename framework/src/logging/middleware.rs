@@ -29,7 +29,7 @@ pub async fn log_request(
     event.id = id;
     event.ip = ip;
     event.user_agent = user_agent;
-    event.request = request_line(&method, &path);
+    event.action = request_line(&method, &path);
     event.status = Some(status);
     event.latency_ms = Some(millis_since(started));
     let _ = record(&shipper, event);
@@ -173,7 +173,7 @@ mod tests {
         assert_eq!(events.len(), 1);
         let event = &events[0];
         assert_eq!(event.id, "req-1");
-        assert_eq!(event.request, "GET /status/204");
+        assert_eq!(event.action, "GET /status/204");
         assert_eq!(event.ip, "");
         assert_eq!(event.user_agent, "");
         assert_eq!(event.status, Some(204));
@@ -184,6 +184,8 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
+        assert_eq!(value["action"], "GET /status/204");
+        assert!(value.get("request").is_none());
         assert!(!json.contains("secret"));
         assert!(!json.contains("token"));
     }
@@ -245,7 +247,7 @@ mod tests {
         let event = &buffered_events(&shipper)[0];
         assert_eq!(event.ip, "203.0.113.8");
         assert_eq!(event.user_agent, "demo-agent");
-        assert_eq!(event.request, "GET /status/200");
+        assert_eq!(event.action, "GET /status/200");
     }
 
     #[tokio::test]
@@ -278,7 +280,7 @@ mod tests {
         assert_eq!(events[0].ip, "198.51.100.4");
         assert_eq!(events[0].user_agent, "");
         assert_eq!(events[1].ip, "192.0.2.10");
-        assert_eq!(events[1].request, "GET /status/201");
+        assert_eq!(events[1].action, "GET /status/201");
     }
 
     fn generated_request_id(value: &str) -> bool {
