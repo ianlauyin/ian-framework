@@ -71,7 +71,6 @@ An example is `GET /api/foo`.
 The path does not include the query string.
 An empty path with a method is `/`.
 An empty method gives an empty `action`.
-The HTTP header for `id` is `x-request-id`.
 
 ## Shipper
 
@@ -192,13 +191,9 @@ let router = Router::new().layer(middleware::from_fn_with_state(
 ));
 ```
 
-The middleware reads the header `x-request-id`.
-A valid `x-request-id` has 1 to 128 characters.
-Each character is a letter, a digit, `.`, `_`, `-`, or `:`.
-A missing header gets a new id.
-An invalid header gets a new id.
-The middleware stores that id in the event field `id`.
-The middleware writes that id into the response header `x-request-id`.
+The middleware does not read the header `x-request-id`.
+The middleware does not write the header `x-request-id`.
+The middleware leaves the event field `id` empty.
 The middleware records one event after the inner handler returns.
 The middleware does not set `app` on the event.
 The middleware does not set `project` on the event.
