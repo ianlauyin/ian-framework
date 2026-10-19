@@ -139,7 +139,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_records_the_request_schema() {
-        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api", "")).unwrap();
         let response = app(shipper.clone())
             .oneshot(
                 Request::builder()
@@ -177,7 +177,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_levels_follow_the_status() {
-        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api", "")).unwrap();
         let router = app(shipper.clone());
         assert_eq!(
             send(router.clone(), "/status/404").await.status(),
@@ -196,7 +196,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_reads_ip_and_user_agent() {
-        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api", "")).unwrap();
         let response = app(shipper.clone())
             .oneshot(
                 Request::builder()
@@ -219,7 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_uses_real_ip_then_the_socket_host() {
-        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api", "")).unwrap();
         let router = app(shipper.clone());
         router
             .clone()

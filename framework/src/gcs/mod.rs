@@ -442,7 +442,7 @@ mod tests {
     async fn ops_log_writes_the_bucket_and_omits_the_query() {
         let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
         let shipper =
-            crate::logging::LogShipper::new(crate::logging::ShipperConfig::new("storage")).unwrap();
+            crate::logging::LogShipper::new(crate::logging::ShipperConfig::new("storage", "")).unwrap();
         backend.attach_ops_log(shipper.clone());
         ops::record_op(
             &backend,

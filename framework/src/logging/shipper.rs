@@ -17,10 +17,10 @@ pub struct ShipperConfig {
 }
 
 impl ShipperConfig {
-    pub fn new(app: impl Into<String>) -> Self {
+    pub fn new(app: impl Into<String>, endpoint: impl Into<String>) -> Self {
         Self {
             app: app.into(),
-            endpoint: None,
+            endpoint: Some(endpoint.into()),
             capacity: DEFAULT_CAPACITY,
         }
     }
@@ -219,7 +219,7 @@ mod tests {
     use crate::logging::LogLevel;
 
     fn buffer_only() -> LogShipper {
-        LogShipper::new(ShipperConfig::new("api")).unwrap()
+        LogShipper::new(ShipperConfig::new("api", "")).unwrap()
     }
 
     #[test]
@@ -233,19 +233,16 @@ mod tests {
 
     #[test]
     fn blank_endpoint_is_buffer_only() {
-        for endpoint in [Some(String::new()), Some("   ".to_string())] {
-            let mut config = ShipperConfig::new("api");
-            config.endpoint = endpoint;
-            let shipper = LogShipper::new(config).unwrap();
+        for endpoint in ["", "   "] {
+            let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
             assert_eq!(shipper.endpoint(), None);
         }
     }
 
     #[test]
     fn endpoint_is_normalized() {
-        let mut config = ShipperConfig::new("cs");
-        config.endpoint = Some("http://logs.example/ingest/".to_string());
-        let shipper = LogShipper::new(config).unwrap();
+        let shipper =
+            LogShipper::new(ShipperConfig::new("cs", "http://logs.example/ingest/")).unwrap();
         assert_eq!(shipper.endpoint(), Some("http://logs.example/ingest"));
         assert_eq!(
             shipper.batch_url(shipper.endpoint().unwrap()),
@@ -256,23 +253,15 @@ mod tests {
     #[test]
     fn invalid_config_is_rejected() {
         let cases = [
-            ShipperConfig::new(""),
-            ShipperConfig::new("a/b"),
+            ShipperConfig::new("", "http://logs.example"),
+            ShipperConfig::new("a/b", "http://logs.example"),
             {
-                let mut config = ShipperConfig::new("api");
+                let mut config = ShipperConfig::new("api", "http://logs.example");
                 config.capacity = 0;
                 config
             },
-            {
-                let mut config = ShipperConfig::new("api");
-                config.endpoint = Some("ftp://logs.example".to_string());
-                config
-            },
-            {
-                let mut config = ShipperConfig::new("api");
-                config.endpoint = Some("http://logs.example/a b".to_string());
-                config
-            },
+            ShipperConfig::new("api", "ftp://logs.example"),
+            ShipperConfig::new("api", "http://logs.example/a b"),
         ];
         for config in cases {
             assert!(LogShipper::new(config).is_none());
@@ -292,7 +281,7 @@ mod tests {
 
     #[test]
     fn capacity_drops_the_oldest_event() {
-        let mut config = ShipperConfig::new("api");
+        let mut config = ShipperConfig::new("api", "");
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "a", LogLevel::Info));
@@ -342,8 +331,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_batch_does_not_post() {
-        let mut config = ShipperConfig::new("api");
-        config.endpoint = Some("http://127.0.0.1:9".to_string());
+        let config = ShipperConfig::new("api", "http://127.0.0.1:9");
         let shipper = LogShipper::new(config).unwrap();
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
@@ -354,8 +342,7 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         drop(listener);
-        let mut config = ShipperConfig::new("api");
-        config.endpoint = Some(format!("http://{addr}"));
+        let config = ShipperConfig::new("api", format!("http://{addr}"));
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "down", LogLevel::Error));
         shipper.ship_batch().await;
@@ -366,8 +353,7 @@ mod tests {
     #[tokio::test]
     async fn ship_batch_posts_json_to_the_app_path() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let mut config = ShipperConfig::new("cs");
-        config.endpoint = Some(endpoint);
+        let config = ShipperConfig::new("cs", endpoint);
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "one", LogLevel::Info));
         shipper.record(event("", "two", LogLevel::Warn));
@@ -401,9 +387,7 @@ mod tests {
     #[tokio::test]
     async fn http_error_restores_the_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
-        let mut config = ShipperConfig::new("api");
-        config.endpoint = Some(endpoint);
-        let shipper = LogShipper::new(config).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
         shipper.record(event("", "keep", LogLevel::Info));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_events()[0].message, "keep");
@@ -412,8 +396,7 @@ mod tests {
     #[tokio::test]
     async fn in_flight_records_stay_out_of_a_successful_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::Slow).await;
-        let mut config = ShipperConfig::new("api");
-        config.endpoint = Some(endpoint);
+        let mut config = ShipperConfig::new("api", endpoint);
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "a", LogLevel::Info));
@@ -437,8 +420,7 @@ mod tests {
     #[tokio::test]
     async fn failed_restore_keeps_the_oldest_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::SlowUnavailable).await;
-        let mut config = ShipperConfig::new("api");
-        config.endpoint = Some(endpoint);
+        let mut config = ShipperConfig::new("api", endpoint);
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "a", LogLevel::Info));

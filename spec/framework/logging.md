@@ -74,8 +74,9 @@ An empty method gives an empty `action`.
 
 ## Shipper
 
-`ShipperConfig::new` builds one `ShipperConfig` for one app.
-That config has no endpoint.
+`ShipperConfig::new` builds one `ShipperConfig` for one app and one endpoint.
+The first argument is the app.
+The second argument is the endpoint.
 `capacity` starts at 10000 events.
 The ship request time limit is 10 seconds.
 
@@ -138,7 +139,6 @@ The adapter is outside this shipper.
 An unset endpoint selects buffer-only mode.
 An empty endpoint selects buffer-only mode.
 An endpoint that has only spaces selects buffer-only mode.
-`ShipperConfig::new` selects buffer-only mode.
 Buffer-only mode does not build an HTTP client.
 Buffer-only mode does not open an HTTP connection.
 `LogShipper::spawn_ship_loop` in buffer-only mode does not remove buffered events.
@@ -157,7 +157,7 @@ A scheme other than `http` or `https` returns no shipper.
 Use it with `axum::middleware::from_fn_with_state` and one shipper.
 
 ```rust
-let shipper = LogShipper::new(ShipperConfig::new("cs")).unwrap();
+let shipper = LogShipper::new(ShipperConfig::new("cs", "https://logs.example")).unwrap();
 let router = Router::new().layer(middleware::from_fn_with_state(
     shipper,
     ian_framework::logging::log_request,
