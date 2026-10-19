@@ -20,9 +20,10 @@ pub struct LogEvent {
     pub ts: DateTime<Utc>,
     pub app: String,
     pub project: String,
-    pub request_id: String,
-    pub method: String,
-    pub path: String,
+    pub id: String,
+    pub ip: String,
+    pub user_agent: String,
+    pub request: String,
     pub status: Option<u16>,
     pub latency_ms: Option<u64>,
     pub level: LogLevel,
@@ -35,9 +36,10 @@ pub fn event(app: impl Into<String>, level: LogLevel, message: impl Into<String>
         ts: Utc::now(),
         app: app.into(),
         project: String::new(),
-        request_id: String::new(),
-        method: String::new(),
-        path: String::new(),
+        id: String::new(),
+        ip: String::new(),
+        user_agent: String::new(),
+        request: String::new(),
         status: None,
         latency_ms: None,
         level,
@@ -77,6 +79,14 @@ pub fn parse_jsonl(body: &str) -> Result<Vec<LogEvent>, LogError> {
     Ok(events)
 }
 
+pub(crate) fn request_line(method: &str, path: &str) -> String {
+    if method.is_empty() {
+        return String::new();
+    }
+    let path = if path.is_empty() { "/" } else { path };
+    format!("{method} {path}")
+}
+
 pub(super) fn level_rank(level: LogLevel) -> u8 {
     match level {
         LogLevel::Debug => 0,
@@ -97,9 +107,10 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc);
         event.project = "demo".to_string();
-        event.request_id = "req-1".to_string();
-        event.method = "GET".to_string();
-        event.path = "/health".to_string();
+        event.id = "req-1".to_string();
+        event.ip = "203.0.113.8".to_string();
+        event.user_agent = "demo-agent".to_string();
+        event.request = "GET /health".to_string();
         event.status = Some(204);
         event.latency_ms = Some(12);
         event.extra.insert("region".to_string(), json!("asia"));
@@ -114,9 +125,10 @@ mod tests {
             "ts",
             "app",
             "project",
-            "request_id",
-            "method",
-            "path",
+            "id",
+            "ip",
+            "user_agent",
+            "request",
             "status",
             "latency_ms",
             "level",
@@ -131,9 +143,13 @@ mod tests {
             .contains("2026-10-18T12:00:00"));
         assert_eq!(value["app"], "cs");
         assert_eq!(value["project"], "demo");
-        assert_eq!(value["request_id"], "req-1");
-        assert_eq!(value["method"], "GET");
-        assert_eq!(value["path"], "/health");
+        assert_eq!(value["id"], "req-1");
+        assert_eq!(value["ip"], "203.0.113.8");
+        assert_eq!(value["user_agent"], "demo-agent");
+        assert_eq!(value["request"], "GET /health");
+        assert!(value.get("request_id").is_none());
+        assert!(value.get("method").is_none());
+        assert!(value.get("path").is_none());
         assert_eq!(value["status"], 204);
         assert_eq!(value["latency_ms"], 12);
         assert_eq!(value["level"], "info");
@@ -149,9 +165,10 @@ mod tests {
         let value: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(value["app"], "cs");
         assert_eq!(value["project"], "");
-        assert_eq!(value["request_id"], "");
-        assert_eq!(value["method"], "");
-        assert_eq!(value["path"], "");
+        assert_eq!(value["id"], "");
+        assert_eq!(value["ip"], "");
+        assert_eq!(value["user_agent"], "");
+        assert_eq!(value["request"], "");
         assert!(value["status"].is_null());
         assert!(value["latency_ms"].is_null());
         assert_eq!(value["level"], "warn");
@@ -171,6 +188,14 @@ mod tests {
         let body = format!("\n{}\n", to_jsonl(&events).unwrap());
         let parsed = parse_jsonl(&body).unwrap();
         assert_eq!(parsed, events);
+    }
+
+    #[test]
+    fn request_line_joins_method_and_path() {
+        assert_eq!(request_line("GET", "/api/foo"), "GET /api/foo");
+        assert_eq!(request_line("POST", ""), "POST /");
+        assert_eq!(request_line("", "/api/foo"), "");
+        assert_eq!(request_line("", ""), "");
     }
 
     #[test]

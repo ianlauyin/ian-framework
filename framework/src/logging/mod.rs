@@ -2,13 +2,14 @@ mod event;
 mod middleware;
 mod shipper;
 
+pub(crate) use event::request_line;
 pub use event::{event, parse_json_line, parse_jsonl, to_json_line, to_jsonl, LogEvent, LogLevel};
 pub use middleware::log_request;
 pub use shipper::{
     app, buffered_events, buffered_len, dropped, endpoint, log_shipper, minimum_level, project,
     record, ship_batch, shipper_config, spawn_ship_loop, LogShipper, ShipMode, ShipResult,
-    ShipperConfig, DEFAULT_BATCH_SIZE, DEFAULT_CAPACITY, DEFAULT_SHIP_EVERY, MAX_MESSAGE_BYTES,
-    MAX_PATH_BYTES, MAX_REQUEST_ID_BYTES, SHIP_TIMEOUT,
+    ShipperConfig, DEFAULT_BATCH_SIZE, DEFAULT_CAPACITY, DEFAULT_SHIP_EVERY, MAX_ID_BYTES,
+    MAX_IP_BYTES, MAX_MESSAGE_BYTES, MAX_REQUEST_BYTES, MAX_USER_AGENT_BYTES, SHIP_TIMEOUT,
 };
 
 use std::fmt;

@@ -58,14 +58,24 @@ One event has these fields:
 | `ts` | UTC time in RFC 3339 |
 | `app` | app name |
 | `project` | descriptive project name, or an empty string |
-| `request_id` | request id, or an empty string |
-| `method` | HTTP method, or an empty string |
-| `path` | URL path, or an empty string |
+| `id` | event id, or an empty string |
+| `ip` | client address, or an empty string |
+| `user_agent` | `user-agent` header, or an empty string |
+| `request` | `{method} {path}`, or an empty string |
 | `status` | HTTP status, or null |
 | `latency_ms` | latency in milliseconds, or null |
 | `level` | `debug`, `info`, `warn`, or `error` |
 | `message` | short text |
 | `extra` | one JSON object |
+
+`request` is one string.
+The shape is `{method} {path}`.
+One space separates the method and the path.
+An example is `GET /api/foo`.
+The path does not include the query string.
+An empty path with a method is `/`.
+An empty method gives an empty `request`.
+The HTTP header for `id` is `x-request-id`.
 
 `to_json_line` writes one event as one JSON object on one line.
 `parse_json_line` reads that line.
@@ -117,10 +127,18 @@ This check applies at every level.
 `record` does not store an event below `minimum_level`.
 The stored `message` is at most `MAX_MESSAGE_BYTES` bytes.
 `MAX_MESSAGE_BYTES` is 4096.
-The stored `path` is at most `MAX_PATH_BYTES` bytes.
-`MAX_PATH_BYTES` is 2048.
-The stored `request_id` is at most `MAX_REQUEST_ID_BYTES` bytes.
-`MAX_REQUEST_ID_BYTES` is 128.
+The stored `request` is at most `MAX_REQUEST_BYTES` bytes.
+`MAX_REQUEST_BYTES` is 2080.
+This size is 31 bytes, one space, and 2048 bytes.
+The 31 bytes are for the method.
+The 2048 bytes are for the path.
+The stored `id` is at most `MAX_ID_BYTES` bytes.
+`MAX_ID_BYTES` is 128.
+The stored `ip` is at most `MAX_IP_BYTES` bytes.
+`MAX_IP_BYTES` is 64.
+This size covers one IPv6 address.
+The stored `user_agent` is at most `MAX_USER_AGENT_BYTES` bytes.
+`MAX_USER_AGENT_BYTES` is 1024.
 The shipper cuts a long value on a character boundary.
 The buffer keeps at most `capacity` events.
 When the buffer is full, a new event removes the oldest event.
@@ -204,16 +222,32 @@ A valid `x-request-id` has 1 to 128 characters.
 Each character is a letter, a digit, `.`, `_`, `-`, or `:`.
 A missing header gets a new id.
 An invalid header gets a new id.
-The middleware writes `x-request-id` on the response.
+The middleware stores that id in the event field `id`.
+The middleware writes that id into the response header `x-request-id`.
 The middleware records one event after the inner handler returns.
 The middleware builds the event with an empty app and an empty project.
 `record` sets the app from the shipper.
 `record` sets the project from the shipper.
 The shipper project can be empty.
+`request` is `{method} {path}`.
+One space separates the method and the path.
 `method` is the request method.
 `path` is the request path.
-An empty path is stored as `/`.
+An empty path is `/`.
 The path does not include the query string.
+The middleware sets `ip` from the first source that is not empty.
+The sources are in this order:
+
+- The first item in the header `x-forwarded-for`
+- The header `x-real-ip`
+- The host of `ConnectInfo<SocketAddr>`
+
+The middleware removes spaces at the start and at the end of a header value.
+The host does not include the port.
+A request with no source gets an empty `ip`.
+`user_agent` is the header `user-agent`.
+A missing header gives an empty `user_agent`.
+The middleware skips a header value that is not text.
 `status` is the response status.
 `latency_ms` is the handler time in milliseconds.
 `message` is `request`.

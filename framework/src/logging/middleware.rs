@@ -1,12 +1,13 @@
+use std::net::SocketAddr;
 use std::time::Instant;
 
-use axum::extract::{Request, State};
-use axum::http::HeaderValue;
+use axum::extract::{ConnectInfo, Request, State};
+use axum::http::{HeaderMap, HeaderValue};
 use axum::middleware::Next;
 use axum::response::Response;
 use uuid::Uuid;
 
-use super::{event, record, LogLevel, LogShipper, MAX_REQUEST_ID_BYTES};
+use super::{event, record, request_line, LogLevel, LogShipper, MAX_ID_BYTES};
 
 pub async fn log_request(
     State(shipper): State<LogShipper>,
@@ -15,17 +16,20 @@ pub async fn log_request(
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
-    let request_id = incoming_request_id(request.headers()).unwrap_or_else(new_request_id);
+    let id = incoming_request_id(request.headers()).unwrap_or_else(new_request_id);
+    let ip = client_ip(&request);
+    let user_agent = user_agent(request.headers());
     let started = Instant::now();
     let mut response = next.run(request).await;
     let status = response.status().as_u16();
-    if let Ok(value) = HeaderValue::from_str(&request_id) {
+    if let Ok(value) = HeaderValue::from_str(&id) {
         response.headers_mut().insert("x-request-id", value);
     }
     let mut event = event("", level_for_status(status), "request");
-    event.request_id = request_id;
-    event.method = method;
-    event.path = path;
+    event.id = id;
+    event.ip = ip;
+    event.user_agent = user_agent;
+    event.request = request_line(&method, &path);
     event.status = Some(status);
     event.latency_ms = Some(millis_since(started));
     let _ = record(&shipper, event);
@@ -40,7 +44,7 @@ fn request_path(path: &str) -> String {
     }
 }
 
-fn incoming_request_id(headers: &axum::http::HeaderMap) -> Option<String> {
+fn incoming_request_id(headers: &HeaderMap) -> Option<String> {
     let value = headers.get("x-request-id")?.to_str().ok()?;
     if valid_request_id(value) {
         Some(value.to_string())
@@ -51,10 +55,47 @@ fn incoming_request_id(headers: &axum::http::HeaderMap) -> Option<String> {
 
 fn valid_request_id(value: &str) -> bool {
     !value.is_empty()
-        && value.len() <= MAX_REQUEST_ID_BYTES
+        && value.len() <= MAX_ID_BYTES
         && value
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | ':'))
+}
+
+fn client_ip(request: &Request) -> String {
+    if let Some(ip) = first_forwarded_ip(request.headers()) {
+        return ip;
+    }
+    if let Some(ip) = header_text(request.headers(), "x-real-ip") {
+        return ip;
+    }
+    request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(addr)| addr.ip().to_string())
+        .unwrap_or_default()
+}
+
+fn first_forwarded_ip(headers: &HeaderMap) -> Option<String> {
+    let value = header_text(headers, "x-forwarded-for")?;
+    let first = value.split(',').next()?.trim();
+    if first.is_empty() {
+        None
+    } else {
+        Some(first.to_string())
+    }
+}
+
+fn user_agent(headers: &HeaderMap) -> String {
+    header_text(headers, "user-agent").unwrap_or_default()
+}
+
+fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
+    let value = headers.get(name)?.to_str().ok()?.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn new_request_id() -> String {
@@ -133,9 +174,10 @@ mod tests {
         let event = &events[0];
         assert_eq!(event.app, "api");
         assert_eq!(event.project, "demo");
-        assert_eq!(event.request_id, "req-1");
-        assert_eq!(event.method, "GET");
-        assert_eq!(event.path, "/status/204");
+        assert_eq!(event.id, "req-1");
+        assert_eq!(event.request, "GET /status/204");
+        assert_eq!(event.ip, "");
+        assert_eq!(event.user_agent, "");
         assert_eq!(event.status, Some(204));
         assert!(event.latency_ms.is_some());
         assert_eq!(event.level, LogLevel::Info);
@@ -179,7 +221,63 @@ mod tests {
             .to_string();
         assert_ne!(header, "bad id");
         assert!(generated_request_id(&header));
-        assert_eq!(buffered_events(&shipper)[0].request_id, header);
+        assert_eq!(buffered_events(&shipper)[0].id, header);
+    }
+
+    #[tokio::test]
+    async fn middleware_reads_ip_and_user_agent() {
+        let shipper = log_shipper(shipper_config("api")).unwrap();
+        let response = app(shipper.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/status/200")
+                    .header("x-forwarded-for", " 203.0.113.8, 10.0.0.1 ")
+                    .header("x-real-ip", "198.51.100.4")
+                    .header("user-agent", " demo-agent ")
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let event = &buffered_events(&shipper)[0];
+        assert_eq!(event.ip, "203.0.113.8");
+        assert_eq!(event.user_agent, "demo-agent");
+        assert_eq!(event.request, "GET /status/200");
+    }
+
+    #[tokio::test]
+    async fn middleware_uses_real_ip_then_the_socket_host() {
+        let shipper = log_shipper(shipper_config("api")).unwrap();
+        let router = app(shipper.clone());
+        router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/status/200")
+                    .header("x-real-ip", "198.51.100.4")
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        router
+            .oneshot(
+                Request::builder()
+                    .uri("/status/201")
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let events = buffered_events(&shipper);
+        assert_eq!(events[0].ip, "198.51.100.4");
+        assert_eq!(events[0].user_agent, "");
+        assert_eq!(events[1].ip, "192.0.2.10");
+        assert_eq!(events[1].request, "GET /status/201");
     }
 
     fn generated_request_id(value: &str) -> bool {
