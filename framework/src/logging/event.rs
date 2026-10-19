@@ -44,18 +44,19 @@ pub fn event(level: LogLevel, message: impl Into<String>) -> LogEvent {
     }
 }
 
-pub fn to_json_line(event: &LogEvent) -> Result<String, LogError> {
+pub(super) fn to_json_line(event: &LogEvent) -> Result<String, LogError> {
     serde_json::to_string(event).map_err(|err| {
         LogError::with_source(LogErrorKind::Encode, "cannot encode a log event", err)
     })
 }
 
-pub fn parse_json_line(line: &str) -> Result<LogEvent, LogError> {
+#[cfg(test)]
+pub(super) fn parse_json_line(line: &str) -> Result<LogEvent, LogError> {
     serde_json::from_str(line)
         .map_err(|err| LogError::with_source(LogErrorKind::Encode, "cannot parse a log event", err))
 }
 
-pub fn to_jsonl(events: &[LogEvent]) -> Result<String, LogError> {
+pub(super) fn to_jsonl(events: &[LogEvent]) -> Result<String, LogError> {
     let mut body = String::new();
     for event in events {
         body.push_str(&to_json_line(event)?);
@@ -64,7 +65,8 @@ pub fn to_jsonl(events: &[LogEvent]) -> Result<String, LogError> {
     Ok(body)
 }
 
-pub fn parse_jsonl(body: &str) -> Result<Vec<LogEvent>, LogError> {
+#[cfg(test)]
+pub(super) fn parse_jsonl(body: &str) -> Result<Vec<LogEvent>, LogError> {
     let mut events = Vec::new();
     for line in body.lines() {
         if line.trim().is_empty() {

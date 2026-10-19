@@ -478,7 +478,7 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("my-bucket")
         );
-        let line = crate::logging::to_json_line(&events[0]).unwrap();
+        let line = serde_json::to_string(&events[0]).unwrap();
         let value: serde_json::Value = serde_json::from_str(&line).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
