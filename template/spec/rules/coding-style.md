@@ -16,6 +16,8 @@
 
 Use functional programming. Do not use object-oriented programming.
 
+- Use Json for Request and Response unless the route needs special handling.
+
 ## Frontend (SolidJS + Typescript)
 
 ### Components
