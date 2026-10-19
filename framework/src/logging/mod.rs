@@ -2,6 +2,6 @@ mod event;
 mod middleware;
 mod shipper;
 
-pub use event::{LogEvent, LogLevel, RequestJson};
+pub use event::{LogEvent, LogLevel};
 pub use middleware::log_request;
-pub use shipper::{LogShipper, ShipperConfig};
+pub use shipper::{LogShipper, RequestJson, ShipperConfig};

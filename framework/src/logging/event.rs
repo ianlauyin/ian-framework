@@ -41,14 +41,10 @@ pub(crate) fn event(action: impl Into<String>, message: impl Into<String>, level
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RequestJson {
-    pub events: Vec<LogEvent>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::RequestJson;
     use serde_json::json;
 
     fn sample() -> LogEvent {

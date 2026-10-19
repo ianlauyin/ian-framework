@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::{LogEvent, RequestJson};
+use serde::{Deserialize, Serialize};
+
+use super::LogEvent;
 
 const DEFAULT_CAPACITY: usize = 10_000;
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -22,6 +24,11 @@ impl ShipperConfig {
             capacity: DEFAULT_CAPACITY,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequestJson {
+    pub events: Vec<LogEvent>,
 }
 
 #[derive(Clone)]
