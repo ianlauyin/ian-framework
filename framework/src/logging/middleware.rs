@@ -119,7 +119,6 @@ fn millis_since(started: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::event::to_json_line;
     use crate::logging::{buffered_events, log_shipper, shipper_config};
     use axum::body::Body;
     use axum::extract::Path;
@@ -181,12 +180,12 @@ mod tests {
         assert!(event.latency_ms.is_some());
         assert_eq!(event.level, LogLevel::Info);
         assert_eq!(event.message, "request");
-        let line = to_json_line(event).unwrap();
-        let value: serde_json::Value = serde_json::from_str(&line).unwrap();
+        let json = serde_json::to_string(event).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
-        assert!(!line.contains("secret"));
-        assert!(!line.contains("token"));
+        assert!(!json.contains("secret"));
+        assert!(!json.contains("token"));
     }
 
     #[tokio::test]

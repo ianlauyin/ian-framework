@@ -124,10 +124,8 @@ The HTTP method is POST.
 The URL is `{endpoint}/log/{app}`.
 `{app}` is the shipper app.
 For app `cs`, the path is `/log/cs`.
-The content type is `application/x-ndjson`.
-The body is one NDJSON batch.
-NDJSON is the special body for this route.
-Each event in the body is one JSON object and ends with a newline.
+The content type is `application/json`.
+The body is one JSON array of event objects.
 Each object has every field in the event table.
 Each object has no `app` key.
 Each object has no `project` key.

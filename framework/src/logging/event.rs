@@ -4,8 +4,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{LogError, LogErrorKind};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
@@ -42,39 +40,6 @@ pub fn event(level: LogLevel, message: impl Into<String>) -> LogEvent {
         message: message.into(),
         extra: BTreeMap::new(),
     }
-}
-
-pub(super) fn to_json_line(event: &LogEvent) -> Result<String, LogError> {
-    serde_json::to_string(event).map_err(|err| {
-        LogError::with_source(LogErrorKind::Encode, "cannot encode a log event", err)
-    })
-}
-
-#[cfg(test)]
-pub(super) fn parse_json_line(line: &str) -> Result<LogEvent, LogError> {
-    serde_json::from_str(line)
-        .map_err(|err| LogError::with_source(LogErrorKind::Encode, "cannot parse a log event", err))
-}
-
-pub(super) fn to_jsonl(events: &[LogEvent]) -> Result<String, LogError> {
-    let mut body = String::new();
-    for event in events {
-        body.push_str(&to_json_line(event)?);
-        body.push('\n');
-    }
-    Ok(body)
-}
-
-#[cfg(test)]
-pub(super) fn parse_jsonl(body: &str) -> Result<Vec<LogEvent>, LogError> {
-    let mut events = Vec::new();
-    for line in body.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        events.push(parse_json_line(line.trim())?);
-    }
-    Ok(events)
 }
 
 pub(crate) fn request_line(method: &str, path: &str) -> String {
@@ -115,9 +80,9 @@ mod tests {
     }
 
     #[test]
-    fn json_line_has_every_schema_field() {
-        let line = to_json_line(&sample()).unwrap();
-        let value: Value = serde_json::from_str(&line).unwrap();
+    fn json_object_has_every_schema_field() {
+        let json = serde_json::to_string(&sample()).unwrap();
+        let value: Value = serde_json::from_str(&json).unwrap();
         for key in [
             "ts",
             "id",
@@ -156,8 +121,8 @@ mod tests {
 
     #[test]
     fn empty_http_fields_are_null_or_empty() {
-        let line = to_json_line(&event(LogLevel::Warn, "note")).unwrap();
-        let value: Value = serde_json::from_str(&line).unwrap();
+        let json = serde_json::to_string(&event(LogLevel::Warn, "note")).unwrap();
+        let value: Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
         assert_eq!(value["id"], "");
@@ -171,18 +136,22 @@ mod tests {
     }
 
     #[test]
-    fn json_line_round_trips() {
+    fn json_object_round_trips() {
         let event = sample();
-        let parsed = parse_json_line(&to_json_line(&event).unwrap()).unwrap();
+        let parsed: LogEvent =
+            serde_json::from_str(&serde_json::to_string(&event).unwrap()).unwrap();
         assert_eq!(parsed, event);
     }
 
     #[test]
-    fn jsonl_round_trips_and_skips_blank_lines() {
+    fn json_array_round_trips() {
         let events = vec![sample(), event(LogLevel::Error, "down")];
-        let body = format!("\n{}\n", to_jsonl(&events).unwrap());
-        let parsed = parse_jsonl(&body).unwrap();
+        let body = serde_json::to_string(&events).unwrap();
+        let parsed: Vec<LogEvent> = serde_json::from_str(&body).unwrap();
         assert_eq!(parsed, events);
+        assert!(serde_json::from_str::<serde_json::Value>(&body)
+            .unwrap()
+            .is_array());
     }
 
     #[test]
@@ -195,8 +164,7 @@ mod tests {
 
     #[test]
     fn a_missing_schema_field_is_rejected() {
-        let line = r#"{"ts":"2026-10-18T12:00:00Z","message":"note"}"#;
-        let err = parse_json_line(line).unwrap_err();
-        assert_eq!(err.kind(), LogErrorKind::Encode);
+        let json = r#"{"ts":"2026-10-18T12:00:00Z","message":"note"}"#;
+        assert!(serde_json::from_str::<LogEvent>(json).is_err());
     }
 }
