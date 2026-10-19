@@ -26,7 +26,7 @@ impl ShipperConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestJson {
     pub events: Vec<LogEvent>,
 }
