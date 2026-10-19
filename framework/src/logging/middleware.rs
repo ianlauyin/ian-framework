@@ -6,7 +6,8 @@ use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 
-use super::{event, LogLevel, LogShipper};
+use super::event::event;
+use super::{LogLevel, LogShipper};
 
 pub async fn log_request(
     State(shipper): State<LogShipper>,
@@ -29,7 +30,7 @@ pub async fn log_request(
     event.user_agent = user_agent;
     event.status = Some(status);
     event.latency_ms = Some(millis_since(started));
-    let _ = shipper.record(event);
+    shipper.record(event);
     response
 }
 
@@ -138,9 +139,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_records_the_request_schema() {
-        let mut config = ShipperConfig::new("api");
-        config.project = "demo".to_string();
-        let shipper = LogShipper::new(config).unwrap();
+        let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
         let response = app(shipper.clone())
             .oneshot(
                 Request::builder()

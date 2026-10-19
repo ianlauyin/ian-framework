@@ -295,18 +295,20 @@ pub(crate) async fn send(backend: &GcsBackend, call: &Call) -> Result<reqwest::R
             );
             continue;
         }
-        ops::record_op(
-            backend,
-            ops::OpsRecord {
-                level: ops::level_for_status(status),
-                message: "gcs response",
-                method: call.method.as_str(),
-                url: &call.url,
-                status: Some(status),
-                latency_ms: Some(latency_ms),
-                extra: &[],
-            },
-        );
+        if let Some(level) = ops::level_for_status(status) {
+            ops::record_op(
+                backend,
+                ops::OpsRecord {
+                    level,
+                    message: "gcs response",
+                    method: call.method.as_str(),
+                    url: &call.url,
+                    status: Some(status),
+                    latency_ms: Some(latency_ms),
+                    extra: &[],
+                },
+            );
+        }
         if response.status().is_success() || call.extra_status.contains(&status) {
             return Ok(response);
         }
@@ -439,15 +441,13 @@ mod tests {
     #[tokio::test]
     async fn ops_log_writes_the_bucket_and_omits_the_query() {
         let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
-        let mut config = crate::logging::ShipperConfig::new("storage");
-        config.project = "demo".to_string();
-        config.minimum_level = crate::logging::LogLevel::Debug;
-        let shipper = crate::logging::LogShipper::new(config).unwrap();
+        let shipper =
+            crate::logging::LogShipper::new(crate::logging::ShipperConfig::new("storage")).unwrap();
         backend.attach_ops_log(shipper.clone());
         ops::record_op(
             &backend,
             ops::OpsRecord {
-                level: crate::logging::LogLevel::Debug,
+                level: crate::logging::LogLevel::Info,
                 message: "gcs response",
                 method: "GET",
                 url:
@@ -478,41 +478,6 @@ mod tests {
         assert!(value.get("project").is_none());
         assert!(!line.contains("secret"));
         assert!(!line.contains("upload_id"));
-    }
-
-    #[tokio::test]
-    async fn ops_debug_is_hidden_at_the_default_minimum() {
-        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
-        let shipper =
-            crate::logging::LogShipper::new(crate::logging::ShipperConfig::new("storage")).unwrap();
-        backend.attach_ops_log(shipper.clone());
-        ops::record_op(
-            &backend,
-            ops::OpsRecord {
-                level: crate::logging::LogLevel::Debug,
-                message: "gcs response",
-                method: "GET",
-                url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file",
-                status: Some(200),
-                latency_ms: Some(1),
-                extra: &[],
-            },
-        );
-        assert_eq!(shipper.buffered_len(), 0);
-        ops::record_op(
-            &backend,
-            ops::OpsRecord {
-                level: crate::logging::LogLevel::Warn,
-                message: "gcs request failed",
-                method: "GET",
-                url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file",
-                status: None,
-                latency_ms: None,
-                extra: &[],
-            },
-        );
-        assert_eq!(shipper.buffered_len(), 1);
-        assert_eq!(shipper.buffered_events()[0].message, "gcs request failed");
     }
 
     #[tokio::test]

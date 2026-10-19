@@ -1,4 +1,8 @@
-use crate::logging::{event, LogLevel};
+use std::collections::BTreeMap;
+
+use chrono::Utc;
+
+use crate::logging::{LogEvent, LogLevel};
 
 use super::GcsBackend;
 
@@ -16,9 +20,18 @@ pub(crate) fn record_op(backend: &GcsBackend, op: OpsRecord<'_>) {
     let Some(shipper) = backend.ops_shipper() else {
         return;
     };
-    let mut event = event(action(op.method, op.url), op.message, op.level);
-    event.status = op.status;
-    event.latency_ms = op.latency_ms;
+    let mut event = LogEvent {
+        ts: Utc::now(),
+        id: String::new(),
+        ip: String::new(),
+        user_agent: String::new(),
+        action: action(op.method, op.url),
+        status: op.status,
+        latency_ms: op.latency_ms,
+        level: op.level,
+        message: op.message.to_string(),
+        extra: BTreeMap::new(),
+    };
     for (key, value) in op.extra {
         if *key == "bucket" {
             continue;
@@ -32,7 +45,7 @@ pub(crate) fn record_op(backend: &GcsBackend, op: OpsRecord<'_>) {
         "bucket".to_string(),
         serde_json::Value::String(backend.bucket().to_string()),
     );
-    let _ = shipper.record(event);
+    shipper.record(event);
 }
 
 pub(crate) fn millis_since(started: std::time::Instant) -> u64 {
@@ -64,13 +77,13 @@ fn redact_query(text: &str) -> String {
     out
 }
 
-pub(crate) fn level_for_status(status: u16) -> LogLevel {
+pub(crate) fn level_for_status(status: u16) -> Option<LogLevel> {
     if status >= 500 {
-        LogLevel::Error
+        Some(LogLevel::Error)
     } else if status >= 400 {
-        LogLevel::Warn
+        Some(LogLevel::Warn)
     } else {
-        LogLevel::Debug
+        None
     }
 }
 
@@ -119,10 +132,10 @@ mod tests {
     }
 
     #[test]
-    fn http_status_levels_are_debug_warn_and_error() {
-        assert_eq!(level_for_status(200), LogLevel::Debug);
-        assert_eq!(level_for_status(308), LogLevel::Debug);
-        assert_eq!(level_for_status(404), LogLevel::Warn);
-        assert_eq!(level_for_status(503), LogLevel::Error);
+    fn http_status_levels_are_warn_and_error() {
+        assert_eq!(level_for_status(200), None);
+        assert_eq!(level_for_status(308), None);
+        assert_eq!(level_for_status(404), Some(LogLevel::Warn));
+        assert_eq!(level_for_status(503), Some(LogLevel::Error));
     }
 }

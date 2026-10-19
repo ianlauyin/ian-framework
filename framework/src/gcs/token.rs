@@ -23,22 +23,6 @@ pub(crate) async fn access_token(backend: &GcsBackend) -> Result<String, GcsErro
             return Ok(cached.value.clone());
         }
     }
-    let message = match backend.auth() {
-        Auth::Metadata => "request metadata server access token",
-        Auth::User { .. } => "refresh user access token",
-    };
-    super::ops::record_op(
-        backend,
-        super::ops::OpsRecord {
-            level: crate::logging::LogLevel::Debug,
-            message,
-            method: "",
-            url: "",
-            status: None,
-            latency_ms: None,
-            extra: &[],
-        },
-    );
     let fetched = fetch_token(backend.http(), backend.auth()).await;
     if let Err(err) = &fetched {
         let error_text = super::ops::logged_error(err);

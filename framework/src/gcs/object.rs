@@ -821,25 +821,6 @@ async fn put_chunk_retrying(
         match probe_session(backend, location, total).await {
             Ok(Probe::Complete(meta)) => return Ok(UploadStep::Done(meta)),
             Ok(Probe::Incomplete { next }) => {
-                let attempt_text = attempt.to_string();
-                let offset_text = offset.to_string();
-                let next_text = next.to_string();
-                super::ops::record_op(
-                    backend,
-                    super::ops::OpsRecord {
-                        level: crate::logging::LogLevel::Debug,
-                        message: "gcs resumable probe",
-                        method: "PUT",
-                        url: location,
-                        status: None,
-                        latency_ms: None,
-                        extra: &[
-                            ("attempt", &attempt_text),
-                            ("offset", &offset_text),
-                            ("next", &next_text),
-                        ],
-                    },
-                );
                 if next < start || next >= start + chunk_len {
                     return Ok(UploadStep::Continue { next });
                 }

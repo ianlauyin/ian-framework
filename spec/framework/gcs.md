@@ -181,14 +181,10 @@ The value is the bucket name.
 | --- | --- | --- |
 | HTTP status 500 or higher | `error` | `gcs response` |
 | HTTP status 400 through 499 | `warn` | `gcs response` |
-| other HTTP response | `debug` | `gcs response` |
 | HTTP transport failure | `warn` | `gcs request failed` |
 | first HTTP 401 for one call | `warn` | `gcs access token rejected` |
 | resumable chunk failure | `warn` | `gcs resumable chunk failed` |
 | resumable probe failure | `warn` | `gcs resumable probe failed` |
-| resumable probe | `debug` | `gcs resumable probe` |
-| metadata token request | `debug` | `request metadata server access token` |
-| user token refresh | `debug` | `refresh user access token` |
 | token request failure | `warn` | `access token request failed` |
 
 The first HTTP 401 does not also write `gcs response`.
@@ -197,10 +193,9 @@ A later HTTP 401 writes `gcs response`.
 A failure record can include `error` in `extra`.
 An `error` value does not contain a URL query.
 A resumable chunk record includes `attempt` and `offset` in `extra`.
-The `gcs resumable probe` record includes `attempt`, `offset`, and `next` in `extra`.
-The shipper `minimum_level` selects which records stay in the buffer.
-The default minimum is `info`.
-A `debug` record stays out of the buffer.
+A response below 400 writes no operations record.
+A successful resumable probe writes no operations record.
+A successful token request writes no operations record.
 
 ## Out of scope
 

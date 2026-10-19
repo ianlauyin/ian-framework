@@ -44,18 +44,7 @@ The default build includes `logging`.
 
 ## Event
 
-`event` builds one event.
-The first argument is `action`.
-The second argument is `message`.
-The third argument is `level`.
-`event` writes the first argument into `action`.
-`ts` is the current UTC time.
-`id` starts empty.
-`ip` starts empty.
-`user_agent` starts empty.
-`status` starts null.
-`latency_ms` starts null.
-`extra` starts empty.
+One event is one `LogEvent`.
 
 One event has these fields:
 
@@ -68,7 +57,7 @@ One event has these fields:
 | `action` | `{method} {path}`, or an empty string |
 | `status` | HTTP status, or null |
 | `latency_ms` | latency in milliseconds, or null |
-| `level` | `debug`, `info`, `warn`, or `error` |
+| `level` | `info`, `warn`, or `error` |
 | `message` | short text |
 | `extra` | one JSON object |
 
@@ -86,53 +75,31 @@ An empty method gives an empty `action`.
 ## Shipper
 
 `ShipperConfig::new` builds one `ShipperConfig` for one app.
-The project on that config starts empty.
-A caller can set `project` on the config.
-That project stays on the shipper.
-That project is not an event field.
 That config has no endpoint.
-`minimum_level` starts at `info`.
 `capacity` starts at 10000 events.
-`batch_size` starts at 100 events.
-The default ship interval is 5 seconds.
 The ship request time limit is 10 seconds.
 
 `LogShipper::new` builds one shipper from that config.
 One shipper has one app.
 The app is the routing name.
-An app name has 1 to 64 characters.
 The app name starts with a letter or a digit.
 The other characters are letters, digits, `.`, `_`, or `-`.
-An empty app is a configuration error.
-A forbidden character in the app is a configuration error.
-An empty project is valid.
-A project that is not empty uses the same character rules as the app.
-A forbidden character in that project is a configuration error.
-`capacity` of zero is a configuration error.
-`batch_size` of zero is a configuration error.
-`batch_size` above `capacity` is a configuration error.
+An empty app returns no shipper.
+A forbidden character in the app returns no shipper.
+`capacity` of zero returns no shipper.
 
-`LogShipper::app` returns the app name.
-`LogShipper::project` returns the project name.
-`LogShipper::endpoint` returns the endpoint.
-`LogShipper::minimum_level` returns the minimum level.
-
-`LogShipper::record` stores one event in the local buffer.
-`LogShipper::record` does not write `app` into the event.
-`LogShipper::record` does not write `project` into the event.
-`LogShipper::record` does not store an event below `minimum_level`.
-`LogShipper::record` stores the full `message`.
-`LogShipper::record` stores the full `action`.
-`LogShipper::record` stores the full `id`.
-`LogShipper::record` stores the full `ip`.
-`LogShipper::record` stores the full `user_agent`.
+The shipper stores one event in the local buffer.
+The shipper does not write `app` into the event.
+The shipper stores the full `message`.
+The shipper stores the full `action`.
+The shipper stores the full `id`.
+The shipper stores the full `ip`.
+The shipper stores the full `user_agent`.
 The buffer keeps at most `capacity` events.
 When the buffer is full, a new event removes the oldest event.
-`LogShipper::dropped` counts removed events.
-`LogShipper::buffered_len` returns the number of buffered events.
-`LogShipper::buffered_events` returns a copy of the buffered events.
 
-`LogShipper::ship_batch` sends one batch to the log server.
+`LogShipper::spawn_ship_loop` sends every buffered event to the log server.
+The loop repeats that send on an interval.
 The HTTP method is POST.
 The URL is `{endpoint}/log/{app}`.
 `{app}` is the shipper app.
@@ -145,22 +112,16 @@ The body is not a bare JSON array.
 Each event object has every field in the event table.
 Each event object has no `app` key.
 Each event object has no `project` key.
-The shipper does not put `project` in that URL.
-The shipper does not send a project header.
-One batch contains at most `batch_size` events.
-The shipper takes the batch out of the buffer before the POST.
+The shipper takes those events out of the buffer before the POST.
 A response status from 200 through 299 leaves that batch out of the buffer.
 A transport error puts that batch back at the front of the buffer.
 An HTTP error status puts that batch back at the front of the buffer.
 When that return makes the buffer larger than `capacity`, the shipper removes the newest events above the capacity.
 The ship request time limit is 10 seconds.
-`LogShipper::spawn_ship_loop` calls `LogShipper::ship_batch` on an interval.
-An interval of zero is a configuration error.
+An interval of zero returns no task.
 The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
-A ship error does not stop the loop.
+A ship failure does not stop the loop.
 An empty buffer with an endpoint does not send an HTTP request.
-The result mode is `Empty`.
-The result mode for a sent batch is `Sent`.
 
 The path app selects the log stream.
 A log server stores its project from the path app.
@@ -180,17 +141,15 @@ An endpoint that has only spaces selects buffer-only mode.
 `ShipperConfig::new` selects buffer-only mode.
 Buffer-only mode does not build an HTTP client.
 Buffer-only mode does not open an HTTP connection.
-`LogShipper::ship_batch` in buffer-only mode returns success.
-The result mode is `BufferOnly`.
-`LogShipper::ship_batch` in buffer-only mode does not remove buffered events.
+`LogShipper::spawn_ship_loop` in buffer-only mode does not remove buffered events.
 `LogShipper::spawn_ship_loop` in buffer-only mode does not open an HTTP connection.
 A missing log server does not panic the shipper.
 An `http` or `https` endpoint sends batches.
 The shipper removes a trailing slash from that URL.
-An endpoint with a query is a configuration error.
-An endpoint with a fragment is a configuration error.
-An endpoint with whitespace is a configuration error.
-A scheme other than `http` or `https` is a configuration error.
+An endpoint with a query returns no shipper.
+An endpoint with a fragment returns no shipper.
+An endpoint with whitespace returns no shipper.
+A scheme other than `http` or `https` returns no shipper.
 
 ## Axum middleware
 
@@ -198,7 +157,7 @@ A scheme other than `http` or `https` is a configuration error.
 Use it with `axum::middleware::from_fn_with_state` and one shipper.
 
 ```rust
-let shipper = LogShipper::new(ShipperConfig::new("cs"))?;
+let shipper = LogShipper::new(ShipperConfig::new("cs")).unwrap();
 let router = Router::new().layer(middleware::from_fn_with_state(
     shipper,
     ian_framework::logging::log_request,
@@ -210,7 +169,6 @@ The middleware does not write the header `x-request-id`.
 The middleware leaves the event field `id` empty.
 The middleware records one event after the inner handler returns.
 The middleware does not set `app` on the event.
-The middleware does not set `project` on the event.
 `action` is `{method} {path}`.
 One space separates the method and the path.
 `method` is the request method.

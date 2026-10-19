@@ -7,7 +7,6 @@ use serde_json::Value;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
-    Debug,
     Info,
     Warn,
     Error,
@@ -27,7 +26,7 @@ pub struct LogEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
-pub fn event(action: impl Into<String>, message: impl Into<String>, level: LogLevel) -> LogEvent {
+pub(crate) fn event(action: impl Into<String>, message: impl Into<String>, level: LogLevel) -> LogEvent {
     LogEvent {
         ts: Utc::now(),
         id: String::new(),
@@ -39,15 +38,6 @@ pub fn event(action: impl Into<String>, message: impl Into<String>, level: LogLe
         level,
         message: message.into(),
         extra: BTreeMap::new(),
-    }
-}
-
-pub(super) fn level_rank(level: LogLevel) -> u8 {
-    match level {
-        LogLevel::Debug => 0,
-        LogLevel::Info => 1,
-        LogLevel::Warn => 2,
-        LogLevel::Error => 3,
     }
 }
 
