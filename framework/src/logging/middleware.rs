@@ -2,10 +2,9 @@ use std::net::SocketAddr;
 use std::time::Instant;
 
 use axum::extract::{ConnectInfo, Request, State};
-use axum::http::{HeaderMap, HeaderValue};
+use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
-use uuid::Uuid;
 
 use super::{event, record, request_line, LogLevel, LogShipper};
 
@@ -16,17 +15,12 @@ pub async fn log_request(
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
-    let id = incoming_request_id(request.headers()).unwrap_or_else(new_request_id);
     let ip = client_ip(&request);
     let user_agent = user_agent(request.headers());
     let started = Instant::now();
-    let mut response = next.run(request).await;
+    let response = next.run(request).await;
     let status = response.status().as_u16();
-    if let Ok(value) = HeaderValue::from_str(&id) {
-        response.headers_mut().insert("x-request-id", value);
-    }
     let mut event = event(level_for_status(status), "request");
-    event.id = id;
     event.ip = ip;
     event.user_agent = user_agent;
     event.action = request_line(&method, &path);
@@ -42,23 +36,6 @@ fn request_path(path: &str) -> String {
     } else {
         path.to_string()
     }
-}
-
-fn incoming_request_id(headers: &HeaderMap) -> Option<String> {
-    let value = headers.get("x-request-id")?.to_str().ok()?;
-    if valid_request_id(value) {
-        Some(value.to_string())
-    } else {
-        None
-    }
-}
-
-fn valid_request_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.chars().count() <= 128
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | ':'))
 }
 
 fn client_ip(request: &Request) -> String {
@@ -98,10 +75,6 @@ fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
     }
 }
 
-fn new_request_id() -> String {
-    Uuid::new_v4().to_string()
-}
-
 fn level_for_status(status: u16) -> LogLevel {
     if status >= 500 {
         LogLevel::Error
@@ -138,12 +111,8 @@ mod tests {
             .layer(from_fn_with_state(shipper, log_request))
     }
 
-    async fn send(app: Router, uri: &str, request_id: Option<&str>) -> axum::response::Response {
-        let mut builder = Request::builder().uri(uri);
-        if let Some(request_id) = request_id {
-            builder = builder.header("x-request-id", request_id);
-        }
-        app.oneshot(builder.body(Body::empty()).unwrap())
+    async fn send(app: Router, uri: &str) -> axum::response::Response {
+        app.oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
             .await
             .unwrap()
     }
@@ -153,26 +122,22 @@ mod tests {
         let mut config = shipper_config("api");
         config.project = "demo".to_string();
         let shipper = log_shipper(config).unwrap();
-        let response = send(
-            app(shipper.clone()),
-            "/status/204?token=secret",
-            Some("req-1"),
-        )
-        .await;
+        let response = app(shipper.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/status/204?token=secret")
+                    .header("x-request-id", "req-1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        assert_eq!(
-            response
-                .headers()
-                .get("x-request-id")
-                .unwrap()
-                .to_str()
-                .unwrap(),
-            "req-1"
-        );
+        assert!(response.headers().get("x-request-id").is_none());
         let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         let event = &events[0];
-        assert_eq!(event.id, "req-1");
+        assert_eq!(event.id, "");
         assert_eq!(event.action, "GET /status/204");
         assert_eq!(event.ip, "");
         assert_eq!(event.user_agent, "");
@@ -184,7 +149,9 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
+        assert_eq!(value["id"], "");
         assert_eq!(value["action"], "GET /status/204");
+        assert!(!json.contains("req-1"));
         assert!(value.get("request").is_none());
         assert!(!json.contains("secret"));
         assert!(!json.contains("token"));
@@ -195,13 +162,11 @@ mod tests {
         let shipper = log_shipper(shipper_config("api")).unwrap();
         let router = app(shipper.clone());
         assert_eq!(
-            send(router.clone(), "/status/404", Some("warn-1"))
-                .await
-                .status(),
+            send(router.clone(), "/status/404").await.status(),
             StatusCode::NOT_FOUND
         );
         assert_eq!(
-            send(router, "/status/503", Some("err-1")).await.status(),
+            send(router, "/status/503").await.status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
         let events = buffered_events(&shipper);
@@ -209,22 +174,6 @@ mod tests {
         assert_eq!(events[0].status, Some(404));
         assert_eq!(events[1].level, LogLevel::Error);
         assert_eq!(events[1].status, Some(503));
-    }
-
-    #[tokio::test]
-    async fn invalid_request_id_is_replaced() {
-        let shipper = log_shipper(shipper_config("api")).unwrap();
-        let response = send(app(shipper.clone()), "/status/200", Some("bad id")).await;
-        let header = response
-            .headers()
-            .get("x-request-id")
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
-        assert_ne!(header, "bad id");
-        assert!(generated_request_id(&header));
-        assert_eq!(buffered_events(&shipper)[0].id, header);
     }
 
     #[tokio::test]
@@ -281,16 +230,5 @@ mod tests {
         assert_eq!(events[0].user_agent, "");
         assert_eq!(events[1].ip, "192.0.2.10");
         assert_eq!(events[1].action, "GET /status/201");
-    }
-
-    fn generated_request_id(value: &str) -> bool {
-        value.len() == 36
-            && value.bytes().enumerate().all(|(index, byte)| {
-                if matches!(index, 8 | 13 | 18 | 23) {
-                    byte == b'-'
-                } else {
-                    byte.is_ascii_hexdigit()
-                }
-            })
     }
 }
