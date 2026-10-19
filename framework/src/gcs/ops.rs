@@ -16,7 +16,7 @@ pub(crate) fn record_op(backend: &GcsBackend, op: OpsRecord<'_>) {
     let Some(shipper) = ops_shipper(backend) else {
         return;
     };
-    let mut event = event("", "", op.level, op.message);
+    let mut event = event("", op.level, op.message);
     event.method = op.method.to_string();
     event.path = path_only(op.url);
     event.status = op.status;

@@ -44,14 +44,20 @@ The default build includes `logging`.
 
 ## Event
 
-`event` builds one event.
+`event` builds one event for one app.
+`project` starts empty.
+A caller can set `project` on the event.
+`project` is a descriptive name.
+`project` is not the routing name.
+`app` is the routing name.
+
 One event has these fields:
 
 | field | value |
 | --- | --- |
 | `ts` | UTC time in RFC 3339 |
-| `project` | project name |
-| `service` | service name |
+| `app` | app name |
+| `project` | descriptive project name, or an empty string |
 | `request_id` | request id, or an empty string |
 | `method` | HTTP method, or an empty string |
 | `path` | URL path, or an empty string |
@@ -74,7 +80,9 @@ A line that omits a field is an encode error.
 
 ## Shipper
 
-`shipper_config` builds one `ShipperConfig` for one project and one service.
+`shipper_config` builds one `ShipperConfig` for one app.
+The project on that config starts empty.
+A caller can set `project` on the config.
 That config has no endpoint.
 `minimum_level` starts at `info`.
 `capacity` starts at 10000 events.
@@ -85,21 +93,27 @@ That config has no endpoint.
 `SHIP_TIMEOUT` is 10 seconds.
 
 `log_shipper` builds one shipper from that config.
-One shipper has one project and one service.
-A project name has 1 to 64 characters.
-A service name has 1 to 64 characters.
-The name starts with a letter or a digit.
+One shipper has one app.
+The app is the routing name.
+An app name has 1 to 64 characters.
+The app name starts with a letter or a digit.
 The other characters are letters, digits, `.`, `_`, or `-`.
-An empty name is a configuration error.
-A forbidden character is a configuration error.
+An empty app is a configuration error.
+A forbidden character in the app is a configuration error.
+An empty project is valid.
+A project that is not empty uses the same character rules as the app.
+A forbidden character in that project is a configuration error.
 `capacity` of zero is a configuration error.
 `batch_size` of zero is a configuration error.
 `batch_size` above `capacity` is a configuration error.
 
 `record` stores one event in the local buffer.
-`record` sets `project` and `service` from the shipper when those fields are empty.
-`record` rejects an event whose project does not match the shipper.
-`record` rejects an event whose service does not match the shipper.
+`record` sets `app` from the shipper when `app` is empty.
+`record` rejects an event whose app does not match the shipper.
+This check applies at every level.
+`record` sets `project` from the shipper when `project` is empty.
+`record` keeps a project that is not empty.
+`record` accepts an event when `project` does not match the shipper project.
 `record` does not store an event below `minimum_level`.
 The stored `message` is at most `MAX_MESSAGE_BYTES` bytes.
 `MAX_MESSAGE_BYTES` is 4096.
@@ -116,10 +130,15 @@ When the buffer is full, a new event removes the oldest event.
 
 `ship_batch` sends one batch to the log server.
 The HTTP method is POST.
-The URL is `{endpoint}/projects/{project}/logs`.
+The URL is `{endpoint}/log/{app}`.
+`{app}` is the shipper app.
+For app `cs`, the path is `/log/cs`.
 The content type is `application/x-ndjson`.
-The request has the header `x-project`.
-The body is the JSON batch for that project.
+The body is one NDJSON batch.
+NDJSON is the special body for this route.
+Each event in the body is one JSON object and ends with a newline.
+The shipper does not put `project` in that URL.
+The shipper does not send a project header.
 One batch contains at most `batch_size` events.
 The shipper takes the batch out of the buffer before the POST.
 A response status from 200 through 299 leaves that batch out of the buffer.
@@ -134,6 +153,18 @@ A ship error does not stop the loop.
 An empty buffer with an endpoint does not send an HTTP request.
 The result mode is `Empty`.
 The result mode for a sent batch is `Sent`.
+
+The path app selects the log stream.
+A log server stores its project from the path app.
+The event `project` does not select the path.
+A consumer splits logs by the app.
+A consumer does not split logs by the event `project`.
+
+## Adapter
+
+The default shipper posts to `{endpoint}/log/{app}`.
+A consumer that maps the app to a different path uses an adapter.
+The adapter is outside this shipper.
 
 ## Buffer-only mode
 
@@ -161,8 +192,8 @@ A scheme other than `http` or `https` is a configuration error.
 Use it with `axum::middleware::from_fn_with_state` and one shipper.
 
 ```rust
-let shipper = log_shipper(shipper_config("demo", "api"))?;
-let app = Router::new().layer(middleware::from_fn_with_state(
+let shipper = log_shipper(shipper_config("cs"))?;
+let router = Router::new().layer(middleware::from_fn_with_state(
     shipper,
     ian_framework::logging::log_request,
 ));
@@ -175,7 +206,10 @@ A missing header gets a new id.
 An invalid header gets a new id.
 The middleware writes `x-request-id` on the response.
 The middleware records one event after the inner handler returns.
-The event uses the shipper project and the shipper service.
+The middleware builds the event with an empty app and an empty project.
+`record` sets the app from the shipper.
+`record` sets the project from the shipper.
+The shipper project can be empty.
 `method` is the request method.
 `path` is the request path.
 An empty path is stored as `/`.
@@ -196,3 +230,4 @@ This feature does not include these items:
 - Authentication to the log server.
 - A product log policy.
 - Trash rules, browse caps, or upload gates.
+- An adapter that maps the app to a different path.

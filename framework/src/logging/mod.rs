@@ -5,8 +5,8 @@ mod shipper;
 pub use event::{event, parse_json_line, parse_jsonl, to_json_line, to_jsonl, LogEvent, LogLevel};
 pub use middleware::log_request;
 pub use shipper::{
-    buffered_events, buffered_len, dropped, endpoint, log_shipper, minimum_level, project, record,
-    service, ship_batch, shipper_config, spawn_ship_loop, LogShipper, ShipMode, ShipResult,
+    app, buffered_events, buffered_len, dropped, endpoint, log_shipper, minimum_level, project,
+    record, ship_batch, shipper_config, spawn_ship_loop, LogShipper, ShipMode, ShipResult,
     ShipperConfig, DEFAULT_BATCH_SIZE, DEFAULT_CAPACITY, DEFAULT_SHIP_EVERY, MAX_MESSAGE_BYTES,
     MAX_PATH_BYTES, MAX_REQUEST_ID_BYTES, SHIP_TIMEOUT,
 };

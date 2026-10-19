@@ -445,7 +445,8 @@ mod tests {
     #[tokio::test]
     async fn ops_log_writes_the_bucket_and_omits_the_query() {
         let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
-        let mut config = crate::logging::shipper_config("demo", "storage");
+        let mut config = crate::logging::shipper_config("storage");
+        config.project = "demo".to_string();
         config.minimum_level = crate::logging::LogLevel::Debug;
         let shipper = crate::logging::log_shipper(config).unwrap();
         attach_ops_log(&backend, shipper.clone());
@@ -464,8 +465,8 @@ mod tests {
         );
         let events = crate::logging::buffered_events(&shipper);
         assert_eq!(events.len(), 1);
+        assert_eq!(events[0].app, "storage");
         assert_eq!(events[0].project, "demo");
-        assert_eq!(events[0].service, "storage");
         assert_eq!(events[0].method, "GET");
         assert_eq!(events[0].path, "/storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].status, Some(200));
@@ -486,7 +487,7 @@ mod tests {
     async fn ops_debug_is_hidden_at_the_default_minimum() {
         let backend = gcs_backend("my-bucket", user_auth()).await.unwrap();
         let shipper =
-            crate::logging::log_shipper(crate::logging::shipper_config("demo", "storage")).unwrap();
+            crate::logging::log_shipper(crate::logging::shipper_config("storage")).unwrap();
         attach_ops_log(&backend, shipper.clone());
         ops::record_op(
             &backend,

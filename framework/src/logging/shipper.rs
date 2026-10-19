@@ -18,18 +18,18 @@ const MAX_SCOPE_LEN: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShipperConfig {
+    pub app: String,
     pub project: String,
-    pub service: String,
     pub endpoint: Option<String>,
     pub capacity: usize,
     pub batch_size: usize,
     pub minimum_level: LogLevel,
 }
 
-pub fn shipper_config(project: impl Into<String>, service: impl Into<String>) -> ShipperConfig {
+pub fn shipper_config(app: impl Into<String>) -> ShipperConfig {
     ShipperConfig {
-        project: project.into(),
-        service: service.into(),
+        app: app.into(),
+        project: String::new(),
         endpoint: None,
         capacity: DEFAULT_CAPACITY,
         batch_size: DEFAULT_BATCH_SIZE,
@@ -43,8 +43,8 @@ pub struct LogShipper {
 }
 
 struct Inner {
+    app: String,
     project: String,
-    service: String,
     endpoint: Option<String>,
     capacity: usize,
     batch_size: usize,
@@ -72,8 +72,8 @@ pub struct ShipResult {
 impl std::fmt::Debug for LogShipper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LogShipper")
+            .field("app", &self.inner.app)
             .field("project", &self.inner.project)
-            .field("service", &self.inner.service)
             .field("endpoint", &self.inner.endpoint)
             .field("buffered", &buffered_len(self))
             .finish_non_exhaustive()
@@ -81,8 +81,10 @@ impl std::fmt::Debug for LogShipper {
 }
 
 pub fn log_shipper(config: ShipperConfig) -> Result<LogShipper, LogError> {
-    require_scope_name(&config.project, "project")?;
-    require_scope_name(&config.service, "service")?;
+    require_scope_name(&config.app, "app")?;
+    if !config.project.is_empty() {
+        require_scope_name(&config.project, "project")?;
+    }
     if config.capacity == 0 {
         return Err(LogError::new(LogErrorKind::Config, "log capacity is zero"));
     }
@@ -105,8 +107,8 @@ pub fn log_shipper(config: ShipperConfig) -> Result<LogShipper, LogError> {
     };
     Ok(LogShipper {
         inner: Arc::new(Inner {
+            app: config.app,
             project: config.project,
-            service: config.service,
             endpoint,
             capacity: config.capacity,
             batch_size: config.batch_size,
@@ -119,12 +121,12 @@ pub fn log_shipper(config: ShipperConfig) -> Result<LogShipper, LogError> {
     })
 }
 
-pub fn project(shipper: &LogShipper) -> &str {
-    &shipper.inner.project
+pub fn app(shipper: &LogShipper) -> &str {
+    &shipper.inner.app
 }
 
-pub fn service(shipper: &LogShipper) -> &str {
-    &shipper.inner.service
+pub fn project(shipper: &LogShipper) -> &str {
+    &shipper.inner.project
 }
 
 pub fn endpoint(shipper: &LogShipper) -> Option<&str> {
@@ -148,23 +150,19 @@ pub fn dropped(shipper: &LogShipper) -> u64 {
 }
 
 pub fn record(shipper: &LogShipper, mut event: LogEvent) -> Result<(), LogError> {
-    if !event.project.is_empty() && event.project != shipper.inner.project {
+    if !event.app.is_empty() && event.app != shipper.inner.app {
         return Err(LogError::new(
             LogErrorKind::Config,
-            "event project does not match the shipper",
-        ));
-    }
-    if !event.service.is_empty() && event.service != shipper.inner.service {
-        return Err(LogError::new(
-            LogErrorKind::Config,
-            "event service does not match the shipper",
+            "event app does not match the shipper",
         ));
     }
     if level_rank(event.level) < level_rank(shipper.inner.minimum_level) {
         return Ok(());
     }
-    event.project = shipper.inner.project.clone();
-    event.service = shipper.inner.service.clone();
+    event.app = shipper.inner.app.clone();
+    if event.project.is_empty() {
+        event.project = shipper.inner.project.clone();
+    }
     event.message = truncate(&event.message, MAX_MESSAGE_BYTES).to_string();
     event.path = truncate(&event.path, MAX_PATH_BYTES).to_string();
     event.request_id = truncate(&event.request_id, MAX_REQUEST_ID_BYTES).to_string();
@@ -196,7 +194,7 @@ pub async fn ship_batch(shipper: &LogShipper) -> Result<ShipResult, LogError> {
             "shipper has an endpoint and no HTTP client",
         ));
     };
-    if let Err(err) = post_batch(&client, &endpoint, &shipper.inner.project, &batch).await {
+    if let Err(err) = post_batch(&client, &endpoint, &shipper.inner.app, &batch).await {
         restore_batch(&shipper.inner, batch);
         return Err(err);
     }
@@ -259,16 +257,15 @@ fn lock_buffer(
 async fn post_batch(
     client: &reqwest::Client,
     endpoint: &str,
-    project: &str,
+    app: &str,
     events: &[LogEvent],
 ) -> Result<(), LogError> {
     let body = to_jsonl(events)?;
-    let url = batch_url(endpoint, project);
+    let url = batch_url(endpoint, app);
     let response = client
         .post(&url)
         .timeout(SHIP_TIMEOUT)
         .header(reqwest::header::CONTENT_TYPE, "application/x-ndjson")
-        .header("x-project", project)
         .body(body)
         .send()
         .await
@@ -291,8 +288,8 @@ async fn post_batch(
     ))
 }
 
-fn batch_url(endpoint: &str, project: &str) -> String {
-    format!("{endpoint}/projects/{project}/logs")
+fn batch_url(endpoint: &str, app: &str) -> String {
+    format!("{endpoint}/log/{app}")
 }
 
 fn require_scope_name(value: &str, label: &str) -> Result<(), LogError> {
@@ -373,14 +370,20 @@ mod tests {
     use crate::logging::event;
 
     fn buffer_only() -> LogShipper {
-        log_shipper(shipper_config("demo", "api")).unwrap()
+        log_shipper(shipper_config("api")).unwrap()
+    }
+
+    fn labeled() -> LogShipper {
+        let mut config = shipper_config("api");
+        config.project = "demo".to_string();
+        log_shipper(config).unwrap()
     }
 
     #[test]
     fn defaults_are_buffer_only() {
         let shipper = buffer_only();
-        assert_eq!(project(&shipper), "demo");
-        assert_eq!(service(&shipper), "api");
+        assert_eq!(app(&shipper), "api");
+        assert_eq!(project(&shipper), "");
         assert_eq!(endpoint(&shipper), None);
         assert_eq!(minimum_level(&shipper), LogLevel::Info);
         assert_eq!(DEFAULT_CAPACITY, 10_000);
@@ -392,7 +395,7 @@ mod tests {
     #[test]
     fn blank_endpoint_is_buffer_only() {
         for endpoint in [Some(String::new()), Some("   ".to_string())] {
-            let mut config = shipper_config("demo", "api");
+            let mut config = shipper_config("api");
             config.endpoint = endpoint;
             let shipper = log_shipper(config).unwrap();
             assert_eq!(super::endpoint(&shipper), None);
@@ -401,45 +404,49 @@ mod tests {
 
     #[test]
     fn endpoint_is_normalized() {
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("cs");
         config.endpoint = Some("http://logs.example/ingest/".to_string());
         let shipper = log_shipper(config).unwrap();
         assert_eq!(endpoint(&shipper), Some("http://logs.example/ingest"));
         assert_eq!(
-            batch_url(endpoint(&shipper).unwrap(), project(&shipper)),
-            "http://logs.example/ingest/projects/demo/logs"
+            batch_url(endpoint(&shipper).unwrap(), app(&shipper)),
+            "http://logs.example/ingest/log/cs"
         );
     }
 
     #[test]
     fn invalid_config_is_rejected() {
         let cases = [
-            shipper_config("", "api"),
-            shipper_config("demo", ""),
-            shipper_config("a/b", "api"),
+            shipper_config(""),
+            shipper_config("a/b"),
             {
-                let mut config = shipper_config("demo", "api");
+                let mut config = shipper_config("api");
+                config.project = "a/b".to_string();
+                config
+            },
+            {
+                let mut config = shipper_config("api");
                 config.capacity = 0;
                 config
             },
             {
-                let mut config = shipper_config("demo", "api");
+                let mut config = shipper_config("api");
                 config.batch_size = 0;
                 config
             },
             {
-                let mut config = shipper_config("demo", "api");
+                let mut config = shipper_config("api");
                 config.capacity = 2;
                 config.batch_size = 3;
                 config
             },
             {
-                let mut config = shipper_config("demo", "api");
+                let mut config = shipper_config("api");
                 config.endpoint = Some("ftp://logs.example".to_string());
                 config
             },
             {
-                let mut config = shipper_config("demo", "api");
+                let mut config = shipper_config("api");
                 config.endpoint = Some("http://logs.example/a b".to_string());
                 config
             },
@@ -453,35 +460,46 @@ mod tests {
     }
 
     #[test]
-    fn record_fills_scope_and_drops_debug_below_info() {
-        let shipper = buffer_only();
-        record(&shipper, event("", "", LogLevel::Debug, "hidden")).unwrap();
+    fn record_fills_app_and_drops_debug_below_info() {
+        let shipper = labeled();
+        record(&shipper, event("", LogLevel::Debug, "hidden")).unwrap();
         assert_eq!(buffered_len(&shipper), 0);
-        record(&shipper, event("", "", LogLevel::Info, "kept")).unwrap();
+        record(&shipper, event("", LogLevel::Info, "kept")).unwrap();
         let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
+        assert_eq!(events[0].app, "api");
         assert_eq!(events[0].project, "demo");
-        assert_eq!(events[0].service, "api");
         assert_eq!(events[0].message, "kept");
     }
 
     #[test]
-    fn record_rejects_a_different_project() {
+    fn record_keeps_a_different_project() {
+        let shipper = labeled();
+        let mut event = event("api", LogLevel::Info, "kept");
+        event.project = "other".to_string();
+        record(&shipper, event).unwrap();
+        let stored = buffered_events(&shipper).remove(0);
+        assert_eq!(stored.project, "other");
+        assert_eq!(stored.app, "api");
+    }
+
+    #[test]
+    fn record_rejects_a_different_app() {
         let shipper = buffer_only();
-        let err = record(&shipper, event("other", "api", LogLevel::Info, "no")).unwrap_err();
+        let err = record(&shipper, event("other", LogLevel::Debug, "no")).unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Config);
         assert_eq!(buffered_len(&shipper), 0);
     }
 
     #[test]
     fn capacity_drops_the_oldest_event() {
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("api");
         config.capacity = 2;
         config.batch_size = 1;
         let shipper = log_shipper(config).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "a")).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "b")).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "c")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "a")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "b")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "c")).unwrap();
         let messages: Vec<_> = buffered_events(&shipper)
             .into_iter()
             .map(|event| event.message)
@@ -494,7 +512,7 @@ mod tests {
     fn message_is_truncated_on_a_char_boundary() {
         let shipper = buffer_only();
         let message = "é".repeat(3000);
-        record(&shipper, event("demo", "api", LogLevel::Info, message)).unwrap();
+        record(&shipper, event("api", LogLevel::Info, message)).unwrap();
         let stored = buffered_events(&shipper).remove(0).message;
         assert!(stored.len() <= MAX_MESSAGE_BYTES);
         assert!(stored.is_char_boundary(stored.len()));
@@ -504,7 +522,7 @@ mod tests {
     #[tokio::test]
     async fn unset_endpoint_keeps_events_without_http() {
         let shipper = buffer_only();
-        record(&shipper, event("demo", "api", LogLevel::Info, "local")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "local")).unwrap();
         let result = ship_batch(&shipper).await.unwrap();
         assert_eq!(result.mode, ShipMode::BufferOnly);
         assert_eq!(result.shipped, 0);
@@ -515,7 +533,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_batch_does_not_post() {
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("api");
         config.endpoint = Some("http://127.0.0.1:9".to_string());
         let shipper = log_shipper(config).unwrap();
         let result = ship_batch(&shipper).await.unwrap();
@@ -528,10 +546,10 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         drop(listener);
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("api");
         config.endpoint = Some(format!("http://{addr}"));
         let shipper = log_shipper(config).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Error, "down")).unwrap();
+        record(&shipper, event("api", LogLevel::Error, "down")).unwrap();
         let err = ship_batch(&shipper).await.unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Transport);
         assert_eq!(buffered_len(&shipper), 1);
@@ -539,29 +557,36 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn ship_batch_posts_project_scoped_jsonl() {
+    async fn ship_batch_posts_ndjson_to_the_app_path() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("cs");
+        config.project = "demo".to_string();
         config.endpoint = Some(endpoint);
         config.batch_size = 2;
         config.capacity = 10;
         let shipper = log_shipper(config).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "one")).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Warn, "two")).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Error, "three")).unwrap();
+        let mut one = event("cs", LogLevel::Info, "one");
+        one.project = "other".to_string();
+        record(&shipper, one).unwrap();
+        record(&shipper, event("cs", LogLevel::Warn, "two")).unwrap();
+        record(&shipper, event("cs", LogLevel::Error, "three")).unwrap();
         let first = ship_batch(&shipper).await.unwrap();
         assert_eq!(first.mode, ShipMode::Sent);
         assert_eq!(first.shipped, 2);
         assert_eq!(first.buffered, 1);
         let captured = rx.recv().await.unwrap();
-        assert_eq!(captured.project, "demo");
+        assert_eq!(captured.app, "cs");
+        assert_eq!(captured.path, "/log/cs");
         assert_eq!(captured.content_type, "application/x-ndjson");
-        assert_eq!(captured.project_header, "demo");
+        assert!(!captured.has_project_header);
         let events = parse_body(&captured.body);
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].message, "one");
+        assert_eq!(events[0].app, "cs");
+        assert_eq!(events[0].project, "other");
         assert_eq!(events[1].message, "two");
-        assert_eq!(events[0].project, "demo");
+        assert_eq!(events[1].app, "cs");
+        assert_eq!(events[1].project, "demo");
         let second = ship_batch(&shipper).await.unwrap();
         assert_eq!(second.shipped, 1);
         assert_eq!(buffered_len(&shipper), 0);
@@ -572,10 +597,10 @@ mod tests {
     #[tokio::test]
     async fn http_error_restores_the_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("api");
         config.endpoint = Some(endpoint);
         let shipper = log_shipper(config).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "keep")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "keep")).unwrap();
         let err = ship_batch(&shipper).await.unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Api);
         assert!(err.to_string().contains("503"));
@@ -585,13 +610,13 @@ mod tests {
     #[tokio::test]
     async fn in_flight_records_stay_out_of_a_successful_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::Slow).await;
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("api");
         config.endpoint = Some(endpoint);
         config.capacity = 2;
         config.batch_size = 2;
         let shipper = log_shipper(config).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "a")).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "b")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "a")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "b")).unwrap();
         let shipper_task = shipper.clone();
         let ship = tokio::spawn(async move { ship_batch(&shipper_task).await.unwrap() });
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -601,7 +626,7 @@ mod tests {
         })
         .await
         .unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "c")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "c")).unwrap();
         let result = ship.await.unwrap();
         assert_eq!(result.shipped, 2);
         assert_eq!(result.mode, ShipMode::Sent);
@@ -613,13 +638,13 @@ mod tests {
     #[tokio::test]
     async fn failed_restore_keeps_the_oldest_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::SlowUnavailable).await;
-        let mut config = shipper_config("demo", "api");
+        let mut config = shipper_config("api");
         config.endpoint = Some(endpoint);
         config.capacity = 2;
         config.batch_size = 2;
         let shipper = log_shipper(config).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "a")).unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "b")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "a")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "b")).unwrap();
         let shipper_task = shipper.clone();
         let ship = tokio::spawn(async move { ship_batch(&shipper_task).await });
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -629,7 +654,7 @@ mod tests {
         })
         .await
         .unwrap();
-        record(&shipper, event("demo", "api", LogLevel::Info, "c")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "c")).unwrap();
         let err = ship.await.unwrap().unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Api);
         let left: Vec<_> = buffered_events(&shipper)
@@ -643,7 +668,7 @@ mod tests {
     #[tokio::test]
     async fn buffer_only_loop_does_not_drop_events() {
         let shipper = buffer_only();
-        record(&shipper, event("demo", "api", LogLevel::Info, "stay")).unwrap();
+        record(&shipper, event("api", LogLevel::Info, "stay")).unwrap();
         let handle = spawn_ship_loop(shipper.clone(), Duration::from_millis(10)).unwrap();
         tokio::time::sleep(Duration::from_millis(40)).await;
         assert!(!handle.is_finished());
@@ -667,9 +692,10 @@ mod tests {
     }
 
     struct Captured {
-        project: String,
+        app: String,
+        path: String,
         content_type: String,
-        project_header: String,
+        has_project_header: bool,
         body: String,
     }
 
@@ -677,7 +703,7 @@ mod tests {
         action: StatusAction,
     ) -> (String, tokio::sync::mpsc::UnboundedReceiver<Captured>) {
         use axum::extract::{Path, State};
-        use axum::http::{HeaderMap, StatusCode};
+        use axum::http::{HeaderMap, StatusCode, Uri};
         use axum::routing::post;
         use axum::Router;
 
@@ -696,10 +722,11 @@ mod tests {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let app = Router::new()
             .route(
-                "/projects/{project}/logs",
+                "/log/{app}",
                 post(
                     |State(capture): State<Capture>,
-                     Path(project): Path<String>,
+                     Path(app): Path<String>,
+                     uri: Uri,
                      headers: HeaderMap,
                      body: String| async move {
                         if capture.action == 2 || capture.action == 3 {
@@ -710,15 +737,11 @@ mod tests {
                             .and_then(|value| value.to_str().ok())
                             .unwrap_or("")
                             .to_string();
-                        let project_header = headers
-                            .get("x-project")
-                            .and_then(|value| value.to_str().ok())
-                            .unwrap_or("")
-                            .to_string();
                         let _ = capture.tx.send(Captured {
-                            project,
+                            app,
+                            path: uri.path().to_string(),
                             content_type,
-                            project_header,
+                            has_project_header: headers.get("x-project").is_some(),
                             body,
                         });
                         if capture.action == 1 || capture.action == 3 {

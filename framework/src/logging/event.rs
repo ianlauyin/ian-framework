@@ -18,8 +18,8 @@ pub enum LogLevel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     pub ts: DateTime<Utc>,
+    pub app: String,
     pub project: String,
-    pub service: String,
     pub request_id: String,
     pub method: String,
     pub path: String,
@@ -30,16 +30,11 @@ pub struct LogEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
-pub fn event(
-    project: impl Into<String>,
-    service: impl Into<String>,
-    level: LogLevel,
-    message: impl Into<String>,
-) -> LogEvent {
+pub fn event(app: impl Into<String>, level: LogLevel, message: impl Into<String>) -> LogEvent {
     LogEvent {
         ts: Utc::now(),
-        project: project.into(),
-        service: service.into(),
+        app: app.into(),
+        project: String::new(),
         request_id: String::new(),
         method: String::new(),
         path: String::new(),
@@ -97,10 +92,11 @@ mod tests {
     use serde_json::json;
 
     fn sample() -> LogEvent {
-        let mut event = event("demo", "api", LogLevel::Info, "request");
+        let mut event = event("cs", LogLevel::Info, "request");
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
+        event.project = "demo".to_string();
         event.request_id = "req-1".to_string();
         event.method = "GET".to_string();
         event.path = "/health".to_string();
@@ -116,8 +112,8 @@ mod tests {
         let value: Value = serde_json::from_str(&line).unwrap();
         for key in [
             "ts",
+            "app",
             "project",
-            "service",
             "request_id",
             "method",
             "path",
@@ -133,8 +129,8 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("2026-10-18T12:00:00"));
+        assert_eq!(value["app"], "cs");
         assert_eq!(value["project"], "demo");
-        assert_eq!(value["service"], "api");
         assert_eq!(value["request_id"], "req-1");
         assert_eq!(value["method"], "GET");
         assert_eq!(value["path"], "/health");
@@ -149,8 +145,10 @@ mod tests {
 
     #[test]
     fn empty_http_fields_are_null_or_empty() {
-        let line = to_json_line(&event("demo", "api", LogLevel::Warn, "note")).unwrap();
+        let line = to_json_line(&event("cs", LogLevel::Warn, "note")).unwrap();
         let value: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(value["app"], "cs");
+        assert_eq!(value["project"], "");
         assert_eq!(value["request_id"], "");
         assert_eq!(value["method"], "");
         assert_eq!(value["path"], "");
@@ -169,7 +167,7 @@ mod tests {
 
     #[test]
     fn jsonl_round_trips_and_skips_blank_lines() {
-        let events = vec![sample(), event("demo", "api", LogLevel::Error, "down")];
+        let events = vec![sample(), event("cs", LogLevel::Error, "down")];
         let body = format!("\n{}\n", to_jsonl(&events).unwrap());
         let parsed = parse_jsonl(&body).unwrap();
         assert_eq!(parsed, events);
