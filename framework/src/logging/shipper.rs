@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use serde::Serialize;
+
 use super::event::level_rank;
 use super::{truncate, LogError, LogErrorKind, LogEvent, LogLevel};
 
@@ -238,13 +240,18 @@ fn lock_buffer(
     buffer.lock().unwrap_or_else(|err| err.into_inner())
 }
 
+#[derive(Serialize)]
+struct RequestJson<'a> {
+    events: &'a [LogEvent],
+}
+
 async fn post_batch(
     client: &reqwest::Client,
     endpoint: &str,
     app: &str,
     events: &[LogEvent],
 ) -> Result<(), LogError> {
-    let body = serde_json::to_string(events).map_err(|err| {
+    let body = serde_json::to_string(&RequestJson { events }).map_err(|err| {
         LogError::with_source(LogErrorKind::Encode, "cannot encode a log batch", err)
     })?;
     let url = batch_url(endpoint, app);
@@ -561,10 +568,14 @@ mod tests {
         assert_eq!(events[0].message, "one");
         assert_eq!(events[1].message, "two");
         let body: serde_json::Value = serde_json::from_str(&captured.body).unwrap();
-        for item in body.as_array().unwrap() {
+        assert!(body.as_object().is_some());
+        assert!(body.as_array().is_none());
+        assert_eq!(body.as_object().unwrap().len(), 1);
+        for item in body["events"].as_array().unwrap() {
             assert!(item.get("app").is_none());
             assert!(item.get("project").is_none());
         }
+        assert!(serde_json::from_str::<Vec<LogEvent>>(&captured.body).is_err());
         let second = ship_batch(&shipper).await.unwrap();
         assert_eq!(second.shipped, 1);
         assert_eq!(buffered_len(&shipper), 0);
@@ -659,7 +670,11 @@ mod tests {
     }
 
     fn parse_body(body: &str) -> Vec<LogEvent> {
-        serde_json::from_str(body).unwrap()
+        #[derive(serde::Deserialize)]
+        struct RequestJson {
+            events: Vec<LogEvent>,
+        }
+        serde_json::from_str::<RequestJson>(body).unwrap().events
     }
 
     fn assert_no_scope_keys(line: &str) {
