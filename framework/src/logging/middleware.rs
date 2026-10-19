@@ -22,7 +22,7 @@ pub async fn log_request(
     if let Ok(value) = HeaderValue::from_str(&request_id) {
         response.headers_mut().insert("x-request-id", value);
     }
-    let mut event = event("", "", level_for_status(status), "request");
+    let mut event = event("", level_for_status(status), "request");
     event.request_id = request_id;
     event.method = method;
     event.path = path;
@@ -109,7 +109,9 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_records_the_request_schema() {
-        let shipper = log_shipper(shipper_config("demo", "api")).unwrap();
+        let mut config = shipper_config("api");
+        config.project = "demo".to_string();
+        let shipper = log_shipper(config).unwrap();
         let response = send(
             app(shipper.clone()),
             "/status/204?token=secret",
@@ -129,8 +131,8 @@ mod tests {
         let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         let event = &events[0];
+        assert_eq!(event.app, "api");
         assert_eq!(event.project, "demo");
-        assert_eq!(event.service, "api");
         assert_eq!(event.request_id, "req-1");
         assert_eq!(event.method, "GET");
         assert_eq!(event.path, "/status/204");
@@ -145,7 +147,7 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_levels_follow_the_status() {
-        let shipper = log_shipper(shipper_config("demo", "api")).unwrap();
+        let shipper = log_shipper(shipper_config("api")).unwrap();
         let router = app(shipper.clone());
         assert_eq!(
             send(router.clone(), "/status/404", Some("warn-1"))
@@ -166,7 +168,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_request_id_is_replaced() {
-        let shipper = log_shipper(shipper_config("demo", "api")).unwrap();
+        let shipper = log_shipper(shipper_config("api")).unwrap();
         let response = send(app(shipper.clone()), "/status/200", Some("bad id")).await;
         let header = response
             .headers()
