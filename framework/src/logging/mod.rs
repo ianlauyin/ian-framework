@@ -5,10 +5,7 @@ mod shipper;
 pub(crate) use event::request_line;
 pub use event::{event, LogEvent, LogLevel};
 pub use middleware::log_request;
-pub use shipper::{
-    LogShipper, ShipMode, ShipResult, ShipperConfig, DEFAULT_BATCH_SIZE, DEFAULT_CAPACITY,
-    DEFAULT_SHIP_EVERY, SHIP_TIMEOUT,
-};
+pub use shipper::{LogShipper, ShipMode, ShipResult, ShipperConfig};
 
 use std::fmt;
 

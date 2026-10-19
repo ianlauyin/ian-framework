@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use crate::gcs::token::CachedToken;
 
-pub const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
+pub(crate) const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 

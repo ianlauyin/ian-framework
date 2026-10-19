@@ -8,10 +8,11 @@ use serde::Serialize;
 use super::event::level_rank;
 use super::{truncate, LogError, LogErrorKind, LogEvent, LogLevel};
 
-pub const DEFAULT_CAPACITY: usize = 10_000;
-pub const DEFAULT_BATCH_SIZE: usize = 100;
-pub const DEFAULT_SHIP_EVERY: Duration = Duration::from_secs(5);
-pub const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_CAPACITY: usize = 10_000;
+const DEFAULT_BATCH_SIZE: usize = 100;
+#[allow(dead_code)]
+const DEFAULT_SHIP_EVERY: Duration = Duration::from_secs(5);
+const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 
 const MAX_SCOPE_LEN: usize = 64;
 
@@ -460,9 +461,11 @@ mod tests {
     #[test]
     fn record_drops_debug_below_info_and_omits_scope_keys() {
         let shipper = labeled();
-        shipper.record(event(LogLevel::Debug, "hidden")).unwrap();
+        shipper
+            .record(event("", "hidden", LogLevel::Debug))
+            .unwrap();
         assert_eq!(shipper.buffered_len(), 0);
-        shipper.record(event(LogLevel::Info, "kept")).unwrap();
+        shipper.record(event("", "kept", LogLevel::Info)).unwrap();
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].message, "kept");
@@ -477,9 +480,9 @@ mod tests {
         config.capacity = 2;
         config.batch_size = 1;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event(LogLevel::Info, "a")).unwrap();
-        shipper.record(event(LogLevel::Info, "b")).unwrap();
-        shipper.record(event(LogLevel::Info, "c")).unwrap();
+        shipper.record(event("", "a", LogLevel::Info)).unwrap();
+        shipper.record(event("", "b", LogLevel::Info)).unwrap();
+        shipper.record(event("", "c", LogLevel::Info)).unwrap();
         let messages: Vec<_> = shipper
             .buffered_events()
             .into_iter()
@@ -492,9 +495,12 @@ mod tests {
     #[test]
     fn record_keeps_long_message_request_id_ip_and_user_agent() {
         let shipper = buffer_only();
-        let mut event = event(LogLevel::Info, "é".repeat(5000));
+        let mut event = event(
+            format!("GET /{}", "p".repeat(3000)),
+            "é".repeat(5000),
+            LogLevel::Info,
+        );
         event.id = "i".repeat(200);
-        event.action = format!("GET /{}", "p".repeat(3000));
         event.ip = "1".repeat(80);
         event.user_agent = "é".repeat(2000);
         let message = event.message.clone();
@@ -514,7 +520,7 @@ mod tests {
     #[tokio::test]
     async fn unset_endpoint_keeps_events_without_http() {
         let shipper = buffer_only();
-        shipper.record(event(LogLevel::Info, "local")).unwrap();
+        shipper.record(event("", "local", LogLevel::Info)).unwrap();
         let result = shipper.ship_batch().await.unwrap();
         assert_eq!(result.mode, ShipMode::BufferOnly);
         assert_eq!(result.shipped, 0);
@@ -541,7 +547,7 @@ mod tests {
         let mut config = ShipperConfig::new("api");
         config.endpoint = Some(format!("http://{addr}"));
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event(LogLevel::Error, "down")).unwrap();
+        shipper.record(event("", "down", LogLevel::Error)).unwrap();
         let err = shipper.ship_batch().await.unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Transport);
         assert_eq!(shipper.buffered_len(), 1);
@@ -557,9 +563,9 @@ mod tests {
         config.batch_size = 2;
         config.capacity = 10;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event(LogLevel::Info, "one")).unwrap();
-        shipper.record(event(LogLevel::Warn, "two")).unwrap();
-        shipper.record(event(LogLevel::Error, "three")).unwrap();
+        shipper.record(event("", "one", LogLevel::Info)).unwrap();
+        shipper.record(event("", "two", LogLevel::Warn)).unwrap();
+        shipper.record(event("", "three", LogLevel::Error)).unwrap();
         let first = shipper.ship_batch().await.unwrap();
         assert_eq!(first.mode, ShipMode::Sent);
         assert_eq!(first.shipped, 2);
@@ -597,7 +603,7 @@ mod tests {
         let mut config = ShipperConfig::new("api");
         config.endpoint = Some(endpoint);
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event(LogLevel::Info, "keep")).unwrap();
+        shipper.record(event("", "keep", LogLevel::Info)).unwrap();
         let err = shipper.ship_batch().await.unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Api);
         assert!(err.to_string().contains("503"));
@@ -612,8 +618,8 @@ mod tests {
         config.capacity = 2;
         config.batch_size = 2;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event(LogLevel::Info, "a")).unwrap();
-        shipper.record(event(LogLevel::Info, "b")).unwrap();
+        shipper.record(event("", "a", LogLevel::Info)).unwrap();
+        shipper.record(event("", "b", LogLevel::Info)).unwrap();
         let shipper_task = shipper.clone();
         let ship = tokio::spawn(async move { shipper_task.ship_batch().await.unwrap() });
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -623,7 +629,7 @@ mod tests {
         })
         .await
         .unwrap();
-        shipper.record(event(LogLevel::Info, "c")).unwrap();
+        shipper.record(event("", "c", LogLevel::Info)).unwrap();
         let result = ship.await.unwrap();
         assert_eq!(result.shipped, 2);
         assert_eq!(result.mode, ShipMode::Sent);
@@ -640,8 +646,8 @@ mod tests {
         config.capacity = 2;
         config.batch_size = 2;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event(LogLevel::Info, "a")).unwrap();
-        shipper.record(event(LogLevel::Info, "b")).unwrap();
+        shipper.record(event("", "a", LogLevel::Info)).unwrap();
+        shipper.record(event("", "b", LogLevel::Info)).unwrap();
         let shipper_task = shipper.clone();
         let ship = tokio::spawn(async move { shipper_task.ship_batch().await });
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -651,7 +657,7 @@ mod tests {
         })
         .await
         .unwrap();
-        shipper.record(event(LogLevel::Info, "c")).unwrap();
+        shipper.record(event("", "c", LogLevel::Info)).unwrap();
         let err = ship.await.unwrap().unwrap_err();
         assert_eq!(err.kind(), LogErrorKind::Api);
         let left: Vec<_> = shipper
@@ -666,7 +672,7 @@ mod tests {
     #[tokio::test]
     async fn buffer_only_loop_does_not_drop_events() {
         let shipper = buffer_only();
-        shipper.record(event(LogLevel::Info, "stay")).unwrap();
+        shipper.record(event("", "stay", LogLevel::Info)).unwrap();
         let handle = shipper.spawn_ship_loop(Duration::from_millis(10)).unwrap();
         tokio::time::sleep(Duration::from_millis(40)).await;
         assert!(!handle.is_finished());

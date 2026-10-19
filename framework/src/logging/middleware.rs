@@ -20,10 +20,13 @@ pub async fn log_request(
     let started = Instant::now();
     let response = next.run(request).await;
     let status = response.status().as_u16();
-    let mut event = event(level_for_status(status), "request");
+    let mut event = event(
+        request_line(&method, &path),
+        "request",
+        level_for_status(status),
+    );
     event.ip = ip;
     event.user_agent = user_agent;
-    event.action = request_line(&method, &path);
     event.status = Some(status);
     event.latency_ms = Some(millis_since(started));
     let _ = shipper.record(event);

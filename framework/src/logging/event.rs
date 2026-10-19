@@ -27,13 +27,13 @@ pub struct LogEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
-pub fn event(level: LogLevel, message: impl Into<String>) -> LogEvent {
+pub fn event(action: impl Into<String>, message: impl Into<String>, level: LogLevel) -> LogEvent {
     LogEvent {
         ts: Utc::now(),
         id: String::new(),
         ip: String::new(),
         user_agent: String::new(),
-        action: String::new(),
+        action: action.into(),
         status: None,
         latency_ms: None,
         level,
@@ -65,14 +65,13 @@ mod tests {
     use serde_json::json;
 
     fn sample() -> LogEvent {
-        let mut event = event(LogLevel::Info, "request");
+        let mut event = event("GET /health", "request", LogLevel::Info);
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
         event.id = "req-1".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "demo-agent".to_string();
-        event.action = "GET /health".to_string();
         event.status = Some(204);
         event.latency_ms = Some(12);
         event.extra.insert("region".to_string(), json!("asia"));
@@ -122,7 +121,7 @@ mod tests {
 
     #[test]
     fn empty_http_fields_are_null_or_empty() {
-        let json = serde_json::to_string(&event(LogLevel::Warn, "note")).unwrap();
+        let json = serde_json::to_string(&event("", "note", LogLevel::Warn)).unwrap();
         let value: Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
@@ -152,7 +151,7 @@ mod tests {
             events: Vec<LogEvent>,
         }
 
-        let events = vec![sample(), event(LogLevel::Error, "down")];
+        let events = vec![sample(), event("", "down", LogLevel::Error)];
         let body = serde_json::to_string(&RequestJson {
             events: events.clone(),
         })
