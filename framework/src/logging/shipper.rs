@@ -154,6 +154,11 @@ impl LogShipper {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn buffered_events(&self) -> Vec<LogEvent> {
+        self.lock_buffer().events.iter().cloned().collect()
+    }
+
     fn buffered_len(&self) -> usize {
         self.lock_buffer().events.len()
     }
@@ -248,14 +253,10 @@ fn capacity_warn_event() -> LogEvent {
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+mod tests {
     use super::super::event::event;
     use super::*;
     use crate::logging::LogLevel;
-
-    pub(crate) fn buffered_events(shipper: &LogShipper) -> Vec<LogEvent> {
-        shipper.lock_buffer().events.iter().cloned().collect()
-    }
 
     fn buffer_only() -> LogShipper {
         LogShipper::new(ShipperConfig::new("api", "")).unwrap()
@@ -315,7 +316,7 @@ pub(super) mod tests {
     fn record_omits_scope_keys() {
         let shipper = buffer_only();
         shipper.record(event("", "kept", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].message, "kept");
         assert_eq!(shipper.inner.app, "api");
@@ -330,7 +331,7 @@ pub(super) mod tests {
         shipper.record(event("", "a", LogLevel::Info));
         shipper.record(event("", "b", LogLevel::Info));
         shipper.record(event("", "c", LogLevel::Info));
-        let messages: Vec<_> = buffered_events(&shipper)
+        let messages: Vec<_> = shipper.buffered_events()
             .into_iter()
             .map(|event| event.message)
             .collect();
@@ -354,7 +355,7 @@ pub(super) mod tests {
         let ip = event.ip.clone();
         let user_agent = event.user_agent.clone();
         shipper.record(event);
-        let stored = buffered_events(&shipper).remove(0);
+        let stored = shipper.buffered_events().remove(0);
         assert_eq!(stored.message, message);
         assert_eq!(stored.action, action);
         assert_eq!(stored.id, id);
@@ -368,7 +369,7 @@ pub(super) mod tests {
         shipper.record(event("", "local", LogLevel::Info));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 1);
-        assert_eq!(buffered_events(&shipper)[0].message, "local");
+        assert_eq!(shipper.buffered_events()[0].message, "local");
     }
 
     #[tokio::test]
@@ -389,7 +390,7 @@ pub(super) mod tests {
         shipper.record(event("", "down", LogLevel::Error));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 1);
-        assert_eq!(buffered_events(&shipper)[0].message, "down");
+        assert_eq!(shipper.buffered_events()[0].message, "down");
     }
 
     #[tokio::test]
@@ -441,7 +442,7 @@ pub(super) mod tests {
         assert_eq!(events.len(), SHIP_CHUNK);
         assert_eq!(events[0].message, "0");
         assert_eq!(events[SHIP_CHUNK - 1].message, (SHIP_CHUNK - 1).to_string());
-        assert_eq!(buffered_events(&shipper)[0].message, SHIP_CHUNK.to_string());
+        assert_eq!(shipper.buffered_events()[0].message, SHIP_CHUNK.to_string());
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
         let rest = rx.recv().await.unwrap();
@@ -480,7 +481,7 @@ pub(super) mod tests {
         let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
         shipper.record(event("", "keep", LogLevel::Info));
         shipper.ship_batch().await;
-        assert_eq!(buffered_events(&shipper)[0].message, "keep");
+        assert_eq!(shipper.buffered_events()[0].message, "keep");
     }
 
     #[tokio::test]
@@ -502,7 +503,7 @@ pub(super) mod tests {
         .unwrap();
         shipper.record(event("", "c", LogLevel::Info));
         ship.await.unwrap();
-        let left = buffered_events(&shipper);
+        let left = shipper.buffered_events();
         assert_eq!(left.len(), 1);
         assert_eq!(left[0].message, "c");
     }
@@ -526,7 +527,7 @@ pub(super) mod tests {
         .unwrap();
         shipper.record(event("", "c", LogLevel::Info));
         ship.await.unwrap();
-        let left: Vec<_> = buffered_events(&shipper)
+        let left: Vec<_> = shipper.buffered_events()
             .into_iter()
             .map(|event| event.message)
             .collect();
@@ -576,7 +577,7 @@ pub(super) mod tests {
         shipper.record(oldest);
         shipper.record(event("", "second", LogLevel::Info));
         shipper.record(event("", "third", LogLevel::Info));
-        let below = buffered_events(&shipper);
+        let below = shipper.buffered_events();
         assert_eq!(below.len(), 3);
         assert_eq!(capacity_warn_count(&below), 0);
         assert_eq!(below[0].level, LogLevel::Error);
@@ -584,7 +585,7 @@ pub(super) mod tests {
         let before = chrono::Utc::now();
         shipper.record(event("", "fourth", LogLevel::Info));
         let after = chrono::Utc::now();
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 5);
         assert_eq!(events[0].level, LogLevel::Error);
         assert_eq!(events[0].message, "first");
@@ -608,14 +609,14 @@ pub(super) mod tests {
         assert_capacity_warn(&events[4]);
         assert!(events[4].ts >= before && events[4].ts <= after);
         shipper.record(event("", "fifth", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(
             messages_of(&events),
             ["second", "third", "fourth", CAPACITY_WARN_NOTE, "fifth"]
         );
         assert_eq!(capacity_warn_count(&events), 1);
         shipper.record(event("", "sixth", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(
             messages_of(&events),
             ["third", "fourth", CAPACITY_WARN_NOTE, "fifth", "sixth"]
@@ -631,18 +632,18 @@ pub(super) mod tests {
         for message in ["a", "b", "c"] {
             shipper.record(event("", message, LogLevel::Info));
         }
-        let below = buffered_events(&shipper);
+        let below = shipper.buffered_events();
         assert_eq!(messages_of(&below), ["a", "b", "c"]);
         assert_eq!(capacity_warn_count(&below), 0);
         shipper.record(event("", "d", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(messages_of(&events), ["b", "c", "d", CAPACITY_WARN_NOTE]);
         assert_eq!(events[0].level, LogLevel::Info);
         assert_eq!(events[1].level, LogLevel::Info);
         assert_eq!(events[2].level, LogLevel::Info);
         assert_capacity_warn(&events[3]);
         shipper.record(event("", "e", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(messages_of(&events), ["c", "d", CAPACITY_WARN_NOTE, "e"]);
         assert_eq!(capacity_warn_count(&events), 1);
     }
@@ -653,11 +654,11 @@ pub(super) mod tests {
         config.capacity = 1;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("GET /", "hello", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
         assert_capacity_warn(&events[0]);
         shipper.record(event("", "next", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].message, "next");
         assert_eq!(events[0].level, LogLevel::Info);
@@ -674,7 +675,7 @@ pub(super) mod tests {
             shipper.record(event("", message, LogLevel::Info));
         }
         shipper.ship_batch().await;
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(
             messages_of(&events),
             ["a", "b", "c", "d", CAPACITY_WARN_NOTE]
@@ -682,7 +683,7 @@ pub(super) mod tests {
         assert_eq!(events[0].level, LogLevel::Info);
         assert_capacity_warn(&events[4]);
         shipper.record(event("", "e", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(
             messages_of(&events),
             ["b", "c", "d", CAPACITY_WARN_NOTE, "e"]
@@ -714,11 +715,11 @@ pub(super) mod tests {
         for message in ["e", "f", "g"] {
             shipper.record(event("", message, LogLevel::Info));
         }
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(messages_of(&events), ["e", "f", "g"]);
         assert_eq!(capacity_warn_count(&events), 0);
         shipper.record(event("", "h", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(
             messages_of(&events),
             ["e", "f", "g", "h", CAPACITY_WARN_NOTE]
@@ -726,7 +727,7 @@ pub(super) mod tests {
         assert_eq!(events[0].level, LogLevel::Info);
         assert_capacity_warn(&events[4]);
         shipper.record(event("", "i", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(
             messages_of(&events),
             ["f", "g", "h", CAPACITY_WARN_NOTE, "i"]
@@ -743,7 +744,7 @@ pub(super) mod tests {
         for index in 0..4_000 {
             shipper.record(event("", index.to_string(), LogLevel::Info));
         }
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 4_001);
         assert_eq!(events[0].message, "0");
         assert_eq!(events[0].level, LogLevel::Info);
@@ -753,7 +754,7 @@ pub(super) mod tests {
             shipper.record(event("", index.to_string(), LogLevel::Info));
         }
         assert_eq!(shipper.buffered_len(), 5_000);
-        assert_eq!(capacity_warn_count(&buffered_events(&shipper)), 1);
+        assert_eq!(capacity_warn_count(&shipper.buffered_events()), 1);
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 4_000);
         let posted = parse_body(&rx.recv().await.unwrap().body);
@@ -761,12 +762,12 @@ pub(super) mod tests {
         assert_eq!(posted[0].message, "0");
         assert_eq!(posted[0].level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&posted), 0);
-        let left = buffered_events(&shipper);
+        let left = shipper.buffered_events();
         assert_eq!(left[0].message, "1000");
         assert_eq!(left[0].level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&left), 1);
         shipper.record(event("", "more", LogLevel::Info));
-        let left = buffered_events(&shipper);
+        let left = shipper.buffered_events();
         assert_eq!(left.len(), 4_001);
         assert_eq!(left[0].message, "1000");
         assert_eq!(left.last().unwrap().message, "more");
@@ -777,14 +778,14 @@ pub(super) mod tests {
         let second = parse_body(&rx.recv().await.unwrap().body);
         assert_eq!(second[0].message, "1000");
         assert_eq!(capacity_warn_count(&second), 0);
-        assert_eq!(capacity_warn_count(&buffered_events(&shipper)), 1);
+        assert_eq!(capacity_warn_count(&shipper.buffered_events()), 1);
         for index in 0..998 {
             shipper.record(event("", format!("extra-{index}"), LogLevel::Info));
         }
         assert_eq!(shipper.buffered_len(), 3_999);
-        assert_eq!(capacity_warn_count(&buffered_events(&shipper)), 1);
+        assert_eq!(capacity_warn_count(&shipper.buffered_events()), 1);
         shipper.record(event("", "cross", LogLevel::Info));
-        let events = buffered_events(&shipper);
+        let events = shipper.buffered_events();
         assert_eq!(events.len(), 4_001);
         assert_eq!(capacity_warn_count(&events), 2);
         assert_eq!(events[events.len() - 2].message, "cross");
