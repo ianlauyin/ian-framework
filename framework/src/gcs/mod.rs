@@ -24,6 +24,75 @@ pub struct GcsBackend {
     inner: Arc<Inner>,
 }
 
+impl fmt::Debug for GcsBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GcsBackend")
+            .field("bucket", &self.inner.bucket)
+            .field("email", &self.inner.email)
+            .field("auth", &self.inner.auth)
+            .finish_non_exhaustive()
+    }
+}
+
+impl GcsBackend {
+    pub async fn from_adc(bucket_name: impl Into<String>) -> Result<Self, GcsError> {
+        let auth = match cred::load_adc_auth().await? {
+            Some(auth) => auth,
+            None => Auth::Metadata,
+        };
+        Self::new(bucket_name, auth).await
+    }
+
+    pub fn bucket(&self) -> &str {
+        &self.inner.bucket
+    }
+
+    pub fn signer_email(&self) -> &str {
+        &self.inner.email
+    }
+
+    pub fn attach_ops_log(&self, shipper: crate::logging::LogShipper) {
+        *lock_ops(&self.inner.ops_log) = Some(shipper);
+    }
+
+    pub(crate) async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
+        let bucket_name = bucket_name.into();
+        validate_bucket(&bucket_name)?;
+        cred::validate_auth(&auth)?;
+        let http = http_client()?;
+        let email = match &auth {
+            Auth::Metadata => token::metadata_email(&http).await?,
+            Auth::User { signer_email, .. } => signer_email.clone(),
+        };
+        Ok(Self {
+            inner: Arc::new(Inner {
+                bucket: bucket_name,
+                email,
+                auth,
+                http,
+                token: tokio::sync::Mutex::new(None),
+                ops_log: std::sync::Mutex::new(None),
+            }),
+        })
+    }
+
+    pub(crate) fn ops_shipper(&self) -> Option<crate::logging::LogShipper> {
+        lock_ops(&self.inner.ops_log).clone()
+    }
+
+    pub(crate) fn http(&self) -> &reqwest::Client {
+        &self.inner.http
+    }
+
+    pub(crate) fn auth(&self) -> &Auth {
+        &self.inner.auth
+    }
+
+    pub(crate) fn token_cache(&self) -> &tokio::sync::Mutex<Option<CachedToken>> {
+        &self.inner.token
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GcsErrorKind {
     Auth,
@@ -38,27 +107,6 @@ pub struct GcsError {
     status: Option<u16>,
     message: String,
     source: Option<Box<dyn std::error::Error + Send + Sync>>,
-}
-
-pub(crate) struct Call {
-    pub method: reqwest::Method,
-    pub url: String,
-    pub headers: Vec<(reqwest::header::HeaderName, String)>,
-    pub json: Option<serde_json::Value>,
-    pub bytes: Option<Vec<u8>>,
-
-    pub extra_status: &'static [u16],
-
-    pub timeout: Option<Duration>,
-}
-
-struct Inner {
-    bucket: String,
-    email: String,
-    auth: Auth,
-    http: reqwest::Client,
-    token: tokio::sync::Mutex<Option<CachedToken>>,
-    ops_log: std::sync::Mutex<Option<crate::logging::LogShipper>>,
 }
 
 impl GcsError {
@@ -127,73 +175,25 @@ impl std::error::Error for GcsError {
     }
 }
 
-impl fmt::Debug for GcsBackend {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GcsBackend")
-            .field("bucket", &self.inner.bucket)
-            .field("email", &self.inner.email)
-            .field("auth", &self.inner.auth)
-            .finish_non_exhaustive()
-    }
+pub(crate) struct Call {
+    pub method: reqwest::Method,
+    pub url: String,
+    pub headers: Vec<(reqwest::header::HeaderName, String)>,
+    pub json: Option<serde_json::Value>,
+    pub bytes: Option<Vec<u8>>,
+
+    pub extra_status: &'static [u16],
+
+    pub timeout: Option<Duration>,
 }
 
-impl GcsBackend {
-    pub(crate) async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
-        let bucket_name = bucket_name.into();
-        validate_bucket(&bucket_name)?;
-        cred::validate_auth(&auth)?;
-        let http = http_client()?;
-        let email = match &auth {
-            Auth::Metadata => token::metadata_email(&http).await?,
-            Auth::User { signer_email, .. } => signer_email.clone(),
-        };
-        Ok(Self {
-            inner: Arc::new(Inner {
-                bucket: bucket_name,
-                email,
-                auth,
-                http,
-                token: tokio::sync::Mutex::new(None),
-                ops_log: std::sync::Mutex::new(None),
-            }),
-        })
-    }
-
-    pub async fn from_adc(bucket_name: impl Into<String>) -> Result<Self, GcsError> {
-        let auth = match cred::load_adc_auth().await? {
-            Some(auth) => auth,
-            None => Auth::Metadata,
-        };
-        Self::new(bucket_name, auth).await
-    }
-
-    pub fn bucket(&self) -> &str {
-        &self.inner.bucket
-    }
-
-    pub fn signer_email(&self) -> &str {
-        &self.inner.email
-    }
-
-    pub fn attach_ops_log(&self, shipper: crate::logging::LogShipper) {
-        *lock_ops(&self.inner.ops_log) = Some(shipper);
-    }
-
-    pub(crate) fn ops_shipper(&self) -> Option<crate::logging::LogShipper> {
-        lock_ops(&self.inner.ops_log).clone()
-    }
-
-    pub(crate) fn http(&self) -> &reqwest::Client {
-        &self.inner.http
-    }
-
-    pub(crate) fn auth(&self) -> &Auth {
-        &self.inner.auth
-    }
-
-    pub(crate) fn token_cache(&self) -> &tokio::sync::Mutex<Option<CachedToken>> {
-        &self.inner.token
-    }
+struct Inner {
+    bucket: String,
+    email: String,
+    auth: Auth,
+    http: reqwest::Client,
+    token: tokio::sync::Mutex<Option<CachedToken>>,
+    ops_log: std::sync::Mutex<Option<crate::logging::LogShipper>>,
 }
 
 fn lock_ops(

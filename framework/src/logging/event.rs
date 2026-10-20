@@ -26,25 +26,6 @@ pub struct LogEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
-pub(crate) fn event(
-    action: impl Into<String>,
-    message: impl Into<String>,
-    level: LogLevel,
-) -> LogEvent {
-    LogEvent {
-        ts: Utc::now(),
-        id: String::new(),
-        ip: String::new(),
-        user_agent: String::new(),
-        action: action.into(),
-        status: None,
-        latency_ms: None,
-        level,
-        message: message.into(),
-        extra: BTreeMap::new(),
-    }
-}
-
 impl LogEvent {
     pub fn sanitize_untrusted_client(&self) -> Option<LogEvent> {
         let message = self.message.trim();
@@ -63,6 +44,25 @@ impl LogEvent {
             message: message.to_string(),
             extra: client_extra(&self.extra),
         })
+    }
+}
+
+pub(crate) fn event(
+    action: impl Into<String>,
+    message: impl Into<String>,
+    level: LogLevel,
+) -> LogEvent {
+    LogEvent {
+        ts: Utc::now(),
+        id: String::new(),
+        ip: String::new(),
+        user_agent: String::new(),
+        action: action.into(),
+        status: None,
+        latency_ms: None,
+        level,
+        message: message.into(),
+        extra: BTreeMap::new(),
     }
 }
 

@@ -19,30 +19,6 @@ pub struct ShipperConfig {
     pub capacity: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LogBatch {
-    pub events: Vec<LogEvent>,
-}
-
-#[derive(Clone)]
-pub struct LogShipper {
-    inner: Arc<Inner>,
-}
-
-struct Buffer {
-    events: VecDeque<LogEvent>,
-    capacity_warned: bool,
-}
-
-struct Inner {
-    app: String,
-    endpoint: Option<String>,
-    capacity: usize,
-    buffer: Mutex<Buffer>,
-    http: Option<reqwest::Client>,
-    shipping: tokio::sync::Mutex<()>,
-}
-
 impl ShipperConfig {
     pub fn new(app: impl Into<String>, endpoint: impl Into<String>) -> Self {
         Self {
@@ -51,6 +27,11 @@ impl ShipperConfig {
             capacity: DEFAULT_CAPACITY,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LogBatch {
+    pub events: Vec<LogEvent>,
 }
 
 impl LogBatch {
@@ -64,6 +45,11 @@ impl LogBatch {
         }
         Some(events)
     }
+}
+
+#[derive(Clone)]
+pub struct LogShipper {
+    inner: Arc<Inner>,
 }
 
 impl std::fmt::Debug for LogShipper {
@@ -152,10 +138,6 @@ impl LogShipper {
         }))
     }
 
-    fn buffered_len(&self) -> usize {
-        self.lock_buffer().events.len()
-    }
-
     pub fn record(&self, event: LogEvent) {
         let capacity = self.inner.capacity;
         let mut buffer = self.lock_buffer();
@@ -170,6 +152,10 @@ impl LogShipper {
             buffer.events.push_back(capacity_warn_event());
             buffer.capacity_warned = true;
         }
+    }
+
+    fn buffered_len(&self) -> usize {
+        self.lock_buffer().events.len()
     }
 
     async fn ship_batch(&self) {
@@ -237,6 +223,20 @@ impl LogShipper {
     fn batch_url(&self, endpoint: &str) -> String {
         format!("{endpoint}/log/{}", self.inner.app)
     }
+}
+
+struct Buffer {
+    events: VecDeque<LogEvent>,
+    capacity_warned: bool,
+}
+
+struct Inner {
+    app: String,
+    endpoint: Option<String>,
+    capacity: usize,
+    buffer: Mutex<Buffer>,
+    http: Option<reqwest::Client>,
+    shipping: tokio::sync::Mutex<()>,
 }
 
 fn meets_capacity_warn(len: usize, capacity: usize) -> bool {

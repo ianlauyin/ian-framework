@@ -18,6 +18,8 @@ Use functional programming. Do not use object-oriented programming.
 
 - Use Json for Request and Response unless the route needs special handling.
 - public type should put at the top of the files after import and const
+- public type impl should follow that type
+- public method should put at the top of the impl
 
 ## Frontend (SolidJS + Typescript)
 
