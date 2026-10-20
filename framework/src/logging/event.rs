@@ -103,7 +103,7 @@ fn extra_value(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::RequestJson;
+    use crate::logging::LogBatch;
     use serde_json::json;
 
     fn sample() -> LogEvent {
@@ -187,13 +187,13 @@ mod tests {
     }
 
     #[test]
-    fn request_json_round_trips() {
+    fn log_batch_round_trips() {
         let events = vec![sample(), event("", "down", LogLevel::Error)];
-        let body = serde_json::to_string(&RequestJson {
+        let body = serde_json::to_string(&LogBatch {
             events: events.clone(),
         })
         .unwrap();
-        let parsed: RequestJson = serde_json::from_str(&body).unwrap();
+        let parsed: LogBatch = serde_json::from_str(&body).unwrap();
         assert_eq!(parsed.events, events);
         let value: Value = serde_json::from_str(&body).unwrap();
         assert!(value.as_object().is_some());
@@ -343,13 +343,13 @@ mod tests {
 
     #[test]
     fn sanitize_untrusted_client_rejects_an_empty_batch() {
-        let body = RequestJson { events: vec![] };
+        let body = LogBatch { events: vec![] };
         assert!(body.sanitize_untrusted_client().is_none());
     }
 
     #[test]
     fn sanitize_untrusted_client_rejects_the_batch_when_one_event_fails() {
-        let body = RequestJson {
+        let body = LogBatch {
             events: vec![
                 event("/ok", "kept", LogLevel::Info),
                 event("/ok", "   ", LogLevel::Warn),
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn sanitize_untrusted_client_returns_sanitized_events() {
-        let body = RequestJson {
+        let body = LogBatch {
             events: vec![
                 event("/a?x=1", " one ", LogLevel::Info),
                 event("#frag", "two", LogLevel::Error),

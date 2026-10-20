@@ -30,11 +30,11 @@ impl ShipperConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RequestJson {
+pub struct LogBatch {
     pub events: Vec<LogEvent>,
 }
 
-impl RequestJson {
+impl LogBatch {
     pub fn sanitize_untrusted_client(&self) -> Option<Vec<LogEvent>> {
         if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
             return None;
@@ -190,7 +190,7 @@ impl LogShipper {
             return;
         };
         let url = self.batch_url(&endpoint);
-        let posted = match serde_json::to_string(&RequestJson {
+        let posted = match serde_json::to_string(&LogBatch {
             events: batch.clone(),
         }) {
             Ok(body) => match client
@@ -452,7 +452,7 @@ pub(super) mod tests {
 
     #[test]
     fn sanitize_untrusted_client_accepts_a_batch_at_the_ship_chunk() {
-        let body = RequestJson {
+        let body = LogBatch {
             events: (0..SHIP_CHUNK)
                 .map(|_| event("/ok", "kept", LogLevel::Info))
                 .collect(),
@@ -465,7 +465,7 @@ pub(super) mod tests {
 
     #[test]
     fn sanitize_untrusted_client_rejects_a_batch_above_the_ship_chunk() {
-        let body = RequestJson {
+        let body = LogBatch {
             events: (0..=SHIP_CHUNK)
                 .map(|_| event("/ok", "kept", LogLevel::Info))
                 .collect(),
@@ -816,7 +816,7 @@ pub(super) mod tests {
     }
 
     fn parse_body(body: &str) -> Vec<LogEvent> {
-        serde_json::from_str::<RequestJson>(body).unwrap().events
+        serde_json::from_str::<LogBatch>(body).unwrap().events
     }
 
     fn assert_no_scope_keys(line: &str) {
