@@ -104,7 +104,7 @@ fn millis_since(started: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::{LogShipper, ShipperConfig};
+    use crate::logging::{buffered_events, LogShipper, ShipperConfig};
     use axum::body::Body;
     use axum::extract::Path;
     use axum::http::{Request, StatusCode};
@@ -152,7 +152,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         assert!(response.headers().get("x-request-id").is_none());
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         let event = &events[0];
         assert_eq!(event.id, "");
@@ -187,7 +187,7 @@ mod tests {
             send(router, "/status/503").await.status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events[0].level, LogLevel::Warn);
         assert_eq!(events[0].status, Some(404));
         assert_eq!(events[1].level, LogLevel::Error);
@@ -211,7 +211,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let event = &shipper.buffered_events()[0];
+        let event = &buffered_events(&shipper)[0];
         assert_eq!(event.ip, "203.0.113.8");
         assert_eq!(event.user_agent, "demo-agent");
         assert_eq!(event.action, "GET /status/200");
@@ -243,7 +243,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events[0].ip, "198.51.100.4");
         assert_eq!(events[0].user_agent, "");
         assert_eq!(events[1].ip, "192.0.2.10");

@@ -358,6 +358,7 @@ pub(crate) fn truncate(text: &str, max: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::buffered_events;
 
     fn user_auth() -> Auth {
         Auth::User {
@@ -457,7 +458,7 @@ mod tests {
                 extra: &[],
             },
         );
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].action, "GET /storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");

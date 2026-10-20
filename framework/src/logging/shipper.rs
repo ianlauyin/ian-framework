@@ -128,20 +128,8 @@ impl LogShipper {
         }))
     }
 
-    fn app(&self) -> &str {
-        &self.inner.app
-    }
-
-    fn endpoint(&self) -> Option<&str> {
-        self.inner.endpoint.as_deref()
-    }
-
     fn buffered_len(&self) -> usize {
         self.lock_buffer().len()
-    }
-
-    pub(crate) fn buffered_events(&self) -> Vec<LogEvent> {
-        self.lock_buffer().iter().cloned().collect()
     }
 
     pub fn record(&self, event: LogEvent) {
@@ -215,10 +203,14 @@ impl LogShipper {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::super::event::event;
     use super::*;
     use crate::logging::LogLevel;
+
+    pub(crate) fn buffered_events(shipper: &LogShipper) -> Vec<LogEvent> {
+        shipper.lock_buffer().iter().cloned().collect()
+    }
 
     fn buffer_only() -> LogShipper {
         LogShipper::new(ShipperConfig::new("api", "")).unwrap()
@@ -227,8 +219,8 @@ mod tests {
     #[test]
     fn defaults_are_buffer_only() {
         let shipper = buffer_only();
-        assert_eq!(shipper.app(), "api");
-        assert_eq!(shipper.endpoint(), None);
+        assert_eq!(shipper.inner.app, "api");
+        assert_eq!(shipper.inner.endpoint, None);
         assert_eq!(DEFAULT_CAPACITY, 10_000);
         assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
     }
@@ -237,7 +229,7 @@ mod tests {
     fn blank_endpoint_is_buffer_only() {
         for endpoint in ["", "   "] {
             let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
-            assert_eq!(shipper.endpoint(), None);
+            assert_eq!(shipper.inner.endpoint, None);
         }
     }
 
@@ -245,9 +237,12 @@ mod tests {
     fn endpoint_is_normalized() {
         let shipper =
             LogShipper::new(ShipperConfig::new("cs", "http://logs.example/ingest/")).unwrap();
-        assert_eq!(shipper.endpoint(), Some("http://logs.example/ingest"));
         assert_eq!(
-            shipper.batch_url(shipper.endpoint().unwrap()),
+            shipper.inner.endpoint.as_deref(),
+            Some("http://logs.example/ingest")
+        );
+        assert_eq!(
+            shipper.batch_url(shipper.inner.endpoint.as_deref().unwrap()),
             "http://logs.example/ingest/log/cs"
         );
     }
@@ -274,10 +269,10 @@ mod tests {
     fn record_omits_scope_keys() {
         let shipper = buffer_only();
         shipper.record(event("", "kept", LogLevel::Info));
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].message, "kept");
-        assert_eq!(shipper.app(), "api");
+        assert_eq!(shipper.inner.app, "api");
         assert_no_scope_keys(&serde_json::to_string(&events[0]).unwrap());
     }
 
@@ -289,8 +284,7 @@ mod tests {
         shipper.record(event("", "a", LogLevel::Info));
         shipper.record(event("", "b", LogLevel::Info));
         shipper.record(event("", "c", LogLevel::Info));
-        let messages: Vec<_> = shipper
-            .buffered_events()
+        let messages: Vec<_> = buffered_events(&shipper)
             .into_iter()
             .map(|event| event.message)
             .collect();
@@ -314,7 +308,7 @@ mod tests {
         let ip = event.ip.clone();
         let user_agent = event.user_agent.clone();
         shipper.record(event);
-        let stored = shipper.buffered_events().remove(0);
+        let stored = buffered_events(&shipper).remove(0);
         assert_eq!(stored.message, message);
         assert_eq!(stored.action, action);
         assert_eq!(stored.id, id);
@@ -328,7 +322,7 @@ mod tests {
         shipper.record(event("", "local", LogLevel::Info));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 1);
-        assert_eq!(shipper.buffered_events()[0].message, "local");
+        assert_eq!(buffered_events(&shipper)[0].message, "local");
     }
 
     #[tokio::test]
@@ -349,7 +343,7 @@ mod tests {
         shipper.record(event("", "down", LogLevel::Error));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 1);
-        assert_eq!(shipper.buffered_events()[0].message, "down");
+        assert_eq!(buffered_events(&shipper)[0].message, "down");
     }
 
     #[tokio::test]
@@ -392,7 +386,7 @@ mod tests {
         let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
         shipper.record(event("", "keep", LogLevel::Info));
         shipper.ship_batch().await;
-        assert_eq!(shipper.buffered_events()[0].message, "keep");
+        assert_eq!(buffered_events(&shipper)[0].message, "keep");
     }
 
     #[tokio::test]
@@ -414,7 +408,7 @@ mod tests {
         .unwrap();
         shipper.record(event("", "c", LogLevel::Info));
         ship.await.unwrap();
-        let left = shipper.buffered_events();
+        let left = buffered_events(&shipper);
         assert_eq!(left.len(), 1);
         assert_eq!(left[0].message, "c");
     }
@@ -438,8 +432,7 @@ mod tests {
         .unwrap();
         shipper.record(event("", "c", LogLevel::Info));
         ship.await.unwrap();
-        let left: Vec<_> = shipper
-            .buffered_events()
+        let left: Vec<_> = buffered_events(&shipper)
             .into_iter()
             .map(|event| event.message)
             .collect();
