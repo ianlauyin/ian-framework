@@ -223,9 +223,8 @@ The stored `status` is null.
 The stored `latency_ms` is null.
 The stored `ts` is the current UTC time.
 The function keeps the client `level`.
+The function keeps the client `action`.
 The function stores the `message` after it removes those spaces.
-The stored `action` is the text before the first `?` or the first `#`.
-An empty result is `/`.
 The function reads every `extra` key.
 An empty key is not stored.
 A key is stored only when each character is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.

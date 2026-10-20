@@ -56,23 +56,13 @@ impl LogEvent {
             id: String::new(),
             ip: String::new(),
             user_agent: String::new(),
-            action: path_only(&self.action),
+            action: self.action.clone(),
             status: None,
             latency_ms: None,
             level: self.level,
             message: message.to_string(),
             extra: client_extra(&self.extra),
         })
-    }
-}
-
-fn path_only(action: &str) -> String {
-    let end = action.find(['?', '#']).unwrap_or(action.len());
-    let path = &action[..end];
-    if path.is_empty() {
-        "/".to_string()
-    } else {
-        path.to_string()
     }
 }
 
@@ -243,30 +233,29 @@ mod tests {
         assert_eq!(stored.latency_ms, None);
         assert_eq!(stored.level, LogLevel::Warn);
         assert_eq!(stored.message, "saved file");
-        assert_eq!(stored.action, "GET /download");
+        assert_eq!(stored.action, "GET /download?sig=abc#top");
         assert_ne!(stored.ts, event.ts);
         assert!(stored.ts >= before && stored.ts <= after);
     }
 
     #[test]
-    fn sanitize_untrusted_client_keeps_the_path_only() {
-        let cases = [
-            ("/api/foo?x=1", "/api/foo"),
-            ("/api/foo#part", "/api/foo"),
-            ("/api/foo?x=1#part", "/api/foo"),
-            ("/api/foo#part?x=1", "/api/foo"),
-            ("", "/"),
-            ("?x=1", "/"),
-            ("#part", "/"),
-            ("/", "/"),
-            ("GET /api/foo?token=secret", "GET /api/foo"),
-            ("plain", "plain"),
-        ];
-        for (action, expect) in cases {
+    fn sanitize_untrusted_client_keeps_the_client_action() {
+        for action in [
+            "/api/foo?x=1",
+            "/api/foo#part",
+            "/api/foo?x=1#part",
+            "/api/foo#part?x=1",
+            "",
+            "?x=1",
+            "#part",
+            "/",
+            "GET /api/foo?token=secret",
+            "plain",
+        ] {
             let stored = event(action, "ok", LogLevel::Info)
                 .sanitize_untrusted_client()
                 .unwrap();
-            assert_eq!(stored.action, expect, "{action}");
+            assert_eq!(stored.action, action);
         }
     }
 
@@ -380,7 +369,7 @@ mod tests {
         };
         let stored = body.sanitize_untrusted_client().unwrap();
         assert_eq!(stored.len(), 2);
-        assert_eq!(stored[0].action, "/a");
+        assert_eq!(stored[0].action, "/a?x=1");
         assert_eq!(stored[0].message, "one");
         assert_eq!(stored[0].level, LogLevel::Info);
         assert_eq!(stored[0].id, "");
@@ -388,7 +377,7 @@ mod tests {
         assert_eq!(stored[0].user_agent, "");
         assert_eq!(stored[0].status, None);
         assert_eq!(stored[0].latency_ms, None);
-        assert_eq!(stored[1].action, "/");
+        assert_eq!(stored[1].action, "#frag");
         assert_eq!(stored[1].message, "two");
         assert_eq!(stored[1].level, LogLevel::Error);
     }
