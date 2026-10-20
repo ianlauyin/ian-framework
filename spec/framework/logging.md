@@ -141,7 +141,7 @@ The URL is `{endpoint}/log/{app}`.
 For app `cs`, the path is `/log/cs`.
 The content type is `application/json`.
 The body is one JSON object.
-The body type is `RequestJson`.
+The body type is `LogBatch`.
 The body shape is `{"events":[...]}`.
 The body is not a bare JSON array.
 `events` is one JSON array of event objects.
@@ -286,8 +286,8 @@ The function stores a false value as `false`.
 Each stored value is a string.
 The function stores the full value text.
 
-`RequestJson::sanitize_untrusted_client` checks one batch.
-The input is one `RequestJson`.
+`LogBatch::sanitize_untrusted_client` checks one batch.
+The input is one `LogBatch`.
 The result is a list of events, or no batch.
 An empty `events` list returns no batch.
 The function returns no batch when `events` has more than 1000 events.
@@ -296,7 +296,7 @@ One ship batch uses this same limit of 1000 events.
 The function returns no batch when one event gives no event.
 The function does not call `LogShipper::record`.
 The caller calls `LogShipper::record` for each kept event.
-`body` is one `RequestJson`.
+`body` is one `LogBatch`.
 `shipper` is one `LogShipper`.
 
 ```rust
