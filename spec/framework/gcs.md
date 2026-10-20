@@ -41,14 +41,13 @@ cargo test --features gcs
 
 ## Constructors
 
-The client has two constructors.
-
-- `GcsBackend::from_adc` reads Application Default Credentials for one bucket.
-- `GcsBackend::new` takes one bucket and an explicit auth value.
+`GcsBackend::from_adc` reads Application Default Credentials for one bucket.
 
 ## Authentication
 
-- Metadata auth uses the service account on the VM metadata server.
+The client accepts only Application Default Credentials.
+
+- If no credentials file is present, metadata auth uses the service account on the VM metadata server.
 - The client rejects a service account JSON key.
 - The client rejects impersonated application default credentials.
 - User application default credentials need `GCS_SIGNER_EMAIL`.

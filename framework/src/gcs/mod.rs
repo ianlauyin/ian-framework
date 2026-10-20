@@ -5,7 +5,7 @@ mod ops;
 mod signed_url;
 mod token;
 
-pub use cred::Auth;
+pub(crate) use cred::Auth;
 pub use encode::{encode_object_id, encode_object_path, encode_seg};
 pub use object::{ListPage, ListQuery, ObjectMeta, ObjectReader, PutOptions};
 
@@ -126,7 +126,7 @@ impl fmt::Debug for GcsBackend {
 }
 
 impl GcsBackend {
-    pub async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
+    pub(crate) async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
         let bucket_name = bucket_name.into();
         validate_bucket(&bucket_name)?;
         cred::validate_auth(&auth)?;

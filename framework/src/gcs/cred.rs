@@ -8,7 +8,7 @@ use super::{GcsError, GcsErrorKind};
 const ADC_FILE_LIMIT: u64 = 1024 * 1024;
 
 #[derive(Clone)]
-pub enum Auth {
+pub(crate) enum Auth {
     Metadata,
 
     User {
