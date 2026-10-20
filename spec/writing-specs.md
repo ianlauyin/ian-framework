@@ -11,7 +11,6 @@ Write all spec text in ASD-STE100 (Simplified Technical English).
 - If you give several items or several points, use a list.
 - If you give only one point, use a paragraph.
 - If all items have the same small set of fields, use a table.
-- Write in English. Use Traditional Chinese only when you quote a user-facing string exactly.
 
 ## Refer to a file
 
