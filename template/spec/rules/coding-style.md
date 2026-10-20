@@ -17,6 +17,8 @@
 Use functional programming. Do not use object-oriented programming.
 
 - Use Json for Request and Response unless the route needs special handling.
+- public type should put at the top of the files after import and const
+- each mod only contain one test for that module
 
 ## Frontend (SolidJS + Typescript)
 
