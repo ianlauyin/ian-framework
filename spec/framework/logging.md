@@ -226,12 +226,9 @@ The function keeps the client `level`.
 The function stores the `message` after it removes those spaces.
 The stored `action` is the text before the first `?` or the first `#`.
 An empty result is `/`.
-The function reads `extra` in ascending key order.
-The function reads only the first 8 keys.
-A removed key is one of those 8 keys.
-A key after the eighth key is not stored.
-A key is stored only when its length is from 1 through 64.
-Each character of that key is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.
+The function reads every `extra` key.
+An empty key is not stored.
+A key is stored only when each character is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.
 A value is stored only when it is a string, a number, or a `bool`.
 The function does not store these values:
 
@@ -246,8 +243,7 @@ The function stores a number as its number text.
 The function stores a true value as `true`.
 The function stores a false value as `false`.
 Each stored value is a string.
-The stored text has at most 200 bytes.
-A longer text is cut to 200 bytes on a character boundary.
+The function stores the full value text.
 
 `RequestJson::sanitize_untrusted_client` checks one batch.
 The input is one `RequestJson`.

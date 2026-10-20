@@ -45,10 +45,6 @@ pub(crate) fn event(
     }
 }
 
-const EXTRA_KEY_LIMIT: usize = 8;
-const EXTRA_KEY_MAX_LEN: usize = 64;
-const EXTRA_VALUE_MAX_BYTES: usize = 200;
-
 impl LogEvent {
     pub fn sanitize_untrusted_client(&self) -> Option<LogEvent> {
         let message = self.message.trim();
@@ -82,7 +78,7 @@ fn path_only(action: &str) -> String {
 
 fn client_extra(extra: &BTreeMap<String, Value>) -> BTreeMap<String, Value> {
     let mut kept = BTreeMap::new();
-    for (key, value) in extra.iter().take(EXTRA_KEY_LIMIT) {
+    for (key, value) in extra {
         if !extra_key_ok(key) {
             continue;
         }
@@ -95,7 +91,7 @@ fn client_extra(extra: &BTreeMap<String, Value>) -> BTreeMap<String, Value> {
 }
 
 fn extra_key_ok(key: &str) -> bool {
-    (1..=EXTRA_KEY_MAX_LEN).contains(&key.len())
+    !key.is_empty()
         && key
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
@@ -111,18 +107,7 @@ fn extra_value(value: &Value) -> Option<String> {
     if text.contains('\r') || text.contains('\n') {
         return None;
     }
-    Some(truncate(&text, EXTRA_VALUE_MAX_BYTES).to_string())
-}
-
-fn truncate(text: &str, max: usize) -> &str {
-    if text.len() <= max {
-        return text;
-    }
-    let mut end = max;
-    while end > 0 && !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
+    Some(text)
 }
 
 #[cfg(test)]
@@ -286,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_untrusted_client_limits_extra() {
+    fn sanitize_untrusted_client_filters_extra() {
         let mut client = event("/files", "note", LogLevel::Info);
         client.extra.insert("bad key".to_string(), json!("no"));
         client.extra.insert("k01".to_string(), json!("kept"));
@@ -303,27 +288,30 @@ mod tests {
         let stored = client.sanitize_untrusted_client().unwrap();
         assert_eq!(
             stored.extra.keys().cloned().collect::<Vec<_>>(),
-            vec!["k01".to_string(), "k07".to_string(),]
+            vec![
+                "k01".to_string(),
+                "k07".to_string(),
+                "k08".to_string(),
+                "k09".to_string(),
+            ]
         );
         assert_eq!(stored.extra["k01"], json!("kept"));
-        assert_eq!(stored.extra["k07"], json!("x".repeat(200)));
-        assert!(!stored.extra.contains_key("k08"));
-        assert!(!stored.extra.contains_key("k09"));
+        assert_eq!(stored.extra["k07"], json!("x".repeat(250)));
+        assert_eq!(stored.extra["k08"], json!("ninth"));
+        assert_eq!(stored.extra["k09"], json!("true"));
         assert!(!stored.extra.contains_key("bad key"));
 
         let mut scalars = event("/files", "note", LogLevel::Error);
         scalars.extra.insert("a/b".to_string(), json!("no"));
         scalars.extra.insert("a_b-c.d".to_string(), json!("yes"));
-        scalars.extra.insert("a".repeat(64), json!("yes"));
-        scalars.extra.insert("a".repeat(65), json!("no"));
+        scalars.extra.insert("a".repeat(65), json!("long-key"));
         scalars.extra.insert("count".to_string(), json!(12));
         scalars.extra.insert("flag".to_string(), json!(true));
         scalars.extra.insert("off".to_string(), json!(false));
         scalars.extra.insert("ratio".to_string(), json!(1.5));
         let stored = scalars.sanitize_untrusted_client().unwrap();
         assert_eq!(stored.extra.get("a/b"), None);
-        assert_eq!(stored.extra.get(&"a".repeat(65)), None);
-        assert_eq!(stored.extra[&"a".repeat(64)], json!("yes"));
+        assert_eq!(stored.extra[&"a".repeat(65)], json!("long-key"));
         assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
         assert_eq!(stored.extra["count"], json!("12"));
         assert_eq!(stored.extra["flag"], json!("true"));
@@ -334,32 +322,22 @@ mod tests {
         text.extra.insert(String::new(), json!("no"));
         text.extra.insert("café".to_string(), json!("no"));
         text.extra.insert("ok!".to_string(), json!("no"));
-        text.extra
-            .insert("exact".to_string(), json!("y".repeat(200)));
-        text.extra
-            .insert("text".to_string(), json!("中".repeat(67)));
-        text.extra
-            .insert("accent".to_string(), json!("é".repeat(101)));
+        let long = "中".repeat(67);
+        text.extra.insert("text".to_string(), json!(long));
         let stored = text.sanitize_untrusted_client().unwrap();
         assert_eq!(stored.extra.get(""), None);
         assert_eq!(stored.extra.get("café"), None);
         assert_eq!(stored.extra.get("ok!"), None);
-        assert_eq!(stored.extra["exact"], json!("y".repeat(200)));
-        assert_eq!(stored.extra["text"], json!("中".repeat(66)));
-        assert_eq!(stored.extra["text"].as_str().unwrap().len(), 198);
-        assert_eq!(stored.extra["accent"], json!("é".repeat(100)));
-        assert_eq!(stored.extra["accent"].as_str().unwrap().len(), 200);
+        assert_eq!(stored.extra["text"], json!(long));
 
-        let mut blocked = event("/files", "note", LogLevel::Info);
+        let mut later = event("/files", "note", LogLevel::Info);
         for index in 0..8 {
-            blocked.extra.insert(format!("bad {index}"), json!("no"));
+            later.extra.insert(format!("bad {index}"), json!("no"));
         }
-        blocked.extra.insert("zzzz".to_string(), json!("yes"));
-        assert!(blocked
-            .sanitize_untrusted_client()
-            .unwrap()
-            .extra
-            .is_empty());
+        later.extra.insert("zzzz".to_string(), json!("yes"));
+        let stored = later.sanitize_untrusted_client().unwrap();
+        assert_eq!(stored.extra.len(), 1);
+        assert_eq!(stored.extra["zzzz"], json!("yes"));
     }
 
     #[test]
