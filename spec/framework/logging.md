@@ -99,8 +99,9 @@ The shipper stores the full `user_agent`.
 The buffer keeps at most `capacity` events.
 When the buffer is full, a new event removes the oldest event.
 
-`LogShipper::spawn_ship_loop` sends every buffered event to the log server.
+`LogShipper::spawn_ship_loop` sends buffered events to the log server.
 The loop repeats that send on an interval.
+One interval sends one batch.
 The HTTP method is POST.
 The URL is `{endpoint}/log/{app}`.
 `{app}` is the shipper app.
@@ -114,7 +115,10 @@ The body is not a bare JSON array.
 Each event object has every field in the event table.
 Each event object has no `app` key.
 Each event object has no `project` key.
-The shipper takes those events out of the buffer before the POST.
+The shipper takes the oldest events out of the buffer before the POST.
+One batch has at most 1000 events.
+The other events stay in the buffer.
+The next interval sends the next oldest events.
 A response status from 200 through 299 leaves that batch out of the buffer.
 A transport error puts that batch back at the front of the buffer.
 An HTTP error status puts that batch back at the front of the buffer.
@@ -248,6 +252,9 @@ The function stores the full value text.
 The input is one `RequestJson`.
 The result is a list of events, or no batch.
 An empty `events` list returns no batch.
+The function returns no batch when `events` has more than 1000 events.
+The function accepts 1000 events when each event gives an event.
+One ship batch uses this same limit of 1000 events.
 The function returns no batch when one event gives no event.
 The function does not call `LogShipper::record`.
 The caller calls `LogShipper::record` for each kept event.

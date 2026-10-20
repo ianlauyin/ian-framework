@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::LogEvent;
 
 const DEFAULT_CAPACITY: usize = 10_000;
+const SHIP_CHUNK: usize = 1_000;
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,7 +34,7 @@ pub struct RequestJson {
 
 impl RequestJson {
     pub fn sanitize_untrusted_client(&self) -> Option<Vec<LogEvent>> {
-        if self.events.is_empty() {
+        if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
             return None;
         }
         let mut events = Vec::with_capacity(self.events.len());
@@ -161,7 +162,8 @@ impl LogShipper {
         };
         let batch = {
             let mut buffer = self.lock_buffer();
-            buffer.drain(..).collect::<Vec<_>>()
+            let count = SHIP_CHUNK.min(buffer.len());
+            buffer.drain(..count).collect::<Vec<_>>()
         };
         if batch.is_empty() {
             return;
@@ -235,6 +237,7 @@ pub(super) mod tests {
         assert_eq!(shipper.inner.app, "api");
         assert_eq!(shipper.inner.endpoint, None);
         assert_eq!(DEFAULT_CAPACITY, 10_000);
+        assert_eq!(SHIP_CHUNK, 1_000);
         assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
     }
 
@@ -391,6 +394,54 @@ pub(super) mod tests {
         assert!(serde_json::from_str::<Vec<LogEvent>>(&captured.body).is_err());
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
+    }
+
+    #[tokio::test]
+    async fn ship_batch_posts_one_chunk_and_leaves_the_rest() {
+        let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
+        let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
+        let total = SHIP_CHUNK + 1;
+        for index in 0..total {
+            shipper.record(event("", index.to_string(), LogLevel::Info));
+        }
+        shipper.ship_batch().await;
+        assert_eq!(shipper.buffered_len(), 1);
+        let captured = rx.recv().await.unwrap();
+        let events = parse_body(&captured.body);
+        assert_eq!(events.len(), SHIP_CHUNK);
+        assert_eq!(events[0].message, "0");
+        assert_eq!(events[SHIP_CHUNK - 1].message, (SHIP_CHUNK - 1).to_string());
+        assert_eq!(buffered_events(&shipper)[0].message, SHIP_CHUNK.to_string());
+        shipper.ship_batch().await;
+        assert_eq!(shipper.buffered_len(), 0);
+        let rest = rx.recv().await.unwrap();
+        let rest_events = parse_body(&rest.body);
+        assert_eq!(rest_events.len(), 1);
+        assert_eq!(rest_events[0].message, SHIP_CHUNK.to_string());
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_accepts_a_batch_at_the_ship_chunk() {
+        let body = RequestJson {
+            events: (0..SHIP_CHUNK)
+                .map(|_| event("/ok", "kept", LogLevel::Info))
+                .collect(),
+        };
+        let stored = body.sanitize_untrusted_client().unwrap();
+        assert_eq!(stored.len(), SHIP_CHUNK);
+        assert_eq!(stored[0].message, "kept");
+        assert_eq!(stored[0].id, "");
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_rejects_a_batch_above_the_ship_chunk() {
+        let body = RequestJson {
+            events: (0..=SHIP_CHUNK)
+                .map(|_| event("/ok", "kept", LogLevel::Info))
+                .collect(),
+        };
+        assert_eq!(body.events.len(), SHIP_CHUNK + 1);
+        assert!(body.sanitize_untrusted_client().is_none());
     }
 
     #[tokio::test]
