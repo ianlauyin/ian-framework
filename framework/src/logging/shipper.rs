@@ -19,32 +19,9 @@ pub struct ShipperConfig {
     pub capacity: usize,
 }
 
-impl ShipperConfig {
-    pub fn new(app: impl Into<String>, endpoint: impl Into<String>) -> Self {
-        Self {
-            app: app.into(),
-            endpoint: Some(endpoint.into()),
-            capacity: DEFAULT_CAPACITY,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogBatch {
     pub events: Vec<LogEvent>,
-}
-
-impl LogBatch {
-    pub fn sanitize_untrusted_client(&self) -> Option<Vec<LogEvent>> {
-        if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
-            return None;
-        }
-        let mut events = Vec::with_capacity(self.events.len());
-        for event in &self.events {
-            events.push(event.sanitize_untrusted_client()?);
-        }
-        Some(events)
-    }
 }
 
 #[derive(Clone)]
@@ -64,6 +41,29 @@ struct Inner {
     buffer: Mutex<Buffer>,
     http: Option<reqwest::Client>,
     shipping: tokio::sync::Mutex<()>,
+}
+
+impl ShipperConfig {
+    pub fn new(app: impl Into<String>, endpoint: impl Into<String>) -> Self {
+        Self {
+            app: app.into(),
+            endpoint: Some(endpoint.into()),
+            capacity: DEFAULT_CAPACITY,
+        }
+    }
+}
+
+impl LogBatch {
+    pub fn sanitize_untrusted_client(&self) -> Option<Vec<LogEvent>> {
+        if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
+            return None;
+        }
+        let mut events = Vec::with_capacity(self.events.len());
+        for event in &self.events {
+            events.push(event.sanitize_untrusted_client()?);
+        }
+        Some(events)
+    }
 }
 
 impl std::fmt::Debug for LogShipper {

@@ -24,15 +24,6 @@ pub struct GcsBackend {
     inner: Arc<Inner>,
 }
 
-struct Inner {
-    bucket: String,
-    email: String,
-    auth: Auth,
-    http: reqwest::Client,
-    token: tokio::sync::Mutex<Option<CachedToken>>,
-    ops_log: std::sync::Mutex<Option<crate::logging::LogShipper>>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GcsErrorKind {
     Auth,
@@ -47,6 +38,27 @@ pub struct GcsError {
     status: Option<u16>,
     message: String,
     source: Option<Box<dyn std::error::Error + Send + Sync>>,
+}
+
+pub(crate) struct Call {
+    pub method: reqwest::Method,
+    pub url: String,
+    pub headers: Vec<(reqwest::header::HeaderName, String)>,
+    pub json: Option<serde_json::Value>,
+    pub bytes: Option<Vec<u8>>,
+
+    pub extra_status: &'static [u16],
+
+    pub timeout: Option<Duration>,
+}
+
+struct Inner {
+    bucket: String,
+    email: String,
+    auth: Auth,
+    http: reqwest::Client,
+    token: tokio::sync::Mutex<Option<CachedToken>>,
+    ops_log: std::sync::Mutex<Option<crate::logging::LogShipper>>,
 }
 
 impl GcsError {
@@ -213,18 +225,6 @@ fn http_client() -> Result<reqwest::Client, GcsError> {
     builder.build().map_err(|err| {
         GcsError::with_source(GcsErrorKind::Transport, "cannot build the HTTP client", err)
     })
-}
-
-pub(crate) struct Call {
-    pub method: reqwest::Method,
-    pub url: String,
-    pub headers: Vec<(reqwest::header::HeaderName, String)>,
-    pub json: Option<serde_json::Value>,
-    pub bytes: Option<Vec<u8>>,
-
-    pub extra_status: &'static [u16],
-
-    pub timeout: Option<Duration>,
 }
 
 pub(crate) fn is_retryable(err: &GcsError) -> bool {
