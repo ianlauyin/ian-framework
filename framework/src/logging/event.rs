@@ -26,7 +26,11 @@ pub struct LogEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
-pub(crate) fn event(action: impl Into<String>, message: impl Into<String>, level: LogLevel) -> LogEvent {
+pub(crate) fn event(
+    action: impl Into<String>,
+    message: impl Into<String>,
+    level: LogLevel,
+) -> LogEvent {
     LogEvent {
         ts: Utc::now(),
         id: String::new(),
@@ -39,6 +43,86 @@ pub(crate) fn event(action: impl Into<String>, message: impl Into<String>, level
         message: message.into(),
         extra: BTreeMap::new(),
     }
+}
+
+const EXTRA_KEY_LIMIT: usize = 8;
+const EXTRA_KEY_MAX_LEN: usize = 64;
+const EXTRA_VALUE_MAX_BYTES: usize = 200;
+
+impl LogEvent {
+    pub fn sanitize_untrusted_client(&self) -> Option<LogEvent> {
+        let message = self.message.trim();
+        if message.is_empty() {
+            return None;
+        }
+        Some(LogEvent {
+            ts: Utc::now(),
+            id: String::new(),
+            ip: String::new(),
+            user_agent: String::new(),
+            action: path_only(&self.action),
+            status: None,
+            latency_ms: None,
+            level: self.level,
+            message: message.to_string(),
+            extra: client_extra(&self.extra),
+        })
+    }
+}
+
+fn path_only(action: &str) -> String {
+    let end = action.find(['?', '#']).unwrap_or(action.len());
+    let path = &action[..end];
+    if path.is_empty() {
+        "/".to_string()
+    } else {
+        path.to_string()
+    }
+}
+
+fn client_extra(extra: &BTreeMap<String, Value>) -> BTreeMap<String, Value> {
+    let mut kept = BTreeMap::new();
+    for (key, value) in extra.iter().take(EXTRA_KEY_LIMIT) {
+        if !extra_key_ok(key) {
+            continue;
+        }
+        let Some(text) = extra_value(value) else {
+            continue;
+        };
+        kept.insert(key.clone(), Value::String(text));
+    }
+    kept
+}
+
+fn extra_key_ok(key: &str) -> bool {
+    (1..=EXTRA_KEY_MAX_LEN).contains(&key.len())
+        && key
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+}
+
+fn extra_value(value: &Value) -> Option<String> {
+    let text = match value {
+        Value::String(text) => text.clone(),
+        Value::Number(number) => number.to_string(),
+        Value::Bool(flag) => flag.to_string(),
+        _ => return None,
+    };
+    if text.contains('\r') || text.contains('\n') {
+        return None;
+    }
+    Some(truncate(&text, EXTRA_VALUE_MAX_BYTES).to_string())
+}
+
+fn truncate(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
 }
 
 #[cfg(test)]
@@ -146,5 +230,188 @@ mod tests {
     fn a_missing_schema_field_is_rejected() {
         let json = r#"{"ts":"2026-10-18T12:00:00Z","message":"note"}"#;
         assert!(serde_json::from_str::<LogEvent>(json).is_err());
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_drops_untrusted_fields() {
+        let mut event = event(
+            "GET /download?sig=abc#top",
+            "  saved file  ",
+            LogLevel::Warn,
+        );
+        event.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        event.id = "client-id".to_string();
+        event.ip = "203.0.113.8".to_string();
+        event.user_agent = "browser".to_string();
+        event.status = Some(500);
+        event.latency_ms = Some(42);
+        let before = Utc::now();
+        let stored = event.sanitize_untrusted_client().unwrap();
+        let after = Utc::now();
+        assert_eq!(event.id, "client-id");
+        assert_eq!(stored.id, "");
+        assert_eq!(stored.ip, "");
+        assert_eq!(stored.user_agent, "");
+        assert_eq!(stored.status, None);
+        assert_eq!(stored.latency_ms, None);
+        assert_eq!(stored.level, LogLevel::Warn);
+        assert_eq!(stored.message, "saved file");
+        assert_eq!(stored.action, "GET /download");
+        assert_ne!(stored.ts, event.ts);
+        assert!(stored.ts >= before && stored.ts <= after);
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_keeps_the_path_only() {
+        let cases = [
+            ("/api/foo?x=1", "/api/foo"),
+            ("/api/foo#part", "/api/foo"),
+            ("/api/foo?x=1#part", "/api/foo"),
+            ("/api/foo#part?x=1", "/api/foo"),
+            ("", "/"),
+            ("?x=1", "/"),
+            ("#part", "/"),
+            ("/", "/"),
+            ("GET /api/foo?token=secret", "GET /api/foo"),
+            ("plain", "plain"),
+        ];
+        for (action, expect) in cases {
+            let stored = event(action, "ok", LogLevel::Info)
+                .sanitize_untrusted_client()
+                .unwrap();
+            assert_eq!(stored.action, expect, "{action}");
+        }
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_limits_extra() {
+        let mut client = event("/files", "note", LogLevel::Info);
+        client.extra.insert("bad key".to_string(), json!("no"));
+        client.extra.insert("k01".to_string(), json!("kept"));
+        client.extra.insert("k02".to_string(), json!("a\nb"));
+        client.extra.insert("k03".to_string(), json!("a\rb"));
+        client.extra.insert("k04".to_string(), json!(null));
+        client.extra.insert("k05".to_string(), json!({"a": 1}));
+        client.extra.insert("k06".to_string(), json!([1]));
+        client
+            .extra
+            .insert("k07".to_string(), json!("x".repeat(250)));
+        client.extra.insert("k08".to_string(), json!("ninth"));
+        client.extra.insert("k09".to_string(), json!(true));
+        let stored = client.sanitize_untrusted_client().unwrap();
+        assert_eq!(
+            stored.extra.keys().cloned().collect::<Vec<_>>(),
+            vec!["k01".to_string(), "k07".to_string(),]
+        );
+        assert_eq!(stored.extra["k01"], json!("kept"));
+        assert_eq!(stored.extra["k07"], json!("x".repeat(200)));
+        assert!(!stored.extra.contains_key("k08"));
+        assert!(!stored.extra.contains_key("k09"));
+        assert!(!stored.extra.contains_key("bad key"));
+
+        let mut scalars = event("/files", "note", LogLevel::Error);
+        scalars.extra.insert("a/b".to_string(), json!("no"));
+        scalars.extra.insert("a_b-c.d".to_string(), json!("yes"));
+        scalars.extra.insert("a".repeat(64), json!("yes"));
+        scalars.extra.insert("a".repeat(65), json!("no"));
+        scalars.extra.insert("count".to_string(), json!(12));
+        scalars.extra.insert("flag".to_string(), json!(true));
+        scalars.extra.insert("off".to_string(), json!(false));
+        scalars.extra.insert("ratio".to_string(), json!(1.5));
+        let stored = scalars.sanitize_untrusted_client().unwrap();
+        assert_eq!(stored.extra.get("a/b"), None);
+        assert_eq!(stored.extra.get(&"a".repeat(65)), None);
+        assert_eq!(stored.extra[&"a".repeat(64)], json!("yes"));
+        assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
+        assert_eq!(stored.extra["count"], json!("12"));
+        assert_eq!(stored.extra["flag"], json!("true"));
+        assert_eq!(stored.extra["off"], json!("false"));
+        assert_eq!(stored.extra["ratio"], json!("1.5"));
+
+        let mut text = event("/files", "note", LogLevel::Info);
+        text.extra.insert(String::new(), json!("no"));
+        text.extra.insert("café".to_string(), json!("no"));
+        text.extra.insert("ok!".to_string(), json!("no"));
+        text.extra
+            .insert("exact".to_string(), json!("y".repeat(200)));
+        text.extra
+            .insert("text".to_string(), json!("中".repeat(67)));
+        text.extra
+            .insert("accent".to_string(), json!("é".repeat(101)));
+        let stored = text.sanitize_untrusted_client().unwrap();
+        assert_eq!(stored.extra.get(""), None);
+        assert_eq!(stored.extra.get("café"), None);
+        assert_eq!(stored.extra.get("ok!"), None);
+        assert_eq!(stored.extra["exact"], json!("y".repeat(200)));
+        assert_eq!(stored.extra["text"], json!("中".repeat(66)));
+        assert_eq!(stored.extra["text"].as_str().unwrap().len(), 198);
+        assert_eq!(stored.extra["accent"], json!("é".repeat(100)));
+        assert_eq!(stored.extra["accent"].as_str().unwrap().len(), 200);
+
+        let mut blocked = event("/files", "note", LogLevel::Info);
+        for index in 0..8 {
+            blocked.extra.insert(format!("bad {index}"), json!("no"));
+        }
+        blocked.extra.insert("zzzz".to_string(), json!("yes"));
+        assert!(blocked
+            .sanitize_untrusted_client()
+            .unwrap()
+            .extra
+            .is_empty());
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_rejects_a_blank_message() {
+        for message in ["", " ", "\n", "\t", " \r\n "] {
+            assert!(
+                event("/ok", message, LogLevel::Info)
+                    .sanitize_untrusted_client()
+                    .is_none(),
+                "{message:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_rejects_an_empty_batch() {
+        let body = RequestJson { events: vec![] };
+        assert!(body.sanitize_untrusted_client().is_none());
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_rejects_the_batch_when_one_event_fails() {
+        let body = RequestJson {
+            events: vec![
+                event("/ok", "kept", LogLevel::Info),
+                event("/ok", "   ", LogLevel::Warn),
+                event("/ok", "also", LogLevel::Error),
+            ],
+        };
+        assert!(body.sanitize_untrusted_client().is_none());
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_returns_sanitized_events() {
+        let body = RequestJson {
+            events: vec![
+                event("/a?x=1", " one ", LogLevel::Info),
+                event("#frag", "two", LogLevel::Error),
+            ],
+        };
+        let stored = body.sanitize_untrusted_client().unwrap();
+        assert_eq!(stored.len(), 2);
+        assert_eq!(stored[0].action, "/a");
+        assert_eq!(stored[0].message, "one");
+        assert_eq!(stored[0].level, LogLevel::Info);
+        assert_eq!(stored[0].id, "");
+        assert_eq!(stored[0].ip, "");
+        assert_eq!(stored[0].user_agent, "");
+        assert_eq!(stored[0].status, None);
+        assert_eq!(stored[0].latency_ms, None);
+        assert_eq!(stored[1].action, "/");
+        assert_eq!(stored[1].message, "two");
+        assert_eq!(stored[1].level, LogLevel::Error);
     }
 }
