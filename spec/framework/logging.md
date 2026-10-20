@@ -197,6 +197,75 @@ A status from 400 through 499 has level `warn`.
 A status below 400 has level `info`.
 A log failure does not change the HTTP response.
 
+## Untrusted client intake
+
+A client can send log events.
+The client is not trusted.
+`LogEvent::sanitize_untrusted_client` checks one event.
+The input is a reference to one `LogEvent`.
+The result is one event, or no event.
+The function does not change the input event.
+The function removes spaces at the start and at the end of `message`.
+An empty message after that removal returns no event.
+The function does not keep these client fields:
+
+- `id`
+- `ip`
+- `user_agent`
+- `status`
+- `latency_ms`
+- `ts`
+
+The stored `id` is an empty string.
+The stored `ip` is an empty string.
+The stored `user_agent` is an empty string.
+The stored `status` is null.
+The stored `latency_ms` is null.
+The stored `ts` is the current UTC time.
+The function keeps the client `level`.
+The function keeps the client `action`.
+The function stores the `message` after it removes those spaces.
+The function reads every `extra` key.
+An empty key is not stored.
+A key is stored only when each character is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.
+A value is stored only when it is a string, a number, or a `bool`.
+The function does not store these values:
+
+- An array
+- An object
+- Null
+- Text that contains `\r`
+- Text that contains `\n`
+
+The function stores a string as that string.
+The function stores a number as its number text.
+The function stores a true value as `true`.
+The function stores a false value as `false`.
+Each stored value is a string.
+The function stores the full value text.
+
+`RequestJson::sanitize_untrusted_client` checks one batch.
+The input is one `RequestJson`.
+The result is a list of events, or no batch.
+An empty `events` list returns no batch.
+The function returns no batch when one event gives no event.
+The function does not call `LogShipper::record`.
+The caller calls `LogShipper::record` for each kept event.
+`body` is one `RequestJson`.
+`shipper` is one `LogShipper`.
+
+```rust
+if let Some(events) = body.sanitize_untrusted_client() {
+    for event in events {
+        shipper.record(event);
+    }
+}
+```
+
+The app keeps the HTTP handler.
+This function does not set an HTTP status.
+This function does not set a body size limit.
+
 ## Out of scope
 
 This feature does not include these items:

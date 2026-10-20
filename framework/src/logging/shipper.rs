@@ -31,6 +31,19 @@ pub struct RequestJson {
     pub events: Vec<LogEvent>,
 }
 
+impl RequestJson {
+    pub fn sanitize_untrusted_client(&self) -> Option<Vec<LogEvent>> {
+        if self.events.is_empty() {
+            return None;
+        }
+        let mut events = Vec::with_capacity(self.events.len());
+        for event in &self.events {
+            events.push(event.sanitize_untrusted_client()?);
+        }
+        Some(events)
+    }
+}
+
 #[derive(Clone)]
 pub struct LogShipper {
     inner: Arc<Inner>,
