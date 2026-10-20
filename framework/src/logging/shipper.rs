@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use super::LogEvent;
 
 const DEFAULT_CAPACITY: usize = 10_000;
+pub const MAX_EVENTS: usize = DEFAULT_CAPACITY;
+pub const MAX_BYTES: usize = DEFAULT_CAPACITY;
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,12 +35,18 @@ pub struct RequestJson {
 
 impl RequestJson {
     pub fn sanitize_untrusted_client(&self) -> Option<Vec<LogEvent>> {
-        if self.events.is_empty() {
+        if self.events.is_empty() || self.events.len() > MAX_EVENTS {
             return None;
         }
         let mut events = Vec::with_capacity(self.events.len());
+        let mut bytes = 0usize;
         for event in &self.events {
-            events.push(event.sanitize_untrusted_client()?);
+            let stored = event.sanitize_untrusted_client()?;
+            bytes = bytes.saturating_add(super::event::json_byte_len(&stored));
+            if bytes > MAX_BYTES {
+                return None;
+            }
+            events.push(stored);
         }
         Some(events)
     }
@@ -235,6 +243,10 @@ pub(super) mod tests {
         assert_eq!(shipper.inner.app, "api");
         assert_eq!(shipper.inner.endpoint, None);
         assert_eq!(DEFAULT_CAPACITY, 10_000);
+        assert_eq!(MAX_EVENTS, DEFAULT_CAPACITY);
+        assert_eq!(MAX_BYTES, DEFAULT_CAPACITY);
+        assert_eq!(crate::logging::MAX_EVENTS, MAX_EVENTS);
+        assert_eq!(crate::logging::MAX_BYTES, MAX_BYTES);
         assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
     }
 
@@ -327,6 +339,24 @@ pub(super) mod tests {
         assert_eq!(stored.id, id);
         assert_eq!(stored.ip, ip);
         assert_eq!(stored.user_agent, user_agent);
+    }
+
+    #[test]
+    fn record_keeps_an_event_above_the_untrusted_byte_limit() {
+        let shipper = buffer_only();
+        let mut trusted = event("GET /api/files", "m".repeat(MAX_BYTES + 50), LogLevel::Info);
+        trusted.ip = "203.0.113.8".to_string();
+        trusted.user_agent = "demo-agent".to_string();
+        trusted.status = Some(204);
+        trusted.latency_ms = Some(12);
+        let message = trusted.message.clone();
+        shipper.record(trusted);
+        let stored = buffered_events(&shipper).remove(0);
+        assert_eq!(stored.message, message);
+        assert_eq!(stored.ip, "203.0.113.8");
+        assert_eq!(stored.user_agent, "demo-agent");
+        assert_eq!(stored.status, Some(204));
+        assert_eq!(stored.latency_ms, Some(12));
     }
 
     #[tokio::test]

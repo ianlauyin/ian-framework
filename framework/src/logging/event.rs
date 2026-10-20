@@ -51,7 +51,7 @@ impl LogEvent {
         if message.is_empty() {
             return None;
         }
-        Some(LogEvent {
+        let stored = LogEvent {
             ts: Utc::now(),
             id: String::new(),
             ip: String::new(),
@@ -62,8 +62,18 @@ impl LogEvent {
             level: self.level,
             message: message.to_string(),
             extra: client_extra(&self.extra),
-        })
+        };
+        if json_byte_len(&stored) > super::shipper::MAX_BYTES {
+            return None;
+        }
+        Some(stored)
     }
+}
+
+pub(super) fn json_byte_len(event: &LogEvent) -> usize {
+    serde_json::to_vec(event)
+        .map(|bytes| bytes.len())
+        .unwrap_or(usize::MAX)
 }
 
 fn client_extra(extra: &BTreeMap<String, Value>) -> BTreeMap<String, Value> {
@@ -327,6 +337,50 @@ mod tests {
         let stored = later.sanitize_untrusted_client().unwrap();
         assert_eq!(stored.extra.len(), 1);
         assert_eq!(stored.extra["zzzz"], json!("yes"));
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_rejects_an_event_above_max_bytes() {
+        use crate::logging::MAX_BYTES;
+
+        assert!(event("/ok", "m".repeat(MAX_BYTES), LogLevel::Info)
+            .sanitize_untrusted_client()
+            .is_none());
+        let mut cleared = event("/ok", "kept", LogLevel::Info);
+        cleared.id = "i".repeat(MAX_BYTES);
+        cleared.ip = "p".repeat(MAX_BYTES);
+        cleared.user_agent = "u".repeat(MAX_BYTES);
+        let stored = cleared.sanitize_untrusted_client().unwrap();
+        assert_eq!(stored.message, "kept");
+        assert_eq!(stored.id, "");
+        assert_eq!(stored.ip, "");
+        assert_eq!(stored.user_agent, "");
+    }
+
+    #[test]
+    fn sanitize_untrusted_client_rejects_a_batch_above_the_caps() {
+        use crate::logging::{MAX_BYTES, MAX_EVENTS};
+
+        let over_count = RequestJson {
+            events: (0..=MAX_EVENTS)
+                .map(|_| event("/ok", "m", LogLevel::Info))
+                .collect(),
+        };
+        assert!(over_count.sanitize_untrusted_client().is_none());
+
+        let wide = "m".repeat(6_000);
+        let one = event("/ok", wide.clone(), LogLevel::Info)
+            .sanitize_untrusted_client()
+            .unwrap();
+        assert!(super::json_byte_len(&one) <= MAX_BYTES);
+        assert!(super::json_byte_len(&one) * 2 > MAX_BYTES);
+        let over_bytes = RequestJson {
+            events: vec![
+                event("/ok", wide.clone(), LogLevel::Info),
+                event("/ok", wide, LogLevel::Info),
+            ],
+        };
+        assert!(over_bytes.sanitize_untrusted_client().is_none());
     }
 
     #[test]

@@ -90,6 +90,8 @@ A forbidden character in the app returns no shipper.
 `capacity` of zero returns no shipper.
 
 `LogShipper::record` stores one event in the local buffer.
+`LogShipper::record` does not apply `MAX_EVENTS`.
+`LogShipper::record` does not apply `MAX_BYTES`.
 The shipper does not write `app` into the event.
 The shipper stores the full `message`.
 The shipper stores the full `action`.
@@ -243,11 +245,28 @@ The function stores a true value as `true`.
 The function stores a false value as `false`.
 Each stored value is a string.
 The function stores the full value text.
+The function does not cut that text.
+
+`MAX_EVENTS` is 10000.
+`MAX_BYTES` is 10000.
+The code writes 10000 in the default capacity constant.
+`MAX_EVENTS` uses that constant.
+`MAX_BYTES` uses that constant.
+`MAX_BYTES` is that number of bytes.
+`MAX_EVENTS` and `MAX_BYTES` apply only to untrusted client intake.
+`LogShipper::record` does not apply these limits.
+
+The byte size of one stored event is the number of bytes in its JSON object.
+`LogEvent::sanitize_untrusted_client` returns no event when that byte size is above `MAX_BYTES`.
+Fields that this function clears do not add to that byte size.
 
 `RequestJson::sanitize_untrusted_client` checks one batch.
 The input is one `RequestJson`.
 The result is a list of events, or no batch.
 An empty `events` list returns no batch.
+The function returns no batch when the event count is above `MAX_EVENTS`.
+The byte size of a batch is the sum of the byte sizes of its stored events.
+The function returns no batch when that sum is above `MAX_BYTES`.
 The function returns no batch when one event gives no event.
 The function does not call `LogShipper::record`.
 The caller calls `LogShipper::record` for each kept event.
@@ -264,7 +283,7 @@ if let Some(events) = body.sanitize_untrusted_client() {
 
 The app keeps the HTTP handler.
 This function does not set an HTTP status.
-This function does not set a body size limit.
+This function does not set an Axum body limit.
 
 ## Out of scope
 
