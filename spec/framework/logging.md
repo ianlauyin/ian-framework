@@ -99,6 +99,39 @@ The shipper stores the full `user_agent`.
 The buffer keeps at most `capacity` events.
 When the buffer is full, a new event removes the oldest event.
 
+After `LogShipper::record` stores the event, the shipper reads the buffer length.
+The 80 percent limit is the smallest whole number that is at least 80 percent of `capacity`.
+The length meets that limit when five times the length is at least four times `capacity`.
+
+| capacity | 80 percent limit |
+| --- | --- |
+| 1 | 1 |
+| 4 | 4 |
+| 5 | 4 |
+| 10000 | 8000 |
+
+When the length meets the limit, `LogShipper::record` stores one new capacity warning.
+The shipper does not change the other events.
+The warning is one event at the end of the buffer.
+The warning has these fields:
+
+| field | value |
+| --- | --- |
+| `ts` | current UTC time |
+| `id` | empty string |
+| `ip` | empty string |
+| `user_agent` | empty string |
+| `action` | empty string |
+| `status` | null |
+| `latency_ms` | null |
+| `level` | `warn` |
+| `message` | `capacity meets 80%` |
+| `extra` | empty object |
+
+When that warning would make the buffer larger than `capacity`, the shipper removes the oldest event first.
+The shipper stores this warning on the record that makes the length meet the limit.
+The shipper does not store the warning again while the length stays at or above the limit.
+
 `LogShipper::spawn_ship_loop` sends buffered events to the log server.
 The loop repeats that send on an interval.
 One interval sends one batch.
@@ -123,6 +156,11 @@ A response status from 200 through 299 leaves that batch out of the buffer.
 A transport error puts that batch back at the front of the buffer.
 An HTTP error status puts that batch back at the front of the buffer.
 When that return makes the buffer larger than `capacity`, the shipper removes the newest events above the capacity.
+A successful ship that leaves the buffer length lower than the 80 percent limit lets `LogShipper::record` store the capacity warning again.
+The next record that makes the length meet the limit stores one new warning.
+A successful ship that leaves the length at or above the limit does not store another warning.
+A failed ship does not store a second warning.
+When a failed ship puts the batch back and the length meets the limit, the next record does not store another warning.
 The ship request time limit is 10 seconds.
 An interval of zero returns no task.
 The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
