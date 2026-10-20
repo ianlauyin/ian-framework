@@ -162,24 +162,6 @@ impl LogShipper {
         buffer.push_back(event);
     }
 
-    pub fn record_untrusted(&self, event: LogEvent) -> bool {
-        let Some(event) = event.sanitize_untrusted_client() else {
-            return false;
-        };
-        self.record(event);
-        true
-    }
-
-    pub fn record_client_batch(&self, body: &RequestJson) -> bool {
-        let Some(events) = body.sanitize_untrusted_client() else {
-            return false;
-        };
-        for event in events {
-            self.record(event);
-        }
-        true
-    }
-
     async fn ship_batch(&self) {
         let _shipping = self.inner.shipping.lock().await;
         let Some(endpoint) = self.inner.endpoint.clone() else {
@@ -246,8 +228,6 @@ pub(super) mod tests {
     use super::super::event::event;
     use super::*;
     use crate::logging::LogLevel;
-    use chrono::{DateTime, Utc};
-    use serde_json::json;
 
     pub(crate) fn buffered_events(shipper: &LogShipper) -> Vec<LogEvent> {
         shipper.lock_buffer().iter().cloned().collect()
@@ -379,53 +359,6 @@ pub(super) mod tests {
         assert_eq!(stored.latency_ms, Some(12));
     }
 
-    #[test]
-    fn record_untrusted_rejects_a_blank_message() {
-        let shipper = buffer_only();
-        shipper.record(event("GET /health", "request", LogLevel::Info));
-        for message in ["", " ", "\n", "\t", " \r\n "] {
-            assert!(
-                !shipper.record_untrusted(event("/ok", message, LogLevel::Info)),
-                "{message:?}"
-            );
-        }
-        let left = buffered_events(&shipper);
-        assert_eq!(left.len(), 1);
-        assert_eq!(left[0].message, "request");
-        assert_eq!(left[0].action, "GET /health");
-    }
-
-    #[test]
-    fn record_client_batch_rejects_a_bad_batch() {
-        let shipper = buffer_only();
-        shipper.record(event("GET /health", "request", LogLevel::Info));
-        assert!(!shipper.record_client_batch(&RequestJson { events: vec![] }));
-        assert!(!shipper.record_client_batch(&RequestJson {
-            events: vec![
-                event("/ok", "kept", LogLevel::Info),
-                event("/ok", "   ", LogLevel::Warn),
-                event("/ok", "also", LogLevel::Error),
-            ],
-        }));
-        assert!(!shipper.record_untrusted(event("/ok", "m".repeat(MAX_BYTES), LogLevel::Info,)));
-        assert!(!shipper.record_client_batch(&RequestJson {
-            events: (0..=MAX_EVENTS)
-                .map(|_| event("/ok", "m", LogLevel::Info))
-                .collect(),
-        }));
-        let wide = "m".repeat(6_000);
-        assert!(!shipper.record_client_batch(&RequestJson {
-            events: vec![
-                event("/a", wide.clone(), LogLevel::Info),
-                event("/b", wide, LogLevel::Warn),
-            ],
-        }));
-        let left = buffered_events(&shipper);
-        assert_eq!(left.len(), 1);
-        assert_eq!(left[0].message, "request");
-        assert_eq!(left[0].action, "GET /health");
-    }
-
     #[tokio::test]
     async fn unset_endpoint_keeps_events_without_http() {
         let shipper = buffer_only();
@@ -488,143 +421,6 @@ pub(super) mod tests {
         assert!(serde_json::from_str::<Vec<LogEvent>>(&captured.body).is_err());
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
-    }
-
-    #[tokio::test]
-    async fn record_ships_middleware_fields() {
-        let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let shipper = LogShipper::new(ShipperConfig::new("cs", endpoint)).unwrap();
-        let trusted_ts = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        let mut trusted = event("GET /api/files", "request", LogLevel::Info);
-        trusted.ts = trusted_ts;
-        trusted.id = "req-1".to_string();
-        trusted.ip = "203.0.113.8".to_string();
-        trusted.user_agent = "demo-agent".to_string();
-        trusted.status = Some(204);
-        trusted.latency_ms = Some(12);
-        shipper.record(trusted);
-        shipper.ship_batch().await;
-        let captured = rx.recv().await.unwrap();
-        assert_eq!(captured.path, "/log/cs");
-        let posted = parse_body(&captured.body);
-        assert_eq!(posted.len(), 1);
-        assert_eq!(posted[0].ts, trusted_ts);
-        assert_eq!(posted[0].id, "req-1");
-        assert_eq!(posted[0].ip, "203.0.113.8");
-        assert_eq!(posted[0].user_agent, "demo-agent");
-        assert_eq!(posted[0].action, "GET /api/files");
-        assert_eq!(posted[0].status, Some(204));
-        assert_eq!(posted[0].latency_ms, Some(12));
-        assert_eq!(posted[0].level, LogLevel::Info);
-        assert_eq!(posted[0].message, "request");
-    }
-
-    #[tokio::test]
-    async fn record_untrusted_sanitizes_before_post() {
-        let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let shipper = LogShipper::new(ShipperConfig::new("cs", endpoint)).unwrap();
-        let mut client = event("GET /download?sig=abc", "  saved file  ", LogLevel::Warn);
-        client.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        client.id = "client-id".to_string();
-        client.ip = "198.51.100.9".to_string();
-        client.user_agent = "browser".to_string();
-        client.status = Some(500);
-        client.latency_ms = Some(42);
-        client.extra.insert("note".to_string(), json!("ok"));
-        client.extra.insert("bad key".to_string(), json!("no"));
-        client.extra.insert("lines".to_string(), json!("a\nb"));
-        let before = Utc::now();
-        assert!(shipper.record_untrusted(client));
-        let after = Utc::now();
-        let buffered = buffered_events(&shipper);
-        assert_eq!(buffered.len(), 1);
-        assert_eq!(buffered[0].ip, "");
-        assert_eq!(buffered[0].status, None);
-        shipper.ship_batch().await;
-        let posted = parse_body(&rx.recv().await.unwrap().body);
-        assert_eq!(posted.len(), 1);
-        assert_eq!(posted[0].id, "");
-        assert_eq!(posted[0].ip, "");
-        assert_eq!(posted[0].user_agent, "");
-        assert_eq!(posted[0].status, None);
-        assert_eq!(posted[0].latency_ms, None);
-        assert_eq!(posted[0].action, "GET /download?sig=abc");
-        assert_eq!(posted[0].message, "saved file");
-        assert_eq!(posted[0].level, LogLevel::Warn);
-        assert_eq!(posted[0].extra["note"], json!("ok"));
-        assert!(posted[0].extra.get("bad key").is_none());
-        assert!(posted[0].extra.get("lines").is_none());
-        assert!(posted[0].ts >= before && posted[0].ts <= after);
-    }
-
-    #[tokio::test]
-    async fn record_client_batch_sanitizes_before_post() {
-        let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let shipper = LogShipper::new(ShipperConfig::new("cs", endpoint)).unwrap();
-        let mut trusted = event("POST /api/files", "request", LogLevel::Warn);
-        let trusted_ts = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        trusted.ts = trusted_ts;
-        trusted.id = "req-9".to_string();
-        trusted.ip = "203.0.113.8".to_string();
-        trusted.user_agent = "demo-agent".to_string();
-        trusted.status = Some(400);
-        trusted.latency_ms = Some(30);
-        shipper.record(trusted);
-
-        let mut first = event("/a?x=1", " one ", LogLevel::Info);
-        first.id = "c1".to_string();
-        first.ip = "203.0.113.1".to_string();
-        first.user_agent = "ua-1".to_string();
-        first.status = Some(201);
-        first.latency_ms = Some(3);
-        first.ts = DateTime::parse_from_rfc3339("1999-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        let mut second = event("#frag", "two", LogLevel::Error);
-        second.id = "c2".to_string();
-        second.ip = "203.0.113.2".to_string();
-        second.user_agent = "ua-2".to_string();
-        second.status = Some(500);
-        second.latency_ms = Some(9);
-        let before = Utc::now();
-        assert!(shipper.record_client_batch(&RequestJson {
-            events: vec![first, second],
-        }));
-        let after = Utc::now();
-        shipper.ship_batch().await;
-        let posted = parse_body(&rx.recv().await.unwrap().body);
-        assert_eq!(posted.len(), 3);
-        assert_eq!(posted[0].ts, trusted_ts);
-        assert_eq!(posted[0].id, "req-9");
-        assert_eq!(posted[0].ip, "203.0.113.8");
-        assert_eq!(posted[0].user_agent, "demo-agent");
-        assert_eq!(posted[0].status, Some(400));
-        assert_eq!(posted[0].latency_ms, Some(30));
-        assert_eq!(posted[0].action, "POST /api/files");
-        assert_eq!(posted[0].message, "request");
-        assert_eq!(posted[1].action, "/a?x=1");
-        assert_eq!(posted[1].message, "one");
-        assert_eq!(posted[1].level, LogLevel::Info);
-        assert_eq!(posted[1].id, "");
-        assert_eq!(posted[1].ip, "");
-        assert_eq!(posted[1].user_agent, "");
-        assert_eq!(posted[1].status, None);
-        assert_eq!(posted[1].latency_ms, None);
-        assert!(posted[1].ts >= before && posted[1].ts <= after);
-        assert_eq!(posted[2].action, "#frag");
-        assert_eq!(posted[2].message, "two");
-        assert_eq!(posted[2].level, LogLevel::Error);
-        assert_eq!(posted[2].id, "");
-        assert_eq!(posted[2].ip, "");
-        assert_eq!(posted[2].user_agent, "");
-        assert_eq!(posted[2].status, None);
-        assert_eq!(posted[2].latency_ms, None);
     }
 
     #[tokio::test]

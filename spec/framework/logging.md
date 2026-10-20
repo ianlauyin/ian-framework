@@ -101,11 +101,6 @@ The shipper stores the full `user_agent`.
 The buffer keeps at most `capacity` events.
 When the buffer is full, a new event removes the oldest event.
 
-`LogShipper::record_untrusted` stores one untrusted client event.
-`LogShipper::record_client_batch` stores one untrusted client batch.
-Those methods sanitize the client input, then call `LogShipper::record`.
-The section Untrusted client intake gives the rules.
-
 `LogShipper::spawn_ship_loop` sends every buffered event to the log server.
 The loop repeats that send on an interval.
 The HTTP method is POST.
@@ -131,10 +126,6 @@ An interval of zero returns no task.
 The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
 A ship failure does not stop the loop.
 An empty buffer with an endpoint does not send an HTTP request.
-The ship loop posts each buffered event as stored.
-The ship loop does not sanitize buffered events.
-The ship loop does not apply `MAX_EVENTS`.
-The ship loop does not apply `MAX_BYTES`.
 
 The path app selects the log stream.
 A log server stores its project from the path app.
@@ -212,50 +203,6 @@ A log failure does not change the HTTP response.
 
 A client can send log events.
 The client is not trusted.
-The app wires `POST /api/logs` to `LogShipper::record_client_batch`.
-The app does not write a sanitize function.
-The app does not call `LogShipper::record` for a client event.
-The app keeps the HTTP handler.
-This crate does not set an HTTP status.
-This crate does not set an Axum body limit.
-This crate does not add an Axum route.
-
-```rust
-let accepted = shipper.record_client_batch(&body);
-```
-
-`body` is one `RequestJson`.
-`shipper` is one `LogShipper`.
-`accepted` is true when the shipper stored every event.
-`accepted` is false when the shipper stored nothing.
-
-`LogShipper::record_untrusted` stores one client event.
-The input is one `LogEvent`.
-The method calls `LogEvent::sanitize_untrusted_client`.
-The method calls `LogShipper::record` with the sanitized event.
-A blank message stores nothing.
-An event above `MAX_BYTES` stores nothing.
-The method returns false when it stores nothing.
-The method returns true when it stores the event.
-
-`LogShipper::record_client_batch` stores one client batch.
-The input is a reference to one `RequestJson`.
-The method calls `RequestJson::sanitize_untrusted_client`.
-The method calls `LogShipper::record` for each kept event.
-An empty `events` list stores nothing.
-One bad event stores nothing.
-A batch above `MAX_EVENTS` stores nothing.
-A batch above `MAX_BYTES` stores nothing.
-The method returns false when it stores nothing.
-The method returns true when it stores every event.
-A false result does not remove events that are already in the buffer.
-
-`LogShipper::record` does not sanitize.
-`LogShipper::record` does not call `LogShipper::record_untrusted`.
-`LogShipper::record` does not call `LogShipper::record_client_batch`.
-The ship loop posts buffered events as stored.
-The ship loop does not sanitize buffered events.
-
 `LogEvent::sanitize_untrusted_client` checks one event.
 The input is a reference to one `LogEvent`.
 The result is one event, or no event.
@@ -307,8 +254,6 @@ The code writes 10000 in the default capacity constant.
 `MAX_BYTES` uses that constant.
 `MAX_BYTES` is that number of bytes.
 `MAX_EVENTS` and `MAX_BYTES` apply only to untrusted client intake.
-`LogShipper::record_untrusted` applies these limits.
-`LogShipper::record_client_batch` applies these limits.
 `LogShipper::record` does not apply these limits.
 
 The byte size of one stored event is the number of bytes in its JSON object.
@@ -324,8 +269,21 @@ The byte size of a batch is the sum of the byte sizes of its stored events.
 The function returns no batch when that sum is above `MAX_BYTES`.
 The function returns no batch when one event gives no event.
 The function does not call `LogShipper::record`.
-`LogShipper::record_client_batch` calls this function, then `LogShipper::record`.
-`LogShipper::record_untrusted` calls `LogEvent::sanitize_untrusted_client`, then `LogShipper::record`.
+The caller calls `LogShipper::record` for each kept event.
+`body` is one `RequestJson`.
+`shipper` is one `LogShipper`.
+
+```rust
+if let Some(events) = body.sanitize_untrusted_client() {
+    for event in events {
+        shipper.record(event);
+    }
+}
+```
+
+The app keeps the HTTP handler.
+This function does not set an HTTP status.
+This function does not set an Axum body limit.
 
 ## Out of scope
 
