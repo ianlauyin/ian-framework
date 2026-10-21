@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["logging"]
+default = ["logging", "http"]
+http = [
+    "dep:axum",
+    "dep:serde",
+    "dep:serde_json",
+]
 logging = [
     "dep:axum",
     "dep:chrono",
