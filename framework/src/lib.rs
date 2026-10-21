@@ -1,3 +1,6 @@
+#[cfg(feature = "http")]
+pub mod http;
+
 #[cfg(feature = "logging")]
 pub mod logging;
 
