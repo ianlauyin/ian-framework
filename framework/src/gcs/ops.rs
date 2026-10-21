@@ -138,4 +138,77 @@ mod tests {
         assert_eq!(level_for_status(404), Some(LogLevel::Warn));
         assert_eq!(level_for_status(503), Some(LogLevel::Error));
     }
+
+    fn user_auth() -> super::super::Auth {
+        super::super::Auth::User {
+            client_id: "client".to_string(),
+            client_secret: "secret".to_string(),
+            refresh_token: "refresh".to_string(),
+            signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn ops_log_writes_the_bucket_and_omits_the_query() {
+        let backend = super::super::GcsBackend::new("my-bucket", user_auth())
+            .await
+            .unwrap();
+        let shipper =
+            crate::logging::LogShipper::new(crate::logging::ShipperConfig::new("storage", ""))
+                .unwrap();
+        backend.attach_ops_log(shipper.clone());
+        record_op(
+            &backend,
+            OpsRecord {
+                level: crate::logging::LogLevel::Info,
+                message: "gcs response",
+                method: "GET",
+                url:
+                    "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file?upload_id=secret",
+                status: Some(200),
+                latency_ms: Some(3),
+                extra: &[],
+            },
+        );
+        let events = shipper.buffered_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].action, "GET /storage/v1/b/my-bucket/o/file");
+        assert_eq!(events[0].id, "");
+        assert_eq!(events[0].ip, "");
+        assert_eq!(events[0].user_agent, "");
+        assert_eq!(events[0].status, Some(200));
+        assert_eq!(events[0].latency_ms, Some(3));
+        assert_eq!(
+            events[0]
+                .extra
+                .get("bucket")
+                .and_then(|value| value.as_str()),
+            Some("my-bucket")
+        );
+        let line = serde_json::to_string(&events[0]).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert!(value.get("app").is_none());
+        assert!(value.get("project").is_none());
+        assert!(!line.contains("secret"));
+        assert!(!line.contains("upload_id"));
+    }
+
+    #[tokio::test]
+    async fn ops_log_without_a_shipper_does_not_panic() {
+        let backend = super::super::GcsBackend::new("my-bucket", user_auth())
+            .await
+            .unwrap();
+        record_op(
+            &backend,
+            OpsRecord {
+                level: crate::logging::LogLevel::Warn,
+                message: "gcs request failed",
+                method: "GET",
+                url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file",
+                status: None,
+                latency_ms: None,
+                extra: &[],
+            },
+        );
+    }
 }
