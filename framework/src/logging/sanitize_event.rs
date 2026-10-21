@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use chrono::Utc;
 use serde_json::Value;
 
-use super::event::event;
 use super::LogEvent;
 
 impl LogEvent {
@@ -63,7 +62,7 @@ fn extra_value(value: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::event::event;
     use chrono::{DateTime, Utc};
     use serde_json::json;
 
