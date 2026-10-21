@@ -46,6 +46,7 @@
 
 - Put the component styles in an `index.css` file next to the component.
 - Each `index.css` file has only one root selector.
+- Nest each child selector inside the block of its parent.
 - To examine nested selectors, run `pnpm lint:css`.
 
 ### Class Names
