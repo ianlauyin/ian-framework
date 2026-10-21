@@ -24,6 +24,7 @@ gcs = [
     "dep:serde_json",
     "dep:sha2",
     "dep:tokio",
+    "reqwest/form",
     "reqwest/json",
     "reqwest/stream",
     "tokio/fs",
@@ -31,17 +32,17 @@ gcs = [
 ]
 
 [dependencies]
-axum = { version = "0.8", optional = true }
-base64 = { version = "0.22", optional = true }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"], optional = true }
-futures-util = { version = "0.3", default-features = false, features = ["std", "async-await"], optional = true }
-hex = { version = "0.4", optional = true }
-reqwest = { version = "0.12.20", default-features = false, features = ["rustls-tls"], optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
-sha2 = { version = "0.10", optional = true }
-tokio = { version = "1", default-features = false, features = ["rt", "sync", "time"], optional = true }
+axum = { version = "0.8.9", optional = true }
+base64 = { version = "0.23.1", optional = true }
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std", "serde"], optional = true }
+futures-util = { version = "0.3.34", default-features = false, features = ["std", "async-await"], optional = true }
+hex = { version = "0.4.3", optional = true }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls"], optional = true }
+serde = { version = "1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "1.0.154", optional = true }
+sha2 = { version = "0.11.1", optional = true }
+tokio = { version = "1.54.0", default-features = false, features = ["rt", "sync", "time"], optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-tower = { version = "0.5", features = ["util"] }
+tokio = { version = "1.54.0", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+tower = { version = "0.5.3", features = ["util"] }
