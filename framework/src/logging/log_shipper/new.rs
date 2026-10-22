@@ -84,7 +84,8 @@ impl LogShipper {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{LogShipper, ShipperConfig, DEFAULT_CAPACITY, SHIP_CHUNK, SHIP_TIMEOUT};
+    use super::super::super::SHIP_CHUNK;
+    use super::super::{LogShipper, ShipperConfig, DEFAULT_CAPACITY, SHIP_TIMEOUT};
     use std::time::Duration;
 
     #[test]

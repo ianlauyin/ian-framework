@@ -1,5 +1,4 @@
-use super::super::event::event;
-use super::super::{LogEvent, LogLevel};
+use super::super::{event, LogEvent, LogLevel};
 use super::{meets_capacity_warn, LogShipper, CAPACITY_WARN_NOTE};
 
 impl LogShipper {
@@ -26,7 +25,6 @@ fn capacity_warn_event() -> LogEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::event::event;
     use super::super::{LogShipper, ShipperConfig, CAPACITY_WARN_NOTE};
     use super::*;
     use chrono::{DateTime, Utc};

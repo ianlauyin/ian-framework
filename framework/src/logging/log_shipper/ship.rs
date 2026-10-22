@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use super::super::LogEvent;
-use super::{meets_capacity_warn, LogBatch, LogShipper, SHIP_CHUNK, SHIP_TIMEOUT};
+use super::super::{LogBatch, LogEvent, SHIP_CHUNK};
+use super::{meets_capacity_warn, LogShipper, SHIP_TIMEOUT};
 
 impl LogShipper {
     pub fn spawn_ship_loop(&self, every: Duration) -> Option<tokio::task::JoinHandle<()>> {
@@ -81,10 +81,9 @@ impl LogShipper {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::event::event;
-    use super::super::{LogShipper, ShipperConfig, CAPACITY_WARN_NOTE, SHIP_CHUNK};
+    use super::super::super::{event, LogLevel};
+    use super::super::{ShipperConfig, CAPACITY_WARN_NOTE};
     use super::*;
-    use crate::logging::{LogBatch, LogLevel};
 
     fn buffer_only() -> LogShipper {
         LogShipper::new(ShipperConfig::new("api", "")).unwrap()

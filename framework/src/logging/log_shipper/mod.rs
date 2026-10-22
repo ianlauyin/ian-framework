@@ -1,6 +1,5 @@
 mod new;
 mod record;
-mod sanitize_batch;
 mod ship;
 
 use std::collections::VecDeque;
@@ -10,10 +9,8 @@ use std::time::Duration;
 use super::LogEvent;
 
 pub use new::ShipperConfig;
-pub use sanitize_batch::LogBatch;
 
 const DEFAULT_CAPACITY: usize = 10_000;
-const SHIP_CHUNK: usize = 1_000;
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 const CAPACITY_WARN_NOTE: &str = "capacity meets 80%";
 

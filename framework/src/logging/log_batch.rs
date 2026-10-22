@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::super::LogEvent;
-use super::SHIP_CHUNK;
+use super::{LogEvent, SHIP_CHUNK};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogBatch {
@@ -23,10 +22,8 @@ impl LogBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::event::event;
-    use super::super::SHIP_CHUNK;
+    use super::super::{event, LogLevel};
     use super::*;
-    use crate::logging::LogLevel;
     use chrono::{DateTime, Utc};
     use serde_json::{json, Value};
 

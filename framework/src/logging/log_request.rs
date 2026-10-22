@@ -6,8 +6,7 @@ use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 
-use super::event::event;
-use super::{LogLevel, LogShipper};
+use super::{event, LogLevel, LogShipper};
 
 pub async fn log_request(
     State(shipper): State<LogShipper>,
