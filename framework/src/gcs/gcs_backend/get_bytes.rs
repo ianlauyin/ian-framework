@@ -1,4 +1,5 @@
-use super::super::{GcsBackend, GcsError};
+use super::super::GcsError;
+use super::GcsBackend;
 
 impl GcsBackend {
     pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, GcsError> {

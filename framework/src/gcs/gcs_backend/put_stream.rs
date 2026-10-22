@@ -2,13 +2,9 @@ use std::pin::Pin;
 
 use futures_util::{Stream, StreamExt};
 
-use super::super::{GcsBackend, GcsError, GcsErrorKind};
-use super::resumable::{
-    expect_done, put_chunk_retrying, start_resumable, UploadStep, CHUNK_ALIGN, CHUNK_SIZE,
-};
-use super::shared::{
-    content_type_of, validate_metadata, validate_object_name, ObjectMeta, PutOptions,
-};
+use super::super::{GcsError, GcsErrorKind, ObjectMeta, PutOptions};
+use super::resumable::{UploadStep, CHUNK_ALIGN, CHUNK_SIZE};
+use super::{validate_metadata, validate_object_name, GcsBackend};
 
 impl GcsBackend {
     pub async fn put_stream<S, E>(
@@ -22,9 +18,11 @@ impl GcsBackend {
         E: std::fmt::Display,
     {
         validate_object_name(name)?;
-        let content_type = content_type_of(options)?;
+        let content_type = options.content_type()?;
         validate_metadata(&options.metadata)?;
-        let location = start_resumable(self, name, &content_type, &options.metadata, None).await?;
+        let location = self
+            .start_resumable(name, &content_type, &options.metadata, None)
+            .await?;
         let mut pending = Vec::new();
         let mut stream = Box::pin(stream);
         let mut buf = Vec::new();
@@ -47,10 +45,10 @@ impl GcsBackend {
                         "finished upload did not return object metadata",
                     ));
                 }
-                return expect_done(
-                    put_chunk_retrying(self, &location, &content_type, b"", 0, Some(0), true)
-                        .await?,
-                );
+                return self
+                    .put_chunk_retrying(&location, &content_type, b"", 0, Some(0), true)
+                    .await?
+                    .expect_done();
             }
             let is_last = eof;
             let send_len = if is_last {
@@ -68,16 +66,16 @@ impl GcsBackend {
             } else {
                 None
             };
-            match put_chunk_retrying(
-                self,
-                &location,
-                &content_type,
-                &buf[..send_len],
-                origin,
-                total,
-                is_last,
-            )
-            .await?
+            match self
+                .put_chunk_retrying(
+                    &location,
+                    &content_type,
+                    &buf[..send_len],
+                    origin,
+                    total,
+                    is_last,
+                )
+                .await?
             {
                 UploadStep::Done(meta) => return Ok(meta),
                 UploadStep::Continue { next } => {

@@ -3,16 +3,12 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
-use super::encode::{encode_object_path, encode_seg};
-use super::{GcsBackend, GcsError, GcsErrorKind};
+use super::super::encode::{encode_object_path, encode_seg};
+use super::super::{GcsError, GcsErrorKind};
+use super::{validate_object_name, GcsBackend};
 
 const HOST: &str = "storage.googleapis.com";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
-
-struct SignedParts {
-    string_to_sign: String,
-    url_prefix: String,
-}
 
 impl GcsBackend {
     pub async fn signed_get_url(
@@ -20,9 +16,9 @@ impl GcsBackend {
         name: &str,
         expires_in: Option<Duration>,
     ) -> Result<String, GcsError> {
-        super::object::validate_object_name(name)?;
+        validate_object_name(name)?;
         let seconds = signed_lifetime_seconds(expires_in)?;
-        let parts = v4_get_parts(
+        let parts = SignedParts::v4_get(
             self.bucket(),
             name,
             self.signer_email(),
@@ -35,6 +31,53 @@ impl GcsBackend {
             parts.url_prefix,
             hex::encode(signature)
         ))
+    }
+}
+
+struct SignedParts {
+    string_to_sign: String,
+    url_prefix: String,
+}
+
+impl SignedParts {
+    fn v4_get(
+        bucket_name: &str,
+        name: &str,
+        email: &str,
+        now: DateTime<Utc>,
+        expires_secs: u64,
+    ) -> Self {
+        let request_ts = now.format("%Y%m%dT%H%M%SZ").to_string();
+        let date = now.format("%Y%m%d").to_string();
+        let scope = format!("{date}/auto/storage/goog4_request");
+        let credential = format!("{email}/{scope}");
+        let canonical_uri = format!("/{}/{}", encode_seg(bucket_name), encode_object_path(name));
+        let mut pairs = [
+            ("X-Goog-Algorithm", "GOOG4-RSA-SHA256".to_string()),
+            ("X-Goog-Credential", credential),
+            ("X-Goog-Date", request_ts.clone()),
+            ("X-Goog-Expires", expires_secs.to_string()),
+            ("X-Goog-SignedHeaders", "host".to_string()),
+        ];
+        pairs.sort_by(|left, right| left.0.cmp(right.0));
+        let mut query = String::new();
+        for (index, (key, value)) in pairs.iter().enumerate() {
+            if index > 0 {
+                query.push('&');
+            }
+            query.push_str(&encode_seg(key));
+            query.push('=');
+            query.push_str(&encode_seg(value));
+        }
+        let canonical_request =
+            format!("GET\n{canonical_uri}\n{query}\nhost:{HOST}\n\nhost\nUNSIGNED-PAYLOAD");
+        let hash = hex::encode(Sha256::digest(canonical_request.as_bytes()));
+        let string_to_sign = format!("GOOG4-RSA-SHA256\n{request_ts}\n{scope}\n{hash}");
+        let url_prefix = format!("https://{HOST}{canonical_uri}?{query}");
+        Self {
+            string_to_sign,
+            url_prefix,
+        }
     }
 }
 
@@ -61,56 +104,17 @@ fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError
     Ok(seconds)
 }
 
-fn v4_get_parts(
-    bucket_name: &str,
-    name: &str,
-    email: &str,
-    now: DateTime<Utc>,
-    expires_secs: u64,
-) -> SignedParts {
-    let request_ts = now.format("%Y%m%dT%H%M%SZ").to_string();
-    let date = now.format("%Y%m%d").to_string();
-    let scope = format!("{date}/auto/storage/goog4_request");
-    let credential = format!("{email}/{scope}");
-    let canonical_uri = format!("/{}/{}", encode_seg(bucket_name), encode_object_path(name));
-    let mut pairs = [
-        ("X-Goog-Algorithm", "GOOG4-RSA-SHA256".to_string()),
-        ("X-Goog-Credential", credential),
-        ("X-Goog-Date", request_ts.clone()),
-        ("X-Goog-Expires", expires_secs.to_string()),
-        ("X-Goog-SignedHeaders", "host".to_string()),
-    ];
-    pairs.sort_by(|left, right| left.0.cmp(right.0));
-    let mut query = String::new();
-    for (index, (key, value)) in pairs.iter().enumerate() {
-        if index > 0 {
-            query.push('&');
-        }
-        query.push_str(&encode_seg(key));
-        query.push('=');
-        query.push_str(&encode_seg(value));
-    }
-    let canonical_request =
-        format!("GET\n{canonical_uri}\n{query}\nhost:{HOST}\n\nhost\nUNSIGNED-PAYLOAD");
-    let hash = hex::encode(Sha256::digest(canonical_request.as_bytes()));
-    let string_to_sign = format!("GOOG4-RSA-SHA256\n{request_ts}\n{scope}\n{hash}");
-    let url_prefix = format!("https://{HOST}{canonical_uri}?{query}");
-    SignedParts {
-        string_to_sign,
-        url_prefix,
-    }
-}
 #[cfg(test)]
 mod tests {
+    use super::super::super::cred::Auth;
     use super::*;
-    use crate::gcs::{Auth, GcsBackend};
 
     #[test]
     fn v4_get_matches_the_canonical_request() {
         let now = DateTime::parse_from_rfc3339("2018-10-26T21:19:42Z")
             .unwrap()
             .with_timezone(&Utc);
-        let parts = v4_get_parts(
+        let parts = SignedParts::v4_get(
             "example-bucket",
             "photos/cat.jpeg",
             "signer@example-project.iam.gserviceaccount.com",
@@ -145,7 +149,7 @@ UNSIGNED-PAYLOAD";
         let now = DateTime::parse_from_rfc3339("2018-10-26T21:19:42Z")
             .unwrap()
             .with_timezone(&Utc);
-        let parts = v4_get_parts(
+        let parts = SignedParts::v4_get(
             "b",
             "my cat.jpeg",
             "s@example.iam.gserviceaccount.com",

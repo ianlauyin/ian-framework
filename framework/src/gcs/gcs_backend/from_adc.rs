@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::super::cred::{validate_signer_email, Auth};
-use super::super::{GcsBackend, GcsError, GcsErrorKind};
+use super::super::cred::Auth;
+use super::super::{validate_signer_email, GcsError, GcsErrorKind};
+use super::GcsBackend;
 
 const ADC_FILE_LIMIT: u64 = 1024 * 1024;
 
@@ -102,17 +103,6 @@ fn signer_email_from_env() -> Result<String, GcsError> {
     Ok(value.to_string())
 }
 
-fn auth_from_json_bytes(bytes: &[u8], signer_email: Option<&str>) -> Result<Auth, GcsError> {
-    let value: Value = serde_json::from_slice(bytes).map_err(|err| {
-        GcsError::with_source(
-            GcsErrorKind::Config,
-            "application default credentials are not JSON",
-            err,
-        )
-    })?;
-    auth_from_value(&value, signer_email)
-}
-
 fn auth_from_value(value: &Value, signer_email: Option<&str>) -> Result<Auth, GcsError> {
     let typ = value.get("type").and_then(Value::as_str).unwrap_or("");
     match typ {
@@ -172,8 +162,6 @@ fn string_field(value: &Value, name: &str) -> Result<String, GcsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::cred::Auth;
-    use super::super::super::GcsErrorKind;
     use super::*;
 
     const USER_JSON: &str = r#"{
@@ -182,6 +170,17 @@ mod tests {
         "client_secret": "secret",
         "refresh_token": "refresh"
     }"#;
+
+    fn auth_from_json_bytes(bytes: &[u8], signer_email: Option<&str>) -> Result<Auth, GcsError> {
+        let value: Value = serde_json::from_slice(bytes).map_err(|err| {
+            GcsError::with_source(
+                GcsErrorKind::Config,
+                "application default credentials are not JSON",
+                err,
+            )
+        })?;
+        auth_from_value(&value, signer_email)
+    }
 
     #[test]
     fn service_account_key_is_rejected_without_echoing_the_key() {

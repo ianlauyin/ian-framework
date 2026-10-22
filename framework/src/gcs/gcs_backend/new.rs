@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::super::cred::{validate_auth, Auth};
-use super::super::token;
+use super::super::cred::Auth;
 #[cfg(target_os = "linux")]
 use super::super::TRANSFER_TIMEOUT;
-use super::super::{GcsBackend, GcsError, GcsErrorKind};
-use super::Inner;
+use super::super::{GcsError, GcsErrorKind};
+use super::{GcsBackend, Inner};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -14,12 +13,9 @@ impl GcsBackend {
     pub(crate) async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
         let bucket_name = bucket_name.into();
         validate_bucket(&bucket_name)?;
-        validate_auth(&auth)?;
+        auth.validate()?;
         let http = http_client()?;
-        let email = match &auth {
-            Auth::Metadata => token::metadata_email(&http).await?,
-            Auth::User { signer_email, .. } => signer_email.clone(),
-        };
+        let email = auth.signer_email(&http).await?;
         Ok(Self {
             inner: Arc::new(Inner {
                 bucket: bucket_name,
@@ -60,8 +56,7 @@ fn http_client() -> Result<reqwest::Client, GcsError> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::cred::Auth;
-    use super::super::super::{GcsBackend, GcsErrorKind};
+    use super::*;
 
     fn user_auth() -> Auth {
         Auth::User {

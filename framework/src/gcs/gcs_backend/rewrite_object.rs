@@ -1,8 +1,9 @@
 use serde::Deserialize;
 
 use super::super::encode::{encode_object_id, encode_seg};
-use super::super::{send, Call, GcsBackend, GcsError, GcsErrorKind};
-use super::shared::{object_url, validate_object_name, ObjectMeta};
+use super::super::object::RawObject;
+use super::super::{GcsError, GcsErrorKind, ObjectMeta};
+use super::{object_url, validate_object_name, Call, GcsBackend};
 
 impl GcsBackend {
     pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
@@ -10,9 +11,8 @@ impl GcsBackend {
         validate_object_name(to)?;
         let mut token: Option<String> = None;
         loop {
-            let response = send(
-                self,
-                &Call {
+            let response = self
+                .send(&Call {
                     method: reqwest::Method::POST,
                     url: rewrite_url(self.bucket(), from, to, token.as_deref()),
                     headers: Vec::new(),
@@ -20,9 +20,8 @@ impl GcsBackend {
                     bytes: None,
                     extra_status: &[],
                     timeout: None,
-                },
-            )
-            .await?;
+                })
+                .await?;
             let bytes = response.bytes().await.map_err(|err| {
                 GcsError::with_source(
                     GcsErrorKind::Transport,
@@ -30,7 +29,7 @@ impl GcsBackend {
                     err,
                 )
             })?;
-            let step = rewrite_step_from_slice(&bytes)?;
+            let step = RewriteStep::from_slice(&bytes)?;
             if step.done {
                 return step.resource.ok_or_else(|| {
                     GcsError::new(GcsErrorKind::Api, "rewrite did not return object metadata")
@@ -70,35 +69,38 @@ struct RewriteStep {
     resource: Option<ObjectMeta>,
 }
 
-fn rewrite_step_from_slice(bytes: &[u8]) -> Result<RewriteStep, GcsError> {
-    let raw: RawRewrite = serde_json::from_slice(bytes)
-        .map_err(|err| GcsError::with_source(GcsErrorKind::Api, "rewrite JSON is invalid", err))?;
-    let resource = match raw.resource {
-        Some(object) => Some(object.into_meta()?),
-        None => None,
-    };
-    if raw.done && resource.is_none() {
-        return Err(GcsError::new(
-            GcsErrorKind::Api,
-            "rewrite did not return object metadata",
-        ));
-    }
-    if !raw.done {
-        match raw.rewrite_token.as_deref() {
-            Some(token) if !token.is_empty() => {}
-            _ => {
-                return Err(GcsError::new(
-                    GcsErrorKind::Api,
-                    "rewrite did not return a token",
-                ));
+impl RewriteStep {
+    fn from_slice(bytes: &[u8]) -> Result<Self, GcsError> {
+        let raw: RawRewrite = serde_json::from_slice(bytes).map_err(|err| {
+            GcsError::with_source(GcsErrorKind::Api, "rewrite JSON is invalid", err)
+        })?;
+        let resource = match raw.resource {
+            Some(object) => Some(object.into_meta()?),
+            None => None,
+        };
+        if raw.done && resource.is_none() {
+            return Err(GcsError::new(
+                GcsErrorKind::Api,
+                "rewrite did not return object metadata",
+            ));
+        }
+        if !raw.done {
+            match raw.rewrite_token.as_deref() {
+                Some(token) if !token.is_empty() => {}
+                _ => {
+                    return Err(GcsError::new(
+                        GcsErrorKind::Api,
+                        "rewrite did not return a token",
+                    ));
+                }
             }
         }
+        Ok(Self {
+            done: raw.done,
+            rewrite_token: raw.rewrite_token.filter(|token| !token.is_empty()),
+            resource,
+        })
     }
-    Ok(RewriteStep {
-        done: raw.done,
-        rewrite_token: raw.rewrite_token.filter(|token| !token.is_empty()),
-        resource,
-    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -108,7 +110,7 @@ struct RawRewrite {
     #[serde(rename = "rewriteToken", default)]
     rewrite_token: Option<String>,
     #[serde(default)]
-    resource: Option<super::shared::RawObject>,
+    resource: Option<RawObject>,
 }
 
 #[cfg(test)]
@@ -117,19 +119,19 @@ mod tests {
 
     #[test]
     fn rewrite_step_reads_a_token_until_done() {
-        let step = rewrite_step_from_slice(br#"{"done":false,"rewriteToken":"abc"}"#).unwrap();
+        let step = RewriteStep::from_slice(br#"{"done":false,"rewriteToken":"abc"}"#).unwrap();
         assert!(!step.done);
         assert_eq!(step.rewrite_token.as_deref(), Some("abc"));
         assert!(step.resource.is_none());
-        let done = rewrite_step_from_slice(br#"{"done":true,"resource":{"name":"b","size":"3"}}"#)
+        let done = RewriteStep::from_slice(br#"{"done":true,"resource":{"name":"b","size":"3"}}"#)
             .unwrap();
         assert!(done.done);
         let resource = done.resource.unwrap();
         assert_eq!(resource.name, "b");
         assert_eq!(resource.size, 3);
-        assert!(rewrite_step_from_slice(br#"{"done":false}"#).is_err());
-        assert!(rewrite_step_from_slice(br#"{"done":true}"#).is_err());
-        assert!(rewrite_step_from_slice(br#"{"done":false,"rewriteToken":""}"#).is_err());
+        assert!(RewriteStep::from_slice(br#"{"done":false}"#).is_err());
+        assert!(RewriteStep::from_slice(br#"{"done":true}"#).is_err());
+        assert!(RewriteStep::from_slice(br#"{"done":false,"rewriteToken":""}"#).is_err());
     }
 
     #[test]

@@ -25,6 +25,13 @@ impl GcsError {
         self.status
     }
 
+    pub(crate) fn is_retryable(&self) -> bool {
+        if self.kind == GcsErrorKind::Transport {
+            return true;
+        }
+        matches!(self.status, Some(408 | 429 | 500 | 502 | 503 | 504))
+    }
+
     pub(crate) fn new(kind: GcsErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
@@ -79,5 +86,21 @@ impl std::error::Error for GcsError {
             Some(source) => Some(source.as_ref()),
             None => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retryable_status_codes_match_the_upload_policy() {
+        assert!(GcsError::new(GcsErrorKind::Transport, "reset").is_retryable());
+        for status in [408_u16, 429, 500, 502, 503, 504] {
+            assert!(GcsError::with_status(GcsErrorKind::Api, status, "retry").is_retryable());
+        }
+        assert!(!GcsError::with_status(GcsErrorKind::NotFound, 404, "missing").is_retryable());
+        assert!(!GcsError::with_status(GcsErrorKind::Api, 400, "bad").is_retryable());
+        assert!(!GcsError::new(GcsErrorKind::Config, "config").is_retryable());
     }
 }

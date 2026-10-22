@@ -1,13 +1,11 @@
-use super::super::{send, Call, GcsBackend, GcsError};
-use super::read::ObjectReader;
-use super::shared::{object_url, validate_object_name};
+use super::super::{GcsError, ObjectReader};
+use super::{object_url, validate_object_name, Call, GcsBackend};
 
 impl GcsBackend {
     pub async fn open_object(&self, name: &str) -> Result<ObjectReader, GcsError> {
         validate_object_name(name)?;
-        let response = send(
-            self,
-            &Call {
+        let response = self
+            .send(&Call {
                 method: reqwest::Method::GET,
                 url: format!("{}?alt=media", object_url(self.bucket(), name)),
                 headers: Vec::new(),
@@ -15,9 +13,8 @@ impl GcsBackend {
                 bytes: None,
                 extra_status: &[],
                 timeout: None,
-            },
-        )
-        .await?;
+            })
+            .await?;
         Ok(ObjectReader { response })
     }
 }

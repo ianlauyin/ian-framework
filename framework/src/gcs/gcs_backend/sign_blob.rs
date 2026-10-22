@@ -1,7 +1,8 @@
 use base64::Engine;
 
-use super::encode::encode_seg;
-use super::{send, Call, GcsBackend, GcsError, GcsErrorKind};
+use super::super::encode::encode_seg;
+use super::super::{GcsError, GcsErrorKind};
+use super::{Call, GcsBackend};
 
 impl GcsBackend {
     pub async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
@@ -10,9 +11,8 @@ impl GcsBackend {
             encode_seg(self.signer_email()),
         );
         let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
-        let response = send(
-            self,
-            &Call {
+        let response = self
+            .send(&Call {
                 method: reqwest::Method::POST,
                 url,
                 headers: Vec::new(),
@@ -20,9 +20,8 @@ impl GcsBackend {
                 bytes: None,
                 extra_status: &[],
                 timeout: None,
-            },
-        )
-        .await?;
+            })
+            .await?;
         let bytes = response.bytes().await.map_err(|err| {
             GcsError::with_source(
                 GcsErrorKind::Transport,

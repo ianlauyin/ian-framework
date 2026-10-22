@@ -1,12 +1,11 @@
-use super::super::{send, Call, GcsBackend, GcsError};
-use super::shared::{meta_from_response, object_url, validate_object_name, ObjectMeta};
+use super::super::{GcsError, ObjectMeta};
+use super::{object_url, validate_object_name, Call, GcsBackend};
 
 impl GcsBackend {
     pub async fn stat(&self, name: &str) -> Result<ObjectMeta, GcsError> {
         validate_object_name(name)?;
-        let response = send(
-            self,
-            &Call {
+        let response = self
+            .send(&Call {
                 method: reqwest::Method::GET,
                 url: object_url(self.bucket(), name),
                 headers: Vec::new(),
@@ -14,9 +13,8 @@ impl GcsBackend {
                 bytes: None,
                 extra_status: &[],
                 timeout: None,
-            },
-        )
-        .await?;
-        meta_from_response(response).await
+            })
+            .await?;
+        ObjectMeta::from_response(response).await
     }
 }

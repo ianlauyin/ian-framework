@@ -2,7 +2,7 @@ use std::pin::Pin;
 
 use futures_util::{Stream, StreamExt};
 
-use super::super::{GcsError, GcsErrorKind};
+use super::{GcsError, GcsErrorKind};
 
 pub struct ObjectReader {
     pub(super) response: reqwest::Response,

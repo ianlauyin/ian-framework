@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use crate::logging::LogLevel;
+
 use super::super::encode::encode_seg;
-use super::super::{send, Call, GcsBackend, GcsError, GcsErrorKind, TRANSFER_TIMEOUT};
-use super::shared::{meta_from_response, ObjectMeta};
+use super::super::{GcsError, GcsErrorKind, ObjectMeta, TRANSFER_TIMEOUT};
+use super::{logged_error, Call, GcsBackend, OpsRecord};
 
 pub(super) const CHUNK_SIZE: usize = 8 * 1024 * 1024;
 pub(super) const CHUNK_ALIGN: u64 = 256 * 1024;
@@ -11,92 +13,259 @@ const CHUNK_ATTEMPTS: u32 = 5;
 const CHUNK_BACKOFF: Duration = Duration::from_millis(200);
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
 
-fn is_retryable(err: &GcsError) -> bool {
-    if err.kind() == GcsErrorKind::Transport {
-        return true;
-    }
-    matches!(err.status(), Some(408 | 429 | 500 | 502 | 503 | 504))
-}
-
-pub(super) async fn start_resumable(
-    backend: &GcsBackend,
-    name: &str,
-    content_type: &str,
-    metadata: &BTreeMap<String, String>,
-    total_len: Option<u64>,
-) -> Result<String, GcsError> {
-    let url = format!(
-        "{UPLOAD_ROOT}/b/{}/o?uploadType=resumable",
-        encode_seg(backend.bucket()),
-    );
-    let mut body = serde_json::json!({
-        "name": name,
-        "contentType": content_type,
-    });
-    if !metadata.is_empty() {
-        body["metadata"] = serde_json::to_value(metadata).map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Config, "metadata is not JSON", err)
-        })?;
-    }
-    let mut headers = vec![(
-        reqwest::header::HeaderName::from_static("x-upload-content-type"),
-        content_type.to_string(),
-    )];
-    if let Some(len) = total_len {
-        headers.push((
-            reqwest::header::HeaderName::from_static("x-upload-content-length"),
-            len.to_string(),
-        ));
-    }
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::POST,
-            url,
-            headers,
-            json: Some(body),
-            bytes: None,
-            extra_status: &[],
-            timeout: None,
-        },
-    )
-    .await?;
-    let location = response
-        .headers()
-        .get(reqwest::header::LOCATION)
-        .ok_or_else(|| {
-            GcsError::new(
-                GcsErrorKind::Api,
-                "resumable upload did not return Location",
-            )
-        })?;
-    let location = location
-        .to_str()
-        .map_err(|_| GcsError::new(GcsErrorKind::Api, "resumable Location header is not UTF-8"))?
-        .to_string();
-    let _ = response.bytes().await;
-    if !location.starts_with("https://") {
-        return Err(GcsError::new(
-            GcsErrorKind::Api,
-            "resumable Location is not an https URL",
-        ));
-    }
-    Ok(location)
-}
-
-pub(super) fn expect_done(step: UploadStep) -> Result<ObjectMeta, GcsError> {
-    match step {
-        UploadStep::Done(meta) => Ok(meta),
-        UploadStep::Continue { .. } => Err(GcsError::new(
-            GcsErrorKind::Api,
-            "finished upload did not return object metadata",
-        )),
-    }
-}
-
 pub(super) enum UploadStep {
     Done(ObjectMeta),
     Continue { next: u64 },
+}
+
+impl UploadStep {
+    pub(super) fn expect_done(self) -> Result<ObjectMeta, GcsError> {
+        match self {
+            Self::Done(meta) => Ok(meta),
+            Self::Continue { .. } => Err(GcsError::new(
+                GcsErrorKind::Api,
+                "finished upload did not return object metadata",
+            )),
+        }
+    }
+}
+
+impl GcsBackend {
+    pub(super) async fn start_resumable(
+        &self,
+        name: &str,
+        content_type: &str,
+        metadata: &BTreeMap<String, String>,
+        total_len: Option<u64>,
+    ) -> Result<String, GcsError> {
+        let url = format!(
+            "{UPLOAD_ROOT}/b/{}/o?uploadType=resumable",
+            encode_seg(self.bucket()),
+        );
+        let mut body = serde_json::json!({
+            "name": name,
+            "contentType": content_type,
+        });
+        if !metadata.is_empty() {
+            body["metadata"] = serde_json::to_value(metadata).map_err(|err| {
+                GcsError::with_source(GcsErrorKind::Config, "metadata is not JSON", err)
+            })?;
+        }
+        let mut headers = vec![(
+            reqwest::header::HeaderName::from_static("x-upload-content-type"),
+            content_type.to_string(),
+        )];
+        if let Some(len) = total_len {
+            headers.push((
+                reqwest::header::HeaderName::from_static("x-upload-content-length"),
+                len.to_string(),
+            ));
+        }
+        let response = self
+            .send(&Call {
+                method: reqwest::Method::POST,
+                url,
+                headers,
+                json: Some(body),
+                bytes: None,
+                extra_status: &[],
+                timeout: None,
+            })
+            .await?;
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .ok_or_else(|| {
+                GcsError::new(
+                    GcsErrorKind::Api,
+                    "resumable upload did not return Location",
+                )
+            })?;
+        let location = location
+            .to_str()
+            .map_err(|_| {
+                GcsError::new(GcsErrorKind::Api, "resumable Location header is not UTF-8")
+            })?
+            .to_string();
+        let _ = response.bytes().await;
+        if !location.starts_with("https://") {
+            return Err(GcsError::new(
+                GcsErrorKind::Api,
+                "resumable Location is not an https URL",
+            ));
+        }
+        Ok(location)
+    }
+
+    pub(super) async fn put_chunk_retrying(
+        &self,
+        location: &str,
+        content_type: &str,
+        chunk: &[u8],
+        start: u64,
+        total: Option<u64>,
+        finished: bool,
+    ) -> Result<UploadStep, GcsError> {
+        let chunk_len = chunk.len() as u64;
+        let mut offset = start;
+        let mut attempt = 0u32;
+        loop {
+            if chunk_suffix_len(chunk_len, start, offset, finished).is_none() {
+                return Ok(UploadStep::Continue { next: offset });
+            }
+            attempt += 1;
+            if attempt > CHUNK_ATTEMPTS {
+                return Err(GcsError::new(
+                    GcsErrorKind::Transport,
+                    "resumable chunk failed after retries",
+                ));
+            }
+            if attempt > 1 {
+                tokio::time::sleep(retry_delay(attempt - 1)).await;
+            }
+            let piece = &chunk[(offset - start) as usize..];
+            let sent = self
+                .upload_chunk_once(location, content_type, piece, offset, total)
+                .await;
+            match sent {
+                Ok(Sent::Done(meta)) => return Ok(UploadStep::Done(meta)),
+                Ok(Sent::Accepted { next }) => {
+                    if next >= start + chunk_len {
+                        return Ok(UploadStep::Continue { next });
+                    }
+                    if next > offset {
+                        offset = next;
+                        attempt = 0;
+                        continue;
+                    }
+                }
+                Err(err) if !err.is_retryable() => return Err(err),
+                Err(err) => {
+                    let attempt_text = attempt.to_string();
+                    let offset_text = offset.to_string();
+                    let error_text = logged_error(&err);
+                    self.record_op(OpsRecord {
+                        level: LogLevel::Warn,
+                        message: "gcs resumable chunk failed",
+                        method: "PUT",
+                        url: location,
+                        status: err.status(),
+                        latency_ms: None,
+                        extra: &[
+                            ("attempt", &attempt_text),
+                            ("offset", &offset_text),
+                            ("error", &error_text),
+                        ],
+                    });
+                }
+            }
+            match self.probe_session(location, total).await {
+                Ok(Probe::Complete(meta)) => return Ok(UploadStep::Done(meta)),
+                Ok(Probe::Incomplete { next }) => {
+                    if next < start || next >= start + chunk_len {
+                        return Ok(UploadStep::Continue { next });
+                    }
+                    if next > offset {
+                        offset = next;
+                        attempt = 0;
+                        continue;
+                    }
+                    if next < offset {
+                        offset = next;
+                    }
+                }
+                Err(err) if !err.is_retryable() => return Err(err),
+                Err(err) => {
+                    let attempt_text = attempt.to_string();
+                    let offset_text = offset.to_string();
+                    let error_text = logged_error(&err);
+                    self.record_op(OpsRecord {
+                        level: LogLevel::Warn,
+                        message: "gcs resumable probe failed",
+                        method: "PUT",
+                        url: location,
+                        status: err.status(),
+                        latency_ms: None,
+                        extra: &[
+                            ("attempt", &attempt_text),
+                            ("offset", &offset_text),
+                            ("error", &error_text),
+                        ],
+                    });
+                }
+            }
+        }
+    }
+
+    async fn upload_chunk_once(
+        &self,
+        location: &str,
+        content_type: &str,
+        chunk: &[u8],
+        offset: u64,
+        total: Option<u64>,
+    ) -> Result<Sent, GcsError> {
+        let range = chunk_content_range(offset, chunk.len() as u64, total);
+        let response = self
+            .send(&Call {
+                method: reqwest::Method::PUT,
+                url: location.to_string(),
+                headers: vec![
+                    (reqwest::header::CONTENT_TYPE, content_type.to_string()),
+                    (reqwest::header::CONTENT_RANGE, range),
+                ],
+                json: None,
+                bytes: Some(chunk.to_vec()),
+                extra_status: &[308],
+                timeout: Some(TRANSFER_TIMEOUT),
+            })
+            .await?;
+        if response.status().is_success() {
+            return Ok(Sent::Done(ObjectMeta::from_response(response).await?));
+        }
+        let header = response
+            .headers()
+            .get(reqwest::header::RANGE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let _ = response.bytes().await;
+        let next = match header {
+            Some(value) => next_offset_from_range(&value)?,
+            None => offset + chunk.len() as u64,
+        };
+        Ok(Sent::Accepted { next })
+    }
+
+    async fn probe_session(&self, location: &str, total: Option<u64>) -> Result<Probe, GcsError> {
+        let response = self
+            .send(&Call {
+                method: reqwest::Method::PUT,
+                url: location.to_string(),
+                headers: vec![
+                    (reqwest::header::CONTENT_RANGE, probe_content_range(total)),
+                    (reqwest::header::CONTENT_LENGTH, "0".to_string()),
+                ],
+                json: None,
+                bytes: Some(Vec::new()),
+                extra_status: &[308],
+                timeout: Some(TRANSFER_TIMEOUT),
+            })
+            .await?;
+        if response.status().is_success() {
+            return Ok(Probe::Complete(ObjectMeta::from_response(response).await?));
+        }
+        let header = response
+            .headers()
+            .get(reqwest::header::RANGE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let _ = response.bytes().await;
+        let next = match header {
+            Some(value) => next_offset_from_range(&value)?,
+            None => 0,
+        };
+        Ok(Probe::Incomplete { next })
+    }
 }
 
 enum Sent {
@@ -209,188 +378,6 @@ fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
         .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))
 }
 
-pub(super) async fn put_chunk_retrying(
-    backend: &GcsBackend,
-    location: &str,
-    content_type: &str,
-    chunk: &[u8],
-    start: u64,
-    total: Option<u64>,
-    finished: bool,
-) -> Result<UploadStep, GcsError> {
-    let chunk_len = chunk.len() as u64;
-    let mut offset = start;
-    let mut attempt = 0u32;
-    loop {
-        if chunk_suffix_len(chunk_len, start, offset, finished).is_none() {
-            return Ok(UploadStep::Continue { next: offset });
-        }
-        attempt += 1;
-        if attempt > CHUNK_ATTEMPTS {
-            return Err(GcsError::new(
-                GcsErrorKind::Transport,
-                "resumable chunk failed after retries",
-            ));
-        }
-        if attempt > 1 {
-            tokio::time::sleep(retry_delay(attempt - 1)).await;
-        }
-        let piece = &chunk[(offset - start) as usize..];
-        let sent = upload_chunk_once(backend, location, content_type, piece, offset, total).await;
-        match sent {
-            Ok(Sent::Done(meta)) => return Ok(UploadStep::Done(meta)),
-            Ok(Sent::Accepted { next }) => {
-                if next >= start + chunk_len {
-                    return Ok(UploadStep::Continue { next });
-                }
-                if next > offset {
-                    offset = next;
-                    attempt = 0;
-                    continue;
-                }
-            }
-            Err(err) if !is_retryable(&err) => return Err(err),
-            Err(err) => {
-                let attempt_text = attempt.to_string();
-                let offset_text = offset.to_string();
-                let error_text = super::super::ops::logged_error(&err);
-                super::super::ops::record_op(
-                    backend,
-                    super::super::ops::OpsRecord {
-                        level: crate::logging::LogLevel::Warn,
-                        message: "gcs resumable chunk failed",
-                        method: "PUT",
-                        url: location,
-                        status: err.status(),
-                        latency_ms: None,
-                        extra: &[
-                            ("attempt", &attempt_text),
-                            ("offset", &offset_text),
-                            ("error", &error_text),
-                        ],
-                    },
-                );
-            }
-        }
-        match probe_session(backend, location, total).await {
-            Ok(Probe::Complete(meta)) => return Ok(UploadStep::Done(meta)),
-            Ok(Probe::Incomplete { next }) => {
-                if next < start || next >= start + chunk_len {
-                    return Ok(UploadStep::Continue { next });
-                }
-                if next > offset {
-                    offset = next;
-                    attempt = 0;
-                    continue;
-                }
-                if next < offset {
-                    offset = next;
-                }
-            }
-            Err(err) if !is_retryable(&err) => return Err(err),
-            Err(err) => {
-                let attempt_text = attempt.to_string();
-                let offset_text = offset.to_string();
-                let error_text = super::super::ops::logged_error(&err);
-                super::super::ops::record_op(
-                    backend,
-                    super::super::ops::OpsRecord {
-                        level: crate::logging::LogLevel::Warn,
-                        message: "gcs resumable probe failed",
-                        method: "PUT",
-                        url: location,
-                        status: err.status(),
-                        latency_ms: None,
-                        extra: &[
-                            ("attempt", &attempt_text),
-                            ("offset", &offset_text),
-                            ("error", &error_text),
-                        ],
-                    },
-                );
-            }
-        }
-    }
-}
-
-async fn upload_chunk_once(
-    backend: &GcsBackend,
-    location: &str,
-    content_type: &str,
-    chunk: &[u8],
-    offset: u64,
-    total: Option<u64>,
-) -> Result<Sent, GcsError> {
-    let range = chunk_content_range(offset, chunk.len() as u64, total);
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::PUT,
-            url: location.to_string(),
-            headers: vec![
-                (reqwest::header::CONTENT_TYPE, content_type.to_string()),
-                (reqwest::header::CONTENT_RANGE, range),
-            ],
-            json: None,
-            bytes: Some(chunk.to_vec()),
-            extra_status: &[308],
-            timeout: Some(TRANSFER_TIMEOUT),
-        },
-    )
-    .await?;
-    if response.status().is_success() {
-        return Ok(Sent::Done(meta_from_response(response).await?));
-    }
-    let header = response
-        .headers()
-        .get(reqwest::header::RANGE)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_string);
-    let _ = response.bytes().await;
-    let next = match header {
-        Some(value) => next_offset_from_range(&value)?,
-        None => offset + chunk.len() as u64,
-    };
-    Ok(Sent::Accepted { next })
-}
-
-async fn probe_session(
-    backend: &GcsBackend,
-    location: &str,
-    total: Option<u64>,
-) -> Result<Probe, GcsError> {
-    let response = send(
-        backend,
-        &Call {
-            method: reqwest::Method::PUT,
-            url: location.to_string(),
-            headers: vec![
-                (reqwest::header::CONTENT_RANGE, probe_content_range(total)),
-                (reqwest::header::CONTENT_LENGTH, "0".to_string()),
-            ],
-            json: None,
-            bytes: Some(Vec::new()),
-            extra_status: &[308],
-            timeout: Some(TRANSFER_TIMEOUT),
-        },
-    )
-    .await?;
-    if response.status().is_success() {
-        return Ok(Probe::Complete(meta_from_response(response).await?));
-    }
-    let header = response
-        .headers()
-        .get(reqwest::header::RANGE)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_string);
-    let _ = response.bytes().await;
-    let next = match header {
-        Some(value) => next_offset_from_range(&value)?,
-        None => 0,
-    };
-    Ok(Probe::Incomplete { next })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,34 +443,5 @@ mod tests {
         assert_eq!(TRANSFER_TIMEOUT, Duration::from_secs(180));
         assert_eq!(retry_delay(1), Duration::from_millis(200));
         assert_eq!(retry_delay(3), Duration::from_millis(600));
-    }
-
-    #[test]
-    fn retryable_status_codes_match_the_upload_policy() {
-        assert!(is_retryable(&GcsError::new(
-            GcsErrorKind::Transport,
-            "reset"
-        )));
-        for status in [408_u16, 429, 500, 502, 503, 504] {
-            assert!(is_retryable(&GcsError::with_status(
-                GcsErrorKind::Api,
-                status,
-                "retry"
-            )));
-        }
-        assert!(!is_retryable(&GcsError::with_status(
-            GcsErrorKind::NotFound,
-            404,
-            "missing"
-        )));
-        assert!(!is_retryable(&GcsError::with_status(
-            GcsErrorKind::Api,
-            400,
-            "bad"
-        )));
-        assert!(!is_retryable(&GcsError::new(
-            GcsErrorKind::Config,
-            "config"
-        )));
     }
 }
