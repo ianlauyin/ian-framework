@@ -14,6 +14,7 @@
 
 ## Source files
 
+- No file may have more than 400 lines.
 - A `pub struct` can have many `pub` methods.
 - If a `pub struct` has many `pub` methods, you can make a folder for the struct. Use the struct name in snake case as the folder name. Example: `log_shipper/` for `LogShipper`.
 - Keep the tests for the `pub struct`, the `pub fn` or the `pub` method in the same source file, below that item.
