@@ -104,13 +104,16 @@ Each session probe uses the transfer time limit.
 The client uploads bytes with a resumable session.
 A chunk that is not the last chunk is 8 MiB.
 The last chunk can be shorter.
+The last chunk of an empty object has an empty body.
+Each chunk request sends `Content-Length`, also when the body is empty.
+GCS answers 411 to a chunk request that has no `Content-Length`.
 The client retries a chunk in these cases:
 
 - The transport fails.
 - The HTTP status is 408, 429, 500, 502, 503, or 504.
 
 The client probes the session after one of those failures.
-The probe request has an empty body.
+The probe request has an empty body and `Content-Length: 0`.
 The probe uses `Content-Range: bytes */{total}` when the object size is known.
 The probe uses `Content-Range: bytes */*` when the object size is not known.
 A probe response with status 308 can include `Range: bytes=START-END`.

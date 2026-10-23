@@ -213,6 +213,7 @@ impl GcsBackend {
                 headers: vec![
                     (reqwest::header::CONTENT_TYPE, content_type.to_string()),
                     (reqwest::header::CONTENT_RANGE, range),
+                    (reqwest::header::CONTENT_LENGTH, chunk.len().to_string()),
                 ],
                 json: None,
                 bytes: Some(chunk.to_vec()),
@@ -443,5 +444,49 @@ mod tests {
         assert_eq!(TRANSFER_TIMEOUT, Duration::from_secs(180));
         assert_eq!(retry_delay(1), Duration::from_millis(200));
         assert_eq!(retry_delay(3), Duration::from_millis(600));
+    }
+
+    #[tokio::test]
+    async fn empty_final_chunk_sends_content_length_zero() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let location = format!("http://{}/session", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut head = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = socket.read(&mut buf).await.unwrap();
+                head.extend_from_slice(&buf[..n]);
+            }
+            let body = br#"{"name":"photos/","size":"0"}"#;
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n",
+                body.len()
+            );
+            socket.write_all(reply.as_bytes()).await.unwrap();
+            socket.write_all(body).await.unwrap();
+            String::from_utf8(head).unwrap().to_ascii_lowercase()
+        });
+        let auth = super::super::super::cred::Auth::User {
+            client_id: "client".to_string(),
+            client_secret: "secret".to_string(),
+            refresh_token: "refresh".to_string(),
+            signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
+        };
+        let backend = GcsBackend::new("my-bucket", auth).await.unwrap();
+        *backend.inner.token.lock().await = Some(super::super::super::cred::CachedToken {
+            value: "token".to_string(),
+            expires_at: std::time::Instant::now() + Duration::from_secs(600),
+        });
+        backend
+            .put_chunk_retrying(&location, "application/octet-stream", b"", 0, Some(0), true)
+            .await
+            .unwrap()
+            .expect_done()
+            .unwrap();
+        let head = server.await.unwrap();
+        assert!(head.contains("\r\ncontent-length: 0\r\n"), "{head}");
     }
 }
