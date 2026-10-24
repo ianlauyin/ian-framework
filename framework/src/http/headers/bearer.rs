@@ -1,18 +1,34 @@
 use axum::http::header::AUTHORIZATION;
 use axum::http::HeaderMap;
+use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 pub fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.split_once(' ')?;
-    if scheme != "Bearer" || token.is_empty() || token.contains(' ') {
+    if !scheme.eq_ignore_ascii_case("Bearer") || !is_token68(token) {
         return None;
     }
     Some(token)
 }
 
+// Slices of different lengths compare in less time, so compare the fixed-size hashes.
 pub fn key_matches(token: &str, key: &str) -> bool {
-    bool::from(token.as_bytes().ct_eq(key.as_bytes()))
+    if key.is_empty() {
+        return false;
+    }
+    let token_hash = Sha256::digest(token.as_bytes());
+    let key_hash = Sha256::digest(key.as_bytes());
+    bool::from(token_hash.as_slice().ct_eq(key_hash.as_slice()))
+}
+
+// RFC 9110 token68: one or more of ALPHA DIGIT "-" "." "_" "~" "+" "/", then any "=".
+fn is_token68(token: &str) -> bool {
+    let body = token.trim_end_matches('=');
+    !body.is_empty()
+        && body
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~+/".contains(&byte))
 }
 
 #[cfg(test)]
@@ -40,9 +56,14 @@ mod tests {
     }
 
     #[test]
+    fn accepts_the_scheme_in_any_case() {
+        assert!(authorize(&headers_with("bearer test-api-key-value")));
+        assert!(authorize(&headers_with("BEARER test-api-key-value")));
+    }
+
+    #[test]
     fn rejects_bad_credentials() {
         assert!(!authorize(&HeaderMap::new()));
-        assert!(!authorize(&headers_with("bearer test-api-key-value")));
         assert!(!authorize(&headers_with("Basic test-api-key-value")));
         assert!(!authorize(&headers_with("Bearer")));
         assert!(!authorize(&headers_with("Bearer test-api-key-valu")));
@@ -57,7 +78,18 @@ mod tests {
         assert_eq!(bearer_token(&headers_with("Bearer ")), None);
         assert_eq!(bearer_token(&headers_with("Bearer  token")), None);
         assert_eq!(bearer_token(&headers_with("Bearer a b")), None);
-        assert_eq!(bearer_token(&headers_with("bearer token")), None);
+        assert_eq!(bearer_token(&headers_with("Bearer a\tb")), None);
+        assert_eq!(bearer_token(&headers_with("Bearer ===")), None);
+        assert_eq!(bearer_token(&headers_with("Bearer a=b")), None);
+    }
+
+    #[test]
+    fn accepts_token68_characters() {
+        let token = "aZ09-._~+/==";
+        assert_eq!(
+            bearer_token(&headers_with(&format!("Bearer {token}"))),
+            Some(token)
+        );
     }
 
     #[test]
@@ -76,6 +108,11 @@ mod tests {
         assert!(key_matches(KEY, KEY));
         assert!(!key_matches("test-api-key-valu", KEY));
         assert!(!key_matches("", KEY));
-        assert!(key_matches("", ""));
+    }
+
+    #[test]
+    fn an_empty_key_never_matches() {
+        assert!(!key_matches("", ""));
+        assert!(!key_matches("anything", ""));
     }
 }

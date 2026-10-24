@@ -1,6 +1,6 @@
-# HTTP boundary error
+# HTTP errors and request headers
 
-This document describes the HTTP boundary error and the bearer API key check in the framework.
+This document describes the HTTP boundary error, the bearer API key check, and the cookie header helpers in the framework.
 This feature is not product business logic.
 
 ## Crate
@@ -21,6 +21,7 @@ The `http` feature enables these dependencies:
 - `axum`
 - `serde`
 - `serde_json`
+- `sha2`
 - `subtle`
 
 The `http` feature does not enable `logging`.
@@ -179,20 +180,23 @@ The module has these functions:
 | `key_matches(token: &str, key: &str)` | the match result, `bool` |
 
 `bearer_token` reads the `Authorization` header.
-The header value must be `Bearer`, then one space, then the token.
+The header value must be the scheme `Bearer`, then one space, then the token.
+The token is an RFC 9110 `token68`.
+It has one or more of the characters `A`-`Z`, `a`-`z`, `0`-`9`, `-`, `.`, `_`, `~`, `+`, `/`, then zero or more `=`.
 `bearer_token` gives `None` in these conditions:
 
 - The request has no `Authorization` header.
 - The header value is not UTF-8 text.
-- The scheme is not exactly `Bearer`. The scheme is case sensitive.
+- The scheme is not `Bearer`. The scheme is not case sensitive, so `bearer` is also `Bearer`.
 - The header value has no space.
-- The token is empty.
-- The token contains a space.
+- The token is not a `token68`. For example, the token is empty, or it contains a space or a tab.
 
-`key_matches` compares the token bytes and the key bytes in constant time.
-`key_matches` uses `subtle::ConstantTimeEq`.
+`key_matches` makes the SHA-256 hash of the token and of the key.
+It compares the two hashes in constant time with `subtle::ConstantTimeEq`.
 The comparison time does not depend on the position of the first different byte.
+The comparison time does not depend on the length of the key.
 `key_matches` gives `true` only if the token and the key are equal.
+`key_matches` gives `false` when the key is empty, so an unset key does not match.
 
 The project keeps the API key.
 The project selects the HTTP status and the error for a rejected request.
@@ -203,6 +207,27 @@ fn authorize(headers: &axum::http::HeaderMap, api_key: &str) -> bool {
         .is_some_and(|token| ian_framework::http::key_matches(token, api_key))
 }
 ```
+
+## Cookie headers
+
+The module has these functions:
+
+| function | result |
+| --- | --- |
+| `read_cookie(headers: &axum::http::HeaderMap, name: &str)` | the cookie value, `Option<&str>` |
+| `sets_cookie(headers: &axum::http::HeaderMap, name: &str)` | the match result, `bool` |
+
+`read_cookie` reads each `Cookie` request header.
+An HTTP/2 client can send each cookie in its own `Cookie` header.
+`read_cookie` returns the value of the first cookie with the name `name`.
+It skips a `Cookie` header that is not UTF-8 text.
+It returns `None` when no cookie has the name.
+It does not remove quotes from the value.
+
+`sets_cookie` reads each `Set-Cookie` response header.
+It returns `true` when one of them sets the cookie with the name `name`.
+
+Cookie sessions use these functions. Cookie sessions are `spec/framework/auth.md`.
 
 ## Out of scope
 

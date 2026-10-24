@@ -18,7 +18,7 @@ The `auth` feature enables `http`.
 The `auth` feature uses Tokio for the password hash.
 The `auth` feature does not enable `logging`.
 The `auth` feature does not enable `gcs`.
-The HTTP boundary error is `spec/framework/http.md`.
+The HTTP boundary error and the cookie header helpers are `spec/framework/http.md`.
 
 Put this block in the project `Cargo.toml`:
 
@@ -65,6 +65,10 @@ It returns an error when the URL is not a Redis URL.
 It returns an error when Redis does not reply `PONG`.
 It returns an error when `ttl_secs` is zero.
 It returns an error when `max_age_secs` is zero.
+It returns an error when `max_age_secs` is more than 400 days, 34560000 seconds. Browsers cap a cookie lifetime at 400 days.
+It returns an error when `ttl_secs` is more than `max_age_secs`.
+It returns an error when `cookie_name` is not an RFC 6265 cookie name.
+A cookie name has one or more visible ASCII characters and no separator character `()<>@,;:\"/[]?={}`.
 The connection manager stops early when Redis is down:
 
 | setting | value |
@@ -83,7 +87,7 @@ The Redis key of a session is `{prefix}{hash}`.
 Redis does not hold the token, so a copy of Redis does not give working tokens.
 The value is `{deadline}:{subject}`.
 `deadline` is the creation time plus `max_age_secs`, in Unix seconds.
-The key expires after the smaller of `ttl_secs` and `max_age_secs`.
+The key expires after `ttl_secs`.
 
 | method | result |
 | --- | --- |
@@ -102,9 +106,10 @@ A project with many sessions must use a prefix that only the session store uses.
 
 ## Cookie
 
-`SessionStore::token` reads the session token from the `Cookie` request header.
-It returns the value of the first cookie with the name `cookie_name`.
-It returns no token when the header is missing or is not text.
+`SessionStore::token` reads the session token from the `Cookie` request headers with `ian_framework::http::read_cookie`.
+It takes the value of the first cookie with the name `cookie_name`.
+It returns no token when no cookie has the name.
+It returns no token when the value is not 64 lowercase hex characters, so a bad value does not reach Redis.
 
 `SessionStore::cookie` returns one `Set-Cookie` value for a token.
 The value has these attributes:
@@ -137,7 +142,7 @@ After the handler returns, the middleware does these steps:
 
 1. When the response status is 401, it returns the response with no change.
 2. When the request has no token, it returns the response with no change.
-3. When the response has a `Set-Cookie` for `cookie_name`, it returns the response with no change.
+3. When the response has a `Set-Cookie` for `cookie_name`, it returns the response with no change. It checks this with `ian_framework::http::sets_cookie`.
    This keeps the cookie of a login or a logout handler.
 4. It calls `touch` for the token.
 5. When `touch` returns `true`, it adds one `Set-Cookie` with `cookie(token)`.

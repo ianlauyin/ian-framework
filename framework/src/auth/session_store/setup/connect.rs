@@ -7,17 +7,12 @@ use crate::auth::{AuthError, AuthErrorKind, SessionConfig};
 
 use crate::auth::session_store::{Inner, SessionStore};
 
+// Browsers cap a cookie lifetime at 400 days.
+const MAX_AGE_LIMIT_SECS: u64 = 400 * 24 * 60 * 60;
+
 impl SessionStore {
     pub async fn connect(url: &str, config: SessionConfig) -> Result<Self, AuthError> {
-        if config.ttl_secs == 0 {
-            return Err(AuthError::new(AuthErrorKind::Config, "session ttl is zero"));
-        }
-        if config.max_age_secs == 0 {
-            return Err(AuthError::new(
-                AuthErrorKind::Config,
-                "session max age is zero",
-            ));
-        }
+        check_config(&config)?;
         let client = redis::Client::open(url).map_err(|err| {
             AuthError::with_source(AuthErrorKind::Config, "redis url is not valid", err)
         })?;
@@ -46,6 +41,31 @@ fn manager_config() -> ConnectionManagerConfig {
         .set_max_delay(Duration::from_millis(500))
 }
 
+fn check_config(config: &SessionConfig) -> Result<(), AuthError> {
+    let problem = if config.ttl_secs == 0 {
+        "session ttl is zero"
+    } else if config.max_age_secs == 0 {
+        "session max age is zero"
+    } else if config.max_age_secs > MAX_AGE_LIMIT_SECS {
+        "session max age is more than 400 days"
+    } else if config.ttl_secs > config.max_age_secs {
+        "session ttl is more than the max age"
+    } else if !is_cookie_name(&config.cookie_name) {
+        "session cookie name is not valid"
+    } else {
+        return Ok(());
+    };
+    Err(AuthError::new(AuthErrorKind::Config, problem))
+}
+
+// RFC 6265 cookie-name: one or more visible ASCII characters with no separator.
+fn is_cookie_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() && !b"()<>@,;:\\\"/[]?={}".contains(&byte))
+}
+
 fn unreachable(err: redis::RedisError) -> AuthError {
     AuthError::with_source(AuthErrorKind::Store, "cannot reach redis", err)
 }
@@ -53,6 +73,39 @@ fn unreachable(err: redis::RedisError) -> AuthError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn config_with(change: impl FnOnce(&mut SessionConfig)) -> SessionConfig {
+        let mut config = SessionConfig::default();
+        change(&mut config);
+        config
+    }
+
+    #[test]
+    fn checks_the_config() {
+        assert!(check_config(&SessionConfig::default()).is_ok());
+        let bad = [
+            config_with(|config| config.ttl_secs = 0),
+            config_with(|config| config.max_age_secs = 0),
+            config_with(|config| config.max_age_secs = MAX_AGE_LIMIT_SECS + 1),
+            config_with(|config| config.ttl_secs = config.max_age_secs + 1),
+            config_with(|config| config.ttl_secs = u64::MAX),
+            config_with(|config| config.cookie_name = String::new()),
+            config_with(|config| config.cookie_name = "a b".to_string()),
+            config_with(|config| config.cookie_name = "a;b".to_string()),
+            config_with(|config| config.cookie_name = "a=b".to_string()),
+            config_with(|config| config.cookie_name = "séance".to_string()),
+        ];
+        for config in bad {
+            let err = check_config(&config).unwrap_err();
+            assert_eq!(err.kind(), AuthErrorKind::Config);
+        }
+        let edge = config_with(|config| {
+            config.max_age_secs = MAX_AGE_LIMIT_SECS;
+            config.ttl_secs = MAX_AGE_LIMIT_SECS;
+            config.cookie_name = "__Host-sid".to_string();
+        });
+        assert!(check_config(&edge).is_ok());
+    }
 
     #[tokio::test]
     async fn bad_config_is_refused_before_connecting() {

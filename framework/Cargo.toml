@@ -9,6 +9,7 @@ http = [
     "dep:axum",
     "dep:serde",
     "dep:serde_json",
+    "dep:sha2",
     "dep:subtle",
 ]
 logging = [
