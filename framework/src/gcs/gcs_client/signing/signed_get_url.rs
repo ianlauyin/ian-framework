@@ -15,15 +15,20 @@ impl GcsClient {
         &self,
         name: &str,
         expires_in: Option<Duration>,
+        attachment_filename: Option<&str>,
     ) -> Result<String, GcsError> {
         validate_object_name(name)?;
         let seconds = signed_lifetime_seconds(expires_in)?;
+        let disposition = attachment_filename
+            .map(attachment_disposition)
+            .transpose()?;
         let parts = SignedParts::v4_get(
             self.bucket(),
             name,
             self.signer_email(),
             Utc::now(),
             seconds,
+            disposition.as_deref(),
         );
         let signature = self.sign_blob(parts.string_to_sign.as_bytes()).await?;
         Ok(format!(
@@ -46,19 +51,23 @@ impl SignedParts {
         email: &str,
         now: DateTime<Utc>,
         expires_secs: u64,
+        disposition: Option<&str>,
     ) -> Self {
         let request_ts = now.format("%Y%m%dT%H%M%SZ").to_string();
         let date = now.format("%Y%m%d").to_string();
         let scope = format!("{date}/auto/storage/goog4_request");
         let credential = format!("{email}/{scope}");
         let canonical_uri = format!("/{}/{}", encode_seg(bucket_name), encode_object_path(name));
-        let mut pairs = [
+        let mut pairs = vec![
             ("X-Goog-Algorithm", "GOOG4-RSA-SHA256".to_string()),
             ("X-Goog-Credential", credential),
             ("X-Goog-Date", request_ts.clone()),
             ("X-Goog-Expires", expires_secs.to_string()),
             ("X-Goog-SignedHeaders", "host".to_string()),
         ];
+        if let Some(disposition) = disposition {
+            pairs.push(("response-content-disposition", disposition.to_string()));
+        }
         pairs.sort_by(|left, right| left.0.cmp(right.0));
         let mut query = String::new();
         for (index, (key, value)) in pairs.iter().enumerate() {
@@ -104,6 +113,29 @@ fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError
     Ok(seconds)
 }
 
+fn attachment_disposition(filename: &str) -> Result<String, GcsError> {
+    if filename.is_empty() {
+        return Err(GcsError::new(
+            GcsErrorKind::Config,
+            "attachment filename is empty",
+        ));
+    }
+    let fallback: String = filename
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii() && !ch.is_ascii_control() && ch != '"' && ch != '\\' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    Ok(format!(
+        "attachment; filename=\"{fallback}\"; filename*=UTF-8''{}",
+        encode_seg(filename)
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,6 +152,7 @@ mod tests {
             "signer@example-project.iam.gserviceaccount.com",
             now,
             3600,
+            None,
         );
         let canonical = "\
 GET
@@ -155,11 +188,50 @@ UNSIGNED-PAYLOAD";
             "s@example.iam.gserviceaccount.com",
             now,
             60,
+            None,
         );
         assert!(parts.url_prefix.contains("/b/my%20cat.jpeg?"));
         assert!(parts
             .string_to_sign
             .contains("20181026/auto/storage/goog4_request"));
+    }
+
+    #[test]
+    fn v4_signs_the_attachment_disposition_after_the_goog_params() {
+        let now = DateTime::parse_from_rfc3339("2018-10-26T21:19:42Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let disposition = attachment_disposition("報告 \"v2\".pdf").unwrap();
+        assert_eq!(
+            disposition,
+            "attachment; filename=\"__ _v2_.pdf\"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%20%22v2%22.pdf"
+        );
+        let parts = SignedParts::v4_get(
+            "b",
+            "a.pdf",
+            "s@example.iam.gserviceaccount.com",
+            now,
+            60,
+            Some(&disposition),
+        );
+        assert!(parts.url_prefix.ends_with(
+            "&X-Goog-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3D%22__%20_v2_.pdf%22%3B%20filename%2A%3DUTF-8%27%27%25E5%25A0%25B1%25E5%2591%258A%2520%2522v2%2522.pdf"
+        ));
+        let without = SignedParts::v4_get(
+            "b",
+            "a.pdf",
+            "s@example.iam.gserviceaccount.com",
+            now,
+            60,
+            None,
+        );
+        assert_ne!(parts.string_to_sign, without.string_to_sign);
+    }
+
+    #[test]
+    fn attachment_disposition_rejects_an_empty_filename() {
+        let err = attachment_disposition("").unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Config);
     }
 
     #[tokio::test]
@@ -176,7 +248,7 @@ UNSIGNED-PAYLOAD";
         .await
         .unwrap();
         let err = client
-            .signed_get_url("a", Some(Duration::from_secs(604_801)))
+            .signed_get_url("a", Some(Duration::from_secs(604_801)), None)
             .await
             .unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
@@ -196,7 +268,10 @@ UNSIGNED-PAYLOAD";
         .await
         .unwrap();
         for lifetime in [None, Some(Duration::ZERO), Some(Duration::from_millis(500))] {
-            let err = client.signed_get_url("a", lifetime).await.unwrap_err();
+            let err = client
+                .signed_get_url("a", lifetime, None)
+                .await
+                .unwrap_err();
             assert_eq!(err.kind(), GcsErrorKind::Auth);
         }
     }

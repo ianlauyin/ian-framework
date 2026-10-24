@@ -107,6 +107,15 @@ The client does not sign `X-Goog-Expires=0`.
 The maximum lifetime is 604800 seconds.
 A lifetime above that maximum is a configuration error.
 
+`GcsClient::signed_get_url` takes an optional attachment filename.
+With a filename, the URL signs the query parameter `response-content-disposition`.
+GCS then sends that value as the `Content-Disposition` response header.
+The value is `attachment; filename="{fallback}"; filename*=UTF-8''{encoded}`.
+`{fallback}` is the filename with `_` in place of each non-ASCII character, control character, `"`, and `\`.
+`{encoded}` is the percent-encoded UTF-8 filename.
+An empty filename is a configuration error.
+Without a filename, the URL has no `response-content-disposition`.
+
 ## Transfer time limit
 
 The transfer time limit is 180 seconds.
@@ -244,4 +253,3 @@ The client does not include these items:
 - Move and rename policy.
 - Axum and a product Store.
 - Extra access-token caches. The client keeps one access-token cache.
-- `Content-Disposition` for attachments.
