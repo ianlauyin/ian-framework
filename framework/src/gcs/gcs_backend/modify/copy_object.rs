@@ -1,6 +1,6 @@
-use super::super::encode::{encode_object_id, encode_seg};
-use super::super::{GcsError, ObjectMeta};
-use super::{object_url, validate_object_name, Call, GcsBackend};
+use crate::gcs::encode::{encode_object_id, encode_seg};
+use crate::gcs::gcs_backend::{object_url, validate_object_name, Call, GcsBackend};
+use crate::gcs::{GcsError, ObjectMeta};
 
 impl GcsBackend {
     pub async fn copy_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {

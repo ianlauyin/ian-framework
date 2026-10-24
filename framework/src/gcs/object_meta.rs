@@ -3,33 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
-use super::encode::encode_seg;
-use super::{GcsError, GcsErrorKind, API_ROOT};
-
-const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct PutOptions {
-    pub content_type: Option<String>,
-    pub metadata: BTreeMap<String, String>,
-}
-
-impl PutOptions {
-    pub(super) fn content_type(&self) -> Result<String, GcsError> {
-        match &self.content_type {
-            Some(value) => {
-                if value.is_empty() || !value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
-                    return Err(GcsError::new(
-                        GcsErrorKind::Config,
-                        "content type is empty or is not printable ASCII",
-                    ));
-                }
-                Ok(value.clone())
-            }
-            None => Ok(DEFAULT_CONTENT_TYPE.to_string()),
-        }
-    }
-}
+use super::{GcsError, GcsErrorKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectMeta {
@@ -53,71 +27,6 @@ impl ObjectMeta {
             GcsError::with_source(GcsErrorKind::Api, "object JSON is invalid", err)
         })?;
         raw.into_meta()
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ListQuery {
-    pub prefix: Option<String>,
-    pub delimiter: Option<String>,
-    pub page_token: Option<String>,
-    pub max_results: Option<u32>,
-}
-
-impl ListQuery {
-    pub(super) fn url(&self, bucket_name: &str) -> String {
-        let max_results = self.max_results.map(|max| max.to_string());
-        let mut pairs: Vec<(&str, &str)> = Vec::new();
-        if let Some(prefix) = self.prefix.as_deref() {
-            pairs.push(("prefix", prefix));
-        }
-        if let Some(delimiter) = self.delimiter.as_deref() {
-            pairs.push(("delimiter", delimiter));
-        }
-        if let Some(token) = self.page_token.as_deref() {
-            pairs.push(("pageToken", token));
-        }
-        if let Some(max) = max_results.as_deref() {
-            pairs.push(("maxResults", max));
-        }
-        pairs.sort_by(|left, right| left.0.cmp(right.0));
-        let mut url = format!("{API_ROOT}/b/{}/o", encode_seg(bucket_name));
-        if pairs.is_empty() {
-            return url;
-        }
-        url.push('?');
-        for (index, (key, value)) in pairs.iter().enumerate() {
-            if index > 0 {
-                url.push('&');
-            }
-            url.push_str(&encode_seg(key));
-            url.push('=');
-            url.push_str(&encode_seg(value));
-        }
-        url
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ListPage {
-    pub objects: Vec<ObjectMeta>,
-    pub prefixes: Vec<String>,
-    pub next_page_token: Option<String>,
-}
-
-impl ListPage {
-    pub(super) fn from_slice(bytes: &[u8]) -> Result<Self, GcsError> {
-        let raw: RawList = serde_json::from_slice(bytes)
-            .map_err(|err| GcsError::with_source(GcsErrorKind::Api, "list JSON is invalid", err))?;
-        let mut objects = Vec::with_capacity(raw.items.len());
-        for item in raw.items {
-            objects.push(item.into_meta()?);
-        }
-        Ok(Self {
-            objects,
-            prefixes: raw.prefixes,
-            next_page_token: raw.next_page_token.filter(|token| !token.is_empty()),
-        })
     }
 }
 
@@ -158,16 +67,6 @@ impl RawObject {
             metadata: self.metadata,
         })
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct RawList {
-    #[serde(default)]
-    items: Vec<RawObject>,
-    #[serde(default)]
-    prefixes: Vec<String>,
-    #[serde(rename = "nextPageToken", default)]
-    next_page_token: Option<String>,
 }
 
 fn de_size<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
@@ -228,13 +127,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn put_options_do_not_insert_product_keys() {
-        let options = PutOptions::default();
-        assert!(options.metadata.is_empty());
-        assert_eq!(options.content_type().unwrap(), "application/octet-stream");
-    }
-
-    #[test]
     fn object_json_keeps_caller_metadata() {
         let json = br#"{
             "name": "photos/cat.jpeg",
@@ -272,39 +164,5 @@ mod tests {
         assert!(meta.metadata.is_empty());
         assert_eq!(meta.size, 1);
         assert_eq!(meta.updated, None);
-    }
-
-    #[test]
-    fn list_url_encodes_query_and_does_not_add_a_cap() {
-        let url = ListQuery::default().url("buck");
-        assert_eq!(url, "https://storage.googleapis.com/storage/v1/b/buck/o");
-        let url = ListQuery {
-            prefix: Some("a b".to_string()),
-            delimiter: Some("/".to_string()),
-            page_token: None,
-            max_results: Some(10),
-        }
-        .url("buck");
-        assert_eq!(
-            url,
-            "https://storage.googleapis.com/storage/v1/b/buck/o?delimiter=%2F&maxResults=10&prefix=a%20b"
-        );
-    }
-
-    #[test]
-    fn list_keeps_trash_prefixes() {
-        let json = br#"{
-            "items": [{"name":"keep.txt","size":"3","metadata":null}],
-            "prefixes": [".trash/", "photos/"],
-            "nextPageToken": "next"
-        }"#;
-        let page = ListPage::from_slice(json).unwrap();
-        assert_eq!(
-            page.prefixes,
-            vec![".trash/".to_string(), "photos/".to_string()]
-        );
-        assert_eq!(page.objects.len(), 1);
-        assert!(page.objects[0].metadata.is_empty());
-        assert_eq!(page.next_page_token.as_deref(), Some("next"));
     }
 }

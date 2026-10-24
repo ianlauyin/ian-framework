@@ -3,9 +3,9 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
-use super::super::encode::{encode_object_path, encode_seg};
-use super::super::{GcsError, GcsErrorKind};
-use super::{validate_object_name, GcsBackend};
+use crate::gcs::encode::{encode_object_path, encode_seg};
+use crate::gcs::gcs_backend::{validate_object_name, GcsBackend};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 const HOST: &str = "storage.googleapis.com";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
@@ -106,8 +106,8 @@ fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::cred::Auth;
     use super::*;
+    use crate::gcs::gcs_backend::Auth;
 
     #[test]
     fn v4_get_matches_the_canonical_request() {

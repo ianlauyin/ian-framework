@@ -1,8 +1,8 @@
 use base64::Engine;
 
-use super::super::encode::encode_seg;
-use super::super::{GcsError, GcsErrorKind};
-use super::{Call, GcsBackend};
+use crate::gcs::encode::encode_seg;
+use crate::gcs::gcs_backend::{Call, GcsBackend};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 impl GcsBackend {
     pub async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {

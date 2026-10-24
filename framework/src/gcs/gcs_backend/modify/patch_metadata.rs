@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
-use super::super::{GcsError, ObjectMeta};
-use super::{object_url, validate_metadata, validate_object_name, Call, GcsBackend};
+use crate::gcs::gcs_backend::{
+    object_url, validate_metadata, validate_object_name, Call, GcsBackend,
+};
+use crate::gcs::{GcsError, ObjectMeta};
 
 impl GcsBackend {
     pub async fn patch_metadata(

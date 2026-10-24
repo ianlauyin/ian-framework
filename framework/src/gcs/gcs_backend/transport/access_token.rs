@@ -2,11 +2,11 @@ use std::time::Instant;
 
 use crate::logging::LogLevel;
 
-use super::super::GcsError;
-use super::{logged_error, GcsBackend, OpsRecord};
+use crate::gcs::gcs_backend::{logged_error, GcsBackend, OpsRecord};
+use crate::gcs::GcsError;
 
 impl GcsBackend {
-    pub(super) async fn access_token(&self) -> Result<String, GcsError> {
+    pub(crate) async fn access_token(&self) -> Result<String, GcsError> {
         let mut guard = self.inner.token.lock().await;
         if let Some(cached) = guard.as_ref() {
             if Instant::now() < cached.expires_at && !cached.value.is_empty() {
@@ -32,7 +32,7 @@ impl GcsBackend {
         Ok(value)
     }
 
-    pub(super) async fn invalidate_token(&self) {
+    pub(crate) async fn invalidate_token(&self) {
         *self.inner.token.lock().await = None;
     }
 }

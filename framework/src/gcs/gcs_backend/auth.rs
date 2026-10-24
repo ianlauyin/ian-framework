@@ -1,7 +1,8 @@
 use std::time::{Duration, Instant};
 
-use super::encode::encode_seg;
-use super::{api_detail, truncate, validate_signer_email, GcsError, GcsErrorKind};
+use crate::gcs::encode::encode_seg;
+use crate::gcs::gcs_backend::{api_detail, truncate, validate_signer_email};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 const METADATA_ROOT: &str =
     "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default";

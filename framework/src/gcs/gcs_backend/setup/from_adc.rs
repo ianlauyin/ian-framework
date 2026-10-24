@@ -3,9 +3,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::super::cred::Auth;
-use super::super::{validate_signer_email, GcsError, GcsErrorKind};
-use super::GcsBackend;
+use crate::gcs::gcs_backend::{validate_signer_email, Auth, GcsBackend};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 const ADC_FILE_LIMIT: u64 = 1024 * 1024;
 

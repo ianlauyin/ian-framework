@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use crate::logging::LogLevel;
 
-use super::super::encode::encode_seg;
-use super::super::{GcsError, GcsErrorKind, ObjectMeta, TRANSFER_TIMEOUT};
-use super::{logged_error, Call, GcsBackend, OpsRecord};
+use crate::gcs::encode::encode_seg;
+use crate::gcs::gcs_backend::{logged_error, Call, GcsBackend, OpsRecord, TRANSFER_TIMEOUT};
+use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
 
 pub(super) const CHUNK_SIZE: usize = 8 * 1024 * 1024;
 pub(super) const CHUNK_ALIGN: u64 = 256 * 1024;
@@ -469,14 +469,14 @@ mod tests {
             socket.write_all(body).await.unwrap();
             String::from_utf8(head).unwrap().to_ascii_lowercase()
         });
-        let auth = super::super::super::cred::Auth::User {
+        let auth = crate::gcs::gcs_backend::Auth::User {
             client_id: "client".to_string(),
             client_secret: "secret".to_string(),
             refresh_token: "refresh".to_string(),
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         };
         let backend = GcsBackend::new("my-bucket", auth).await.unwrap();
-        *backend.inner.token.lock().await = Some(super::super::super::cred::CachedToken {
+        *backend.inner.token.lock().await = Some(crate::gcs::gcs_backend::CachedToken {
             value: "token".to_string(),
             expires_at: std::time::Instant::now() + Duration::from_secs(600),
         });

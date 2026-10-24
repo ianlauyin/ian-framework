@@ -1,6 +1,6 @@
-use super::super::{GcsError, GcsErrorKind, ObjectMeta, PutOptions};
 use super::resumable::{advance_offset, UploadStep, CHUNK_SIZE};
-use super::{validate_metadata, validate_object_name, GcsBackend};
+use crate::gcs::gcs_backend::{validate_metadata, validate_object_name, GcsBackend};
+use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta, PutOptions};
 
 impl GcsBackend {
     pub async fn put_bytes(

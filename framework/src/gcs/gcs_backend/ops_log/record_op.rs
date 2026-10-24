@@ -4,9 +4,9 @@ use chrono::Utc;
 
 use crate::logging::{LogEvent, LogLevel};
 
-use super::{lock_ops, GcsBackend};
+use crate::gcs::gcs_backend::{lock_ops, GcsBackend};
 
-pub(super) struct OpsRecord<'a> {
+pub(crate) struct OpsRecord<'a> {
     pub level: LogLevel,
     pub message: &'a str,
     pub method: &'a str,
@@ -17,7 +17,7 @@ pub(super) struct OpsRecord<'a> {
 }
 
 impl GcsBackend {
-    pub(super) fn record_op(&self, op: OpsRecord<'_>) {
+    pub(crate) fn record_op(&self, op: OpsRecord<'_>) {
         let Some(shipper) = lock_ops(&self.inner.ops_log).clone() else {
             return;
         };
@@ -71,8 +71,8 @@ fn path_only(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::cred::Auth;
     use super::*;
+    use crate::gcs::gcs_backend::Auth;
     use crate::logging::{LogShipper, ShipperConfig};
 
     fn user_auth() -> Auth {

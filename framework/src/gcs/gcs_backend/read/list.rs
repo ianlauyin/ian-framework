@@ -1,5 +1,5 @@
-use super::super::{GcsError, GcsErrorKind, ListPage, ListQuery};
-use super::{Call, GcsBackend};
+use crate::gcs::gcs_backend::{Call, GcsBackend};
+use crate::gcs::{GcsError, GcsErrorKind, ListPage, ListQuery};
 
 impl GcsBackend {
     pub async fn list(&self, query: &ListQuery) -> Result<ListPage, GcsError> {

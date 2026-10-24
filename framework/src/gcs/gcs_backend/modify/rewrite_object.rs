@@ -1,9 +1,9 @@
 use serde::Deserialize;
 
-use super::super::encode::{encode_object_id, encode_seg};
-use super::super::object::RawObject;
-use super::super::{GcsError, GcsErrorKind, ObjectMeta};
-use super::{object_url, validate_object_name, Call, GcsBackend};
+use crate::gcs::encode::{encode_object_id, encode_seg};
+use crate::gcs::gcs_backend::{object_url, validate_object_name, Call, GcsBackend};
+use crate::gcs::object_meta::RawObject;
+use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
 
 impl GcsBackend {
     pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {

@@ -1,11 +1,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::super::cred::Auth;
 #[cfg(target_os = "linux")]
-use super::super::TRANSFER_TIMEOUT;
-use super::super::{GcsError, GcsErrorKind};
-use super::{GcsBackend, Inner};
+use crate::gcs::gcs_backend::TRANSFER_TIMEOUT;
+use crate::gcs::gcs_backend::{Auth, GcsBackend, Inner};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 

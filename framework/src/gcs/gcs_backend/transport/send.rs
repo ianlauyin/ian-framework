@@ -2,10 +2,10 @@ use std::time::{Duration, Instant};
 
 use crate::logging::LogLevel;
 
-use super::super::{api_detail, truncate, GcsError, GcsErrorKind};
-use super::{logged_error, GcsBackend, OpsRecord};
+use crate::gcs::gcs_backend::{api_detail, logged_error, truncate, GcsBackend, OpsRecord};
+use crate::gcs::{GcsError, GcsErrorKind};
 
-pub(super) struct Call {
+pub(crate) struct Call {
     pub method: reqwest::Method,
     pub url: String,
     pub headers: Vec<(reqwest::header::HeaderName, String)>,
@@ -16,7 +16,7 @@ pub(super) struct Call {
 }
 
 impl GcsBackend {
-    pub(super) async fn send(&self, call: &Call) -> Result<reqwest::Response, GcsError> {
+    pub(crate) async fn send(&self, call: &Call) -> Result<reqwest::Response, GcsError> {
         let mut retried = false;
         loop {
             let token = self.access_token().await?;

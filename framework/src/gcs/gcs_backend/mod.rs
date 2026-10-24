@@ -1,36 +1,27 @@
-mod access_token;
-mod attach_ops_log;
-mod copy_object;
-mod delete_object;
-mod from_adc;
-mod get_bytes;
-mod list;
-mod new;
-mod open_object;
-mod patch_metadata;
-mod put_bytes;
-mod put_file;
-mod put_stream;
-mod record_op;
-mod resumable;
-mod rewrite_object;
-mod send;
-mod sign_blob;
-mod signed_get_url;
-mod stat;
+mod auth;
+mod modify;
+mod ops_log;
+mod read;
+mod setup;
+mod signing;
+mod transport;
+mod upload;
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::logging::LogShipper;
 
-use super::cred::{Auth, CachedToken};
 use super::encode::{encode_object_id, encode_seg};
-use super::{truncate, GcsError, GcsErrorKind, API_ROOT};
+use super::{GcsError, GcsErrorKind, API_ROOT};
 
-use record_op::OpsRecord;
-use send::Call;
+use auth::{Auth, CachedToken};
+use ops_log::OpsRecord;
+use transport::Call;
+
+const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Clone)]
 pub struct GcsBackend {
@@ -127,9 +118,55 @@ fn redact_query(text: &str) -> String {
     out
 }
 
+fn validate_signer_email(email: &str) -> Result<(), GcsError> {
+    if email.is_empty()
+        || !email.contains('@')
+        || email.contains(char::is_whitespace)
+        || email.contains(['\r', '\n'])
+    {
+        return Err(GcsError::new(
+            GcsErrorKind::Config,
+            "signer email is not a service account email",
+        ));
+    }
+    Ok(())
+}
+
+fn api_detail(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    if let Some(message) = value
+        .get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(|m| m.as_str())
+    {
+        return Some(message.to_string());
+    }
+    if let Some(message) = value.get("error_description").and_then(|m| m.as_str()) {
+        return Some(message.to_string());
+    }
+    None
+}
+
+fn truncate(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn api_detail_reads_the_gcs_message() {
+        let body = r#"{"error":{"code":404,"message":"No such object"}}"#;
+        assert_eq!(api_detail(body).as_deref(), Some("No such object"));
+    }
 
     #[test]
     fn object_url_encodes_slashes() {
