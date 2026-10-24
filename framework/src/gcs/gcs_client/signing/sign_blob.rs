@@ -15,11 +15,8 @@ impl GcsClient {
             .send(&Call {
                 method: reqwest::Method::POST,
                 url,
-                headers: Vec::new(),
                 json: Some(serde_json::json!({ "payload": encoded })),
-                bytes: None,
-                extra_status: &[],
-                timeout: None,
+                ..Default::default()
             })
             .await?;
         let bytes = response.bytes().await.map_err(|err| {

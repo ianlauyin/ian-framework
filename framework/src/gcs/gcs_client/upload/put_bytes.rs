@@ -25,12 +25,10 @@ impl GcsClient {
         let mut offset = 0u64;
         let mut rewinds = 0u32;
         while offset < total {
-            let remaining = total - offset;
-            let is_last = remaining <= CHUNK_SIZE as u64;
-            let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
-            let start = usize::try_from(offset)
-                .map_err(|_| GcsError::new(GcsErrorKind::Api, "object is too large"))?;
-            let chunk = &bytes[start..start + len];
+            let start = offset as usize;
+            let end = (start + CHUNK_SIZE).min(bytes.len());
+            let is_last = end == bytes.len();
+            let chunk = &bytes[start..end];
             match self
                 .put_chunk_retrying(
                     &location,

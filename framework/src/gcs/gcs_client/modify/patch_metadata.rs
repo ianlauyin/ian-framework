@@ -17,11 +17,8 @@ impl GcsClient {
             .send(&Call {
                 method: reqwest::Method::PATCH,
                 url: object_url(self.bucket(), name),
-                headers: Vec::new(),
                 json: Some(serde_json::json!({ "metadata": metadata })),
-                bytes: None,
-                extra_status: &[],
-                timeout: None,
+                ..Default::default()
             })
             .await?;
         ObjectMeta::from_response(response).await

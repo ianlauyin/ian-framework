@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::gcs::gcs_client::{validate_signer_email, Auth, GcsClient};
+use crate::gcs::gcs_client::{Auth, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const ADC_FILE_LIMIT: u64 = 1024 * 1024;
@@ -80,26 +80,16 @@ async fn read_adc_at(path: &Path) -> Result<Auth, GcsError> {
             err,
         )
     })?;
-    let typ = value.get("type").and_then(Value::as_str).unwrap_or("");
-    let signer = if typ == "authorized_user" {
-        Some(signer_email_from_env()?)
-    } else {
-        None
-    };
-    auth_from_value(&value, signer.as_deref())
+    auth_from_value(&value, signer_email_from_env().as_deref())
 }
 
-fn signer_email_from_env() -> Result<String, GcsError> {
-    let value = env::var("GCS_SIGNER_EMAIL").unwrap_or_default();
+fn signer_email_from_env() -> Option<String> {
+    let value = env::var("GCS_SIGNER_EMAIL").ok()?;
     let value = value.trim();
     if value.is_empty() {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "user application default credentials require GCS_SIGNER_EMAIL",
-        ));
+        return None;
     }
-    validate_signer_email(value)?;
-    Ok(value.to_string())
+    Some(value.to_string())
 }
 
 fn auth_from_value(value: &Value, signer_email: Option<&str>) -> Result<Auth, GcsError> {
@@ -128,20 +118,11 @@ fn authorized_user(value: &Value, signer_email: Option<&str>) -> Result<Auth, Gc
             "user application default credentials require GCS_SIGNER_EMAIL",
         )
     })?;
-    validate_signer_email(signer_email)?;
-    let client_id = string_field(value, "client_id")?;
-    let client_secret = string_field(value, "client_secret")?;
-    let refresh_token = string_field(value, "refresh_token")?;
-    if client_id.is_empty() || client_secret.is_empty() || refresh_token.is_empty() {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "user credentials are incomplete",
-        ));
-    }
+    // GcsClient::new checks that the fields are not empty and the signer email is valid.
     Ok(Auth::User {
-        client_id,
-        client_secret,
-        refresh_token,
+        client_id: string_field(value, "client_id")?,
+        client_secret: string_field(value, "client_secret")?,
+        refresh_token: string_field(value, "refresh_token")?,
         signer_email: signer_email.to_string(),
     })
 }

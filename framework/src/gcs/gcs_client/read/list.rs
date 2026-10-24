@@ -7,11 +7,7 @@ impl GcsClient {
             .send(&Call {
                 method: reqwest::Method::GET,
                 url: query.url(self.bucket()),
-                headers: Vec::new(),
-                json: None,
-                bytes: None,
-                extra_status: &[],
-                timeout: None,
+                ..Default::default()
             })
             .await?;
         let bytes = response.bytes().await.map_err(|err| {

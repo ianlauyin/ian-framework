@@ -33,93 +33,32 @@ impl ObjectMeta {
 #[derive(Debug, Deserialize)]
 pub(super) struct RawObject {
     name: String,
-    #[serde(default, deserialize_with = "de_size")]
-    size: Option<u64>,
+    #[serde(default)]
+    size: Option<String>,
     #[serde(rename = "contentType", default)]
     content_type: Option<String>,
     #[serde(default)]
-    updated: Option<String>,
-    #[serde(default, deserialize_with = "de_metadata")]
-    metadata: BTreeMap<String, String>,
+    updated: Option<DateTime<Utc>>,
+    #[serde(default)]
+    metadata: Option<BTreeMap<String, String>>,
 }
 
 impl RawObject {
     pub(super) fn into_meta(self) -> Result<ObjectMeta, GcsError> {
-        let updated = match self.updated {
-            Some(text) => Some(
-                DateTime::parse_from_rfc3339(&text)
-                    .map_err(|err| {
-                        GcsError::with_source(
-                            GcsErrorKind::Api,
-                            "object updated time is invalid",
-                            err,
-                        )
-                    })?
-                    .with_timezone(&Utc),
-            ),
-            None => None,
+        let size = match self.size {
+            Some(text) => text.parse().map_err(|err| {
+                GcsError::with_source(GcsErrorKind::Api, "object size is invalid", err)
+            })?,
+            None => 0,
         };
         Ok(ObjectMeta {
             name: self.name,
-            size: self.size.unwrap_or(0),
+            size,
             content_type: self.content_type,
-            updated,
-            metadata: self.metadata,
+            updated: self.updated,
+            metadata: self.metadata.unwrap_or_default(),
         })
     }
-}
-
-fn de_size<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    struct Visit;
-    impl<'de> serde::de::Visitor<'de> for Visit {
-        type Value = Option<u64>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a string or integer size")
-        }
-
-        fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-            Ok(None)
-        }
-
-        fn visit_none<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-            Ok(None)
-        }
-
-        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where
-            D: serde::Deserializer<'de>,
-        {
-            deserializer.deserialize_any(Visit)
-        }
-
-        fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<Self::Value, E> {
-            Ok(Some(value))
-        }
-
-        fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<Self::Value, E> {
-            u64::try_from(value).map(Some).map_err(E::custom)
-        }
-
-        fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-            if value.is_empty() {
-                return Ok(None);
-            }
-            value.parse::<u64>().map(Some).map_err(E::custom)
-        }
-    }
-    deserializer.deserialize_any(Visit)
-}
-
-fn de_metadata<'de, D>(deserializer: D) -> Result<BTreeMap<String, String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = Option::<BTreeMap<String, String>>::deserialize(deserializer)?;
-    Ok(value.unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -159,7 +98,7 @@ mod tests {
 
     #[test]
     fn missing_metadata_is_an_empty_map() {
-        let json = br#"{"name":"a","size":1}"#;
+        let json = br#"{"name":"a","size":"1"}"#;
         let meta = ObjectMeta::from_slice(json).unwrap();
         assert!(meta.metadata.is_empty());
         assert_eq!(meta.size, 1);

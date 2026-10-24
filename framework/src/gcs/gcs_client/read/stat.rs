@@ -8,11 +8,7 @@ impl GcsClient {
             .send(&Call {
                 method: reqwest::Method::GET,
                 url: object_url(self.bucket(), name),
-                headers: Vec::new(),
-                json: None,
-                bytes: None,
-                extra_status: &[],
-                timeout: None,
+                ..Default::default()
             })
             .await?;
         ObjectMeta::from_response(response).await

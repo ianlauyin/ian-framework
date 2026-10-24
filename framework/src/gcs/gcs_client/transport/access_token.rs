@@ -9,7 +9,7 @@ impl GcsClient {
     pub(crate) async fn access_token(&self) -> Result<String, GcsError> {
         let mut guard = self.inner.token.lock().await;
         if let Some(cached) = guard.as_ref() {
-            if Instant::now() < cached.expires_at && !cached.value.is_empty() {
+            if Instant::now() < cached.expires_at {
                 return Ok(cached.value.clone());
             }
         }

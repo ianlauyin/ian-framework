@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+
 use super::resumable::{advance_offset, UploadStep, CHUNK_SIZE};
 use crate::gcs::gcs_client::{validate_metadata, validate_object_name, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta, PutOptions};
@@ -46,7 +48,6 @@ impl GcsClient {
         }
         let mut offset = 0u64;
         let mut rewinds = 0u32;
-        use tokio::io::AsyncSeekExt;
         while offset < total {
             let remaining = total - offset;
             let is_last = remaining <= CHUNK_SIZE as u64;
@@ -60,7 +61,10 @@ impl GcsClient {
                         err,
                     )
                 })?;
-            let chunk = read_exact_n(&mut file, len).await?;
+            let mut chunk = vec![0u8; len];
+            file.read_exact(&mut chunk).await.map_err(|err| {
+                GcsError::with_source(GcsErrorKind::Transport, "read file failed", err)
+            })?;
             match self
                 .put_chunk_retrying(
                     &location,
@@ -83,23 +87,4 @@ impl GcsClient {
             "finished upload did not return object metadata",
         ))
     }
-}
-
-async fn read_exact_n(file: &mut tokio::fs::File, len: usize) -> Result<Vec<u8>, GcsError> {
-    use tokio::io::AsyncReadExt;
-    let mut buf = vec![0u8; len];
-    let mut filled = 0;
-    while filled < len {
-        let got = file.read(&mut buf[filled..]).await.map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Transport, "read file failed", err)
-        })?;
-        if got == 0 {
-            return Err(GcsError::new(
-                GcsErrorKind::Transport,
-                "file ended before the expected length",
-            ));
-        }
-        filled += got;
-    }
-    Ok(buf)
 }

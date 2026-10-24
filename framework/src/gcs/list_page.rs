@@ -14,12 +14,12 @@ impl ListPage {
     pub(super) fn from_slice(bytes: &[u8]) -> Result<Self, GcsError> {
         let raw: RawList = serde_json::from_slice(bytes)
             .map_err(|err| GcsError::with_source(GcsErrorKind::Api, "list JSON is invalid", err))?;
-        let mut objects = Vec::with_capacity(raw.items.len());
-        for item in raw.items {
-            objects.push(item.into_meta()?);
-        }
         Ok(Self {
-            objects,
+            objects: raw
+                .items
+                .into_iter()
+                .map(RawObject::into_meta)
+                .collect::<Result<_, _>>()?,
             prefixes: raw.prefixes,
             next_page_token: raw.next_page_token.filter(|token| !token.is_empty()),
         })

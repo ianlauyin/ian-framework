@@ -8,7 +8,7 @@ use crate::gcs::gcs_client::{logged_error, Call, GcsClient, OpsRecord, TRANSFER_
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
 
 pub(super) const CHUNK_SIZE: usize = 8 * 1024 * 1024;
-pub(super) const CHUNK_ALIGN: u64 = 256 * 1024;
+const CHUNK_ALIGN: u64 = 256 * 1024;
 const CHUNK_ATTEMPTS: u32 = 5;
 const CHUNK_BACKOFF: Duration = Duration::from_millis(200);
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
@@ -47,9 +47,7 @@ impl GcsClient {
             "contentType": content_type,
         });
         if !metadata.is_empty() {
-            body["metadata"] = serde_json::to_value(metadata).map_err(|err| {
-                GcsError::with_source(GcsErrorKind::Config, "metadata is not JSON", err)
-            })?;
+            body["metadata"] = serde_json::json!(metadata);
         }
         let mut headers = vec![(
             reqwest::header::HeaderName::from_static("x-upload-content-type"),
@@ -67,9 +65,7 @@ impl GcsClient {
                 url,
                 headers,
                 json: Some(body),
-                bytes: None,
-                extra_status: &[],
-                timeout: None,
+                ..Default::default()
             })
             .await?;
         let location = response
@@ -128,8 +124,8 @@ impl GcsClient {
                 .upload_chunk_once(location, content_type, piece, offset, total)
                 .await;
             match sent {
-                Ok(Sent::Done(meta)) => return Ok(UploadStep::Done(meta)),
-                Ok(Sent::Accepted { next }) => {
+                Ok(UploadStep::Done(meta)) => return Ok(UploadStep::Done(meta)),
+                Ok(UploadStep::Continue { next }) => {
                     if next >= start + chunk_len {
                         return Ok(UploadStep::Continue { next });
                     }
@@ -160,8 +156,8 @@ impl GcsClient {
                 }
             }
             match self.probe_session(location, total).await {
-                Ok(Probe::Complete(meta)) => return Ok(UploadStep::Done(meta)),
-                Ok(Probe::Incomplete { next }) => {
+                Ok(UploadStep::Done(meta)) => return Ok(UploadStep::Done(meta)),
+                Ok(UploadStep::Continue { next }) => {
                     if next < start || next >= start + chunk_len {
                         return Ok(UploadStep::Continue { next });
                     }
@@ -204,7 +200,7 @@ impl GcsClient {
         chunk: &[u8],
         offset: u64,
         total: Option<u64>,
-    ) -> Result<Sent, GcsError> {
+    ) -> Result<UploadStep, GcsError> {
         let range = chunk_content_range(offset, chunk.len() as u64, total);
         let response = self
             .send(&Call {
@@ -215,14 +211,14 @@ impl GcsClient {
                     (reqwest::header::CONTENT_RANGE, range),
                     (reqwest::header::CONTENT_LENGTH, chunk.len().to_string()),
                 ],
-                json: None,
                 bytes: Some(chunk.to_vec()),
                 extra_status: &[308],
                 timeout: Some(TRANSFER_TIMEOUT),
+                ..Default::default()
             })
             .await?;
         if response.status().is_success() {
-            return Ok(Sent::Done(ObjectMeta::from_response(response).await?));
+            return Ok(UploadStep::Done(ObjectMeta::from_response(response).await?));
         }
         let header = response
             .headers()
@@ -234,10 +230,14 @@ impl GcsClient {
             Some(value) => next_offset_from_range(&value)?,
             None => offset + chunk.len() as u64,
         };
-        Ok(Sent::Accepted { next })
+        Ok(UploadStep::Continue { next })
     }
 
-    async fn probe_session(&self, location: &str, total: Option<u64>) -> Result<Probe, GcsError> {
+    async fn probe_session(
+        &self,
+        location: &str,
+        total: Option<u64>,
+    ) -> Result<UploadStep, GcsError> {
         let response = self
             .send(&Call {
                 method: reqwest::Method::PUT,
@@ -246,14 +246,14 @@ impl GcsClient {
                     (reqwest::header::CONTENT_RANGE, probe_content_range(total)),
                     (reqwest::header::CONTENT_LENGTH, "0".to_string()),
                 ],
-                json: None,
                 bytes: Some(Vec::new()),
                 extra_status: &[308],
                 timeout: Some(TRANSFER_TIMEOUT),
+                ..Default::default()
             })
             .await?;
         if response.status().is_success() {
-            return Ok(Probe::Complete(ObjectMeta::from_response(response).await?));
+            return Ok(UploadStep::Done(ObjectMeta::from_response(response).await?));
         }
         let header = response
             .headers()
@@ -265,18 +265,8 @@ impl GcsClient {
             Some(value) => next_offset_from_range(&value)?,
             None => 0,
         };
-        Ok(Probe::Incomplete { next })
+        Ok(UploadStep::Continue { next })
     }
-}
-
-enum Sent {
-    Done(ObjectMeta),
-    Accepted { next: u64 },
-}
-
-enum Probe {
-    Complete(ObjectMeta),
-    Incomplete { next: u64 },
 }
 
 fn retry_delay(attempt: u32) -> Duration {
@@ -389,6 +379,7 @@ mod tests {
         assert_eq!(probe_content_range(Some(12)), "bytes */12");
         assert_eq!(probe_content_range(None), "bytes */*");
         assert_eq!(chunk_content_range(0, 0, Some(0)), "bytes */0");
+        assert_eq!(chunk_content_range(8, 0, Some(8)), "bytes */8");
         assert_eq!(chunk_content_range(0, 4, Some(4)), "bytes 0-3/4");
         assert_eq!(chunk_content_range(8, 4, None), "bytes 8-11/*");
     }
@@ -408,6 +399,7 @@ mod tests {
         assert_eq!(chunk_suffix_len(align, 0, 1, false), None);
         assert_eq!(chunk_suffix_len(align, 0, 1, true), Some(align - 1));
         assert_eq!(chunk_suffix_len(0, 0, 0, true), Some(0));
+        assert_eq!(chunk_suffix_len(0, 8, 8, true), Some(0));
         assert_eq!(chunk_suffix_len(align, 0, align, false), None);
     }
 

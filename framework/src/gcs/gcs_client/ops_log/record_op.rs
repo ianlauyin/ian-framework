@@ -34,9 +34,6 @@ impl GcsClient {
             extra: BTreeMap::new(),
         };
         for (key, value) in op.extra {
-            if *key == "bucket" {
-                continue;
-            }
             event.extra.insert(
                 (*key).to_string(),
                 serde_json::Value::String((*value).to_string()),

@@ -136,6 +136,7 @@ The client uploads bytes with a resumable session.
 A chunk that is not the last chunk is 8 MiB.
 The last chunk can be shorter.
 The last chunk of an empty object has an empty body.
+When a byte stream ends on a chunk boundary, the last chunk has an empty body.
 Each chunk request sends `Content-Length`, also when the body is empty.
 GCS answers 411 to a chunk request that has no `Content-Length`.
 The client retries a chunk in these cases:

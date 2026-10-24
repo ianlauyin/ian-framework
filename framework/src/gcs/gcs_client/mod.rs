@@ -119,11 +119,7 @@ fn redact_query(text: &str) -> String {
 }
 
 fn validate_signer_email(email: &str) -> Result<(), GcsError> {
-    if email.is_empty()
-        || !email.contains('@')
-        || email.contains(char::is_whitespace)
-        || email.contains(['\r', '\n'])
-    {
+    if !email.contains('@') || email.contains(char::is_whitespace) {
         return Err(GcsError::new(
             GcsErrorKind::Config,
             "signer email is not a service account email",

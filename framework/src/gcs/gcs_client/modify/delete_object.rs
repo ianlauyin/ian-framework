@@ -8,11 +8,7 @@ impl GcsClient {
             .send(&Call {
                 method: reqwest::Method::DELETE,
                 url: object_url(self.bucket(), name),
-                headers: Vec::new(),
-                json: None,
-                bytes: None,
-                extra_status: &[],
-                timeout: None,
+                ..Default::default()
             })
             .await?;
         let _ = response.bytes().await;

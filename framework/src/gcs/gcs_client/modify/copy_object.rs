@@ -16,11 +16,8 @@ impl GcsClient {
             .send(&Call {
                 method: reqwest::Method::POST,
                 url,
-                headers: Vec::new(),
                 json: Some(serde_json::json!({})),
-                bytes: None,
-                extra_status: &[],
-                timeout: None,
+                ..Default::default()
             })
             .await?;
         ObjectMeta::from_response(response).await

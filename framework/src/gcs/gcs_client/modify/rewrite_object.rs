@@ -15,11 +15,8 @@ impl GcsClient {
                 .send(&Call {
                     method: reqwest::Method::POST,
                     url: rewrite_url(self.bucket(), from, to, token.as_deref()),
-                    headers: Vec::new(),
                     json: Some(serde_json::json!({})),
-                    bytes: None,
-                    extra_status: &[],
-                    timeout: None,
+                    ..Default::default()
                 })
                 .await?;
             let bytes = response.bytes().await.map_err(|err| {
@@ -29,15 +26,10 @@ impl GcsClient {
                     err,
                 )
             })?;
-            let step = RewriteStep::from_slice(&bytes)?;
-            if step.done {
-                return step.resource.ok_or_else(|| {
-                    GcsError::new(GcsErrorKind::Api, "rewrite did not return object metadata")
-                });
-            }
-            let next = step.rewrite_token.ok_or_else(|| {
-                GcsError::new(GcsErrorKind::Api, "rewrite did not return a token")
-            })?;
+            let next = match RewriteStep::from_slice(&bytes)? {
+                RewriteStep::Done(meta) => return Ok(meta),
+                RewriteStep::Next(next) => next,
+            };
             if token.as_deref() == Some(next.as_str()) {
                 return Err(GcsError::new(
                     GcsErrorKind::Api,
@@ -63,10 +55,9 @@ fn rewrite_url(bucket_name: &str, from: &str, to: &str, token: Option<&str>) -> 
     url
 }
 
-struct RewriteStep {
-    done: bool,
-    rewrite_token: Option<String>,
-    resource: Option<ObjectMeta>,
+enum RewriteStep {
+    Done(ObjectMeta),
+    Next(String),
 }
 
 impl RewriteStep {
@@ -74,32 +65,19 @@ impl RewriteStep {
         let raw: RawRewrite = serde_json::from_slice(bytes).map_err(|err| {
             GcsError::with_source(GcsErrorKind::Api, "rewrite JSON is invalid", err)
         })?;
-        let resource = match raw.resource {
-            Some(object) => Some(object.into_meta()?),
-            None => None,
-        };
-        if raw.done && resource.is_none() {
-            return Err(GcsError::new(
+        if raw.done {
+            let resource = raw.resource.ok_or_else(|| {
+                GcsError::new(GcsErrorKind::Api, "rewrite did not return object metadata")
+            })?;
+            return Ok(Self::Done(resource.into_meta()?));
+        }
+        match raw.rewrite_token {
+            Some(token) if !token.is_empty() => Ok(Self::Next(token)),
+            _ => Err(GcsError::new(
                 GcsErrorKind::Api,
-                "rewrite did not return object metadata",
-            ));
+                "rewrite did not return a token",
+            )),
         }
-        if !raw.done {
-            match raw.rewrite_token.as_deref() {
-                Some(token) if !token.is_empty() => {}
-                _ => {
-                    return Err(GcsError::new(
-                        GcsErrorKind::Api,
-                        "rewrite did not return a token",
-                    ));
-                }
-            }
-        }
-        Ok(Self {
-            done: raw.done,
-            rewrite_token: raw.rewrite_token.filter(|token| !token.is_empty()),
-            resource,
-        })
     }
 }
 
@@ -120,13 +98,12 @@ mod tests {
     #[test]
     fn rewrite_step_reads_a_token_until_done() {
         let step = RewriteStep::from_slice(br#"{"done":false,"rewriteToken":"abc"}"#).unwrap();
-        assert!(!step.done);
-        assert_eq!(step.rewrite_token.as_deref(), Some("abc"));
-        assert!(step.resource.is_none());
+        assert!(matches!(step, RewriteStep::Next(token) if token == "abc"));
         let done = RewriteStep::from_slice(br#"{"done":true,"resource":{"name":"b","size":"3"}}"#)
             .unwrap();
-        assert!(done.done);
-        let resource = done.resource.unwrap();
+        let RewriteStep::Done(resource) = done else {
+            panic!("expected a finished rewrite");
+        };
         assert_eq!(resource.name, "b");
         assert_eq!(resource.size, 3);
         assert!(RewriteStep::from_slice(br#"{"done":false}"#).is_err());

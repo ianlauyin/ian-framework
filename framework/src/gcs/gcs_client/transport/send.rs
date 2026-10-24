@@ -5,6 +5,7 @@ use crate::logging::LogLevel;
 use crate::gcs::gcs_client::{api_detail, logged_error, truncate, GcsClient, OpsRecord};
 use crate::gcs::{GcsError, GcsErrorKind};
 
+#[derive(Default)]
 pub(crate) struct Call {
     pub method: reqwest::Method,
     pub url: String,
