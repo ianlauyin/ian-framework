@@ -89,6 +89,36 @@ impl std::error::Error for GcsError {
     }
 }
 
+#[cfg(feature = "http")]
+impl crate::http::IntoApiError for GcsError {
+    fn status_code(&self) -> u16 {
+        match self.kind {
+            GcsErrorKind::NotFound => 404,
+            GcsErrorKind::Auth | GcsErrorKind::Config => 500,
+            GcsErrorKind::Api | GcsErrorKind::Transport => 502,
+        }
+    }
+
+    fn error_code(&self) -> &str {
+        match self.kind {
+            GcsErrorKind::NotFound => "gcs_not_found",
+            GcsErrorKind::Auth => "gcs_auth",
+            GcsErrorKind::Config => "gcs_config",
+            GcsErrorKind::Api => "gcs_api",
+            GcsErrorKind::Transport => "gcs_transport",
+        }
+    }
+
+    fn message(&self) -> String {
+        let message = match self.kind {
+            GcsErrorKind::NotFound => "storage object not found",
+            GcsErrorKind::Auth | GcsErrorKind::Config => "storage is not available",
+            GcsErrorKind::Api | GcsErrorKind::Transport => "storage request failed",
+        };
+        message.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,5 +132,46 @@ mod tests {
         assert!(!GcsError::with_status(GcsErrorKind::NotFound, 404, "missing").is_retryable());
         assert!(!GcsError::with_status(GcsErrorKind::Api, 400, "bad").is_retryable());
         assert!(!GcsError::new(GcsErrorKind::Config, "config").is_retryable());
+    }
+
+    #[cfg(feature = "http")]
+    #[test]
+    fn api_error_hides_the_internal_message() {
+        use crate::http::ApiError;
+        use axum::http::StatusCode;
+
+        let cases = [
+            (
+                GcsErrorKind::NotFound,
+                StatusCode::NOT_FOUND,
+                "gcs_not_found",
+            ),
+            (
+                GcsErrorKind::Auth,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "gcs_auth",
+            ),
+            (
+                GcsErrorKind::Config,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "gcs_config",
+            ),
+            (GcsErrorKind::Api, StatusCode::BAD_GATEWAY, "gcs_api"),
+            (
+                GcsErrorKind::Transport,
+                StatusCode::BAD_GATEWAY,
+                "gcs_transport",
+            ),
+        ];
+        for (kind, status, code) in cases {
+            let error = ApiError::from(GcsError::new(kind, "secret bucket detail"));
+            assert_eq!(error.status, status);
+            assert_eq!(error.code, code);
+            assert!(!error.message.contains("secret"));
+        }
+
+        let error = ApiError::from(GcsError::with_status(GcsErrorKind::Api, 400, "bad"));
+        assert_eq!(error.status, StatusCode::BAD_GATEWAY);
+        assert_eq!(error.message, "storage request failed");
     }
 }

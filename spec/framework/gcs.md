@@ -199,6 +199,25 @@ A response below 400 writes no operations record.
 A successful resumable probe writes no operations record.
 A successful token request writes no operations record.
 
+## HTTP error
+
+`GcsError` implements `ian_framework::http::IntoApiError`.
+This implementation needs the `http` feature.
+A handler that returns `Result<T, ApiError>` can use `?` on a `GcsError`.
+
+| kind | status | code | message |
+| --- | --- | --- | --- |
+| `NotFound` | 404 | `gcs_not_found` | `storage object not found` |
+| `Auth` | 500 | `gcs_auth` | `storage is not available` |
+| `Config` | 500 | `gcs_config` | `storage is not available` |
+| `Api` | 502 | `gcs_api` | `storage request failed` |
+| `Transport` | 502 | `gcs_transport` | `storage request failed` |
+
+The status depends only on the kind.
+The GCS response status does not change the HTTP status.
+The message is fixed for each kind.
+The message does not contain the internal `GcsError` message.
+
 ## Out of scope
 
 The client does not include these items:
