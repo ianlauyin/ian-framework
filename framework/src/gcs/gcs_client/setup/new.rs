@@ -2,13 +2,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
-use crate::gcs::gcs_backend::TRANSFER_TIMEOUT;
-use crate::gcs::gcs_backend::{Auth, GcsBackend, Inner};
+use crate::gcs::gcs_client::TRANSFER_TIMEOUT;
+use crate::gcs::gcs_client::{Auth, GcsClient, Inner};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
-impl GcsBackend {
+impl GcsClient {
     pub(crate) async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
         let bucket_name = bucket_name.into();
         validate_bucket(&bucket_name)?;
@@ -67,32 +67,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn user_backend_keeps_bucket_and_signer() {
-        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
-        assert_eq!(backend.bucket(), "my-bucket");
+    async fn user_client_keeps_bucket_and_signer() {
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+        assert_eq!(client.bucket(), "my-bucket");
         assert_eq!(
-            backend.signer_email(),
+            client.signer_email(),
             "signer@example.iam.gserviceaccount.com"
         );
-        let cloned = backend.clone();
+        let cloned = client.clone();
         assert_eq!(cloned.bucket(), "my-bucket");
     }
 
     #[tokio::test]
-    async fn backend_rejects_an_empty_bucket() {
-        let err = GcsBackend::new(" ", user_auth()).await.unwrap_err();
+    async fn client_rejects_an_empty_bucket() {
+        let err = GcsClient::new(" ", user_auth()).await.unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
     }
 
     #[tokio::test]
-    async fn backend_rejects_an_incomplete_user() {
+    async fn client_rejects_an_incomplete_user() {
         let auth = Auth::User {
             client_id: String::new(),
             client_secret: "secret".to_string(),
             refresh_token: "refresh".to_string(),
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         };
-        let err = GcsBackend::new("my-bucket", auth).await.unwrap_err();
+        let err = GcsClient::new("my-bucket", auth).await.unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
     }
 }

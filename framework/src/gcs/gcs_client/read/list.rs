@@ -1,7 +1,7 @@
-use crate::gcs::gcs_backend::{Call, GcsBackend};
+use crate::gcs::gcs_client::{Call, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind, ListPage, ListQuery};
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn list(&self, query: &ListQuery) -> Result<ListPage, GcsError> {
         let response = self
             .send(&Call {

@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::logging::LogLevel;
 
-use crate::gcs::gcs_backend::{api_detail, logged_error, truncate, GcsBackend, OpsRecord};
+use crate::gcs::gcs_client::{api_detail, logged_error, truncate, GcsClient, OpsRecord};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 pub(crate) struct Call {
@@ -15,7 +15,7 @@ pub(crate) struct Call {
     pub timeout: Option<Duration>,
 }
 
-impl GcsBackend {
+impl GcsClient {
     pub(crate) async fn send(&self, call: &Call) -> Result<reqwest::Response, GcsError> {
         let mut retried = false;
         loop {

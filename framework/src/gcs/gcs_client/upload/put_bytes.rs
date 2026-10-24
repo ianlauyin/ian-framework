@@ -1,8 +1,8 @@
 use super::resumable::{advance_offset, UploadStep, CHUNK_SIZE};
-use crate::gcs::gcs_backend::{validate_metadata, validate_object_name, GcsBackend};
+use crate::gcs::gcs_client::{validate_metadata, validate_object_name, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta, PutOptions};
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn put_bytes(
         &self,
         name: &str,

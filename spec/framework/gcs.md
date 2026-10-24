@@ -41,7 +41,7 @@ cargo test --features gcs
 
 ## Constructors
 
-`GcsBackend::from_adc` reads Application Default Credentials for one bucket.
+`GcsClient::from_adc` reads Application Default Credentials for one bucket.
 
 ## Authentication
 
@@ -84,7 +84,7 @@ A project can put those keys in the map.
 The client builds a V4 signed GET URL.
 The signature comes from IAM `signBlob`.
 Each path segment uses `encode_seg`.
-`GcsBackend::signed_get_url` takes an optional lifetime.
+`GcsClient::signed_get_url` takes an optional lifetime.
 A missing lifetime is an authentication error.
 A lifetime of zero is an authentication error.
 A lifetime below 1 second is an authentication error.
@@ -126,14 +126,14 @@ If the session offset moves before those bytes, the upload fails.
 
 ## Copy and rewrite
 
-`GcsBackend::copy_object` copies an object in the same bucket with one `copyTo` call.
-`GcsBackend::rewrite_object` copies an object in the same bucket with the JSON rewrite API.
-`GcsBackend::rewrite_object` sends `rewriteToken` again until `done` is true.
-If `rewriteToken` does not change, `GcsBackend::rewrite_object` returns an error.
+`GcsClient::copy_object` copies an object in the same bucket with one `copyTo` call.
+`GcsClient::rewrite_object` copies an object in the same bucket with the JSON rewrite API.
+`GcsClient::rewrite_object` sends `rewriteToken` again until `done` is true.
+If `rewriteToken` does not change, `GcsClient::rewrite_object` returns an error.
 
 ## Operations
 
-These methods are on `GcsBackend`:
+These methods are on `GcsClient`:
 
 - `put_bytes` puts bytes.
 - `put_file` puts a file path.
@@ -159,7 +159,7 @@ These methods are on `ObjectReader`:
 ## Operations log
 
 The client writes operations records through the logging feature.
-`GcsBackend::attach_ops_log` connects one log shipper to one client.
+`GcsClient::attach_ops_log` connects one log shipper to one client.
 A second call replaces that shipper.
 An operations record has no `app` field.
 An operations record has no `project` field.

@@ -4,13 +4,13 @@ use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
 use crate::gcs::encode::{encode_object_path, encode_seg};
-use crate::gcs::gcs_backend::{validate_object_name, GcsBackend};
+use crate::gcs::gcs_client::{validate_object_name, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const HOST: &str = "storage.googleapis.com";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn signed_get_url(
         &self,
         name: &str,
@@ -107,7 +107,7 @@ fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gcs::gcs_backend::Auth;
+    use crate::gcs::gcs_client::Auth;
 
     #[test]
     fn v4_get_matches_the_canonical_request() {
@@ -164,7 +164,7 @@ UNSIGNED-PAYLOAD";
 
     #[tokio::test]
     async fn signed_url_rejects_a_lifetime_over_seven_days() {
-        let backend = GcsBackend::new(
+        let client = GcsClient::new(
             "my-bucket",
             Auth::User {
                 client_id: "id".to_string(),
@@ -175,7 +175,7 @@ UNSIGNED-PAYLOAD";
         )
         .await
         .unwrap();
-        let err = backend
+        let err = client
             .signed_get_url("a", Some(Duration::from_secs(604_801)))
             .await
             .unwrap_err();
@@ -184,7 +184,7 @@ UNSIGNED-PAYLOAD";
 
     #[tokio::test]
     async fn signed_url_rejects_a_missing_or_zero_lifetime() {
-        let backend = GcsBackend::new(
+        let client = GcsClient::new(
             "my-bucket",
             Auth::User {
                 client_id: "id".to_string(),
@@ -196,7 +196,7 @@ UNSIGNED-PAYLOAD";
         .await
         .unwrap();
         for lifetime in [None, Some(Duration::ZERO), Some(Duration::from_millis(500))] {
-            let err = backend.signed_get_url("a", lifetime).await.unwrap_err();
+            let err = client.signed_get_url("a", lifetime).await.unwrap_err();
             assert_eq!(err.kind(), GcsErrorKind::Auth);
         }
     }

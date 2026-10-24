@@ -3,10 +3,10 @@ use std::pin::Pin;
 use futures_util::{Stream, StreamExt};
 
 use super::resumable::{UploadStep, CHUNK_ALIGN, CHUNK_SIZE};
-use crate::gcs::gcs_backend::{validate_metadata, validate_object_name, GcsBackend};
+use crate::gcs::gcs_client::{validate_metadata, validate_object_name, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta, PutOptions};
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn put_stream<S, E>(
         &self,
         name: &str,

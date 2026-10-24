@@ -1,11 +1,11 @@
 use serde::Deserialize;
 
 use crate::gcs::encode::{encode_object_id, encode_seg};
-use crate::gcs::gcs_backend::{object_url, validate_object_name, Call, GcsBackend};
+use crate::gcs::gcs_client::{object_url, validate_object_name, Call, GcsClient};
 use crate::gcs::object_meta::RawObject;
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
         validate_object_name(from)?;
         validate_object_name(to)?;

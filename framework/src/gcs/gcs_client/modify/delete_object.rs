@@ -1,12 +1,12 @@
-use crate::gcs::gcs_backend::{object_url, validate_object_name, Call, GcsBackend};
-use crate::gcs::{GcsError, ObjectMeta};
+use crate::gcs::gcs_client::{object_url, validate_object_name, Call, GcsClient};
+use crate::gcs::GcsError;
 
-impl GcsBackend {
-    pub async fn stat(&self, name: &str) -> Result<ObjectMeta, GcsError> {
+impl GcsClient {
+    pub async fn delete_object(&self, name: &str) -> Result<(), GcsError> {
         validate_object_name(name)?;
         let response = self
             .send(&Call {
-                method: reqwest::Method::GET,
+                method: reqwest::Method::DELETE,
                 url: object_url(self.bucket(), name),
                 headers: Vec::new(),
                 json: None,
@@ -15,6 +15,7 @@ impl GcsBackend {
                 timeout: None,
             })
             .await?;
-        ObjectMeta::from_response(response).await
+        let _ = response.bytes().await;
+        Ok(())
     }
 }

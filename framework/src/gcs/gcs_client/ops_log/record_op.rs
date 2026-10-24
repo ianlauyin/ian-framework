@@ -4,7 +4,7 @@ use chrono::Utc;
 
 use crate::logging::{LogEvent, LogLevel};
 
-use crate::gcs::gcs_backend::{lock_ops, GcsBackend};
+use crate::gcs::gcs_client::{lock_ops, GcsClient};
 
 pub(crate) struct OpsRecord<'a> {
     pub level: LogLevel,
@@ -16,7 +16,7 @@ pub(crate) struct OpsRecord<'a> {
     pub extra: &'a [(&'a str, &'a str)],
 }
 
-impl GcsBackend {
+impl GcsClient {
     pub(crate) fn record_op(&self, op: OpsRecord<'_>) {
         let Some(shipper) = lock_ops(&self.inner.ops_log).clone() else {
             return;
@@ -72,7 +72,7 @@ fn path_only(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gcs::gcs_backend::Auth;
+    use crate::gcs::gcs_client::Auth;
     use crate::logging::{LogShipper, ShipperConfig};
 
     fn user_auth() -> Auth {
@@ -97,10 +97,10 @@ mod tests {
 
     #[tokio::test]
     async fn ops_log_writes_the_bucket_and_omits_the_query() {
-        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
         let shipper = LogShipper::new(ShipperConfig::new("storage", "")).unwrap();
-        backend.attach_ops_log(shipper.clone());
-        backend.record_op(OpsRecord {
+        client.attach_ops_log(shipper.clone());
+        client.record_op(OpsRecord {
             level: LogLevel::Info,
             message: "gcs response",
             method: "GET",
@@ -134,8 +134,8 @@ mod tests {
 
     #[tokio::test]
     async fn ops_log_without_a_shipper_does_not_panic() {
-        let backend = GcsBackend::new("my-bucket", user_auth()).await.unwrap();
-        backend.record_op(OpsRecord {
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+        client.record_op(OpsRecord {
             level: LogLevel::Warn,
             message: "gcs request failed",
             method: "GET",

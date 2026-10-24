@@ -1,10 +1,10 @@
 use base64::Engine;
 
 use crate::gcs::encode::encode_seg;
-use crate::gcs::gcs_backend::{Call, GcsBackend};
+use crate::gcs::gcs_client::{Call, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind};
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
         let url = format!(
             "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",

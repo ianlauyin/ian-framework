@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::gcs::encode::encode_seg;
-use crate::gcs::gcs_backend::{api_detail, truncate, validate_signer_email};
+use crate::gcs::gcs_client::{api_detail, truncate, validate_signer_email};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const METADATA_ROOT: &str =

@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
-use crate::gcs::gcs_backend::{
-    object_url, validate_metadata, validate_object_name, Call, GcsBackend,
+use crate::gcs::gcs_client::{
+    object_url, validate_metadata, validate_object_name, Call, GcsClient,
 };
 use crate::gcs::{GcsError, ObjectMeta};
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn patch_metadata(
         &self,
         name: &str,

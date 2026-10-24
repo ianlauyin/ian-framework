@@ -24,13 +24,13 @@ use transport::Call;
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Clone)]
-pub struct GcsBackend {
+pub struct GcsClient {
     inner: Arc<Inner>,
 }
 
-impl fmt::Debug for GcsBackend {
+impl fmt::Debug for GcsClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GcsBackend")
+        f.debug_struct("GcsClient")
             .field("bucket", &self.inner.bucket)
             .field("email", &self.inner.email)
             .field("auth", &self.inner.auth)
@@ -38,7 +38,7 @@ impl fmt::Debug for GcsBackend {
     }
 }
 
-impl GcsBackend {
+impl GcsClient {
     pub fn bucket(&self) -> &str {
         &self.inner.bucket
     }

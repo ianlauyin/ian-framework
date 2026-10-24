@@ -2,10 +2,10 @@ use std::time::Instant;
 
 use crate::logging::LogLevel;
 
-use crate::gcs::gcs_backend::{logged_error, GcsBackend, OpsRecord};
+use crate::gcs::gcs_client::{logged_error, GcsClient, OpsRecord};
 use crate::gcs::GcsError;
 
-impl GcsBackend {
+impl GcsClient {
     pub(crate) async fn access_token(&self) -> Result<String, GcsError> {
         let mut guard = self.inner.token.lock().await;
         if let Some(cached) = guard.as_ref() {

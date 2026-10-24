@@ -3,12 +3,12 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::gcs::gcs_backend::{validate_signer_email, Auth, GcsBackend};
+use crate::gcs::gcs_client::{validate_signer_email, Auth, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const ADC_FILE_LIMIT: u64 = 1024 * 1024;
 
-impl GcsBackend {
+impl GcsClient {
     pub async fn from_adc(bucket_name: impl Into<String>) -> Result<Self, GcsError> {
         let auth = match load_adc_auth().await? {
             Some(auth) => auth,
