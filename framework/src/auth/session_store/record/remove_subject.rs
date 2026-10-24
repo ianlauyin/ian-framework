@@ -1,6 +1,6 @@
 use redis::AsyncCommands;
 
-use crate::auth::session_store::{store_err, SessionStore};
+use crate::auth::session_store::{parse_value, store_err, SessionStore};
 use crate::auth::AuthError;
 
 impl SessionStore {
@@ -23,7 +23,11 @@ impl SessionStore {
                 .query_async(&mut conn)
                 .await
                 .map_err(store_err)?;
-            if value.as_deref() == Some(subject) {
+            let owner = value
+                .as_deref()
+                .and_then(parse_value)
+                .map(|(_, owner)| owner);
+            if owner == Some(subject) {
                 redis::cmd("DEL")
                     .arg(&key)
                     .query_async::<()>(&mut conn)

@@ -1,14 +1,16 @@
-use crate::auth::session_store::{store_err, SessionStore};
+use crate::auth::session_store::{now_secs, store_err, SessionStore};
 use crate::auth::{AuthError, AuthErrorKind};
 
 impl SessionStore {
     pub async fn create(&self, subject: &str) -> Result<String, AuthError> {
         let token = random_token()?;
+        let max_age = self.inner.config.max_age_secs;
+        let deadline = now_secs().saturating_add(max_age);
         redis::cmd("SET")
             .arg(self.key(&token))
-            .arg(subject)
+            .arg(format!("{deadline}:{subject}"))
             .arg("EX")
-            .arg(self.ttl_secs())
+            .arg(self.ttl_secs().min(max_age))
             .query_async::<()>(&mut self.conn())
             .await
             .map_err(store_err)?;

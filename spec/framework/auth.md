@@ -15,6 +15,7 @@ The module path is `ian_framework::auth`.
 The Cargo feature name is `auth`.
 `auth` is not a default feature.
 The `auth` feature enables `http`.
+The `auth` feature uses Tokio for the password hash.
 The `auth` feature does not enable `logging`.
 The `auth` feature does not enable `gcs`.
 The HTTP boundary error is `spec/framework/http.md`.
@@ -41,6 +42,8 @@ When the tests cannot connect, the session tests write a skip note and pass.
 ## Session store
 
 A session joins one random token to one subject.
+A session ends when it is idle for `ttl_secs`.
+It also ends `max_age_secs` after `create`, even when it is in use.
 The subject is one string, for example a user id.
 The project owns the subject.
 The framework does not read the user table.
@@ -52,7 +55,8 @@ It is a plain struct with `pub` fields and `Default`.
 | --- | --- | --- |
 | `prefix` | `session:` | start of each Redis key |
 | `cookie_name` | `session` | name of the session cookie |
-| `ttl_secs` | 604800 | session life in seconds |
+| `ttl_secs` | 604800 | idle session life in seconds |
+| `max_age_secs` | 2592000 | longest session life in seconds, from `create` |
 
 `SessionStore::connect` takes one Redis URL and one `SessionConfig`.
 It opens one Redis connection manager.
@@ -60,6 +64,7 @@ It sends `PING`.
 It returns an error when the URL is not a Redis URL.
 It returns an error when Redis does not reply `PONG`.
 It returns an error when `ttl_secs` is zero.
+It returns an error when `max_age_secs` is zero.
 The connection manager stops early when Redis is down:
 
 | setting | value |
@@ -73,15 +78,18 @@ The connection manager stops early when Redis is down:
 All clones use the same connection manager.
 The error messages do not contain the Redis URL.
 
-The Redis key of a session is `{prefix}{token}`.
-The value is the subject.
-The key expires after `ttl_secs`.
+The Redis key of a session is `{prefix}{hash}`.
+`hash` is the SHA-256 of the token, in lowercase hex.
+Redis does not hold the token, so a copy of Redis does not give working tokens.
+The value is `{deadline}:{subject}`.
+`deadline` is the creation time plus `max_age_secs`, in Unix seconds.
+The key expires after the smaller of `ttl_secs` and `max_age_secs`.
 
 | method | result |
 | --- | --- |
 | `create(subject)` | makes a new token, stores the session, and returns the token |
-| `subject(token)` | returns the subject, or no subject when the session is missing or expired |
-| `touch(token)` | sets the expiry to `ttl_secs` again; returns `false` when the session is missing |
+| `subject(token)` | returns the subject, or no subject when the session is missing, expired, or past its deadline |
+| `touch(token)` | sets the expiry to the smaller of `ttl_secs` and the time to the deadline; returns `false` when the session is missing or past its deadline |
 | `remove(token)` | removes one session |
 | `remove_subject(subject)` | removes each session of that subject |
 | `ttl_secs()` | returns the configured `ttl_secs` |
@@ -89,7 +97,7 @@ The key expires after `ttl_secs`.
 A token is 32 random bytes from the OS random source, in lowercase hex.
 A token has 64 characters.
 `remove_subject` scans the keys that start with `prefix`.
-It removes each key whose value is the subject.
+It removes each key whose value has the subject.
 A project with many sessions must use a prefix that only the session store uses.
 
 ## Cookie
@@ -129,8 +137,11 @@ After the handler returns, the middleware does these steps:
 
 1. When the response status is 401, it returns the response with no change.
 2. When the request has no token, it returns the response with no change.
-3. It calls `touch` for the token.
-4. When `touch` returns `true`, it sets `Set-Cookie` to `cookie(token)`.
+3. When the response has a `Set-Cookie` for `cookie_name`, it returns the response with no change.
+   This keeps the cookie of a login or a logout handler.
+4. It calls `touch` for the token.
+5. When `touch` returns `true`, it adds one `Set-Cookie` with `cookie(token)`.
+   It keeps the other `Set-Cookie` values of the response.
 
 A Redis failure in the middleware does not change the response.
 
@@ -139,7 +150,11 @@ A Redis failure in the middleware does not change the response.
 `hash_password` makes an Argon2id hash with the default parameters and a random salt.
 The result is one PHC string.
 `verify_password` checks a password against a PHC string.
+Both functions are `async`.
+They run Argon2 with `tokio::task::spawn_blocking`, so the hash does not block the async workers.
+They need a Tokio runtime.
 It returns `false` when the PHC string is not valid.
+It returns `false` when the blocking task fails.
 
 A password has at most 256 bytes.
 `hash_password` returns an error for a longer password.
@@ -155,7 +170,7 @@ The project owns the other password rules, for example the minimum length.
 | --- | --- | --- | --- | --- |
 | `Config` | bad Redis URL or bad `SessionConfig` | 500 | `auth_config` | `session store is not available` |
 | `Store` | Redis connection or command failure | 503 | `auth_store` | `session store is not available` |
-| `Password` | password too long or hash failure | 500 | `auth_password` | `password hash failed` |
+| `Password` | password too long, hash failure, or blocking task failure | 500 | `auth_password` | `password hash failed` |
 | `Random` | OS random source failure | 500 | `auth_random` | `session token failed` |
 
 `AuthError` implements `IntoApiError`.

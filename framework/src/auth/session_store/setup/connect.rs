@@ -12,6 +12,12 @@ impl SessionStore {
         if config.ttl_secs == 0 {
             return Err(AuthError::new(AuthErrorKind::Config, "session ttl is zero"));
         }
+        if config.max_age_secs == 0 {
+            return Err(AuthError::new(
+                AuthErrorKind::Config,
+                "session max age is zero",
+            ));
+        }
         let client = redis::Client::open(url).map_err(|err| {
             AuthError::with_source(AuthErrorKind::Config, "redis url is not valid", err)
         })?;
@@ -58,6 +64,15 @@ mod tests {
 
         let config = SessionConfig {
             ttl_secs: 0,
+            ..SessionConfig::default()
+        };
+        let err = SessionStore::connect("redis://127.0.0.1:6379", config)
+            .await
+            .unwrap_err();
+        assert_eq!(err.kind(), AuthErrorKind::Config);
+
+        let config = SessionConfig {
+            max_age_secs: 0,
             ..SessionConfig::default()
         };
         let err = SessionStore::connect("redis://127.0.0.1:6379", config)

@@ -29,6 +29,7 @@ mod tests {
             prefix: "p:".to_string(),
             cookie_name: "sid".to_string(),
             ttl_secs: 3600,
+            max_age_secs: 7200,
         };
         let now = DateTime::parse_from_rfc3339("2026-10-24T10:00:00Z")
             .unwrap()

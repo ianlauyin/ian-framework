@@ -25,6 +25,8 @@ auth = [
     "dep:getrandom",
     "dep:hex",
     "dep:redis",
+    "dep:sha2",
+    "dep:tokio",
 ]
 gcs = [
     "logging",

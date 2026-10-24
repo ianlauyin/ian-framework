@@ -4,8 +4,10 @@ mod setup;
 
 use std::fmt;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use redis::aio::ConnectionManager;
+use sha2::{Digest, Sha256};
 
 use super::{AuthError, AuthErrorKind, SessionConfig};
 
@@ -19,12 +21,18 @@ impl SessionStore {
         self.inner.config.ttl_secs
     }
 
+    pub(crate) fn cookie_name(&self) -> &str {
+        &self.inner.config.cookie_name
+    }
+
     fn conn(&self) -> ConnectionManager {
         self.inner.conn.clone()
     }
 
+    // A copy of Redis must not give working tokens, so the key holds only the token hash.
     fn key(&self, token: &str) -> String {
-        format!("{}{token}", self.inner.config.prefix)
+        let hash = hex::encode(Sha256::digest(token.as_bytes()));
+        format!("{}{hash}", self.inner.config.prefix)
     }
 }
 
@@ -47,6 +55,19 @@ fn store_err(err: redis::RedisError) -> AuthError {
     AuthError::with_source(AuthErrorKind::Store, "session store command failed", err)
 }
 
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or_default()
+}
+
+// The stored value is `{deadline}:{subject}`. The deadline is the end of the session in Unix seconds.
+fn parse_value(value: &str) -> Option<(u64, &str)> {
+    let (deadline, subject) = value.split_once(':')?;
+    Some((deadline.parse().ok()?, subject))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,6 +80,7 @@ mod tests {
             prefix: format!("ian-framework-test:{}:", hex::encode(bytes)),
             cookie_name: "sid".to_string(),
             ttl_secs: 60,
+            max_age_secs: 120,
         };
         match SessionStore::connect(&url, config).await {
             Ok(store) => Some(store),
@@ -90,6 +112,76 @@ mod tests {
         assert_eq!(store.subject(&second).await.unwrap(), None);
         assert_eq!(store.subject(&other).await.unwrap().as_deref(), Some("8"));
         store.remove(&other).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn redis_holds_the_token_hash_and_the_deadline() {
+        let Some(store) = store_or_skip().await else {
+            return;
+        };
+        let token = store.create("7").await.unwrap();
+        let mut conn = store.conn();
+        let raw: Option<String> = redis::cmd("GET")
+            .arg(format!("{}{token}", store.inner.config.prefix))
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(raw, None);
+        let value: String = redis::cmd("GET")
+            .arg(store.key(&token))
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        let (deadline, subject) = parse_value(&value).unwrap();
+        assert_eq!(subject, "7");
+        assert!(deadline > now_secs() + 110 && deadline <= now_secs() + 120);
+        store.remove(&token).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn touch_stops_at_the_deadline() {
+        let Some(store) = store_or_skip().await else {
+            return;
+        };
+        let mut conn = store.conn();
+        let token = "a".repeat(64);
+        let key = store.key(&token);
+        let near = format!("{}:7", now_secs() + 10);
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(&near)
+            .arg("EX")
+            .arg(10)
+            .query_async::<()>(&mut conn)
+            .await
+            .unwrap();
+        assert!(store.touch(&token).await.unwrap());
+        let ttl: i64 = redis::cmd("TTL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        assert!(ttl <= 10);
+
+        let past = format!("{}:7", now_secs() - 1);
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(&past)
+            .arg("EX")
+            .arg(10)
+            .query_async::<()>(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(store.subject(&token).await.unwrap(), None);
+        assert!(!store.touch(&token).await.unwrap());
+        store.remove(&token).await.unwrap();
+    }
+
+    #[test]
+    fn value_splits_at_the_first_colon() {
+        assert_eq!(parse_value("100:user:7"), Some((100, "user:7")));
+        assert_eq!(parse_value("7"), None);
+        assert_eq!(parse_value("x:7"), None);
     }
 
     #[tokio::test]
