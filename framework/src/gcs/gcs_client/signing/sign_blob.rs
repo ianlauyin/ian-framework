@@ -5,7 +5,7 @@ use crate::gcs::gcs_client::{Call, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 impl GcsClient {
-    pub async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
+    pub(crate) async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
         let url = format!(
             "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",
             encode_seg(self.signer_email()),

@@ -7,7 +7,6 @@ mod object_meta;
 mod object_reader;
 mod put_options;
 
-pub use encode::{encode_object_id, encode_object_path, encode_seg};
 pub use error::{GcsError, GcsErrorKind};
 pub use gcs_client::GcsClient;
 pub use list_page::ListPage;

@@ -1,4 +1,4 @@
-pub fn encode_seg(segment: &str) -> String {
+pub(crate) fn encode_seg(segment: &str) -> String {
     let mut out = String::with_capacity(segment.len());
     for byte in segment.bytes() {
         match byte {
@@ -11,14 +11,14 @@ pub fn encode_seg(segment: &str) -> String {
     out
 }
 
-pub fn encode_object_path(name: &str) -> String {
+pub(crate) fn encode_object_path(name: &str) -> String {
     name.split('/')
         .map(encode_seg)
         .collect::<Vec<_>>()
         .join("/")
 }
 
-pub fn encode_object_id(name: &str) -> String {
+pub(crate) fn encode_object_id(name: &str) -> String {
     encode_seg(name)
 }
 

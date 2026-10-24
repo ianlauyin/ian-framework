@@ -39,6 +39,20 @@ cargo test --features gcs
 `cargo check --features gcs` checks the build with the `gcs` feature.
 `cargo test --features gcs` runs the tests for the `gcs` feature.
 
+## Public items
+
+`ian_framework::gcs` exports only these items:
+
+- `GcsClient`
+- `GcsError` and `GcsErrorKind`
+- `ListPage` and `ListQuery`
+- `ObjectMeta` and `ObjectReader`
+- `PutOptions`
+
+The URL encoding functions are private to the crate.
+`GcsClient::sign_blob` is private to the crate.
+A project uses `GcsClient::signed_get_url` for a signed URL.
+
 ## Constructors
 
 `GcsClient::from_adc` reads Application Default Credentials for one bucket.
@@ -83,7 +97,8 @@ A project can put those keys in the map.
 
 The client builds a V4 signed GET URL.
 The signature comes from IAM `signBlob`.
-Each path segment uses `encode_seg`.
+Each path segment is percent-encoded.
+Only the RFC 3986 unreserved characters stay unencoded.
 `GcsClient::signed_get_url` takes an optional lifetime.
 A missing lifetime is an authentication error.
 A lifetime of zero is an authentication error.
@@ -147,7 +162,6 @@ These methods are on `GcsClient`:
 - `copy_object` copies an object in the same bucket with `copyTo`.
 - `rewrite_object` copies an object in the same bucket with `rewriteToken`.
 - `signed_get_url` builds a V4 signed GET URL.
-- `sign_blob` signs bytes with IAM `signBlob`.
 - `bucket` returns the bucket name.
 - `signer_email` returns the signer email.
 
