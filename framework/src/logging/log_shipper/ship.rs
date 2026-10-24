@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use super::super::{LogBatch, LogEvent, SHIP_CHUNK};
+use crate::logging::{LogBatch, LogEvent, SHIP_CHUNK};
+
 use super::{meets_capacity_warn, LogShipper, SHIP_TIMEOUT};
 
 impl LogShipper {
@@ -81,9 +82,9 @@ impl LogShipper {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{event, LogLevel};
-    use super::super::{ShipperConfig, CAPACITY_WARN_NOTE};
     use super::*;
+    use crate::logging::log_shipper::CAPACITY_WARN_NOTE;
+    use crate::logging::{event, LogLevel, ShipperConfig};
 
     fn buffer_only() -> LogShipper {
         LogShipper::new(ShipperConfig::new("api", "")).unwrap()

@@ -1,31 +1,24 @@
 use axum::body::Body;
 use axum::http::{header, HeaderValue};
 use axum::response::{IntoResponse, Response};
-use serde::Serialize;
 
 use super::ApiError;
-
-#[derive(Serialize)]
-struct ApiErrorBody {
-    code: String,
-    message: String,
-}
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let status = self.status;
-        let bytes = serde_json::to_vec(&ApiErrorBody {
-            code: self.code,
-            message: self.message,
+        let body = serde_json::json!({
+            "code": self.code,
+            "message": self.message,
         })
-        .expect("api error json");
+        .to_string();
         (
             status,
             [(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("application/json"),
             )],
-            Body::from(bytes),
+            Body::from(body),
         )
             .into_response()
     }

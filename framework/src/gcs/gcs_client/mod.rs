@@ -28,16 +28,6 @@ pub struct GcsClient {
     inner: Arc<Inner>,
 }
 
-impl fmt::Debug for GcsClient {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GcsClient")
-            .field("bucket", &self.inner.bucket)
-            .field("email", &self.inner.email)
-            .field("auth", &self.inner.auth)
-            .finish_non_exhaustive()
-    }
-}
-
 impl GcsClient {
     pub fn bucket(&self) -> &str {
         &self.inner.bucket
@@ -45,6 +35,16 @@ impl GcsClient {
 
     pub fn signer_email(&self) -> &str {
         &self.inner.email
+    }
+}
+
+impl fmt::Debug for GcsClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GcsClient")
+            .field("bucket", &self.inner.bucket)
+            .field("email", &self.inner.email)
+            .field("auth", &self.inner.auth)
+            .finish_non_exhaustive()
     }
 }
 
@@ -116,16 +116,6 @@ fn redact_query(text: &str) -> String {
         out.push(ch);
     }
     out
-}
-
-fn validate_signer_email(email: &str) -> Result<(), GcsError> {
-    if !email.contains('@') || email.contains(char::is_whitespace) {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "signer email is not a service account email",
-        ));
-    }
-    Ok(())
 }
 
 fn api_detail(body: &str) -> Option<String> {

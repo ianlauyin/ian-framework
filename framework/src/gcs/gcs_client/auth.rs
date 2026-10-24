@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::gcs::encode::encode_seg;
-use crate::gcs::gcs_client::{api_detail, truncate, validate_signer_email};
+use crate::gcs::gcs_client::{api_detail, truncate};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const METADATA_ROOT: &str =
@@ -179,6 +179,16 @@ async fn token_from_response(response: reqwest::Response) -> Result<CachedToken,
         value: parsed.access_token,
         expires_at: expiry(parsed.expires_in),
     })
+}
+
+fn validate_signer_email(email: &str) -> Result<(), GcsError> {
+    if !email.contains('@') || email.contains(char::is_whitespace) {
+        return Err(GcsError::new(
+            GcsErrorKind::Config,
+            "signer email is not a service account email",
+        ));
+    }
+    Ok(())
 }
 
 fn expiry(expires_in: u64) -> Instant {

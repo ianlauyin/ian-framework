@@ -83,8 +83,8 @@ fn extra_value(value: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::event;
     use super::*;
+    use crate::logging::event;
     use serde_json::json;
 
     fn sample() -> LogEvent {

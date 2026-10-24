@@ -1,4 +1,5 @@
-use super::super::{event, LogEvent, LogLevel};
+use crate::logging::{event, LogEvent, LogLevel};
+
 use super::{meets_capacity_warn, LogShipper, CAPACITY_WARN_NOTE};
 
 impl LogShipper {
@@ -25,8 +26,9 @@ fn capacity_warn_event() -> LogEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{LogShipper, ShipperConfig, CAPACITY_WARN_NOTE};
     use super::*;
+    use crate::logging::log_shipper::CAPACITY_WARN_NOTE;
+    use crate::logging::{LogShipper, ShipperConfig};
     use chrono::{DateTime, Utc};
 
     fn buffer_only() -> LogShipper {

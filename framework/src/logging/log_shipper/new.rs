@@ -84,9 +84,10 @@ impl LogShipper {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::SHIP_CHUNK;
-    use super::super::{LogShipper, ShipperConfig, DEFAULT_CAPACITY, SHIP_TIMEOUT};
     use std::time::Duration;
+
+    use crate::logging::log_shipper::{DEFAULT_CAPACITY, SHIP_TIMEOUT};
+    use crate::logging::{LogShipper, ShipperConfig, SHIP_CHUNK};
 
     #[test]
     fn defaults_are_buffer_only() {

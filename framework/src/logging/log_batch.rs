@@ -22,8 +22,8 @@ impl LogBatch {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{event, LogLevel};
     use super::*;
+    use crate::logging::{event, LogLevel};
     use chrono::{DateTime, Utc};
     use serde_json::{json, Value};
 

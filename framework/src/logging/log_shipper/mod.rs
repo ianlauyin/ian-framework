@@ -19,16 +19,6 @@ pub struct LogShipper {
     inner: Arc<Inner>,
 }
 
-impl std::fmt::Debug for LogShipper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LogShipper")
-            .field("app", &self.inner.app)
-            .field("endpoint", &self.inner.endpoint)
-            .field("buffered", &self.buffered_len())
-            .finish_non_exhaustive()
-    }
-}
-
 impl LogShipper {
     fn lock_buffer(&self) -> std::sync::MutexGuard<'_, Buffer> {
         self.inner
@@ -44,6 +34,16 @@ impl LogShipper {
     #[cfg(test)]
     pub(crate) fn buffered_events(&self) -> Vec<LogEvent> {
         self.lock_buffer().events.iter().cloned().collect()
+    }
+}
+
+impl std::fmt::Debug for LogShipper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LogShipper")
+            .field("app", &self.inner.app)
+            .field("endpoint", &self.inner.endpoint)
+            .field("buffered", &self.buffered_len())
+            .finish_non_exhaustive()
     }
 }
 

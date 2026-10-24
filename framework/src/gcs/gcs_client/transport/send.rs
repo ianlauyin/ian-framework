@@ -50,7 +50,7 @@ impl GcsClient {
                     });
                     return Err(GcsError::with_source(
                         GcsErrorKind::Transport,
-                        "GCS request failed",
+                        "gcs request failed",
                         err,
                     ));
                 }
