@@ -1,6 +1,6 @@
 # HTTP boundary error
 
-This document describes the HTTP boundary error in the framework.
+This document describes the HTTP boundary error and the bearer API key check in the framework.
 This feature is not product business logic.
 
 ## Crate
@@ -21,6 +21,7 @@ The `http` feature enables these dependencies:
 - `axum`
 - `serde`
 - `serde_json`
+- `subtle`
 
 The `http` feature does not enable `logging`.
 The `http` feature does not enable `gcs`.
@@ -167,11 +168,49 @@ async fn read_item(id: &str) -> Result<String, ian_framework::http::ApiError> {
 }
 ```
 
+## Bearer API key
+
+A server can use a bearer API key to authenticate a request.
+The module has these functions:
+
+| function | result |
+| --- | --- |
+| `bearer_token(headers: &axum::http::HeaderMap)` | the token, `Option<&str>` |
+| `key_matches(token: &str, key: &str)` | the match result, `bool` |
+
+`bearer_token` reads the `Authorization` header.
+The header value must be `Bearer`, then one space, then the token.
+`bearer_token` gives `None` in these conditions:
+
+- The request has no `Authorization` header.
+- The header value is not UTF-8 text.
+- The scheme is not exactly `Bearer`. The scheme is case sensitive.
+- The header value has no space.
+- The token is empty.
+- The token contains a space.
+
+`key_matches` compares the token bytes and the key bytes in constant time.
+`key_matches` uses `subtle::ConstantTimeEq`.
+The comparison time does not depend on the position of the first different byte.
+`key_matches` gives `true` only if the token and the key are equal.
+
+The project keeps the API key.
+The project selects the HTTP status and the error for a rejected request.
+
+```rust
+fn authorize(headers: &axum::http::HeaderMap, api_key: &str) -> bool {
+    ian_framework::http::bearer_token(headers)
+        .is_some_and(|token| ian_framework::http::key_matches(token, api_key))
+}
+```
+
 ## Out of scope
 
 This feature does not include these items:
 
-- Authentication.
+- Authentication other than the bearer API key check.
+- Cookie sessions. Cookie sessions are `spec/framework/auth.md`.
+- An API key store or API key rotation.
 - A catalog of product error codes.
 - A project error enum.
 - A project procedure.

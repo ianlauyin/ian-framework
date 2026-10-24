@@ -316,7 +316,7 @@ This function does not set a body size limit.
 This feature does not include these items:
 
 - A log server process.
-- Authentication to the log server.
+- Authentication to the log server. The bearer API key check is in `spec/framework/http.md`.
 - A product log policy.
 - Trash rules, browse caps, or upload gates.
 - An adapter that maps the app to a different path.
