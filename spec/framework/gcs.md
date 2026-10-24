@@ -86,6 +86,13 @@ A list page also has `prefixes` and `next_page_token`.
 The client does not remove prefixes.
 The client does not set a maximum page size.
 
+`GcsClient::list_all` follows `next_page_token` until the last page.
+It returns one list page with all objects and all prefixes.
+That page has no `next_page_token`.
+A prefix that is on more than one page is in the result one time.
+If GCS returns a page token that `list_all` already used, `list_all` returns an API error.
+`list_all` does not filter objects or prefixes.
+
 ## Metadata
 
 The put options include a metadata map.
@@ -166,6 +173,7 @@ These methods are on `GcsClient`:
 - `open_object` opens the object data.
 - `stat` reads the object metadata.
 - `list` lists one page.
+- `list_all` lists all pages.
 - `delete_object` deletes one object.
 - `patch_metadata` patches the metadata map.
 - `copy_object` copies an object in the same bucket with `copyTo`.
