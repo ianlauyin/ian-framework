@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use super::{GcsError, GcsErrorKind};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
 

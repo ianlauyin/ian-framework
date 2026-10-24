@@ -1,5 +1,5 @@
-use super::encode::encode_seg;
-use super::API_ROOT;
+use crate::gcs::encode::encode_seg;
+use crate::gcs::API_ROOT;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListQuery {

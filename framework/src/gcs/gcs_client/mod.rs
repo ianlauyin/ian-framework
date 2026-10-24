@@ -21,6 +21,9 @@ use auth::{Auth, CachedToken};
 use ops_log::OpsRecord;
 use transport::Call;
 
+pub use read::{ListPage, ListQuery, ObjectReader};
+pub use upload::PutOptions;
+
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Clone)]

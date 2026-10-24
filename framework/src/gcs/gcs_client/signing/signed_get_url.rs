@@ -3,7 +3,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
-use crate::gcs::encode::{encode_object_path, encode_seg};
+use crate::gcs::encode::encode_seg;
 use crate::gcs::gcs_client::{validate_object_name, GcsClient};
 use crate::gcs::{GcsError, GcsErrorKind};
 
@@ -134,6 +134,13 @@ fn attachment_disposition(filename: &str) -> Result<String, GcsError> {
         "attachment; filename=\"{fallback}\"; filename*=UTF-8''{}",
         encode_seg(filename)
     ))
+}
+
+fn encode_object_path(name: &str) -> String {
+    name.split('/')
+        .map(encode_seg)
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 #[cfg(test)]
@@ -274,6 +281,15 @@ UNSIGNED-PAYLOAD";
                 .unwrap_err();
             assert_eq!(err.kind(), GcsErrorKind::Auth);
         }
+    }
+
+    #[test]
+    fn object_path_keeps_slashes() {
+        assert_eq!(
+            encode_object_path("photos/my cat.jpeg"),
+            "photos/my%20cat.jpeg"
+        );
+        assert_eq!(encode_object_path("a//b"), "a//b");
     }
 
     #[test]
