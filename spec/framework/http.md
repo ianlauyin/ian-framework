@@ -26,8 +26,10 @@ The `http` feature does not enable `logging`.
 The `http` feature does not enable `gcs`.
 The `logging` feature does not enable `http`.
 The `gcs` feature does not enable `http`.
+The `auth` feature enables `http`.
 The logging feature is `spec/framework/logging.md`.
 The Google Cloud Storage client is `spec/framework/gcs.md`.
+Cookie sessions and password hashes are `spec/framework/auth.md`.
 A project with default features off selects the feature `http` to compile this module.
 
 Put this block in the project `Cargo.toml`:

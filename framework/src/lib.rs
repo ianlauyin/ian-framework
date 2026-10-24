@@ -1,3 +1,6 @@
+#[cfg(feature = "auth")]
+pub mod auth;
+
 #[cfg(feature = "http")]
 pub mod http;
 
