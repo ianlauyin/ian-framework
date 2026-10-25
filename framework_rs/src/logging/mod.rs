@@ -3,6 +3,7 @@ mod event;
 mod log_batch;
 mod log_request;
 mod log_shipper;
+mod shipper_config;
 
 use std::collections::BTreeMap;
 
@@ -12,7 +13,8 @@ pub use client_log::client_log_router;
 pub use event::{LogEvent, LogLevel};
 pub use log_batch::LogBatch;
 pub use log_request::log_request;
-pub use log_shipper::{LogShipper, ShipperConfig};
+pub use log_shipper::LogShipper;
+pub use shipper_config::ShipperConfig;
 
 const SHIP_CHUNK: usize = 1_000;
 
