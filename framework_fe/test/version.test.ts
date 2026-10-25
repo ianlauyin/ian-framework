@@ -23,7 +23,7 @@ async function flush(): Promise<void> {
 }
 
 async function loadChecker() {
-  const { VersionChecker } = await import("./version");
+  const { VersionChecker } = await import("../src/version");
   return VersionChecker;
 }
 
@@ -42,6 +42,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -49,10 +50,9 @@ describe("VersionChecker", () => {
   it("calls the handler when the version changes", async () => {
     const VersionChecker = await loadChecker();
     const handler = vi.fn();
-    VersionChecker.setUpdatedHandler(handler);
 
     respondWith("a");
-    VersionChecker.init();
+    VersionChecker.init({ onUpdated: handler });
     await flush();
     expect(fetchMock).toHaveBeenCalledWith("/version", {
       method: "GET",
@@ -73,8 +73,8 @@ describe("VersionChecker", () => {
   it("checks only when the page becomes visible", async () => {
     const VersionChecker = await loadChecker();
     respondWith("a");
-    VersionChecker.init();
-    VersionChecker.init();
+    VersionChecker.init({ onUpdated: vi.fn() });
+    VersionChecker.init({ onUpdated: vi.fn() });
     await flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -87,10 +87,9 @@ describe("VersionChecker", () => {
   it("ignores failed checks", async () => {
     const VersionChecker = await loadChecker();
     const handler = vi.fn();
-    VersionChecker.setUpdatedHandler(handler);
 
     respondWith("a");
-    VersionChecker.init();
+    VersionChecker.init({ onUpdated: handler });
     await flush();
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
@@ -100,5 +99,36 @@ describe("VersionChecker", () => {
     showPage();
     await flush();
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("checks on the interval when the page is hidden", async () => {
+    vi.useFakeTimers();
+    const VersionChecker = await loadChecker();
+    const handler = vi.fn();
+
+    respondWith("a");
+    VersionChecker.init({ onUpdated: handler, checkInterval: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    respondWith("b");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    fakeDocument.visibilityState = "hidden";
+    respondWith("b");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not check on a timer without an interval", async () => {
+    vi.useFakeTimers();
+    const VersionChecker = await loadChecker();
+
+    respondWith("a");
+    VersionChecker.init({ onUpdated: vi.fn() });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

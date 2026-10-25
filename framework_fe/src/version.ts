@@ -1,15 +1,19 @@
 const VERSION_URL = "/version";
 
-type VersionUpdatedHandler = () => void;
+export type VersionCheckerOptions = {
+  onUpdated: () => void;
+  checkInterval?: number;
+};
 
 export class VersionChecker {
   private static currentVersion: string | null = null;
   private static initialized = false;
-  private static onUpdated: VersionUpdatedHandler | undefined;
+  private static onUpdated: (() => void) | undefined;
 
-  public static init(): void {
+  public static init(options: VersionCheckerOptions): void {
     if (VersionChecker.initialized) return;
     VersionChecker.initialized = true;
+    VersionChecker.onUpdated = options.onUpdated;
 
     VersionChecker.check();
     document.addEventListener("visibilitychange", () => {
@@ -17,10 +21,9 @@ export class VersionChecker {
         VersionChecker.check();
       }
     });
-  }
-
-  public static setUpdatedHandler(handler?: VersionUpdatedHandler): void {
-    VersionChecker.onUpdated = handler;
+    if (options.checkInterval !== undefined) {
+      setInterval(() => VersionChecker.check(), options.checkInterval);
+    }
   }
 
   private static async check(): Promise<void> {
