@@ -29,6 +29,8 @@ The `http` feature does not enable `gcs`.
 The `logging` feature does not enable `http`.
 The `gcs` feature does not enable `http`.
 The `auth` feature enables `http`.
+The `version` feature enables `http`.
+The process version route is in this module behind the `version` feature. The route is `spec/framework_rs/version.md`.
 The logging feature is `spec/framework_rs/logging.md`.
 The Google Cloud Storage client is `spec/framework_rs/gcs.md`.
 Cookie sessions and password hashes are `spec/framework_rs/auth.md`.

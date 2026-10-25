@@ -48,10 +48,9 @@ gcs = [
     "tokio/io-util",
 ]
 version = [
-    "dep:axum",
+    "http",
     "dep:getrandom",
     "dep:hex",
-    "dep:serde",
 ]
 
 [dependencies]

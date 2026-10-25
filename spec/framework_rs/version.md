@@ -7,21 +7,21 @@ This feature is not product business logic.
 
 The package name is `ian_framework`.
 The crate path is `framework_rs/`.
-The module path is `ian_framework::version`.
+The module path is `ian_framework::http`.
+The source file is `framework_rs/src/http/version.rs`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Feature `version`
 
 The Cargo feature name is `version`.
 `version` is not a default feature.
+The `version` feature enables the `http` feature.
+The `http` feature is `spec/framework_rs/http.md`.
 The `version` feature enables these dependencies:
 
-- `axum`
 - `getrandom`
 - `hex`
-- `serde`
 
-The `version` feature does not enable `http`.
 The `version` feature does not enable `logging`.
 The `version` feature does not enable `auth`.
 The `version` feature does not enable `gcs`.
@@ -43,7 +43,7 @@ cargo test --features version
 
 ## Route
 
-`version_router()` gives an `axum::Router` with one route.
+`ian_framework::http::version_router()` gives an `axum::Router` with one route.
 The route is `GET /version`.
 The project merges this router into its own router.
 The project adds its own layers to the merged router.
