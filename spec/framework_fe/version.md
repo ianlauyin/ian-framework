@@ -8,7 +8,7 @@ This feature is not product business logic.
 The package name is `ian-framework-fe`.
 The package path is `framework_fe/`.
 The import paths are `ian-framework-fe` and `ian-framework-fe/version`.
-The entry file is `framework_fe/src/index.ts`. It re-exports `VersionChecker` and `VersionCheckerOptions`.
+The entry file is `framework_fe/src/index.ts`. It re-exports `VersionChecker`, `VersionCheckerOptions` and the ajax client in `spec/framework_fe/ajax.md`.
 The source file is `framework_fe/src/version.ts`.
 The test file is `framework_fe/test/version.test.ts`.
 
