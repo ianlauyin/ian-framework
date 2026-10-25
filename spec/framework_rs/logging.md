@@ -293,6 +293,36 @@ The middleware skips a header value that is not text.
 `status` is the response status.
 `latency_ms` is the handler time in milliseconds.
 `message` is `request`.
+`extra` has these keys, and no other key:
+
+| key | value |
+| --- | --- |
+| `query` | one object with each query field, when the query has a field |
+| `body` | one object with each body field, when the body has a field |
+
+The middleware leaves out `query` when the request has no query or the query has no field.
+The middleware reads the query as `application/x-www-form-urlencoded` text and decodes each name and value.
+A query field without `=` has an empty string value.
+Each query value is a string.
+A query name that is in the query more than once has one array of its string values, in query order.
+
+The middleware reads the body only when all these rules are true:
+
+- The header `content-length` is a number from 1 through 65536.
+- The media type in the header `content-type` is `application/json` or a type that ends with `+json`. The match ignores case and the parameters after `;`.
+
+`body` is the JSON object.
+The middleware keeps each nested value.
+A JSON body that is not an object, or that is not valid JSON, gives no `body`.
+The middleware does not log a body of another type, such as a form, a multipart upload, or text.
+An empty object gives no `body`.
+The middleware gives the same body bytes to the inner handler.
+The middleware does not read another body, so a large body or a body without `content-length` reaches the handler as a stream.
+When the body read fails, the middleware does not call the inner handler, returns status 400, and records the event with status 400.
+`latency_ms` includes the body read.
+The shipper masks `query` and `body` with the masking rules, and a key in a nested object also counts.
+A pattern such as `^(password|token)$` masks `query.token` and `body.password`.
+
 A status of 500 or higher has level `error`.
 A status from 400 through 499 has level `warn`.
 A status below 400 has level `info`.
@@ -382,6 +412,7 @@ The project gives the same shipper to this router and to the Axum middleware.
 The client events and the request events then share one buffer.
 The shipper ships them together, with the same capacity, warning, and batch rules.
 When the middleware wraps this route, the `POST /log` request also records one request event.
+When that body is at most 65536 bytes, the request event `body` holds the client batch.
 The client events come first, because the middleware records after the handler returns.
 
 ```rust

@@ -1,12 +1,16 @@
 use std::net::SocketAddr;
 use std::time::Instant;
 
+use axum::body::{to_bytes, Body};
 use axum::extract::{ConnectInfo, Request, State};
-use axum::http::HeaderMap;
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::Next;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
+use serde_json::{Map, Value};
 
 use super::{event, LogLevel, LogShipper};
+
+const BODY_LOG_LIMIT: usize = 64 * 1024;
 
 pub async fn log_request(
     State(shipper): State<LogShipper>,
@@ -17,16 +21,72 @@ pub async fn log_request(
     let path = request_path(request.uri().path());
     let ip = client_ip(&request);
     let user_agent = user_agent(request.headers());
+    let query = request.uri().query().map(query_fields);
     let started = Instant::now();
-    let response = next.run(request).await;
+    let (request, body) = split_json_body(request).await;
+    let response = match request {
+        Some(request) => next.run(request).await,
+        None => StatusCode::BAD_REQUEST.into_response(),
+    };
     let status = response.status().as_u16();
     let mut event = event(action(&method, &path), "request", level_for_status(status));
     event.ip = ip;
     event.user_agent = user_agent;
     event.status = Some(status);
     event.latency_ms = Some(millis_since(started));
+    for (key, fields) in [("query", query), ("body", body)] {
+        if let Some(fields) = fields.filter(|fields| !fields.is_empty()) {
+            event.extra.insert(key.to_string(), Value::Object(fields));
+        }
+    }
     shipper.record(event);
     response
+}
+
+async fn split_json_body(request: Request) -> (Option<Request>, Option<Map<String, Value>>) {
+    if !is_small_json_body(request.headers()) {
+        return (Some(request), None);
+    }
+    let (parts, body) = request.into_parts();
+    let Ok(bytes) = to_bytes(body, BODY_LOG_LIMIT).await else {
+        return (None, None);
+    };
+    let fields = serde_json::from_slice::<Map<String, Value>>(&bytes).ok();
+    (Some(Request::from_parts(parts, Body::from(bytes))), fields)
+}
+
+// Only a body with a known small length is read, so a large or streamed body reaches the handler untouched.
+fn is_small_json_body(headers: &HeaderMap) -> bool {
+    let length = header_text(headers, header::CONTENT_LENGTH.as_str())
+        .and_then(|length| length.parse::<usize>().ok());
+    if !matches!(length, Some(1..=BODY_LOG_LIMIT)) {
+        return false;
+    }
+    let Some(content_type) = header_text(headers, header::CONTENT_TYPE.as_str()) else {
+        return false;
+    };
+    let mime = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    mime == "application/json" || mime.ends_with("+json")
+}
+
+fn query_fields(query: &str) -> Map<String, Value> {
+    let mut fields = Map::new();
+    for (key, value) in form_urlencoded::parse(query.as_bytes()) {
+        let value = Value::String(value.into_owned());
+        match fields.get_mut(key.as_ref()) {
+            None => {
+                fields.insert(key.into_owned(), value);
+            }
+            Some(Value::Array(values)) => values.push(value),
+            Some(first) => *first = Value::Array(vec![first.take(), value]),
+        }
+    }
+    fields
 }
 
 fn action(method: &str, path: &str) -> String {
@@ -104,8 +164,9 @@ mod tests {
     use axum::extract::Path;
     use axum::http::{Request, StatusCode};
     use axum::middleware::from_fn_with_state;
-    use axum::routing::get;
+    use axum::routing::{get, post};
     use axum::Router;
+    use serde_json::json;
     use tower::ServiceExt;
 
     async fn status_from_path(Path(code): Path<u16>) -> StatusCode {
@@ -118,10 +179,38 @@ mod tests {
         LogShipper::new(config).unwrap()
     }
 
+    async fn echo(body: String) -> String {
+        body
+    }
+
     fn app(shipper: LogShipper) -> Router {
         Router::new()
             .route("/status/{code}", get(status_from_path))
+            .route("/echo", post(echo))
             .layer(from_fn_with_state(shipper, log_request))
+    }
+
+    async fn post_body(
+        shipper: &LogShipper,
+        uri: &str,
+        content_type: &str,
+        body: String,
+    ) -> (StatusCode, String) {
+        let response = app(shipper.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", content_type)
+                    .header("content-length", body.len())
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, String::from_utf8(bytes.to_vec()).unwrap())
     }
 
     async fn send(app: Router, uri: &str) -> axum::response::Response {
@@ -172,8 +261,88 @@ mod tests {
         assert_eq!(value["action"], "GET /status/204");
         assert!(!json.contains("req-1"));
         assert!(value.get("request").is_none());
-        assert!(!json.contains("secret"));
-        assert!(!json.contains("token"));
+        assert_eq!(value["extra"], json!({"query": {"token": "secret"}}));
+    }
+
+    #[tokio::test]
+    async fn middleware_leaves_out_empty_fields() {
+        let shipper = shipper();
+        let body = json!({"name": "ian"}).to_string();
+        post_body(&shipper, "/echo?", "application/json", body).await;
+        let event = &shipper.buffered_events()[0];
+        assert_eq!(event.extra.len(), 1);
+        assert_eq!(event.extra["body"], json!({"name": "ian"}));
+        assert!(!event.extra.contains_key("query"));
+    }
+
+    #[tokio::test]
+    async fn middleware_logs_each_query_field() {
+        let shipper = shipper();
+        send(app(shipper.clone()), "/status/200?a=1&b=x%20y&a=2&flag").await;
+        let event = &shipper.buffered_events()[0];
+        assert_eq!(
+            event.extra["query"],
+            json!({"a": ["1", "2"], "b": "x y", "flag": ""})
+        );
+    }
+
+    #[tokio::test]
+    async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
+        let shipper = shipper();
+        let body = json!({"name": "ian", "age": 3, "tags": ["a"]}).to_string();
+        let (status, echoed) = post_body(
+            &shipper,
+            "/echo?x=1",
+            "application/json; charset=utf-8",
+            body.clone(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(echoed, body);
+        let event = &shipper.buffered_events()[0];
+        assert_eq!(event.action, "POST /echo");
+        assert_eq!(
+            event.extra["body"],
+            json!({"name": "ian", "age": 3, "tags": ["a"]})
+        );
+        assert_eq!(event.extra["query"], json!({"x": "1"}));
+    }
+
+    #[tokio::test]
+    async fn middleware_skips_a_body_it_cannot_log() {
+        let shipper = shipper();
+        let large = json!({"data": "x".repeat(BODY_LOG_LIMIT)}).to_string();
+        let cases = [
+            ("text/plain", "name=ian".to_string()),
+            ("application/x-www-form-urlencoded", "name=ian".to_string()),
+            ("application/json", "[1, 2]".to_string()),
+            ("application/json", "{not json".to_string()),
+            ("application/json", large),
+        ];
+        for (content_type, body) in cases {
+            let (status, echoed) = post_body(&shipper, "/echo", content_type, body.clone()).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(echoed, body);
+        }
+        for event in shipper.buffered_events() {
+            assert!(!event.extra.contains_key("body"));
+        }
+    }
+
+    #[tokio::test]
+    async fn middleware_masks_query_and_body_fields_by_key() {
+        let mut config = ShipperConfig::new("api");
+        config.endpoint = Some("http://logs.example".to_string());
+        config.mask_patterns = vec![r"^(password|token)$".to_string()];
+        let shipper = LogShipper::new(config).unwrap();
+        let body = json!({"user": "ian", "password": "hunter2"}).to_string();
+        post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
+        let event = &shipper.buffered_events()[0];
+        assert_eq!(event.extra["query"], json!({"token": "***", "page": "2"}));
+        assert_eq!(
+            event.extra["body"],
+            json!({"user": "ian", "password": "***"})
+        );
     }
 
     #[tokio::test]
