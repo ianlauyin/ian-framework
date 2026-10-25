@@ -118,6 +118,34 @@ describe("Logger", () => {
     expect(events[0].message).toBe("event 1");
   });
 
+  it("masks the value of a matching extra key and each match in a string value", async () => {
+    const Logger = await loadLogger();
+    Logger.setMaskPatterns([/^(password|token)$/i, /secret=\S+/]);
+    Logger.info("login secret=keep", {
+      password: "hunter2",
+      TOKEN: 1234,
+      note: "a secret=x and secret=y",
+      code: 7,
+    });
+    hidePage();
+    const [event] = sentEvents(0);
+    expect(event.message).toBe("login secret=keep");
+    expect(event.extra).toEqual({
+      page: "/home",
+      password: "***",
+      TOKEN: "***",
+      note: "a *** and ***",
+      code: 7,
+    });
+  });
+
+  it("keeps the extra values when no mask pattern is set", async () => {
+    const Logger = await loadLogger();
+    Logger.info("login", { password: "hunter2" });
+    hidePage();
+    expect(sentEvents(0)[0].extra).toEqual({ page: "/home", password: "hunter2" });
+  });
+
   it("ignores a failed send", async () => {
     const Logger = await loadLogger();
     fetchMock.mockRejectedValueOnce(new Error("offline"));

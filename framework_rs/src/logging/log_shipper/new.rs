@@ -11,6 +11,7 @@ pub struct ShipperConfig {
     pub app: String,
     pub endpoint: Option<String>,
     pub capacity: usize,
+    pub mask_patterns: Vec<String>,
 }
 
 impl ShipperConfig {
@@ -19,6 +20,7 @@ impl ShipperConfig {
             app: app.into(),
             endpoint: env::var(ENDPOINT_ENV).ok(),
             capacity: DEFAULT_CAPACITY,
+            mask_patterns: Vec::new(),
         }
     }
 }
@@ -57,6 +59,11 @@ impl LogShipper {
                 }
             }
         };
+        let masks = config
+            .mask_patterns
+            .iter()
+            .map(|pattern| regex::Regex::new(pattern).ok())
+            .collect::<Option<Vec<_>>>()?;
         let http = match &endpoint {
             Some(_) => Some(
                 reqwest::Client::builder()
@@ -74,6 +81,7 @@ impl LogShipper {
                 app: config.app,
                 endpoint,
                 capacity: config.capacity,
+                masks,
                 buffer: Mutex::new(Buffer {
                     events: VecDeque::new(),
                     capacity_warned: false,
@@ -107,6 +115,7 @@ mod tests {
         assert_eq!(ENDPOINT_ENV, "LOG_ENDPOINT");
         let shipper = LogShipper::new(config).unwrap();
         assert_eq!(shipper.inner.app, "api");
+        assert!(shipper.inner.masks.is_empty());
         assert_eq!(DEFAULT_CAPACITY, 10_000);
         assert_eq!(SHIP_CHUNK, 1_000);
         assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
@@ -144,6 +153,11 @@ mod tests {
             },
             config("api", "ftp://logs.example"),
             config("api", "http://logs.example/a b"),
+            {
+                let mut config = config("api", "http://logs.example");
+                config.mask_patterns = vec!["(".to_string()];
+                config
+            },
         ];
         for config in cases {
             assert!(LogShipper::new(config).is_none());

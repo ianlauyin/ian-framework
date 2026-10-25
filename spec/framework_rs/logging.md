@@ -76,6 +76,7 @@ The argument is the app.
 When `LOG_ENDPOINT` is not set, `endpoint` is unset.
 The caller can set `endpoint` on the config before `LogShipper::new`.
 `capacity` starts at 10000 events.
+`mask_patterns` starts empty.
 The ship request time limit is 10 seconds.
 
 `LogShipper::new` builds one shipper from that config.
@@ -86,8 +87,10 @@ The other characters are letters, digits, `.`, `_`, or `-`.
 An empty app returns no shipper.
 A forbidden character in the app returns no shipper.
 `capacity` of zero returns no shipper.
+A `mask_patterns` item that is not a valid regex returns no shipper.
 
 `LogShipper::record` stores one event in the local buffer.
+Before it stores or traces the event, `LogShipper::record` masks the event `extra` values.
 In trace-only mode, `LogShipper::record` writes the event with `tracing` and does not store it.
 The shipper does not write `app` into the event.
 The shipper stores the full `message`.
@@ -188,6 +191,35 @@ An empty buffer with an endpoint does not send an HTTP request.
 The path app selects the log stream.
 A log server stores its project from the path app.
 A consumer splits logs by the app in the path.
+
+## Masking
+
+`mask_patterns` is a list of regex patterns.
+The syntax is the `regex` crate syntax.
+An example is `password=\S+`.
+For a case-insensitive match, start the pattern with `(?i)`.
+The shipper masks only the `extra` values.
+The shipper does not mask the other event fields.
+
+When an `extra` key matches a pattern, the shipper replaces the whole value with the string `***`.
+This rule applies to a value of any type.
+This rule also applies to a key in a nested object.
+The shipper does not change the key.
+
+When the key does not match, the shipper replaces each match of each pattern in a string value with `***`.
+The patterns apply in list order.
+This rule also applies to a string in a nested array or object.
+The shipper does not mask a number, a `bool`, or null by the value rule.
+The shipper masks in buffered mode and in trace-only mode.
+The shipper masks client events from `POST /log` and request events from the middleware.
+The frontend logger also masks before it sends. The browser patterns and the shipper patterns are separate lists.
+An empty `mask_patterns` list does not change the event.
+
+```rust
+let mut config = ShipperConfig::new("cs");
+config.mask_patterns = vec![r"(?i)^password$".to_string(), r"password=\S+".to_string()];
+let shipper = LogShipper::new(config).unwrap();
+```
 
 ## Adapter
 

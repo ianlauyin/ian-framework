@@ -1,6 +1,7 @@
 const LOG_URL = "/log";
 const FLUSH_INTERVAL = 60_000;
 const MAX_QUEUE = 1000;
+const MASK = "***";
 
 export type LogLevel = "info" | "warn" | "error";
 export type LogExtra = Record<string, string | number | boolean>;
@@ -21,6 +22,14 @@ type ClientLogEvent = {
 export class Logger {
   private static queue: ClientLogEvent[] = [];
   private static started = false;
+  private static masks: RegExp[] = [];
+
+  public static setMaskPatterns(patterns: RegExp[]): void {
+    Logger.masks = patterns.map(
+      (pattern) =>
+        new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`),
+    );
+  }
 
   public static info(message: string, extra?: LogExtra): void {
     Logger.record("info", message, extra);
@@ -50,8 +59,24 @@ export class Logger {
       latency_ms: null,
       level,
       message,
-      extra: { page: location.pathname, ...extra },
+      extra: Logger.mask({ page: location.pathname, ...extra }),
     });
+  }
+
+  private static mask(extra: LogExtra): LogExtra {
+    if (Logger.masks.length === 0) return extra;
+
+    const masked: LogExtra = {};
+    for (const [key, value] of Object.entries(extra)) {
+      if (Logger.masks.some((mask) => key.search(mask) !== -1)) {
+        masked[key] = MASK;
+      } else if (typeof value === "string") {
+        masked[key] = Logger.masks.reduce((text, mask) => text.replace(mask, MASK), value);
+      } else {
+        masked[key] = value;
+      }
+    }
+    return masked;
   }
 
   private static start(): void {

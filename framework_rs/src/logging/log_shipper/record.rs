@@ -1,9 +1,12 @@
+use serde_json::Value;
+
 use crate::logging::{event, LogEvent, LogLevel};
 
 use super::{meets_capacity_warn, LogShipper, CAPACITY_WARN_NOTE};
 
 impl LogShipper {
-    pub fn record(&self, event: LogEvent) {
+    pub fn record(&self, mut event: LogEvent) {
+        mask_event(&self.inner.masks, &mut event);
         if self.inner.endpoint.is_none() {
             trace_event(&self.inner.app, &event);
             return;
@@ -20,6 +23,46 @@ impl LogShipper {
             }
             buffer.events.push_back(capacity_warn_event());
             buffer.capacity_warned = true;
+        }
+    }
+}
+
+const MASK: &str = "***";
+
+fn mask_event(masks: &[regex::Regex], event: &mut LogEvent) {
+    if masks.is_empty() {
+        return;
+    }
+    for (key, value) in event.extra.iter_mut() {
+        mask_entry(masks, key, value);
+    }
+}
+
+fn mask_entry(masks: &[regex::Regex], key: &str, value: &mut Value) {
+    if masks.iter().any(|mask| mask.is_match(key)) {
+        *value = Value::String(MASK.to_string());
+    } else {
+        mask_value(masks, value);
+    }
+}
+
+fn mask_value(masks: &[regex::Regex], value: &mut Value) {
+    match value {
+        Value::String(text) => mask_text(masks, text),
+        Value::Array(items) => items.iter_mut().for_each(|item| mask_value(masks, item)),
+        Value::Object(map) => {
+            for (key, item) in map.iter_mut() {
+                mask_entry(masks, key, item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn mask_text(masks: &[regex::Regex], text: &mut String) {
+    for mask in masks {
+        if let std::borrow::Cow::Owned(masked) = mask.replace_all(text, MASK) {
+            *text = masked;
         }
     }
 }
@@ -108,6 +151,89 @@ mod tests {
         assert_eq!(events[0].message, "kept");
         assert_eq!(shipper.inner.app, "api");
         assert_no_scope_keys(&serde_json::to_string(&events[0]).unwrap());
+    }
+
+    #[test]
+    fn record_masks_every_pattern_match_in_extra_values() {
+        let mut config = config("http://logs.example");
+        config.mask_patterns = vec![
+            r"password=\S+".to_string(),
+            r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
+        ];
+        let shipper = LogShipper::new(config).unwrap();
+        let mut event = event(
+            "POST /login?password=x",
+            "login password=hunter2 ok",
+            LogLevel::Info,
+        );
+        event.id = "password=1".to_string();
+        event.user_agent = "agent BEARER abc.def".to_string();
+        event
+            .extra
+            .insert("password=k".to_string(), serde_json::json!("Bearer t0k"));
+        event.extra.insert(
+            "note".to_string(),
+            serde_json::json!("user password=a, BEARER b.c done"),
+        );
+        event.extra.insert(
+            "nested".to_string(),
+            serde_json::json!({"list": ["password=a", 7], "keep": "plain"}),
+        );
+        shipper.record(event);
+        let stored = shipper.buffered_events().remove(0);
+        assert_eq!(stored.message, "login password=hunter2 ok");
+        assert_eq!(stored.action, "POST /login?password=x");
+        assert_eq!(stored.id, "password=1");
+        assert_eq!(stored.user_agent, "agent BEARER abc.def");
+        assert_eq!(stored.extra["password=k"], serde_json::json!("***"));
+        assert_eq!(stored.extra["note"], serde_json::json!("user *** *** done"));
+        assert_eq!(
+            stored.extra["nested"],
+            serde_json::json!({"list": ["***", 7], "keep": "plain"})
+        );
+    }
+
+    #[test]
+    fn record_masks_the_value_of_a_matching_extra_key() {
+        let mut config = config("http://logs.example");
+        config.mask_patterns = vec![r"(?i)^(password|token)$".to_string()];
+        let shipper = LogShipper::new(config).unwrap();
+        let mut event = event("", "login", LogLevel::Info);
+        event
+            .extra
+            .insert("password".to_string(), serde_json::json!("hunter2"));
+        event
+            .extra
+            .insert("TOKEN".to_string(), serde_json::json!(1234));
+        event.extra.insert(
+            "nested".to_string(),
+            serde_json::json!({"token": {"a": 1}, "user": "ian"}),
+        );
+        event
+            .extra
+            .insert("user".to_string(), serde_json::json!("ian"));
+        shipper.record(event);
+        let stored = shipper.buffered_events().remove(0);
+        assert_eq!(stored.extra["password"], serde_json::json!("***"));
+        assert_eq!(stored.extra["TOKEN"], serde_json::json!("***"));
+        assert_eq!(
+            stored.extra["nested"],
+            serde_json::json!({"token": "***", "user": "ian"})
+        );
+        assert_eq!(stored.extra["user"], serde_json::json!("ian"));
+    }
+
+    #[test]
+    fn record_without_mask_patterns_keeps_the_text() {
+        let shipper = buffered();
+        let mut event = event("", "password=hunter2", LogLevel::Info);
+        event
+            .extra
+            .insert("note".to_string(), serde_json::json!("password=hunter2"));
+        shipper.record(event);
+        let stored = shipper.buffered_events().remove(0);
+        assert_eq!(stored.message, "password=hunter2");
+        assert_eq!(stored.extra["note"], serde_json::json!("password=hunter2"));
     }
 
     #[test]

@@ -56,6 +56,7 @@ struct Inner {
     app: String,
     endpoint: Option<String>,
     capacity: usize,
+    masks: Vec<regex::Regex>,
     buffer: Mutex<Buffer>,
     http: Option<reqwest::Client>,
     shipping: tokio::sync::Mutex<()>,
