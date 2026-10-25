@@ -5,9 +5,9 @@
   "type": "module",
   "packageManager": "pnpm@10.17.1",
   "exports": {
-    ".": "./src/index.ts",
     "./version": "./src/version.ts",
     "./ajax": "./src/ajax.ts",
+    "./logger": "./src/logger.ts",
     "./error-boundary": {
       "solid": "./src/error-boundary/index.tsx",
       "default": "./src/error-boundary/index.tsx"

@@ -1,4 +1,6 @@
 import { ErrorBoundary, JSX } from "solid-js";
+
+import { Logger } from "../logger";
 import "./index.css";
 
 export interface AppErrorBoundaryProps {
@@ -12,7 +14,10 @@ export interface AppErrorBoundaryProps {
 export const AppErrorBoundary = (props: AppErrorBoundaryProps) => {
   return (
     <ErrorBoundary
-      fallback={(_error, reset) => <ErrorFallback {...props} onReset={reset} />}
+      fallback={(error, reset) => {
+        logError(error);
+        return <ErrorFallback {...props} onReset={reset} />;
+      }}
     >
       {props.children}
     </ErrorBoundary>
@@ -38,4 +43,20 @@ function ErrorFallback(props: FallbackProps) {
       </div>
     </div>
   );
+}
+
+// The log route drops an extra value that contains a line break.
+function logError(error: unknown) {
+  const oneLine = (text: string) => text.replace(/\r?\n\s*/g, " | ");
+  if (error instanceof Error) {
+    Logger.error("app error boundary caught an error", {
+      error_name: error.name,
+      error_message: oneLine(error.message),
+      error_stack: oneLine(error.stack ?? ""),
+    });
+    return;
+  }
+  Logger.error("app error boundary caught an error", {
+    error_message: oneLine(String(error)),
+  });
 }

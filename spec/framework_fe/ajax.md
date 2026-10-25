@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Package
 
 The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-The import paths are `ian-framework-fe` and `ian-framework-fe/ajax`.
+The import path is `ian-framework-fe/ajax`.
 The source file is `framework_fe/src/ajax.ts`.
 The test file is `framework_fe/test/ajax.test.ts`.
 The client uses only browser APIs. The client does not use a UI library.
