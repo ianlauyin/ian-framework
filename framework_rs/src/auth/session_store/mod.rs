@@ -115,6 +115,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn remove_subject_except_keeps_one_session() {
+        let Some(store) = store_or_skip().await else {
+            return;
+        };
+        let current = store.create("7").await.unwrap();
+        let old = store.create("7").await.unwrap();
+        let other = store.create("8").await.unwrap();
+
+        store.remove_subject_except("7", &current).await.unwrap();
+        assert_eq!(store.subject(&current).await.unwrap().as_deref(), Some("7"));
+        assert_eq!(store.subject(&old).await.unwrap(), None);
+        assert_eq!(store.subject(&other).await.unwrap().as_deref(), Some("8"));
+
+        store.remove_subject_except("8", &current).await.unwrap();
+        assert_eq!(store.subject(&current).await.unwrap().as_deref(), Some("7"));
+        assert_eq!(store.subject(&other).await.unwrap(), None);
+        store.remove(&current).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn redis_holds_the_token_hash_and_the_deadline() {
         let Some(store) = store_or_skip().await else {
             return;

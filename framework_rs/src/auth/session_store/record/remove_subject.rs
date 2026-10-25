@@ -5,6 +5,14 @@ use crate::auth::AuthError;
 
 impl SessionStore {
     pub async fn remove_subject(&self, subject: &str) -> Result<(), AuthError> {
+        self.remove_subject_keys(subject, None).await
+    }
+
+    pub(super) async fn remove_subject_keys(
+        &self,
+        subject: &str,
+        keep_key: Option<&str>,
+    ) -> Result<(), AuthError> {
         let mut conn = self.conn();
         let pattern = format!("{}*", escape_glob(&self.inner.config.prefix));
         let mut keys = Vec::new();
@@ -18,6 +26,9 @@ impl SessionStore {
             }
         }
         for key in keys {
+            if keep_key == Some(key.as_str()) {
+                continue;
+            }
             let value: Option<String> = redis::cmd("GET")
                 .arg(&key)
                 .query_async(&mut conn)

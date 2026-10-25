@@ -97,6 +97,7 @@ The key expires after `ttl_secs`.
 | `touch(token)` | sets the expiry to the smaller of `ttl_secs` and the time to the deadline; returns `false` when the session is missing or past its deadline |
 | `remove(token)` | removes one session |
 | `remove_subject(subject)` | removes each session of that subject |
+| `remove_subject_except(subject, keep_token)` | removes each session of that subject, except the session of `keep_token` |
 | `ttl_secs()` | returns the configured `ttl_secs` |
 
 A token is 32 random bytes from the OS random source, in lowercase hex.
@@ -104,6 +105,9 @@ A token has 64 characters.
 `remove_subject` scans the keys that start with `prefix`.
 It removes each key whose value has the subject.
 A project with many sessions must use a prefix that only the session store uses.
+`remove_subject_except` does the same scan and skips the key of `keep_token`.
+It keeps `keep_token` working, and it does not make a new token.
+A project calls it after a password change to end the other sessions of that user and keep the current session.
 
 ## Cookie
 
