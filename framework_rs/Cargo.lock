@@ -619,6 +619,7 @@ dependencies = [
  "subtle",
  "tokio",
  "tower",
+ "tracing",
 ]
 
 [[package]]

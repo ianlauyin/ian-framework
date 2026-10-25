@@ -86,8 +86,14 @@ mod tests {
     use crate::logging::log_shipper::CAPACITY_WARN_NOTE;
     use crate::logging::{event, LogLevel, ShipperConfig};
 
-    fn buffer_only() -> LogShipper {
-        LogShipper::new(ShipperConfig::new("api", "")).unwrap()
+    fn config(app: &str, endpoint: impl Into<String>) -> ShipperConfig {
+        let mut config = ShipperConfig::new(app);
+        config.endpoint = Some(endpoint.into());
+        config
+    }
+
+    fn trace_only() -> LogShipper {
+        LogShipper::new(config("api", "")).unwrap()
     }
 
     fn messages_of(events: &[LogEvent]) -> Vec<&str> {
@@ -119,8 +125,7 @@ mod tests {
 
     #[test]
     fn batch_url_uses_the_app_path() {
-        let shipper =
-            LogShipper::new(ShipperConfig::new("cs", "http://logs.example/ingest/")).unwrap();
+        let shipper = LogShipper::new(config("cs", "http://logs.example/ingest/")).unwrap();
         assert_eq!(
             shipper.batch_url(shipper.inner.endpoint.as_deref().unwrap()),
             "http://logs.example/ingest/log/cs"
@@ -128,17 +133,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unset_endpoint_keeps_events_without_http() {
-        let shipper = buffer_only();
+    async fn unset_endpoint_ships_without_http() {
+        let shipper = trace_only();
         shipper.record(event("", "local", LogLevel::Info));
         shipper.ship_batch().await;
-        assert_eq!(shipper.buffered_len(), 1);
-        assert_eq!(shipper.buffered_events()[0].message, "local");
+        assert_eq!(shipper.buffered_len(), 0);
+        assert!(shipper.inner.http.is_none());
     }
 
     #[tokio::test]
     async fn empty_batch_does_not_post() {
-        let config = ShipperConfig::new("api", "http://127.0.0.1:9");
+        let config = config("api", "http://127.0.0.1:9");
         let shipper = LogShipper::new(config).unwrap();
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
@@ -149,7 +154,7 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         drop(listener);
-        let config = ShipperConfig::new("api", format!("http://{addr}"));
+        let config = config("api", format!("http://{addr}"));
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "down", LogLevel::Error));
         shipper.ship_batch().await;
@@ -160,7 +165,7 @@ mod tests {
     #[tokio::test]
     async fn ship_batch_posts_json_to_the_app_path() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let config = ShipperConfig::new("cs", endpoint);
+        let config = config("cs", endpoint);
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "one", LogLevel::Info));
         shipper.record(event("", "two", LogLevel::Warn));
@@ -194,7 +199,7 @@ mod tests {
     #[tokio::test]
     async fn ship_batch_posts_one_chunk_and_leaves_the_rest() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
+        let shipper = LogShipper::new(config("api", endpoint)).unwrap();
         let total = SHIP_CHUNK + 1;
         for index in 0..total {
             shipper.record(event("", index.to_string(), LogLevel::Info));
@@ -218,7 +223,7 @@ mod tests {
     #[tokio::test]
     async fn http_error_restores_the_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
-        let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
+        let shipper = LogShipper::new(config("api", endpoint)).unwrap();
         shipper.record(event("", "keep", LogLevel::Info));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_events()[0].message, "keep");
@@ -227,7 +232,7 @@ mod tests {
     #[tokio::test]
     async fn in_flight_records_stay_out_of_a_successful_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::Slow).await;
-        let mut config = ShipperConfig::new("api", endpoint);
+        let mut config = config("api", endpoint);
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "a", LogLevel::Info));
@@ -251,7 +256,7 @@ mod tests {
     #[tokio::test]
     async fn failed_restore_keeps_the_oldest_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::SlowUnavailable).await;
-        let mut config = ShipperConfig::new("api", endpoint);
+        let mut config = config("api", endpoint);
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "a", LogLevel::Info));
@@ -276,21 +281,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn buffer_only_loop_does_not_drop_events() {
-        let shipper = buffer_only();
-        shipper.record(event("", "stay", LogLevel::Info));
+    async fn trace_only_loop_keeps_running() {
+        let shipper = trace_only();
+        shipper.record(event("", "traced", LogLevel::Info));
         let handle = shipper.spawn_ship_loop(Duration::from_millis(10)).unwrap();
         tokio::time::sleep(Duration::from_millis(40)).await;
         assert!(!handle.is_finished());
         handle.abort();
-        assert_eq!(shipper.buffered_len(), 1);
+        assert_eq!(shipper.buffered_len(), 0);
         assert!(shipper.spawn_ship_loop(Duration::ZERO).is_none());
     }
 
     #[tokio::test]
     async fn failed_ship_does_not_repeat_the_capacity_warning() {
         let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
-        let mut config = ShipperConfig::new("api", endpoint);
+        let mut config = config("api", endpoint);
         config.capacity = 5;
         let shipper = LogShipper::new(config).unwrap();
         for message in ["a", "b", "c", "d"] {
@@ -318,7 +323,7 @@ mod tests {
     #[tokio::test]
     async fn successful_ship_below_80_percent_warns_on_the_next_crossing() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let mut config = ShipperConfig::new("api", endpoint);
+        let mut config = config("api", endpoint);
         config.capacity = 5;
         let shipper = LogShipper::new(config).unwrap();
         for message in ["a", "b", "c", "d"] {
@@ -360,7 +365,7 @@ mod tests {
     #[tokio::test]
     async fn successful_ship_at_80_percent_does_not_warn_again() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let mut config = ShipperConfig::new("api", endpoint);
+        let mut config = config("api", endpoint);
         config.capacity = 5_000;
         let shipper = LogShipper::new(config).unwrap();
         for index in 0..4_000 {

@@ -95,7 +95,9 @@ mod tests {
     #[tokio::test]
     async fn ops_log_writes_the_bucket_and_omits_the_query() {
         let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
-        let shipper = LogShipper::new(ShipperConfig::new("storage", "")).unwrap();
+        let mut config = ShipperConfig::new("storage");
+        config.endpoint = Some("http://logs.example".to_string());
+        let shipper = LogShipper::new(config).unwrap();
         client.attach_ops_log(shipper.clone());
         client.record_op(OpsRecord {
             level: LogLevel::Info,

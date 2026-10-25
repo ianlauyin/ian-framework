@@ -70,9 +70,11 @@ An empty method gives an empty `action`.
 
 ## Shipper
 
-`ShipperConfig::new` builds one `ShipperConfig` for one app and one endpoint.
-The first argument is the app.
-The second argument is the endpoint.
+`ShipperConfig::new` builds one `ShipperConfig` for one app.
+The argument is the app.
+`endpoint` comes from the environment variable `LOG_ENDPOINT`.
+When `LOG_ENDPOINT` is not set, `endpoint` is unset.
+The caller can set `endpoint` on the config before `LogShipper::new`.
 `capacity` starts at 10000 events.
 The ship request time limit is 10 seconds.
 
@@ -86,6 +88,7 @@ A forbidden character in the app returns no shipper.
 `capacity` of zero returns no shipper.
 
 `LogShipper::record` stores one event in the local buffer.
+In trace-only mode, `LogShipper::record` writes the event with `tracing` and does not store it.
 The shipper does not write `app` into the event.
 The shipper stores the full `message`.
 The shipper stores the full `action`.
@@ -173,15 +176,24 @@ The default shipper posts to `{endpoint}/log/{app}`.
 A consumer that maps the app to a different path uses an adapter.
 The adapter is outside this shipper.
 
-## Buffer-only mode
+## Trace-only mode
 
-An unset endpoint selects buffer-only mode.
-An empty endpoint selects buffer-only mode.
-An endpoint that has only spaces selects buffer-only mode.
-Buffer-only mode does not build an HTTP client.
-Buffer-only mode does not open an HTTP connection.
-`LogShipper::spawn_ship_loop` in buffer-only mode does not remove buffered events.
-`LogShipper::spawn_ship_loop` in buffer-only mode does not open an HTTP connection.
+An unset endpoint selects trace-only mode.
+An empty endpoint selects trace-only mode.
+An endpoint that has only spaces selects trace-only mode.
+In trace-only mode, `LogShipper::record` writes each event with `tracing` at the event level.
+`info` uses `tracing::info!`.
+`warn` uses `tracing::warn!`.
+`error` uses `tracing::error!`.
+The tracing message is the event `message`.
+The tracing fields are `app`, `id`, `ip`, `user_agent`, `action`, `status`, `latency_ms`, and `extra`.
+`extra` is the JSON text of the event `extra`.
+The project installs a `tracing` subscriber to show these logs.
+Trace-only mode does not store events in the buffer.
+Trace-only mode does not store the capacity warning.
+Trace-only mode does not build an HTTP client.
+Trace-only mode does not open an HTTP connection.
+`LogShipper::spawn_ship_loop` in trace-only mode does not open an HTTP connection.
 A missing log server does not panic the shipper.
 An `http` or `https` endpoint sends batches.
 The shipper removes a trailing slash from that URL.
@@ -196,7 +208,7 @@ A scheme other than `http` or `https` returns no shipper.
 Use it with `axum::middleware::from_fn_with_state` and one shipper.
 
 ```rust
-let shipper = LogShipper::new(ShipperConfig::new("cs", "https://logs.example")).unwrap();
+let shipper = LogShipper::new(ShipperConfig::new("cs")).unwrap();
 let router = Router::new().layer(middleware::from_fn_with_state(
     shipper,
     ian_framework::logging::log_request,
@@ -322,7 +334,7 @@ When the middleware wraps this route, the `POST /log` request also records one r
 The client events come first, because the middleware records after the handler returns.
 
 ```rust
-let shipper = LogShipper::new(ShipperConfig::new("cs", "https://logs.example")).unwrap();
+let shipper = LogShipper::new(ShipperConfig::new("cs")).unwrap();
 let router = Router::new()
     .merge(ian_framework::logging::client_log_router(shipper.clone()))
     .layer(middleware::from_fn_with_state(

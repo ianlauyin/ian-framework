@@ -1,7 +1,10 @@
 use std::collections::VecDeque;
+use std::env;
 use std::sync::{Arc, Mutex};
 
 use super::{Buffer, Inner, LogShipper, DEFAULT_CAPACITY, SHIP_TIMEOUT};
+
+const ENDPOINT_ENV: &str = "LOG_ENDPOINT";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShipperConfig {
@@ -11,10 +14,10 @@ pub struct ShipperConfig {
 }
 
 impl ShipperConfig {
-    pub fn new(app: impl Into<String>, endpoint: impl Into<String>) -> Self {
+    pub fn new(app: impl Into<String>) -> Self {
         Self {
             app: app.into(),
-            endpoint: Some(endpoint.into()),
+            endpoint: env::var(ENDPOINT_ENV).ok(),
             capacity: DEFAULT_CAPACITY,
         }
     }
@@ -89,28 +92,40 @@ mod tests {
     use crate::logging::log_shipper::{DEFAULT_CAPACITY, SHIP_TIMEOUT};
     use crate::logging::{LogShipper, ShipperConfig, SHIP_CHUNK};
 
+    use super::ENDPOINT_ENV;
+
+    fn config(app: &str, endpoint: &str) -> ShipperConfig {
+        let mut config = ShipperConfig::new(app);
+        config.endpoint = Some(endpoint.to_string());
+        config
+    }
+
     #[test]
-    fn defaults_are_buffer_only() {
-        let shipper = LogShipper::new(ShipperConfig::new("api", "")).unwrap();
+    fn defaults() {
+        let config = ShipperConfig::new("api");
+        assert_eq!(config.endpoint, std::env::var(ENDPOINT_ENV).ok());
+        assert_eq!(ENDPOINT_ENV, "LOG_ENDPOINT");
+        let shipper = LogShipper::new(config).unwrap();
         assert_eq!(shipper.inner.app, "api");
-        assert_eq!(shipper.inner.endpoint, None);
         assert_eq!(DEFAULT_CAPACITY, 10_000);
         assert_eq!(SHIP_CHUNK, 1_000);
         assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
     }
 
     #[test]
-    fn blank_endpoint_is_buffer_only() {
+    fn blank_endpoint_is_trace_only() {
         for endpoint in ["", "   "] {
-            let shipper = LogShipper::new(ShipperConfig::new("api", endpoint)).unwrap();
+            let shipper = LogShipper::new(config("api", endpoint)).unwrap();
             assert_eq!(shipper.inner.endpoint, None);
         }
+        let mut unset = ShipperConfig::new("api");
+        unset.endpoint = None;
+        assert_eq!(LogShipper::new(unset).unwrap().inner.endpoint, None);
     }
 
     #[test]
     fn endpoint_is_normalized() {
-        let shipper =
-            LogShipper::new(ShipperConfig::new("cs", "http://logs.example/ingest/")).unwrap();
+        let shipper = LogShipper::new(config("cs", "http://logs.example/ingest/")).unwrap();
         assert_eq!(
             shipper.inner.endpoint.as_deref(),
             Some("http://logs.example/ingest")
@@ -120,15 +135,15 @@ mod tests {
     #[test]
     fn invalid_config_is_rejected() {
         let cases = [
-            ShipperConfig::new("", "http://logs.example"),
-            ShipperConfig::new("a/b", "http://logs.example"),
+            config("", "http://logs.example"),
+            config("a/b", "http://logs.example"),
             {
-                let mut config = ShipperConfig::new("api", "http://logs.example");
+                let mut config = config("api", "http://logs.example");
                 config.capacity = 0;
                 config
             },
-            ShipperConfig::new("api", "ftp://logs.example"),
-            ShipperConfig::new("api", "http://logs.example/a b"),
+            config("api", "ftp://logs.example"),
+            config("api", "http://logs.example/a b"),
         ];
         for config in cases {
             assert!(LogShipper::new(config).is_none());

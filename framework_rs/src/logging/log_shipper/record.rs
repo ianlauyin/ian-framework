@@ -4,6 +4,10 @@ use super::{meets_capacity_warn, LogShipper, CAPACITY_WARN_NOTE};
 
 impl LogShipper {
     pub fn record(&self, event: LogEvent) {
+        if self.inner.endpoint.is_none() {
+            trace_event(&self.inner.app, &event);
+            return;
+        }
         let capacity = self.inner.capacity;
         let mut buffer = self.lock_buffer();
         while buffer.events.len() >= capacity {
@@ -24,6 +28,31 @@ fn capacity_warn_event() -> LogEvent {
     event("", CAPACITY_WARN_NOTE, LogLevel::Warn)
 }
 
+fn trace_event(app: &str, event: &LogEvent) {
+    let extra = serde_json::to_string(&event.extra).unwrap_or_default();
+    macro_rules! emit {
+        ($level:ident) => {
+            tracing::$level!(
+                app,
+                id = %event.id,
+                ip = %event.ip,
+                user_agent = %event.user_agent,
+                action = %event.action,
+                status = ?event.status,
+                latency_ms = ?event.latency_ms,
+                extra = %extra,
+                "{}",
+                event.message
+            )
+        };
+    }
+    match event.level {
+        LogLevel::Info => emit!(info),
+        LogLevel::Warn => emit!(warn),
+        LogLevel::Error => emit!(error),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -31,8 +60,14 @@ mod tests {
     use crate::logging::{LogShipper, ShipperConfig};
     use chrono::{DateTime, Utc};
 
-    fn buffer_only() -> LogShipper {
-        LogShipper::new(ShipperConfig::new("api", "")).unwrap()
+    fn config(endpoint: &str) -> ShipperConfig {
+        let mut config = ShipperConfig::new("api");
+        config.endpoint = Some(endpoint.to_string());
+        config
+    }
+
+    fn buffered() -> LogShipper {
+        LogShipper::new(config("http://logs.example")).unwrap()
     }
 
     fn messages_of(events: &[LogEvent]) -> Vec<&str> {
@@ -66,7 +101,7 @@ mod tests {
 
     #[test]
     fn record_omits_scope_keys() {
-        let shipper = buffer_only();
+        let shipper = buffered();
         shipper.record(event("", "kept", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
@@ -76,8 +111,15 @@ mod tests {
     }
 
     #[test]
+    fn unset_endpoint_traces_without_buffering() {
+        let shipper = LogShipper::new(config("")).unwrap();
+        shipper.record(event("GET /", "traced", LogLevel::Error));
+        assert!(shipper.buffered_events().is_empty());
+    }
+
+    #[test]
     fn capacity_drops_the_oldest_event() {
-        let mut config = ShipperConfig::new("api", "");
+        let mut config = config("http://logs.example");
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "a", LogLevel::Info));
@@ -93,7 +135,7 @@ mod tests {
 
     #[test]
     fn record_keeps_long_message_request_id_ip_and_user_agent() {
-        let shipper = buffer_only();
+        let shipper = buffered();
         let mut event = event(
             format!("GET /{}", "p".repeat(3000)),
             "é".repeat(5000),
@@ -118,7 +160,7 @@ mod tests {
 
     #[test]
     fn record_inserts_one_capacity_warning_at_80_percent() {
-        let mut config = ShipperConfig::new("api", "");
+        let mut config = config("http://logs.example");
         config.capacity = 5;
         let shipper = LogShipper::new(config).unwrap();
         let mut oldest = event("GET /a", "first", LogLevel::Error);
@@ -184,7 +226,7 @@ mod tests {
 
     #[test]
     fn record_drops_the_oldest_event_to_store_the_capacity_warning() {
-        let mut config = ShipperConfig::new("api", "");
+        let mut config = config("http://logs.example");
         config.capacity = 4;
         let shipper = LogShipper::new(config).unwrap();
         for message in ["a", "b", "c"] {
@@ -208,7 +250,7 @@ mod tests {
 
     #[test]
     fn record_at_capacity_one_stores_only_the_capacity_warning() {
-        let mut config = ShipperConfig::new("api", "");
+        let mut config = config("http://logs.example");
         config.capacity = 1;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("GET /", "hello", LogLevel::Info));

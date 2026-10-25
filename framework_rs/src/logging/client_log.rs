@@ -51,7 +51,9 @@ mod tests {
     use tower::ServiceExt;
 
     fn shipper() -> LogShipper {
-        LogShipper::new(ShipperConfig::new("web", "")).unwrap()
+        let mut config = ShipperConfig::new("web");
+        config.endpoint = Some("http://logs.example".to_string());
+        LogShipper::new(config).unwrap()
     }
 
     fn client_event(message: &str) -> serde_json::Value {
