@@ -19,11 +19,10 @@ fix all warning after refactor
 - Group the imports in this order, with a blank line between the groups: `std`, external crates, `crate::` paths to other feature modules, then the current module.
 - In a file two or more levels deep, use `crate::` paths. Do not use `super::super::`.
 
-## Source files
+### Source files
 
-- If a `pub struct` has many `pub` methods, you can make a folder for the struct. Use the struct name in snake case as the folder name. Example: `log_shipper/` for `LogShipper`.
-- In a struct folder, put each `pub` method in its own file. Use the method name as the file name. Example: `log_shipper/record.rs` for `LogShipper::record`. If there are many method files, group them into folders by purpose. Example: `gcs_client/read/`, `gcs_client/upload/`, `gcs_client/modify/`.
-- Keep a helper, a constant or a type in the file that uses it. If more than one file in a folder uses it, keep it in the file that owns it and make it `pub(super)`. Example: `CHUNK_SIZE` and `UploadStep` in `upload/resumable.rs`. If no file owns it, put it in `mod.rs`.
+- Use the struct name in snake case as the folder / file name. Example: `log_shipper/` for `LogShipper`.
+- Keep a helper, a constant or a type in the file that uses it. If more than one file in a folder uses it, keep it in the file that owns it and make it `pub(super)`. If no file owns it, put it in `mod.rs`.
 - Put the tests in one `#[cfg(test)] mod tests` at the end of the source file that holds the tested item. Start it with `use super::*;`.
 - In a struct folder, `mod.rs` holds the struct, its private state types, its trait impls, its small accessors, the shared items and the tests for these items.
 - In other folders, `mod.rs` holds only the module declarations, the re-exports and the shared items.
