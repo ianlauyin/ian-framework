@@ -1,10 +1,11 @@
 use axum::body::to_bytes;
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
+use axum::middleware::from_fn;
 use axum::routing::post;
 use axum::Router;
 
-use crate::http::is_same_origin;
+use crate::http::require_same_origin;
 
 use super::log_request::{client_ip, user_agent};
 use super::{LogBatch, LogShipper};
@@ -14,14 +15,14 @@ const BODY_LIMIT: usize = 1024 * 1024;
 
 pub fn client_log_router(shipper: LogShipper) -> Router {
     Router::new()
-        .route(CLIENT_LOG_PATH, post(receive))
+        .route(
+            CLIENT_LOG_PATH,
+            post(receive).route_layer(from_fn(require_same_origin)),
+        )
         .with_state(shipper)
 }
 
 async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusCode {
-    if !is_same_origin(request.headers()) {
-        return StatusCode::FORBIDDEN;
-    }
     let ip = client_ip(&request);
     let user_agent = user_agent(request.headers());
     let Ok(body) = to_bytes(request.into_body(), BODY_LIMIT).await else {

@@ -344,8 +344,9 @@ let router = Router::new()
 ```
 
 The route accepts only a same-origin request.
-It checks the request headers with `ian_framework::http::is_same_origin`. The rules are in `spec/framework_rs/http.md`.
-Each other request gets status 403.
+The `POST` method router has the layer `ian_framework::http::require_same_origin`. The rules are in `spec/framework_rs/http.md`.
+Each other request gets status 403 with the body `{"code":"cross_origin","message":"cross-origin request"}`.
+The layer is on the `POST` method only, so a request with another method still gets status 405.
 
 The body is one `LogBatch`.
 The body size limit is 1 MiB.
