@@ -53,15 +53,24 @@ export const ajax = async <
   });
 
   const body = await response.text();
-  const json = body ? JSON.parse(body) : null;
 
   if (response.status === 401) {
     unauthorizedHandler?.();
   }
 
   if (!response.ok) {
-    throw new AjaxError(response.status, json);
+    throw new AjaxError(response.status, parseErrorBody(body));
   }
 
+  const json = body ? JSON.parse(body) : null;
   return json;
 };
+
+// A proxy can answer with an HTML or text error page, which must still give an AjaxError.
+function parseErrorBody(body: string): ErrorBody | null {
+  try {
+    return body ? JSON.parse(body) : null;
+  } catch {
+    return null;
+  }
+}

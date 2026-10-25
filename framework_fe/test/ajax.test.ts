@@ -82,6 +82,35 @@ describe("ajax", () => {
     expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 
+  it("throws AjaxError with Unknown error when the error body is not JSON", async () => {
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      text: async () => "<html><body>Bad Gateway</body></html>",
+    });
+    await expect(ajax("/guest", "GET")).rejects.toMatchObject({
+      name: "Error",
+      message: "Unknown error",
+      code: 502,
+    } satisfies Partial<AjaxError>);
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => "Unauthorized",
+    });
+    await expect(ajax("/guest", "GET")).rejects.toMatchObject({
+      message: "Unknown error",
+      code: 401,
+    } satisfies Partial<AjaxError>);
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
   it("parses JSON error bodies with a message field", async () => {
     vi.stubGlobal(
       "fetch",

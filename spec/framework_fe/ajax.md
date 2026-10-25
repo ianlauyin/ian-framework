@@ -49,10 +49,11 @@ Each request uses `credentials: "same-origin"`.
 
 The client reads the response:
 
-- An empty body gives `null`.
-- A body that is not empty is parsed as JSON.
 - When the status is 401, the client calls the unauthorized handler before it throws.
 - When the status is not 2xx, the client throws `AjaxError`.
+- For a status that is not 2xx, a body that is empty or not valid JSON gives the error body `null`, so the message is `Unknown error`. An example is an HTML 502 page from a proxy.
+- For a 2xx status, an empty body gives `null`.
+- For a 2xx status, a body that is not empty is parsed as JSON.
 
 ## Out of scope
 
