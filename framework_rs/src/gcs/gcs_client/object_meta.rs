@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
-use super::{GcsError, GcsErrorKind};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectMeta {

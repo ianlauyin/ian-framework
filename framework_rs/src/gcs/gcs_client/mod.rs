@@ -2,6 +2,7 @@ mod auth;
 mod call;
 mod list_page;
 mod list_query;
+mod object_meta;
 mod object_reader;
 mod ops_record;
 mod put_options;
@@ -25,7 +26,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use crate::logging::{LogEvent, LogLevel, LogShipper};
 
 use super::encode::{encode_object_id, encode_seg};
-use super::{GcsError, GcsErrorKind, ObjectMeta, API_ROOT};
+use super::{GcsError, GcsErrorKind, API_ROOT};
 
 use auth::{Auth, CachedToken};
 use call::Call;
@@ -36,6 +37,7 @@ use upload_step::UploadStep;
 
 pub use list_page::ListPage;
 pub use list_query::ListQuery;
+pub use object_meta::ObjectMeta;
 pub use object_reader::ObjectReader;
 pub use put_options::PutOptions;
 
