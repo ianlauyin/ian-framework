@@ -1,5 +1,6 @@
 pub mod http;
 pub mod logging;
+pub mod shutdown;
 
 #[cfg(feature = "auth")]
 pub mod auth;

@@ -164,6 +164,25 @@ The ship request time limit is 10 seconds.
 An interval of zero returns no task.
 The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
 A ship failure does not stop the loop.
+
+`LogShipper::spawn_ship_loop` takes the interval and one `ian_framework::shutdown::ShutdownReceiver`.
+It returns `Option<tokio::task::JoinHandle<()>>`.
+When the shutdown receiver is triggered, the loop stops and makes one final flush.
+The final flush sends batches until the buffer is empty.
+The final flush stops at the first batch that does not leave the buffer, so a log server that is down does not keep the process open.
+The task ends after the final flush.
+The project awaits the task before `main` returns, so the logs of the last interval are sent.
+
+```rust
+let shutdown = ian_framework::shutdown::ShutdownReceiver::new();
+let ship_task = shipper.spawn_ship_loop(Duration::from_secs(5), shutdown.clone());
+axum::serve(listener, app)
+    .with_graceful_shutdown(shutdown.wait())
+    .await?;
+if let Some(ship_task) = ship_task {
+    ship_task.await.ok();
+}
+```
 An empty buffer with an endpoint does not send an HTTP request.
 
 The path app selects the log stream.

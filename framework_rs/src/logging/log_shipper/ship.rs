@@ -1,11 +1,16 @@
 use std::time::Duration;
 
 use crate::logging::{LogBatch, LogEvent, SHIP_CHUNK};
+use crate::shutdown::ShutdownReceiver;
 
 use super::{meets_capacity_warn, LogShipper, SHIP_TIMEOUT};
 
 impl LogShipper {
-    pub fn spawn_ship_loop(&self, every: Duration) -> Option<tokio::task::JoinHandle<()>> {
+    pub fn spawn_ship_loop(
+        &self,
+        every: Duration,
+        shutdown: ShutdownReceiver,
+    ) -> Option<tokio::task::JoinHandle<()>> {
         if every.is_zero() {
             return None;
         }
@@ -13,11 +18,32 @@ impl LogShipper {
         Some(tokio::spawn(async move {
             let mut ticker = tokio::time::interval(every);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let stop = shutdown.wait();
+            tokio::pin!(stop);
             loop {
-                ticker.tick().await;
-                shipper.ship_batch().await;
+                tokio::select! {
+                    biased;
+                    _ = &mut stop => break,
+                    _ = ticker.tick() => shipper.ship_batch().await,
+                }
             }
+            shipper.flush().await;
         }))
+    }
+
+    // Stop at the first batch that does not leave the buffer, so a down log
+    // server does not hold the process open.
+    async fn flush(&self) {
+        loop {
+            let before = self.buffered_len();
+            if before == 0 {
+                return;
+            }
+            self.ship_batch().await;
+            if self.buffered_len() >= before {
+                return;
+            }
+        }
     }
 
     async fn ship_batch(&self) {
@@ -284,12 +310,54 @@ mod tests {
     async fn trace_only_loop_keeps_running() {
         let shipper = trace_only();
         shipper.record(event("", "traced", LogLevel::Info));
-        let handle = shipper.spawn_ship_loop(Duration::from_millis(10)).unwrap();
+        let shutdown = ShutdownReceiver::new();
+        let handle = shipper
+            .spawn_ship_loop(Duration::from_millis(10), shutdown.clone())
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(40)).await;
         assert!(!handle.is_finished());
         handle.abort();
         assert_eq!(shipper.buffered_len(), 0);
-        assert!(shipper.spawn_ship_loop(Duration::ZERO).is_none());
+        assert!(shipper.spawn_ship_loop(Duration::ZERO, shutdown).is_none());
+    }
+
+    #[tokio::test]
+    async fn shutdown_flushes_every_chunk_and_ends_the_loop() {
+        let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
+        let shipper = LogShipper::new(config("api", endpoint)).unwrap();
+        let shutdown = ShutdownReceiver::new();
+        let handle = shipper
+            .spawn_ship_loop(Duration::from_secs(3600), shutdown.clone())
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        for index in 0..SHIP_CHUNK + 1 {
+            shipper.record(event("", index.to_string(), LogLevel::Info));
+        }
+        shutdown.trigger();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(shipper.buffered_len(), 0);
+        assert_eq!(parse_body(&rx.recv().await.unwrap().body).len(), SHIP_CHUNK);
+        assert_eq!(parse_body(&rx.recv().await.unwrap().body).len(), 1);
+    }
+
+    #[tokio::test]
+    async fn shutdown_flush_stops_when_the_log_server_fails() {
+        let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
+        let shipper = LogShipper::new(config("api", endpoint)).unwrap();
+        shipper.record(event("", "keep", LogLevel::Info));
+        let shutdown = ShutdownReceiver::new();
+        shutdown.trigger();
+        let handle = shipper
+            .spawn_ship_loop(Duration::from_secs(3600), shutdown)
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(shipper.buffered_events()[0].message, "keep");
     }
 
     #[tokio::test]
