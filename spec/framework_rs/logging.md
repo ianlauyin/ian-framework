@@ -76,7 +76,8 @@ The argument is the app.
 When `LOG_ENDPOINT` is not set, `endpoint` is unset.
 The caller can set `endpoint` on the config before `LogShipper::new`.
 `capacity` starts at 10000 events.
-`mask_patterns` starts empty.
+`mask_patterns` starts with the default patterns in the Masking section.
+`ship_every` starts at 5 seconds.
 The ship request time limit is 10 seconds.
 
 `LogShipper::new` builds one shipper from that config.
@@ -88,6 +89,8 @@ An empty app returns no shipper.
 A forbidden character in the app returns no shipper.
 `capacity` of zero returns no shipper.
 A `mask_patterns` item that is not a valid regex returns no shipper.
+`ship_every` of zero returns no shipper.
+`LogShipper::new` writes one `tracing` info event with the field `app`. The message is `log shipping posts to the log server` when the shipper has an endpoint, and `log shipping is trace-only` when it does not.
 
 `LogShipper::record` stores one event in the local buffer.
 Before it stores or traces the event, `LogShipper::record` masks the event `extra` values.
@@ -164,12 +167,12 @@ A successful ship that leaves the length at or above the limit does not store an
 A failed ship does not store a second warning.
 When a failed ship puts the batch back and the length meets the limit, the next record does not store another warning.
 The ship request time limit is 10 seconds.
-An interval of zero returns no task.
 The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
 A ship failure does not stop the loop.
 
-`LogShipper::spawn_ship_loop` takes the interval and one `ian_framework::shutdown::ShutdownReceiver`.
-It returns `Option<tokio::task::JoinHandle<()>>`.
+`LogShipper::spawn_ship_loop` takes one `ian_framework::shutdown::ShutdownReceiver`.
+The interval is `ship_every` from the config.
+It returns `tokio::task::JoinHandle<()>`.
 When the shutdown receiver is triggered, the loop stops and makes one final flush.
 The final flush sends batches until the buffer is empty.
 The final flush stops at the first batch that does not leave the buffer, so a log server that is down does not keep the process open.
@@ -178,13 +181,11 @@ The project awaits the task before `main` returns, so the logs of the last inter
 
 ```rust
 let shutdown = ian_framework::shutdown::ShutdownReceiver::new();
-let ship_task = shipper.spawn_ship_loop(Duration::from_secs(5), shutdown.clone());
+let ship_task = shipper.spawn_ship_loop(shutdown.clone());
 axum::serve(listener, app)
     .with_graceful_shutdown(shutdown.wait())
     .await?;
-if let Some(ship_task) = ship_task {
-    ship_task.await.ok();
-}
+ship_task.await.ok();
 ```
 An empty buffer with an endpoint does not send an HTTP request.
 
@@ -198,6 +199,10 @@ A consumer splits logs by the app in the path.
 The syntax is the `regex` crate syntax.
 An example is `password=\S+`.
 For a case-insensitive match, start the pattern with `(?i)`.
+
+The default patterns are `(?i)password`, `(?i)secret`, and `(?i)token`.
+The middleware logs the query and the JSON body, so the defaults keep a credential field such as `password`, `newPassword`, `client_secret`, or `access_token` out of a log.
+A project adds its own patterns to the list. A project that sets a new list drops the defaults.
 The shipper masks only the `extra` values.
 The shipper does not mask the other event fields.
 
@@ -217,7 +222,7 @@ An empty `mask_patterns` list does not change the event.
 
 ```rust
 let mut config = ShipperConfig::new("cs");
-config.mask_patterns = vec![r"(?i)^password$".to_string(), r"password=\S+".to_string()];
+config.mask_patterns.push(r"^sig$".to_string());
 let shipper = LogShipper::new(config).unwrap();
 ```
 

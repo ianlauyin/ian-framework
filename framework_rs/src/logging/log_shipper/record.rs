@@ -225,7 +225,10 @@ mod tests {
 
     #[test]
     fn record_without_mask_patterns_keeps_the_text() {
-        let shipper = buffered();
+        let mut config = ShipperConfig::new("api");
+        config.endpoint = Some("http://logs.example".to_string());
+        config.mask_patterns = Vec::new();
+        let shipper = LogShipper::new(config).unwrap();
         let mut event = event("", "password=hunter2", LogLevel::Info);
         event
             .extra

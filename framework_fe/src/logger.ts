@@ -31,6 +31,16 @@ export class Logger {
     );
   }
 
+  public static watchWindowErrors(): void {
+    window.addEventListener("error", (event) => {
+      Logger.error(event.message || "window error");
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason;
+      Logger.error(reason instanceof Error ? reason.message : "unhandled rejection");
+    });
+  }
+
   public static info(message: string, extra?: LogExtra): void {
     Logger.record("info", message, extra);
   }

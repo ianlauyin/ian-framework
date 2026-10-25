@@ -156,4 +156,30 @@ describe("Logger", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(sentEvents(1)).toHaveLength(1);
   });
+
+  it("records a window error and an unhandled rejection as error events", async () => {
+    const windowListeners: Record<string, (event: unknown) => void> = {};
+    vi.stubGlobal("window", {
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        windowListeners[type] = listener;
+      },
+    });
+    const Logger = await loadLogger();
+    Logger.watchWindowErrors();
+    windowListeners.error({ message: "boom" });
+    windowListeners.error({ message: "" });
+    windowListeners.unhandledrejection({ reason: new Error("rejected") });
+    windowListeners.unhandledrejection({ reason: 42 });
+    hidePage();
+    const sent = sentEvents(0).map((event: { level: string; message: string }) => [
+      event.level,
+      event.message,
+    ]);
+    expect(sent).toEqual([
+      ["error", "boom"],
+      ["error", "window error"],
+      ["error", "rejected"],
+      ["error", "unhandled rejection"],
+    ]);
+  });
 });

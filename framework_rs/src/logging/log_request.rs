@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(value["action"], "GET /status/204");
         assert!(!json.contains("req-1"));
         assert!(value.get("request").is_none());
-        assert_eq!(value["extra"], json!({"query": {"token": "secret"}}));
+        assert_eq!(value["extra"], json!({"query": {"token": "***"}}));
     }
 
     #[tokio::test]

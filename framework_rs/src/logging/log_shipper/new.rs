@@ -1,10 +1,14 @@
 use std::collections::VecDeque;
 use std::env;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use super::{Buffer, Inner, LogShipper, DEFAULT_CAPACITY, SHIP_TIMEOUT};
 
 const ENDPOINT_ENV: &str = "LOG_ENDPOINT";
+const DEFAULT_SHIP_EVERY: Duration = Duration::from_secs(5);
+// log_request records the query and the JSON body, so a credential field must not reach a log.
+const DEFAULT_MASK_PATTERNS: [&str; 3] = [r"(?i)password", r"(?i)secret", r"(?i)token"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShipperConfig {
@@ -12,6 +16,7 @@ pub struct ShipperConfig {
     pub endpoint: Option<String>,
     pub capacity: usize,
     pub mask_patterns: Vec<String>,
+    pub ship_every: Duration,
 }
 
 impl ShipperConfig {
@@ -20,7 +25,11 @@ impl ShipperConfig {
             app: app.into(),
             endpoint: env::var(ENDPOINT_ENV).ok(),
             capacity: DEFAULT_CAPACITY,
-            mask_patterns: Vec::new(),
+            mask_patterns: DEFAULT_MASK_PATTERNS
+                .iter()
+                .map(|pattern| pattern.to_string())
+                .collect(),
+            ship_every: DEFAULT_SHIP_EVERY,
         }
     }
 }
@@ -35,6 +44,7 @@ impl LogShipper {
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
             || config.capacity == 0
+            || config.ship_every.is_zero()
         {
             return None;
         }
@@ -76,11 +86,17 @@ impl LogShipper {
             ),
             None => None,
         };
+        if endpoint.is_some() {
+            tracing::info!(app = %config.app, "log shipping posts to the log server");
+        } else {
+            tracing::info!(app = %config.app, "log shipping is trace-only");
+        }
         Some(Self {
             inner: Arc::new(Inner {
                 app: config.app,
                 endpoint,
                 capacity: config.capacity,
+                ship_every: config.ship_every,
                 masks,
                 buffer: Mutex::new(Buffer {
                     events: VecDeque::new(),
@@ -113,9 +129,14 @@ mod tests {
         let config = ShipperConfig::new("api");
         assert_eq!(config.endpoint, std::env::var(ENDPOINT_ENV).ok());
         assert_eq!(ENDPOINT_ENV, "LOG_ENDPOINT");
+        assert_eq!(
+            config.mask_patterns,
+            [r"(?i)password", r"(?i)secret", r"(?i)token"]
+        );
+        assert_eq!(config.ship_every, Duration::from_secs(5));
         let shipper = LogShipper::new(config).unwrap();
         assert_eq!(shipper.inner.app, "api");
-        assert!(shipper.inner.masks.is_empty());
+        assert_eq!(shipper.inner.masks.len(), 3);
         assert_eq!(DEFAULT_CAPACITY, 10_000);
         assert_eq!(SHIP_CHUNK, 1_000);
         assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
@@ -149,6 +170,11 @@ mod tests {
             {
                 let mut config = config("api", "http://logs.example");
                 config.capacity = 0;
+                config
+            },
+            {
+                let mut config = config("api", "http://logs.example");
+                config.ship_every = Duration::ZERO;
                 config
             },
             config("api", "ftp://logs.example"),

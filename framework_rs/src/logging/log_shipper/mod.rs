@@ -56,6 +56,7 @@ struct Inner {
     app: String,
     endpoint: Option<String>,
     capacity: usize,
+    ship_every: Duration,
     masks: Vec<regex::Regex>,
     buffer: Mutex<Buffer>,
     http: Option<reqwest::Client>,

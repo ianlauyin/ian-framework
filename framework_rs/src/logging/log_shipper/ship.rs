@@ -1,22 +1,13 @@
-use std::time::Duration;
-
 use crate::logging::{LogBatch, LogEvent, SHIP_CHUNK};
 use crate::shutdown::ShutdownReceiver;
 
 use super::{meets_capacity_warn, LogShipper, SHIP_TIMEOUT};
 
 impl LogShipper {
-    pub fn spawn_ship_loop(
-        &self,
-        every: Duration,
-        shutdown: ShutdownReceiver,
-    ) -> Option<tokio::task::JoinHandle<()>> {
-        if every.is_zero() {
-            return None;
-        }
+    pub fn spawn_ship_loop(&self, shutdown: ShutdownReceiver) -> tokio::task::JoinHandle<()> {
         let shipper = self.clone();
-        Some(tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(every);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(shipper.inner.ship_every);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let stop = shutdown.wait();
             tokio::pin!(stop);
@@ -28,7 +19,7 @@ impl LogShipper {
                 }
             }
             shipper.flush().await;
-        }))
+        })
     }
 
     // Stop at the first batch that does not leave the buffer, so a down log
@@ -111,6 +102,7 @@ mod tests {
     use super::*;
     use crate::logging::log_shipper::CAPACITY_WARN_NOTE;
     use crate::logging::{event, LogLevel, ShipperConfig};
+    use std::time::Duration;
 
     fn config(app: &str, endpoint: impl Into<String>) -> ShipperConfig {
         let mut config = ShipperConfig::new(app);
@@ -308,17 +300,15 @@ mod tests {
 
     #[tokio::test]
     async fn trace_only_loop_keeps_running() {
-        let shipper = trace_only();
+        let mut config = config("api", "");
+        config.ship_every = Duration::from_millis(10);
+        let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "traced", LogLevel::Info));
-        let shutdown = ShutdownReceiver::new();
-        let handle = shipper
-            .spawn_ship_loop(Duration::from_millis(10), shutdown.clone())
-            .unwrap();
+        let handle = shipper.spawn_ship_loop(ShutdownReceiver::new());
         tokio::time::sleep(Duration::from_millis(40)).await;
         assert!(!handle.is_finished());
         handle.abort();
         assert_eq!(shipper.buffered_len(), 0);
-        assert!(shipper.spawn_ship_loop(Duration::ZERO, shutdown).is_none());
     }
 
     #[tokio::test]
@@ -326,9 +316,7 @@ mod tests {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
         let shipper = LogShipper::new(config("api", endpoint)).unwrap();
         let shutdown = ShutdownReceiver::new();
-        let handle = shipper
-            .spawn_ship_loop(Duration::from_secs(3600), shutdown.clone())
-            .unwrap();
+        let handle = shipper.spawn_ship_loop(shutdown.clone());
         tokio::time::sleep(Duration::from_millis(20)).await;
         for index in 0..SHIP_CHUNK + 1 {
             shipper.record(event("", index.to_string(), LogLevel::Info));
@@ -350,9 +338,7 @@ mod tests {
         shipper.record(event("", "keep", LogLevel::Info));
         let shutdown = ShutdownReceiver::new();
         shutdown.trigger();
-        let handle = shipper
-            .spawn_ship_loop(Duration::from_secs(3600), shutdown)
-            .unwrap();
+        let handle = shipper.spawn_ship_loop(shutdown);
         tokio::time::timeout(Duration::from_secs(2), handle)
             .await
             .unwrap()
