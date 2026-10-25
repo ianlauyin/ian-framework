@@ -7,6 +7,8 @@ edition = "2021"
 default = ["logging", "http"]
 http = [
     "dep:axum",
+    "dep:getrandom",
+    "dep:hex",
     "dep:serde",
     "dep:serde_json",
     "dep:sha2",
@@ -46,11 +48,6 @@ gcs = [
     "reqwest/stream",
     "tokio/fs",
     "tokio/io-util",
-]
-version = [
-    "http",
-    "dep:getrandom",
-    "dep:hex",
 ]
 
 [dependencies]

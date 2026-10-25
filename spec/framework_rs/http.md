@@ -1,6 +1,6 @@
 # HTTP errors and request headers
 
-This document describes the HTTP boundary error, the bearer API key check, and the cookie header helpers in the framework.
+This document describes the HTTP boundary error, the bearer API key check, the cookie header helpers, and the process version route in the framework.
 This feature is not product business logic.
 
 ## Crate
@@ -19,6 +19,8 @@ A project gets this feature with no extra feature flag.
 The `http` feature enables these dependencies:
 
 - `axum`
+- `getrandom`
+- `hex`
 - `serde`
 - `serde_json`
 - `sha2`
@@ -29,8 +31,6 @@ The `http` feature does not enable `gcs`.
 The `logging` feature does not enable `http`.
 The `gcs` feature does not enable `http`.
 The `auth` feature enables `http`.
-The `version` feature enables `http`.
-The process version route is in this module behind the `version` feature. The route is `spec/framework_rs/version.md`.
 The logging feature is `spec/framework_rs/logging.md`.
 The Google Cloud Storage client is `spec/framework_rs/gcs.md`.
 Cookie sessions and password hashes are `spec/framework_rs/auth.md`.
@@ -230,6 +230,38 @@ It does not remove quotes from the value.
 It returns `true` when one of them sets the cookie with the name `name`.
 
 Cookie sessions use these functions. Cookie sessions are `spec/framework_rs/auth.md`.
+
+## Process version route
+
+The source file is `framework_rs/src/http/version.rs`.
+`ian_framework::http::version_router()` gives an `axum::Router` with one route.
+The route is `GET /version`.
+The project merges this router into its own router.
+The project adds its own layers to the merged router.
+
+The response status is 200.
+The content type is `application/json`.
+The body is one flat JSON object.
+The body has these fields:
+
+| field | value |
+| --- | --- |
+| `version` | the process version, a string |
+
+An example body is `{"version":"3f2a9c0e5b7d41a8a6c1e2f3d4b5a697"}`.
+
+The process version is 16 random bytes from `getrandom`, in lowercase hex.
+The process version has 32 characters.
+The first request makes the process version.
+Each later request in the same process gets the same value.
+A new process makes a new value.
+A client compares the value with the last value. When the value changes, a new server process is running.
+The process version is not the build version or the release version of the project.
+The route has no authentication.
+The client code that reads the route is `spec/framework_fe/version.md`.
+
+When `getrandom` fails, the response status is 500 and the body is empty.
+The next request tries again.
 
 ## Out of scope
 
