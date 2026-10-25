@@ -10,13 +10,11 @@ The crate path is `framework_rs/`.
 The module path is `ian_framework::http`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
-## Feature `http`
+## Build
 
-The Cargo feature name is `http`.
-`http` is a default feature.
-A default build compiles this feature.
-A project gets this feature with no extra feature flag.
-The `http` feature enables these dependencies:
+This module has no Cargo feature.
+Each build compiles this module.
+This module uses these dependencies:
 
 - `axum`
 - `getrandom`
@@ -26,15 +24,9 @@ The `http` feature enables these dependencies:
 - `sha2`
 - `subtle`
 
-The `http` feature does not enable `logging`.
-The `http` feature does not enable `gcs`.
-The `logging` feature does not enable `http`.
-The `gcs` feature does not enable `http`.
-The `auth` feature enables `http`.
-The logging feature is `spec/framework_rs/logging.md`.
+The logging module is `spec/framework_rs/logging.md`.
 The Google Cloud Storage client is `spec/framework_rs/gcs.md`.
 Cookie sessions and password hashes are `spec/framework_rs/auth.md`.
-A project with default features off selects the feature `http` to compile this module.
 
 Put this block in the project `Cargo.toml`:
 
@@ -48,18 +40,10 @@ Use these commands in `framework_rs/`:
 ```sh
 cargo check
 cargo test
-cargo check --no-default-features
-cargo test --no-default-features --features http
 ```
 
-`cargo check` checks the default build.
-The default build includes `http`.
-The default build includes `logging`.
-`cargo test` runs the default tests.
-`cargo check --no-default-features` checks the build with no default features.
-That build does not compile this module.
-`cargo test --no-default-features --features http` runs the tests for the `http` feature.
-That command does not enable `logging`.
+`cargo check` checks the build with no optional feature.
+`cargo test` runs the tests of this module and of the logging module.
 
 ## ApiError
 

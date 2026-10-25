@@ -14,9 +14,7 @@ The module path is `ian_framework::auth`.
 
 The Cargo feature name is `auth`.
 `auth` is not a default feature.
-The `auth` feature enables `http`.
 The `auth` feature uses Tokio for the password hash.
-The `auth` feature does not enable `logging`.
 The `auth` feature does not enable `gcs`.
 The HTTP boundary error and the cookie header helpers are `spec/framework_rs/http.md`.
 

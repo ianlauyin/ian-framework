@@ -89,7 +89,6 @@ impl std::error::Error for GcsError {
     }
 }
 
-#[cfg(feature = "http")]
 impl crate::http::IntoApiError for GcsError {
     fn status_code(&self) -> u16 {
         match self.kind {
@@ -134,7 +133,6 @@ mod tests {
         assert!(!GcsError::new(GcsErrorKind::Config, "config").is_retryable());
     }
 
-    #[cfg(feature = "http")]
     #[test]
     fn api_error_hides_the_internal_message() {
         use crate::http::ApiError;

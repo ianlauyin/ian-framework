@@ -17,8 +17,7 @@ The `gcs` feature is optional.
 The default build does not compile this client.
 A project sets the Cargo feature `gcs` to compile this client.
 A project can select the dependency feature `ian_framework/gcs`.
-The `gcs` feature enables the `logging` feature.
-The logging feature is `spec/framework_rs/logging.md`.
+The logging module is `spec/framework_rs/logging.md`.
 
 Put this block in the project `Cargo.toml`:
 
@@ -35,7 +34,7 @@ cargo check --features gcs
 cargo test --features gcs
 ```
 
-`cargo check` checks the default build.
+`cargo check` checks the build with no optional feature.
 `cargo check --features gcs` checks the build with the `gcs` feature.
 `cargo test --features gcs` runs the tests for the `gcs` feature.
 
@@ -190,7 +189,7 @@ These methods are on `ObjectReader`:
 
 ## Operations log
 
-The client writes operations records through the logging feature.
+The client writes operations records through the logging module.
 `GcsClient::attach_ops_log` connects one log shipper to one client.
 A second call replaces that shipper.
 An operations record has no `app` field.
@@ -234,7 +233,6 @@ A successful token request writes no operations record.
 ## HTTP error
 
 `GcsError` implements `ian_framework::http::IntoApiError`.
-This implementation needs the `http` feature.
 A handler that returns `Result<T, ApiError>` can use `?` on a `GcsError`.
 
 | kind | status | code | message |

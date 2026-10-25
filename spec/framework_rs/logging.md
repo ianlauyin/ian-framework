@@ -10,14 +10,11 @@ The crate path is `framework_rs/`.
 The module path is `ian_framework::logging`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
-## Feature `logging`
+## Build
 
-The Cargo feature name is `logging`.
-`logging` is a default feature.
-A default build compiles this feature.
-A project gets this feature with no extra feature flag.
+This module has no Cargo feature.
+Each build compiles this module.
 The `gcs` feature is optional.
-The `gcs` feature enables `logging`.
 The Google Cloud Storage client is `spec/framework_rs/gcs.md`.
 
 Put this block in the project `Cargo.toml`:
@@ -36,9 +33,8 @@ cargo check --features gcs
 cargo test --features gcs
 ```
 
-`cargo check` checks the default build.
-The default build includes `logging`.
-`cargo test` runs the default tests.
+`cargo check` checks the build with no optional feature.
+`cargo test` runs the tests with no optional feature.
 `cargo check --features gcs` checks the build with the `gcs` feature.
 `cargo test --features gcs` runs the tests with the `gcs` feature.
 
