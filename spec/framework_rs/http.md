@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Crate
 
 The package name is `ian_framework`.
-The crate path is `framework/`.
+The crate path is `framework_rs/`.
 The module path is `ian_framework::http`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
@@ -29,9 +29,9 @@ The `http` feature does not enable `gcs`.
 The `logging` feature does not enable `http`.
 The `gcs` feature does not enable `http`.
 The `auth` feature enables `http`.
-The logging feature is `spec/framework/logging.md`.
-The Google Cloud Storage client is `spec/framework/gcs.md`.
-Cookie sessions and password hashes are `spec/framework/auth.md`.
+The logging feature is `spec/framework_rs/logging.md`.
+The Google Cloud Storage client is `spec/framework_rs/gcs.md`.
+Cookie sessions and password hashes are `spec/framework_rs/auth.md`.
 A project with default features off selects the feature `http` to compile this module.
 
 Put this block in the project `Cargo.toml`:
@@ -41,7 +41,7 @@ Put this block in the project `Cargo.toml`:
 ian_framework = "0.1"
 ```
 
-Use these commands in `framework/`:
+Use these commands in `framework_rs/`:
 
 ```sh
 cargo check
@@ -227,14 +227,14 @@ It does not remove quotes from the value.
 `sets_cookie` reads each `Set-Cookie` response header.
 It returns `true` when one of them sets the cookie with the name `name`.
 
-Cookie sessions use these functions. Cookie sessions are `spec/framework/auth.md`.
+Cookie sessions use these functions. Cookie sessions are `spec/framework_rs/auth.md`.
 
 ## Out of scope
 
 This feature does not include these items:
 
 - Authentication other than the bearer API key check.
-- Cookie sessions. Cookie sessions are `spec/framework/auth.md`.
+- Cookie sessions. Cookie sessions are `spec/framework_rs/auth.md`.
 - An API key store or API key rotation.
 - A catalog of product error codes.
 - A project error enum.

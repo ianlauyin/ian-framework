@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Crate
 
 The package name is `ian_framework`.
-The crate path is `framework/`.
+The crate path is `framework_rs/`.
 The module path is `ian_framework::version`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
@@ -33,7 +33,7 @@ Put this block in the project `Cargo.toml`:
 ian_framework = { version = "0.1", default-features = false, features = ["version"] }
 ```
 
-Use these commands in `framework/`:
+Use these commands in `framework_rs/`:
 
 ```sh
 cargo check --no-default-features --features version
@@ -76,5 +76,5 @@ The next request tries again.
 This feature does not include these items:
 
 - The build version or the release version of the project.
-- The client code that reads the route.
+- The client code that reads the route. The client code is `spec/framework_fe/version.md`.
 - Authentication of the route.

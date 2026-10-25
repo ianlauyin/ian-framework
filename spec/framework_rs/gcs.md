@@ -6,7 +6,7 @@ This client is not product business logic.
 ## Crate
 
 The package name is `ian_framework`.
-The crate path is `framework/`.
+The crate path is `framework_rs/`.
 The module path is `ian_framework::gcs`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
@@ -18,7 +18,7 @@ The default build does not compile this client.
 A project sets the Cargo feature `gcs` to compile this client.
 A project can select the dependency feature `ian_framework/gcs`.
 The `gcs` feature enables the `logging` feature.
-The logging feature is `spec/framework/logging.md`.
+The logging feature is `spec/framework_rs/logging.md`.
 
 Put this block in the project `Cargo.toml`:
 
@@ -27,7 +27,7 @@ Put this block in the project `Cargo.toml`:
 ian_framework = { version = "0.1", features = ["gcs"] }
 ```
 
-Use these commands in `framework/`:
+Use these commands in `framework_rs/`:
 
 ```sh
 cargo check
@@ -195,7 +195,7 @@ The client writes operations records through the logging feature.
 A second call replaces that shipper.
 An operations record has no `app` field.
 An operations record has no `project` field.
-The log route is `spec/framework/logging.md`.
+The log route is `spec/framework_rs/logging.md`.
 A client with no shipper writes no operations record.
 A logging failure does not change the storage result.
 The client does not write product rules in these records.

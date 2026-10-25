@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Crate
 
 The package name is `ian_framework`.
-The crate path is `framework/`.
+The crate path is `framework_rs/`.
 The module path is `ian_framework::auth`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
@@ -18,7 +18,7 @@ The `auth` feature enables `http`.
 The `auth` feature uses Tokio for the password hash.
 The `auth` feature does not enable `logging`.
 The `auth` feature does not enable `gcs`.
-The HTTP boundary error and the cookie header helpers are `spec/framework/http.md`.
+The HTTP boundary error and the cookie header helpers are `spec/framework_rs/http.md`.
 
 Put this block in the project `Cargo.toml`:
 
@@ -27,7 +27,7 @@ Put this block in the project `Cargo.toml`:
 ian_framework = { version = "0.1", features = ["auth"] }
 ```
 
-Use these commands in `framework/`:
+Use these commands in `framework_rs/`:
 
 ```sh
 cargo check --features auth

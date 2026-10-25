@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Crate
 
 The package name is `ian_framework`.
-The crate path is `framework/`.
+The crate path is `framework_rs/`.
 The module path is `ian_framework::logging`.
 `rust-toolchain.toml` gives the Rust version for this repository.
 
@@ -18,7 +18,7 @@ A default build compiles this feature.
 A project gets this feature with no extra feature flag.
 The `gcs` feature is optional.
 The `gcs` feature enables `logging`.
-The Google Cloud Storage client is `spec/framework/gcs.md`.
+The Google Cloud Storage client is `spec/framework_rs/gcs.md`.
 
 Put this block in the project `Cargo.toml`:
 
@@ -27,7 +27,7 @@ Put this block in the project `Cargo.toml`:
 ian_framework = "0.1"
 ```
 
-Use these commands in `framework/`:
+Use these commands in `framework_rs/`:
 
 ```sh
 cargo check
@@ -316,7 +316,7 @@ This function does not set a body size limit.
 This feature does not include these items:
 
 - A log server process.
-- Authentication to the log server. The bearer API key check is in `spec/framework/http.md`.
+- Authentication to the log server. The bearer API key check is in `spec/framework_rs/http.md`.
 - A product log policy.
 - Trash rules, browse caps, or upload gates.
 - An adapter that maps the app to a different path.
