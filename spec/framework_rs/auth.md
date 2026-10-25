@@ -16,6 +16,9 @@ The Cargo feature name is `auth`.
 `auth` is not a default feature.
 The `auth` feature uses Tokio for the password hash.
 The `auth` feature does not enable `gcs`.
+The `auth` feature enables the `redis` feature `tokio-rustls-comp`, so a `rediss://` URL connects with TLS. Upstash is one example.
+The TLS connection uses `rustls` with the system root certificates.
+A project does not add its own `redis` dependency for TLS.
 The HTTP boundary error and the cookie header helpers are `spec/framework_rs/http.md`.
 
 Put this block in the project `Cargo.toml`:
