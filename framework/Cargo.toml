@@ -47,6 +47,12 @@ gcs = [
     "tokio/fs",
     "tokio/io-util",
 ]
+version = [
+    "dep:axum",
+    "dep:getrandom",
+    "dep:hex",
+    "dep:serde",
+]
 
 [dependencies]
 argon2 = { version = "0.6.0", optional = true }

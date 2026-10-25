@@ -9,3 +9,6 @@ pub mod logging;
 
 #[cfg(feature = "gcs")]
 pub mod gcs;
+
+#[cfg(feature = "version")]
+pub mod version;

@@ -8,3 +8,4 @@ The shipper posts each batch to `/log/{app}`.
 The Google Cloud Storage client is `spec/framework/gcs.md`.
 The HTTP boundary error and the request header helpers are `spec/framework/http.md`.
 Cookie sessions and password hashes are `spec/framework/auth.md`.
+The process version route is `spec/framework/version.md`.
