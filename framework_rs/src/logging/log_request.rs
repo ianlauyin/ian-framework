@@ -45,7 +45,7 @@ fn request_path(path: &str) -> String {
     }
 }
 
-fn client_ip(request: &Request) -> String {
+pub(super) fn client_ip(request: &Request) -> String {
     if let Some(ip) = first_forwarded_ip(request.headers()) {
         return ip;
     }
@@ -69,7 +69,7 @@ fn first_forwarded_ip(headers: &HeaderMap) -> Option<String> {
     }
 }
 
-fn user_agent(headers: &HeaderMap) -> String {
+pub(super) fn user_agent(headers: &HeaderMap) -> String {
     header_text(headers, "user-agent").unwrap_or_default()
 }
 

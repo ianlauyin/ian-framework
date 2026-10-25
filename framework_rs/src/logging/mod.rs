@@ -1,3 +1,4 @@
+mod client_log;
 mod event;
 mod log_batch;
 mod log_request;
@@ -7,6 +8,7 @@ use std::collections::BTreeMap;
 
 use chrono::Utc;
 
+pub use client_log::client_log_router;
 pub use event::{LogEvent, LogLevel};
 pub use log_batch::LogBatch;
 pub use log_request::log_request;

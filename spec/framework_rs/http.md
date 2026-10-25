@@ -1,6 +1,6 @@
 # HTTP errors and request headers
 
-This document describes the HTTP boundary error, the bearer API key check, the cookie header helpers, and the process version route in the framework.
+This document describes the HTTP boundary error, the bearer API key check, the cookie header helpers, the same-origin check, and the process version route in the framework.
 This feature is not product business logic.
 
 ## Crate
@@ -214,6 +214,22 @@ It does not remove quotes from the value.
 It returns `true` when one of them sets the cookie with the name `name`.
 
 Cookie sessions use these functions. Cookie sessions are `spec/framework_rs/auth.md`.
+
+## Same-origin check
+
+The module has this function:
+
+| function | result |
+| --- | --- |
+| `is_same_origin(headers: &axum::http::HeaderMap)` | the check result, `bool` |
+
+`is_same_origin` returns `true` only in these conditions:
+
+- When the request has the header `Sec-Fetch-Site`, the value is `same-origin`.
+- When the request has no `Sec-Fetch-Site`, the request has the headers `Origin` and `Host`, and the part of `Origin` after `://` equals `Host`. The comparison is not case sensitive.
+
+A browser that does not send `Sec-Fetch-Site` still sends `Origin` on a `POST`.
+The client log route uses this function. The client log route is `spec/framework_rs/logging.md`.
 
 ## Process version route
 

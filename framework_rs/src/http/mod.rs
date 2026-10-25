@@ -5,6 +5,6 @@ mod into_response;
 mod version;
 
 pub use api_error::ApiError;
-pub use headers::{bearer_token, key_matches, read_cookie, sets_cookie};
+pub use headers::{bearer_token, is_same_origin, key_matches, read_cookie, sets_cookie};
 pub use into_api_error::IntoApiError;
 pub use version::version_router;

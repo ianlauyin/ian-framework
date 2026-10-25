@@ -303,9 +303,49 @@ if let Some(events) = body.sanitize_untrusted_client() {
 }
 ```
 
-The app keeps the HTTP handler.
+An app can keep its own HTTP handler.
+The client log route below is one such handler.
 This function does not set an HTTP status.
 This function does not set a body size limit.
+
+## Client log route
+
+`ian_framework::logging::client_log_router(shipper)` gives an `axum::Router` with one route.
+The argument is one `LogShipper`.
+The route is `POST /log`.
+The project merges this router into its own router.
+A browser sends its logs to this route on the same origin.
+The project gives the same shipper to this router and to the Axum middleware.
+The client events and the request events then share one buffer.
+The shipper ships them together, with the same capacity, warning, and batch rules.
+When the middleware wraps this route, the `POST /log` request also records one request event.
+The client events come first, because the middleware records after the handler returns.
+
+```rust
+let shipper = LogShipper::new(ShipperConfig::new("cs", "https://logs.example")).unwrap();
+let router = Router::new()
+    .merge(ian_framework::logging::client_log_router(shipper.clone()))
+    .layer(middleware::from_fn_with_state(
+        shipper,
+        ian_framework::logging::log_request,
+    ));
+```
+
+The route accepts only a same-origin request.
+It checks the request headers with `ian_framework::http::is_same_origin`. The rules are in `spec/framework_rs/http.md`.
+Each other request gets status 403.
+
+The body is one `LogBatch`.
+The body size limit is 1 MiB.
+A larger body gets status 413.
+A body that is not a `LogBatch` gets status 400.
+The route calls `LogBatch::sanitize_untrusted_client`.
+When that call returns no batch, the status is 400 and the route records no event.
+The route sets `ip` and `user_agent` of each kept event from the request.
+The sources are the same as in the Axum middleware.
+The route calls `LogShipper::record` for each kept event.
+The response status is 204 with an empty body.
+The route does not check the content type.
 
 ## Out of scope
 
