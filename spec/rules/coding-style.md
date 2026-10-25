@@ -1,5 +1,7 @@
 # Coding style
 
+fix all warning after refactor
+
 ## Duplication and readability
 
 - Readability is more important than strict DRY. Do not add a helper, a generic type or an abstraction only to remove duplication.
