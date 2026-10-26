@@ -5,55 +5,54 @@ This feature is not product business logic.
 
 ## Package
 
-The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-The import path is `ian-framework-fe/ajax`.
-The source file is `framework_fe/src/ajax.ts`.
-The test file is `framework_fe/test/ajax.test.ts`.
-The client uses only browser APIs. The client does not use a UI library.
+- The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
+- The import path is `ian-framework-fe/ajax`.
+- The source file is `framework_fe/src/ajax.ts`.
+- The test file is `framework_fe/test/ajax.test.ts`.
+- The client uses only browser APIs. The client does not use a UI library.
 
 ## API
 
-| item | kind | meaning |
+| Item | Kind | Meaning |
 | --- | --- | --- |
-| `ajax(url, method, request?, pathParams?)` | function | sends one request and returns the parsed JSON body |
-| `AjaxError` | class | the error for a response status that is not 2xx |
-| `ErrorBody` | type | the error body: `{ message: string }` |
-| `setUnauthorizedHandler(handler?)` | function | sets the handler for a 401 response. A call with no handler removes the handler |
+| `ajax(url, method, request?, pathParams?)` | function | Sends one request and returns the parsed JSON body. |
+| `AjaxError` | class | The error for a response status that is not 2xx. |
+| `ErrorBody` | type | The error body: `{ message: string }`. |
+| `setUnauthorizedHandler(handler?)` | function | Sets the handler for a 401 response. A call with no handler removes the handler. |
 
 `method` is one of `GET`, `DELETE`, `POST` and `PUT`.
 
 `AjaxError` has these fields:
 
-| field | type | value |
+| Field | Type | Value |
 | --- | --- | --- |
-| `code` | `number` | the HTTP status |
-| `message` | `string` | `message` from the error body, or `Unknown error` if the body has no message |
+| `code` | `number` | The HTTP status. |
+| `message` | `string` | `message` from the error body. If the body has no message, the value is `Unknown error`. |
 
 ## Behaviour
 
-The client adds the prefix `/ajax` to `url`. The project serves its JSON routes under `/ajax` on the same origin.
+### URL
 
-The client replaces each `{name}` in `url` with `pathParams[name]`. If a path param has no value, the client throws an `Error` and does not send the request.
+- The client adds the prefix `/ajax` to `url`. The project serves its JSON routes under `/ajax` on the same origin.
+- The client replaces each `{name}` in `url` with `pathParams[name]`.
+- If a path param has no value, the client throws an `Error`. The client does not send the request.
 
-For `GET` and `DELETE`:
+### Request
 
-- The client adds `request` to the URL as a query string.
-- The request has no body.
-
-For `POST` and `PUT`:
-
-- The client sends `request` as a JSON body.
-- The request has the header `Content-Type: application/json`.
+| Method | Request data | Body |
+| --- | --- | --- |
+| `GET`, `DELETE` | The client adds `request` to the URL as a query string. | No body. |
+| `POST`, `PUT` | The client sends `request` as a JSON body. | JSON. The request has the header `Content-Type: application/json`. |
 
 Each request uses `credentials: "same-origin"`.
 
-The client reads the response:
+### Response
 
-- When the status is 401, the client calls the unauthorized handler before it throws.
+- When the status is 401, the client calls the unauthorized handler. Then the client throws.
 - When the status is not 2xx, the client throws `AjaxError`.
-- For a status that is not 2xx, a body that is empty or not valid JSON gives the error body `null`, so the message is `Unknown error`. An example is an HTML 502 page from a proxy.
-- For a 2xx status, an empty body gives `null`.
-- For a 2xx status, a body that is not empty is parsed as JSON.
+- When the status is not 2xx and the body is empty or not valid JSON, the error body is `null`. Then the message is `Unknown error`.
+- When the status is 2xx and the body is empty, the result is `null`.
+- When the status is 2xx and the body is not empty, the client parses the body as JSON.
 
 ## Out of scope
 

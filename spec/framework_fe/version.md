@@ -5,16 +5,15 @@ This feature is not product business logic.
 
 ## Package
 
-The package name is `ian-framework-fe`.
-The package path is `framework_fe/`.
-The import path is `ian-framework-fe/version`.
-The package has no root entry. A project imports each feature from its own path.
-The source file is `framework_fe/src/version.ts`.
-The test file is `framework_fe/test/version.test.ts`.
-
-The package ships TypeScript source. The package has no build step.
-The project bundler and the project TypeScript compiler read the source.
-The checker uses only browser APIs. The checker does not use a UI library.
+- The package name is `ian-framework-fe`.
+- The package path is `framework_fe/`.
+- The import path is `ian-framework-fe/version`.
+- The package has no root entry. A project imports each feature from its own path.
+- The source file is `framework_fe/src/version.ts`.
+- The test file is `framework_fe/test/version.test.ts`.
+- The package ships TypeScript source. The package has no build step.
+- The project bundler and the project TypeScript compiler read the source.
+- The checker uses only browser APIs. The checker does not use a UI library.
 
 A project adds the package as a git dependency with a subdirectory. Put this line in the project `package.json`:
 
@@ -34,24 +33,23 @@ pnpm test
 
 `VersionChecker` is a class with static methods.
 
-| method | effect |
+| Method | Effect |
 | --- | --- |
-| `VersionChecker.init(options)` | starts the checker |
+| `VersionChecker.init(options)` | Starts the checker. |
 
 `options` is a `VersionCheckerOptions` object:
 
-| field | type | meaning |
+| Field | Type | Meaning |
 | --- | --- | --- |
-| `onUpdated` | `() => void` | required. The checker calls it when the version changes |
-| `checkInterval` | `number` | optional. The time between timer checks, in milliseconds. If it is not set, the checker does not use a timer |
+| `onUpdated` | `() => void` | Necessary. The checker calls it when the version changes. |
+| `checkInterval` | `number` | Optional. The time between timer checks, in milliseconds. If it is not set, the checker does not use a timer. |
 
-The project calls `init()` one time when the page starts.
-A second call to `init()` has no effect. The checker ignores the options of the second call.
+- The project calls `init()` one time when the page starts.
+- A second call to `init()` has no effect. The checker ignores the options of the second call.
 
 ## Behaviour
 
-The checker reads `GET /version` on the same origin with `credentials: "same-origin"`.
-The route is in `spec/framework_rs/http.md`.
+The checker reads `GET /version` on the same origin with `credentials: "same-origin"`. The route is in `spec/framework_rs/http.md`.
 
 The checker reads the route at these times:
 
@@ -59,9 +57,11 @@ The checker reads the route at these times:
 - When the page becomes visible. The checker uses the `visibilitychange` event.
 - Each `checkInterval` milliseconds, if `checkInterval` is set. The timer does not depend on the page visibility.
 
-The first good response gives the current version.
-When a later response gives a different version, the checker calls `onUpdated`.
-The checker does not replace the current version. Each later different response calls `onUpdated` again.
+The checker compares the versions:
+
+- The first good response gives the current version.
+- When a later response gives a different version, the checker calls `onUpdated`.
+- The checker does not replace the current version. Thus each later different response calls `onUpdated` again.
 
 The checker ignores these failures:
 
