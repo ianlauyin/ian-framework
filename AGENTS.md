@@ -10,9 +10,3 @@ The frontend library is `framework_fe/`.
 
 Rust framework structure: `spec/framework_rs.md`
 Frontend framework structure: `spec/framework_fe.md`
-
-## Things to do
-
-Read `spec/rules/coding-style.md` before the first edit.
-Read `spec/rules/git-convention.md` before make git commit.
-Read `spec/rules/spec-update.md` after making code changes.
