@@ -21,8 +21,8 @@ use chrono::Utc;
 
 use crate::logging::{LogLevel, LogShipper};
 
-use super::encode::{encode_object_id, encode_seg};
-use super::{GcsError, GcsErrorKind, API_ROOT};
+use crate::gcs::encode::{encode_object_id, encode_seg};
+use crate::gcs::{GcsError, GcsErrorKind, API_ROOT};
 
 use auth::{Auth, CachedToken};
 use call::Call;
@@ -1036,16 +1036,10 @@ mod tests {
             socket.write_all(body).await.unwrap();
             String::from_utf8(head).unwrap().to_ascii_lowercase()
         });
-        let auth = crate::gcs::gcs_client::Auth::User {
-            client_id: "client".to_string(),
-            client_secret: "secret".to_string(),
-            refresh_token: "refresh".to_string(),
-            signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
-        };
-        let client = GcsClient::new("my-bucket", auth).await.unwrap();
-        *client.inner.token.lock().await = Some(crate::gcs::gcs_client::CachedToken {
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+        *client.inner.token.lock().await = Some(CachedToken {
             value: "token".to_string(),
-            expires_at: std::time::Instant::now() + Duration::from_secs(600),
+            expires_at: Instant::now() + Duration::from_secs(600),
         });
         client
             .put_chunk_retrying(&location, "application/octet-stream", b"", 0, 0, true)
@@ -1083,17 +1077,7 @@ mod tests {
 
     #[tokio::test]
     async fn signed_url_rejects_a_lifetime_over_seven_days() {
-        let client = GcsClient::new(
-            "my-bucket",
-            Auth::User {
-                client_id: "id".to_string(),
-                client_secret: "secret".to_string(),
-                refresh_token: "refresh".to_string(),
-                signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
-            },
-        )
-        .await
-        .unwrap();
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
         let err = client
             .signed_get_url("a", Some(Duration::from_secs(604_801)), None)
             .await
@@ -1103,17 +1087,7 @@ mod tests {
 
     #[tokio::test]
     async fn signed_url_rejects_a_missing_or_zero_lifetime() {
-        let client = GcsClient::new(
-            "my-bucket",
-            Auth::User {
-                client_id: "id".to_string(),
-                client_secret: "secret".to_string(),
-                refresh_token: "refresh".to_string(),
-                signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
-            },
-        )
-        .await
-        .unwrap();
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
         for lifetime in [None, Some(Duration::ZERO), Some(Duration::from_millis(500))] {
             let err = client
                 .signed_get_url("a", lifetime, None)

@@ -1,8 +1,7 @@
 use serde::Deserialize;
 
+use crate::gcs::gcs_client::object_meta::RawObject;
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
-
-use super::object_meta::RawObject;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListPage {

@@ -1,10 +1,9 @@
 use serde::Deserialize;
 
 use crate::gcs::encode::{encode_object_id, encode_seg};
+use crate::gcs::gcs_client::object_meta::RawObject;
 use crate::gcs::gcs_client::object_url;
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
-
-use super::object_meta::RawObject;
 
 pub(super) enum RewriteStep {
     Done(ObjectMeta),
