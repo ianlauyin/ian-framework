@@ -5,10 +5,10 @@ use crate::logging::LogLevel;
 
 use crate::gcs::encode::encode_seg;
 use crate::gcs::gcs_client::call::Call;
-use crate::gcs::gcs_client::ops_record::OpsRecord;
+use crate::gcs::gcs_client::ops_record::{logged_error, OpsRecord};
 use crate::gcs::gcs_client::upload_source::UploadSource;
 use crate::gcs::gcs_client::upload_step::UploadStep;
-use crate::gcs::gcs_client::{logged_error, GcsClient, TRANSFER_TIMEOUT};
+use crate::gcs::gcs_client::{GcsClient, TRANSFER_TIMEOUT};
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
 
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";

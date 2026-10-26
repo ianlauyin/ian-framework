@@ -4,6 +4,8 @@ use chrono::Utc;
 
 use crate::logging::{LogEvent, LogLevel};
 
+use crate::gcs::error::truncate;
+
 pub(super) struct OpsRecord<'a> {
     pub(super) level: LogLevel,
     pub(super) message: &'a str,
@@ -42,6 +44,31 @@ impl OpsRecord<'_> {
     }
 }
 
+pub(super) fn logged_error(err: &impl std::fmt::Display) -> String {
+    let redacted = redact_query(&err.to_string());
+    truncate(&redacted, 300).to_string()
+}
+
+fn redact_query(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut skip = false;
+    for ch in text.chars() {
+        if skip {
+            if ch.is_whitespace() {
+                skip = false;
+                out.push(ch);
+            }
+            continue;
+        }
+        if ch == '?' {
+            skip = true;
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
 fn action(method: &str, url: &str) -> String {
     if method.is_empty() {
         return String::new();
@@ -64,6 +91,16 @@ fn path_only(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logged_error_omits_the_query() {
+        let text = logged_error(
+            &"error sending request for url (https://storage.googleapis.com/o?upload_id=secret): connection reset",
+        );
+        assert!(!text.contains("secret"));
+        assert!(!text.contains("upload_id"));
+        assert!(text.contains("connection reset"));
+    }
 
     #[test]
     fn path_only_omits_the_query() {

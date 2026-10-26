@@ -23,12 +23,11 @@ use chrono::Utc;
 use crate::logging::{LogLevel, LogShipper};
 
 use crate::gcs::encode::{encode_object_id, encode_seg};
-use crate::gcs::error::truncate;
 use crate::gcs::{GcsError, GcsErrorKind, API_ROOT};
 
 use auth::{Auth, CachedToken};
 use call::Call;
-use ops_record::OpsRecord;
+use ops_record::{logged_error, OpsRecord};
 use resumable_upload::ResumableUpload;
 use rewrite_step::RewriteStep;
 use signed_parts::SignedParts;
@@ -476,31 +475,6 @@ fn object_url(bucket_name: &str, name: &str) -> String {
     )
 }
 
-fn logged_error(err: &impl std::fmt::Display) -> String {
-    let redacted = redact_query(&err.to_string());
-    truncate(&redacted, 300).to_string()
-}
-
-fn redact_query(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut skip = false;
-    for ch in text.chars() {
-        if skip {
-            if ch.is_whitespace() {
-                skip = false;
-                out.push(ch);
-            }
-            continue;
-        }
-        if ch == '?' {
-            skip = true;
-            continue;
-        }
-        out.push(ch);
-    }
-    out
-}
-
 fn validate_bucket(bucket_name: &str) -> Result<(), GcsError> {
     if bucket_name.is_empty()
         || bucket_name.contains(['/', '\\', ' ', '\r', '\n'])
@@ -558,16 +532,6 @@ mod tests {
             object_url("buck", "a/c"),
             "https://storage.googleapis.com/storage/v1/b/buck/o/a%2Fc"
         );
-    }
-
-    #[test]
-    fn logged_error_omits_the_query() {
-        let text = logged_error(
-            &"error sending request for url (https://storage.googleapis.com/o?upload_id=secret): connection reset",
-        );
-        assert!(!text.contains("secret"));
-        assert!(!text.contains("upload_id"));
-        assert!(text.contains("connection reset"));
     }
 
     fn user_auth() -> Auth {
