@@ -166,7 +166,14 @@ If `rewriteToken` does not change, `GcsClient::rewrite_object` returns an error.
 
 `GcsClient::move_object` rewrites the source to the destination.
 Then it deletes the source.
-If that delete fails, it deletes the destination and returns the delete error.
+A failed delete does not prove that the source still exists.
+If that delete fails, `GcsClient::move_object` reads the source metadata. Then it does one of these steps:
+
+- If the source exists, it deletes the destination and returns the delete error. If the destination delete also fails, the error tells that the object exists at both names, and it includes the two errors.
+- If the source does not exist, it keeps the destination. The error tells that the object exists only at the destination.
+- If the metadata read fails, it keeps the destination. The error tells that the object can exist at both names, and it includes the two errors.
+
+Each of these errors has the kind of the source delete error.
 A source and a destination with the same name is a configuration error.
 
 ## Missing objects

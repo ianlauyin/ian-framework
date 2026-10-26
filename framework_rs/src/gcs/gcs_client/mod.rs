@@ -190,12 +190,41 @@ impl GcsClient {
             ));
         }
         let meta = self.rewrite_object(from, to).await?;
-        if let Err(err) = self.delete_object(from).await {
-            // Without this the object would exist at both names.
-            let _ = self.delete_object(to).await;
-            return Err(err);
-        }
-        Ok(meta)
+        let Err(delete_err) = self.delete_object(from).await else {
+            return Ok(meta);
+        };
+        // A failed delete does not prove that the source still exists. Delete the copy only
+        // when the source is confirmed, else the copy can be the only one.
+        let err = match self.stat_opt(from).await {
+            Ok(Some(_)) => match self.delete_object(to).await {
+                Ok(()) => delete_err,
+                Err(cleanup_err) => GcsError::with_source(
+                    delete_err.kind(),
+                    format!(
+                        "move could not delete the source ({delete_err}) and could not delete \
+                         the destination ({cleanup_err}); the object exists at both names"
+                    ),
+                    delete_err,
+                ),
+            },
+            Ok(None) => GcsError::with_source(
+                delete_err.kind(),
+                format!(
+                    "move could not delete the source ({delete_err}) but the source is gone; \
+                     the object exists only at the destination"
+                ),
+                delete_err,
+            ),
+            Err(check_err) => GcsError::with_source(
+                delete_err.kind(),
+                format!(
+                    "move could not delete the source ({delete_err}) and could not check \
+                     the source ({check_err}); the object may exist at both names"
+                ),
+                delete_err,
+            ),
+        };
+        Err(err)
     }
 
     pub async fn signed_get_url(
