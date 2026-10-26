@@ -1,16 +1,8 @@
-mod auth;
-mod call;
-mod list_page;
-mod list_query;
-mod object_meta;
-mod object_reader;
-mod ops_record;
-mod put_request;
-mod resumable_upload;
+mod credentials;
+mod object;
+mod request;
 mod rewrite_step;
-mod signed_parts;
-mod upload_source;
-mod upload_step;
+mod upload;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -24,19 +16,13 @@ use crate::logging::{LogLevel, LogShipper};
 use crate::gcs::encode::{encode_object_id, encode_seg};
 use crate::gcs::{GcsError, GcsErrorKind, API_ROOT};
 
-use auth::{Auth, CachedToken};
-use call::Call;
-use ops_record::{logged_error, OpsRecord};
-use resumable_upload::ResumableUpload;
+use credentials::{Auth, CachedToken, SignedParts};
+use request::{logged_error, Call, OpsRecord};
 use rewrite_step::RewriteStep;
-use signed_parts::SignedParts;
-use upload_source::UploadSource;
+use upload::{ResumableUpload, UploadSource};
 
-pub use list_page::ListPage;
-pub use list_query::ListQuery;
-pub use object_meta::ObjectMeta;
-pub use object_reader::ObjectReader;
-pub use put_request::{PutBody, PutOptions, PutRequest};
+pub use object::{ListPage, ListQuery, ObjectMeta, ObjectReader};
+pub use upload::{PutBody, PutOptions, PutRequest};
 
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);

@@ -15,7 +15,7 @@ pub struct ObjectMeta {
 }
 
 impl ObjectMeta {
-    pub(super) async fn from_response(response: reqwest::Response) -> Result<Self, GcsError> {
+    pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, GcsError> {
         let bytes = response.bytes().await.map_err(|err| {
             GcsError::with_source(GcsErrorKind::Transport, "object response is not bytes", err)
         })?;
@@ -31,7 +31,7 @@ impl ObjectMeta {
 }
 
 #[derive(Debug, Deserialize)]
-pub(super) struct RawObject {
+pub(crate) struct RawObject {
     name: String,
     #[serde(default)]
     size: Option<String>,
@@ -44,7 +44,7 @@ pub(super) struct RawObject {
 }
 
 impl RawObject {
-    pub(super) fn into_meta(self) -> Result<ObjectMeta, GcsError> {
+    pub(crate) fn into_meta(self) -> Result<ObjectMeta, GcsError> {
         let size = match self.size {
             Some(text) => text.parse().map_err(|err| {
                 GcsError::with_source(GcsErrorKind::Api, "object size is invalid", err)

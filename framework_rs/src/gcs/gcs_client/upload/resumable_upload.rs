@@ -4,10 +4,9 @@ use std::time::Duration;
 use crate::logging::LogLevel;
 
 use crate::gcs::encode::encode_seg;
-use crate::gcs::gcs_client::call::Call;
-use crate::gcs::gcs_client::ops_record::{logged_error, OpsRecord};
-use crate::gcs::gcs_client::upload_source::UploadSource;
-use crate::gcs::gcs_client::upload_step::UploadStep;
+use crate::gcs::gcs_client::request::{logged_error, Call, OpsRecord};
+use crate::gcs::gcs_client::upload::upload_source::UploadSource;
+use crate::gcs::gcs_client::upload::upload_step::UploadStep;
 use crate::gcs::gcs_client::{GcsClient, TRANSFER_TIMEOUT};
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
 
@@ -17,7 +16,7 @@ const CHUNK_ALIGN: u64 = 256 * 1024;
 const CHUNK_ATTEMPTS: u32 = 5;
 const CHUNK_BACKOFF: Duration = Duration::from_millis(200);
 
-pub(super) struct ResumableUpload<'a> {
+pub(crate) struct ResumableUpload<'a> {
     client: &'a GcsClient,
     location: String,
     content_type: &'a str,
@@ -25,7 +24,7 @@ pub(super) struct ResumableUpload<'a> {
 }
 
 impl<'a> ResumableUpload<'a> {
-    pub(super) async fn start(
+    pub(crate) async fn start(
         client: &'a GcsClient,
         name: &str,
         content_type: &'a str,
@@ -92,7 +91,7 @@ impl<'a> ResumableUpload<'a> {
         })
     }
 
-    pub(super) async fn run(&self, source: &mut UploadSource<'_>) -> Result<ObjectMeta, GcsError> {
+    pub(crate) async fn run(&self, source: &mut UploadSource<'_>) -> Result<ObjectMeta, GcsError> {
         let total = self.total;
         if total == 0 {
             return self.put_chunk_retrying(b"", 0, true).await?.expect_done();
@@ -327,7 +326,7 @@ fn probe_content_range(total: u64) -> String {
 mod tests {
     use std::time::Instant;
 
-    use crate::gcs::gcs_client::auth::{Auth, CachedToken};
+    use crate::gcs::gcs_client::credentials::{Auth, CachedToken};
 
     use super::*;
 

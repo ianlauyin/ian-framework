@@ -6,18 +6,18 @@ use crate::logging::{LogEvent, LogLevel};
 
 use crate::gcs::error::truncate;
 
-pub(super) struct OpsRecord<'a> {
-    pub(super) level: LogLevel,
-    pub(super) message: &'a str,
-    pub(super) method: &'a str,
-    pub(super) url: &'a str,
-    pub(super) status: Option<u16>,
-    pub(super) latency_ms: Option<u64>,
-    pub(super) extra: &'a [(&'a str, &'a str)],
+pub(crate) struct OpsRecord<'a> {
+    pub(crate) level: LogLevel,
+    pub(crate) message: &'a str,
+    pub(crate) method: &'a str,
+    pub(crate) url: &'a str,
+    pub(crate) status: Option<u16>,
+    pub(crate) latency_ms: Option<u64>,
+    pub(crate) extra: &'a [(&'a str, &'a str)],
 }
 
 impl OpsRecord<'_> {
-    pub(super) fn into_event(self, bucket: &str) -> LogEvent {
+    pub(crate) fn into_event(self, bucket: &str) -> LogEvent {
         let mut event = LogEvent {
             ts: Utc::now(),
             id: String::new(),
@@ -44,7 +44,7 @@ impl OpsRecord<'_> {
     }
 }
 
-pub(super) fn logged_error(err: &impl std::fmt::Display) -> String {
+pub(crate) fn logged_error(err: &impl std::fmt::Display) -> String {
     let redacted = redact_query(&err.to_string());
     truncate(&redacted, 300).to_string()
 }

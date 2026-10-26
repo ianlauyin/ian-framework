@@ -5,20 +5,20 @@ use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
 use crate::gcs::encode::encode_seg;
-use crate::gcs::gcs_client::call::Call;
+use crate::gcs::gcs_client::request::Call;
 use crate::gcs::gcs_client::GcsClient;
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const HOST: &str = "storage.googleapis.com";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
 
-pub(super) struct SignedParts {
+pub(crate) struct SignedParts {
     pub(super) string_to_sign: String,
     pub(super) url_prefix: String,
 }
 
 impl SignedParts {
-    pub(super) fn v4_get(
+    pub(crate) fn v4_get(
         bucket_name: &str,
         name: &str,
         email: &str,
@@ -66,7 +66,7 @@ impl SignedParts {
         })
     }
 
-    pub(super) async fn sign(self, client: &GcsClient) -> Result<String, GcsError> {
+    pub(crate) async fn sign(self, client: &GcsClient) -> Result<String, GcsError> {
         let signature = sign_blob(client, self.string_to_sign.as_bytes()).await?;
         Ok(format!(
             "{}&X-Goog-Signature={}",

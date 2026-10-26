@@ -5,11 +5,11 @@ use futures_util::{Stream, StreamExt};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 pub struct ObjectReader {
-    pub(super) response: reqwest::Response,
+    pub(crate) response: reqwest::Response,
 }
 
 impl ObjectReader {
-    pub(super) async fn read_to_vec(self) -> Result<Vec<u8>, GcsError> {
+    pub(crate) async fn read_to_vec(self) -> Result<Vec<u8>, GcsError> {
         let bytes = self.response.bytes().await.map_err(|err| {
             GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
         })?;

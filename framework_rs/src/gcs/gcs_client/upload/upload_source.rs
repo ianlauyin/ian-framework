@@ -5,13 +5,13 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use crate::gcs::{GcsError, GcsErrorKind, PutBody};
 
 // The source must re-read any range because the session can move the offset back.
-pub(super) enum UploadSource<'a> {
+pub(crate) enum UploadSource<'a> {
     Bytes(&'a [u8]),
     File { file: tokio::fs::File, len: u64 },
 }
 
 impl<'a> UploadSource<'a> {
-    pub(super) async fn open(body: &'a PutBody) -> Result<Self, GcsError> {
+    pub(crate) async fn open(body: &'a PutBody) -> Result<Self, GcsError> {
         let path = match body {
             PutBody::Bytes(bytes) => return Ok(Self::Bytes(bytes)),
             PutBody::File(path) => path,
@@ -42,7 +42,7 @@ impl<'a> UploadSource<'a> {
         })
     }
 
-    pub(super) fn len(&self) -> u64 {
+    pub(crate) fn len(&self) -> u64 {
         match self {
             Self::Bytes(bytes) => bytes.len() as u64,
             Self::File { len, .. } => *len,

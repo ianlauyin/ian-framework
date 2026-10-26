@@ -10,7 +10,7 @@ pub struct ListQuery {
 }
 
 impl ListQuery {
-    pub(super) fn url(&self, bucket_name: &str) -> String {
+    pub(crate) fn url(&self, bucket_name: &str) -> String {
         let max_results = self.max_results.map(|max| max.to_string());
         let mut pairs: Vec<(&str, &str)> = Vec::new();
         if let Some(delimiter) = self.delimiter.as_deref() {

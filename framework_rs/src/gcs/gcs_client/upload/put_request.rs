@@ -25,7 +25,7 @@ pub struct PutOptions {
 }
 
 impl PutOptions {
-    pub(super) fn content_type(&self) -> Result<String, GcsError> {
+    pub(crate) fn content_type(&self) -> Result<String, GcsError> {
         match &self.content_type {
             Some(value) => {
                 if value.is_empty() || !value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {

@@ -18,7 +18,7 @@ const TOKEN_SKEW: Duration = Duration::from_secs(60);
 const ADC_FILE_LIMIT: u64 = 1024 * 1024;
 
 #[derive(Clone)]
-pub(super) enum Auth {
+pub(crate) enum Auth {
     Metadata,
 
     User {
@@ -42,7 +42,7 @@ impl std::fmt::Debug for Auth {
 }
 
 impl Auth {
-    pub(super) async fn from_adc() -> Result<Self, GcsError> {
+    pub(crate) async fn from_adc() -> Result<Self, GcsError> {
         if let Ok(path) = env::var("GOOGLE_APPLICATION_CREDENTIALS") {
             if !path.is_empty() {
                 return read_adc_at(Path::new(&path)).await;
@@ -54,7 +54,7 @@ impl Auth {
         Ok(Self::Metadata)
     }
 
-    pub(super) fn validate(&self) -> Result<(), GcsError> {
+    pub(crate) fn validate(&self) -> Result<(), GcsError> {
         let Auth::User {
             client_id,
             client_secret,
@@ -73,14 +73,14 @@ impl Auth {
         validate_signer_email(signer_email)
     }
 
-    pub(super) async fn signer_email(&self, http: &reqwest::Client) -> Result<String, GcsError> {
+    pub(crate) async fn signer_email(&self, http: &reqwest::Client) -> Result<String, GcsError> {
         match self {
             Auth::Metadata => metadata_email(http).await,
             Auth::User { signer_email, .. } => Ok(signer_email.clone()),
         }
     }
 
-    pub(super) async fn fetch_token(
+    pub(crate) async fn fetch_token(
         &self,
         http: &reqwest::Client,
     ) -> Result<CachedToken, GcsError> {
@@ -96,9 +96,9 @@ impl Auth {
     }
 }
 
-pub(super) struct CachedToken {
-    pub(super) value: String,
-    pub(super) expires_at: Instant,
+pub(crate) struct CachedToken {
+    pub(crate) value: String,
+    pub(crate) expires_at: Instant,
 }
 
 async fn metadata_email(http: &reqwest::Client) -> Result<String, GcsError> {
