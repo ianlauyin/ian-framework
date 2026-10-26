@@ -49,7 +49,7 @@ cargo test --features gcs
 - `PutBody`, `PutOptions` and `PutRequest`
 
 The URL encoding functions are private to the crate.
-`GcsClient::sign_blob` is private to the crate.
+The IAM `signBlob` call is private to the crate.
 A project uses `GcsClient::signed_get_url` for a signed URL.
 
 ## Constructors

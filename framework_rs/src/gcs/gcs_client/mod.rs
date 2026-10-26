@@ -17,7 +17,6 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use base64::Engine;
 use chrono::Utc;
 
 use crate::logging::{LogLevel, LogShipper};
@@ -228,12 +227,7 @@ impl GcsClient {
             expires_in,
             attachment_filename,
         )?;
-        let signature = self.sign_blob(parts.string_to_sign.as_bytes()).await?;
-        Ok(format!(
-            "{}&X-Goog-Signature={}",
-            parts.url_prefix,
-            hex::encode(signature)
-        ))
+        parts.sign(self).await
     }
 
     pub fn attach_ops_log(&self, shipper: LogShipper) {
@@ -256,49 +250,6 @@ impl GcsClient {
                 ops_log: std::sync::Mutex::new(None),
             }),
         })
-    }
-
-    async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
-        let url = format!(
-            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",
-            encode_seg(self.signer_email()),
-        );
-        let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::POST,
-                url,
-                json: Some(serde_json::json!({ "payload": encoded })),
-                ..Default::default()
-            })
-            .await?;
-        let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
-                "signBlob response is not bytes",
-                err,
-            )
-        })?;
-        let parsed: SignBlobResponse = serde_json::from_slice(&bytes).map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Api, "signBlob response is not JSON", err)
-        })?;
-        let cleaned: String = parsed
-            .signed_blob
-            .chars()
-            .filter(|ch| !ch.is_whitespace())
-            .collect();
-        let signature = base64::engine::general_purpose::STANDARD
-            .decode(cleaned)
-            .map_err(|err| {
-                GcsError::with_source(GcsErrorKind::Api, "signBlob signature is not base64", err)
-            })?;
-        if signature.is_empty() {
-            return Err(GcsError::new(
-                GcsErrorKind::Api,
-                "signBlob returned an empty signature",
-            ));
-        }
-        Ok(signature)
     }
 
     fn record_op(&self, op: OpsRecord<'_>) {
@@ -498,12 +449,6 @@ fn http_client() -> Result<reqwest::Client, GcsError> {
     builder.build().map_err(|err| {
         GcsError::with_source(GcsErrorKind::Transport, "cannot build the HTTP client", err)
     })
-}
-
-#[derive(serde::Deserialize)]
-struct SignBlobResponse {
-    #[serde(rename = "signedBlob")]
-    signed_blob: String,
 }
 
 fn millis_since(started: Instant) -> u64 {
