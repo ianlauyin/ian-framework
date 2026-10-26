@@ -9,7 +9,7 @@ pub struct ObjectReader {
 }
 
 impl ObjectReader {
-    pub async fn read_to_vec(self) -> Result<Vec<u8>, GcsError> {
+    pub(super) async fn read_to_vec(self) -> Result<Vec<u8>, GcsError> {
         let bytes = self.response.bytes().await.map_err(|err| {
             GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
         })?;

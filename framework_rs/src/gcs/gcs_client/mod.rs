@@ -10,7 +10,7 @@ mod rewrite_step;
 mod signed_parts;
 mod upload_step;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -19,7 +19,6 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use chrono::Utc;
-use futures_util::{Stream, StreamExt};
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
@@ -77,6 +76,10 @@ impl GcsClient {
         self.open_object(name).await?.read_to_vec().await
     }
 
+    pub async fn get_bytes_opt(&self, name: &str) -> Result<Option<Vec<u8>>, GcsError> {
+        not_found_as_none(self.get_bytes(name).await)
+    }
+
     pub async fn open_object(&self, name: &str) -> Result<ObjectReader, GcsError> {
         validate_object_name(name)?;
         let response = self
@@ -89,6 +92,10 @@ impl GcsClient {
         Ok(ObjectReader { response })
     }
 
+    pub async fn open_object_opt(&self, name: &str) -> Result<Option<ObjectReader>, GcsError> {
+        not_found_as_none(self.open_object(name).await)
+    }
+
     pub async fn stat(&self, name: &str) -> Result<ObjectMeta, GcsError> {
         validate_object_name(name)?;
         let response = self
@@ -99,6 +106,10 @@ impl GcsClient {
             })
             .await?;
         ObjectMeta::from_response(response).await
+    }
+
+    pub async fn stat_opt(&self, name: &str) -> Result<Option<ObjectMeta>, GcsError> {
+        not_found_as_none(self.stat(name).await)
     }
 
     pub async fn list(&self, query: &ListQuery) -> Result<ListPage, GcsError> {
@@ -115,39 +126,6 @@ impl GcsClient {
         ListPage::from_slice(&bytes)
     }
 
-    pub async fn list_all(&self, query: &ListQuery) -> Result<ListPage, GcsError> {
-        let mut query = query.clone();
-        let mut all = ListPage {
-            objects: Vec::new(),
-            prefixes: Vec::new(),
-            next_page_token: None,
-        };
-        let mut seen_prefixes = HashSet::new();
-        let mut seen_tokens = HashSet::new();
-        if let Some(token) = &query.page_token {
-            seen_tokens.insert(token.clone());
-        }
-        loop {
-            let page = self.list(&query).await?;
-            all.objects.extend(page.objects);
-            for prefix in page.prefixes {
-                if seen_prefixes.insert(prefix.clone()) {
-                    all.prefixes.push(prefix);
-                }
-            }
-            let Some(token) = page.next_page_token else {
-                return Ok(all);
-            };
-            if !seen_tokens.insert(token.clone()) {
-                return Err(GcsError::new(
-                    GcsErrorKind::Api,
-                    "list returned a page token that was already used",
-                ));
-            }
-            query.page_token = Some(token);
-        }
-    }
-
     pub async fn put_bytes(
         &self,
         name: &str,
@@ -159,11 +137,11 @@ impl GcsClient {
         validate_metadata(&options.metadata)?;
         let total = bytes.len() as u64;
         let location = self
-            .start_resumable(name, &content_type, &options.metadata, Some(total))
+            .start_resumable(name, &content_type, &options.metadata, total)
             .await?;
         if total == 0 {
             return self
-                .put_chunk_retrying(&location, &content_type, b"", 0, Some(0), true)
+                .put_chunk_retrying(&location, &content_type, b"", 0, 0, true)
                 .await?
                 .expect_done();
         }
@@ -175,14 +153,7 @@ impl GcsClient {
             let is_last = end == bytes.len();
             let chunk = &bytes[start..end];
             match self
-                .put_chunk_retrying(
-                    &location,
-                    &content_type,
-                    chunk,
-                    offset,
-                    Some(total),
-                    is_last,
-                )
+                .put_chunk_retrying(&location, &content_type, chunk, offset, total, is_last)
                 .await?
             {
                 UploadStep::Done(meta) => return Ok(meta),
@@ -228,11 +199,11 @@ impl GcsClient {
         }
         let total = meta.len();
         let location = self
-            .start_resumable(name, &content_type, &options.metadata, Some(total))
+            .start_resumable(name, &content_type, &options.metadata, total)
             .await?;
         if total == 0 {
             return self
-                .put_chunk_retrying(&location, &content_type, b"", 0, Some(0), true)
+                .put_chunk_retrying(&location, &content_type, b"", 0, 0, true)
                 .await?
                 .expect_done();
         }
@@ -256,14 +227,7 @@ impl GcsClient {
                 GcsError::with_source(GcsErrorKind::Transport, "read file failed", err)
             })?;
             match self
-                .put_chunk_retrying(
-                    &location,
-                    &content_type,
-                    &chunk,
-                    offset,
-                    Some(total),
-                    is_last,
-                )
+                .put_chunk_retrying(&location, &content_type, &chunk, offset, total, is_last)
                 .await?
             {
                 UploadStep::Done(meta) => return Ok(meta),
@@ -276,114 +240,6 @@ impl GcsClient {
             GcsErrorKind::Api,
             "finished upload did not return object metadata",
         ))
-    }
-
-    pub async fn put_stream<S, E>(
-        &self,
-        name: &str,
-        stream: S,
-        options: &PutOptions,
-    ) -> Result<ObjectMeta, GcsError>
-    where
-        S: Stream<Item = Result<Vec<u8>, E>> + Send,
-        E: std::fmt::Display,
-    {
-        validate_object_name(name)?;
-        let content_type = options.content_type()?;
-        validate_metadata(&options.metadata)?;
-        let location = self
-            .start_resumable(name, &content_type, &options.metadata, None)
-            .await?;
-        let mut stream = Box::pin(stream);
-        let mut buf = Vec::new();
-        let mut origin = 0u64;
-        let mut eof = false;
-        loop {
-            while !eof && buf.len() < CHUNK_SIZE {
-                match stream.next().await {
-                    None => eof = true,
-                    Some(Err(err)) => {
-                        return Err(GcsError::new(
-                            GcsErrorKind::Transport,
-                            format!("object stream: {err}"),
-                        ));
-                    }
-                    Some(Ok(piece)) => buf.extend(piece),
-                }
-            }
-            if buf.is_empty() {
-                // The stream is empty, or it ended on a chunk boundary.
-                return self
-                    .put_chunk_retrying(&location, &content_type, b"", origin, Some(origin), true)
-                    .await?
-                    .expect_done();
-            }
-            let is_last = eof;
-            let send_len = if is_last { buf.len() } else { CHUNK_SIZE };
-            let end = origin + send_len as u64;
-            let total = if is_last { Some(end) } else { None };
-            match self
-                .put_chunk_retrying(
-                    &location,
-                    &content_type,
-                    &buf[..send_len],
-                    origin,
-                    total,
-                    is_last,
-                )
-                .await?
-            {
-                UploadStep::Done(meta) => return Ok(meta),
-                UploadStep::Continue { next } => {
-                    if next < origin {
-                        return Err(GcsError::new(
-                            GcsErrorKind::Transport,
-                            "resumable session dropped bytes that are not in memory",
-                        ));
-                    }
-                    if next > end {
-                        return Err(GcsError::new(
-                            GcsErrorKind::Api,
-                            "resumable session is ahead of the buffered bytes",
-                        ));
-                    }
-                    if next == origin {
-                        return Err(GcsError::new(
-                            GcsErrorKind::Api,
-                            "resumable upload did not advance",
-                        ));
-                    }
-                    buf.drain(..(next - origin) as usize);
-                    origin = next;
-                    if buf.is_empty() && eof {
-                        return Err(GcsError::new(
-                            GcsErrorKind::Api,
-                            "finished upload did not return object metadata",
-                        ));
-                    }
-                }
-            }
-        }
-    }
-
-    pub async fn copy_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
-        validate_object_name(from)?;
-        validate_object_name(to)?;
-        let url = format!(
-            "{}/copyTo/b/{}/o/{}",
-            object_url(self.bucket(), from),
-            encode_seg(self.bucket()),
-            encode_object_id(to),
-        );
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::POST,
-                url,
-                json: Some(serde_json::json!({})),
-                ..Default::default()
-            })
-            .await?;
-        ObjectMeta::from_response(response).await
     }
 
     pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
@@ -440,15 +296,36 @@ impl GcsClient {
 
     pub async fn delete_object(&self, name: &str) -> Result<(), GcsError> {
         validate_object_name(name)?;
-        let response = self
+        let result = self
             .send(&Call {
                 method: reqwest::Method::DELETE,
                 url: object_url(self.bucket(), name),
                 ..Default::default()
             })
-            .await?;
+            .await;
+        let response = match result {
+            Ok(response) => response,
+            Err(err) if err.kind() == GcsErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err),
+        };
         let _ = response.bytes().await;
         Ok(())
+    }
+
+    pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
+        if from == to {
+            return Err(GcsError::new(
+                GcsErrorKind::Config,
+                "move source and destination are the same object",
+            ));
+        }
+        let meta = self.rewrite_object(from, to).await?;
+        if let Err(err) = self.delete_object(from).await {
+            // Without this the object would exist at both names.
+            let _ = self.delete_object(to).await;
+            return Err(err);
+        }
+        Ok(meta)
     }
 
     pub async fn signed_get_url(
@@ -505,7 +382,7 @@ impl GcsClient {
         name: &str,
         content_type: &str,
         metadata: &BTreeMap<String, String>,
-        total_len: Option<u64>,
+        total_len: u64,
     ) -> Result<String, GcsError> {
         let url = format!(
             "{UPLOAD_ROOT}/b/{}/o?uploadType=resumable",
@@ -518,16 +395,16 @@ impl GcsClient {
         if !metadata.is_empty() {
             body["metadata"] = serde_json::json!(metadata);
         }
-        let mut headers = vec![(
-            reqwest::header::HeaderName::from_static("x-upload-content-type"),
-            content_type.to_string(),
-        )];
-        if let Some(len) = total_len {
-            headers.push((
+        let headers = vec![
+            (
+                reqwest::header::HeaderName::from_static("x-upload-content-type"),
+                content_type.to_string(),
+            ),
+            (
                 reqwest::header::HeaderName::from_static("x-upload-content-length"),
-                len.to_string(),
-            ));
-        }
+                total_len.to_string(),
+            ),
+        ];
         let response = self
             .send(&Call {
                 method: reqwest::Method::POST,
@@ -568,7 +445,7 @@ impl GcsClient {
         content_type: &str,
         chunk: &[u8],
         start: u64,
-        total: Option<u64>,
+        total: u64,
         finished: bool,
     ) -> Result<UploadStep, GcsError> {
         let chunk_len = chunk.len() as u64;
@@ -668,7 +545,7 @@ impl GcsClient {
         content_type: &str,
         chunk: &[u8],
         offset: u64,
-        total: Option<u64>,
+        total: u64,
     ) -> Result<UploadStep, GcsError> {
         let range = chunk_content_range(offset, chunk.len() as u64, total);
         let response = self
@@ -702,11 +579,7 @@ impl GcsClient {
         Ok(UploadStep::Continue { next })
     }
 
-    async fn probe_session(
-        &self,
-        location: &str,
-        total: Option<u64>,
-    ) -> Result<UploadStep, GcsError> {
+    async fn probe_session(&self, location: &str, total: u64) -> Result<UploadStep, GcsError> {
         let response = self
             .send(&Call {
                 method: reqwest::Method::PUT,
@@ -930,6 +803,14 @@ struct Inner {
     http: reqwest::Client,
     token: tokio::sync::Mutex<Option<CachedToken>>,
     ops_log: std::sync::Mutex<Option<LogShipper>>,
+}
+
+fn not_found_as_none<T>(result: Result<T, GcsError>) -> Result<Option<T>, GcsError> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if err.kind() == GcsErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
+    }
 }
 
 fn lock_ops(
@@ -1221,22 +1102,16 @@ fn chunk_suffix_len(chunk_len: u64, start: u64, offset: u64, finished: bool) -> 
     None
 }
 
-fn chunk_content_range(start: u64, len: u64, total: Option<u64>) -> String {
+fn chunk_content_range(start: u64, len: u64, total: u64) -> String {
     if len == 0 {
-        return format!("bytes */{}", total.unwrap_or(0));
+        return format!("bytes */{total}");
     }
     let end = start + len - 1;
-    match total {
-        Some(total) => format!("bytes {start}-{end}/{total}"),
-        None => format!("bytes {start}-{end}/*"),
-    }
+    format!("bytes {start}-{end}/{total}")
 }
 
-fn probe_content_range(total: Option<u64>) -> String {
-    match total {
-        Some(total) => format!("bytes */{total}"),
-        None => "bytes */*".to_string(),
-    }
+fn probe_content_range(total: u64) -> String {
+    format!("bytes */{total}")
 }
 
 fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
@@ -1543,13 +1418,11 @@ mod tests {
 
     #[test]
     fn probe_and_chunk_ranges_match_the_upload_shape() {
-        assert_eq!(probe_content_range(Some(0)), "bytes */0");
-        assert_eq!(probe_content_range(Some(12)), "bytes */12");
-        assert_eq!(probe_content_range(None), "bytes */*");
-        assert_eq!(chunk_content_range(0, 0, Some(0)), "bytes */0");
-        assert_eq!(chunk_content_range(8, 0, Some(8)), "bytes */8");
-        assert_eq!(chunk_content_range(0, 4, Some(4)), "bytes 0-3/4");
-        assert_eq!(chunk_content_range(8, 4, None), "bytes 8-11/*");
+        assert_eq!(probe_content_range(0), "bytes */0");
+        assert_eq!(probe_content_range(12), "bytes */12");
+        assert_eq!(chunk_content_range(0, 0, 0), "bytes */0");
+        assert_eq!(chunk_content_range(8, 0, 8), "bytes */8");
+        assert_eq!(chunk_content_range(0, 4, 4), "bytes 0-3/4");
     }
 
     #[test]
@@ -1641,13 +1514,37 @@ mod tests {
             expires_at: std::time::Instant::now() + Duration::from_secs(600),
         });
         client
-            .put_chunk_retrying(&location, "application/octet-stream", b"", 0, Some(0), true)
+            .put_chunk_retrying(&location, "application/octet-stream", b"", 0, 0, true)
             .await
             .unwrap()
             .expect_done()
             .unwrap();
         let head = server.await.unwrap();
         assert!(head.contains("\r\ncontent-length: 0\r\n"), "{head}");
+    }
+
+    #[test]
+    fn not_found_becomes_none() {
+        let missing: Result<(), GcsError> = Err(GcsError::with_status(
+            GcsErrorKind::NotFound,
+            404,
+            "missing",
+        ));
+        assert!(not_found_as_none(missing).unwrap().is_none());
+        assert_eq!(not_found_as_none(Ok(7)).unwrap(), Some(7));
+        let denied: Result<(), GcsError> =
+            Err(GcsError::with_status(GcsErrorKind::Auth, 403, "denied"));
+        assert_eq!(
+            not_found_as_none(denied).unwrap_err().kind(),
+            GcsErrorKind::Auth
+        );
+    }
+
+    #[tokio::test]
+    async fn move_rejects_the_same_object() {
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+        let err = client.move_object("a.txt", "a.txt").await.unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Config);
     }
 
     #[test]

@@ -84,13 +84,9 @@ An object result has these fields:
 A list page also has `prefixes` and `next_page_token`.
 The client does not remove prefixes.
 The client does not set a maximum page size.
-
-`GcsClient::list_all` follows `next_page_token` until the last page.
-It returns one list page with all objects and all prefixes.
-That page has no `next_page_token`.
-A prefix that is on more than one page is in the result one time.
-If GCS returns a page token that `list_all` already used, `list_all` returns an API error.
-`list_all` does not filter objects or prefixes.
+An empty `next_page_token` from GCS is `None`.
+The client does not follow `next_page_token`.
+A project writes its own page loop with its own limits.
 
 ## Metadata
 
@@ -132,10 +128,10 @@ Each session probe uses the transfer time limit.
 ## Resumable upload
 
 The client uploads bytes with a resumable session.
+The client knows the object size before the upload starts.
 A chunk that is not the last chunk is 8 MiB.
 The last chunk can be shorter.
 The last chunk of an empty object has an empty body.
-When a byte stream ends on a chunk boundary, the last chunk has an empty body.
 Each chunk request sends `Content-Length`, also when the body is empty.
 GCS answers 411 to a chunk request that has no `Content-Length`.
 The client retries a chunk in these cases:
@@ -145,22 +141,29 @@ The client retries a chunk in these cases:
 
 The client probes the session after one of those failures.
 The probe request has an empty body and `Content-Length: 0`.
-The probe uses `Content-Range: bytes */{total}` when the object size is known.
-The probe uses `Content-Range: bytes */*` when the object size is not known.
+The probe uses `Content-Range: bytes */{total}`.
 A probe response with status 308 can include `Range: bytes=START-END`.
 The next byte offset is `END + 1`.
 A probe response with status 308 and no `Range` header means offset 0.
 The client makes up to 5 attempts for one offset.
 The client resets that count when the committed offset increases.
-A byte stream cannot send bytes that it has already dropped.
-If the session offset moves before those bytes, the upload fails.
 
-## Copy and rewrite
+## Rewrite and move
 
-`GcsClient::copy_object` copies an object in the same bucket with one `copyTo` call.
 `GcsClient::rewrite_object` copies an object in the same bucket with the JSON rewrite API.
 `GcsClient::rewrite_object` sends `rewriteToken` again until `done` is true.
 If `rewriteToken` does not change, `GcsClient::rewrite_object` returns an error.
+
+`GcsClient::move_object` rewrites the source to the destination.
+Then it deletes the source.
+If that delete fails, it deletes the destination and returns the delete error.
+A source and a destination with the same name is a configuration error.
+
+## Missing objects
+
+`GcsClient::delete_object` returns `Ok` when the object does not exist.
+`get_bytes_opt`, `open_object_opt` and `stat_opt` return `None` when the object does not exist.
+`get_bytes`, `open_object` and `stat` return a `NotFound` error when the object does not exist.
 
 ## Operations
 
@@ -168,23 +171,23 @@ These methods are on `GcsClient`:
 
 - `put_bytes` puts bytes.
 - `put_file` puts a file path.
-- `put_stream` puts a byte stream.
 - `get_bytes` gets the object bytes.
+- `get_bytes_opt` gets the object bytes or `None`.
 - `open_object` opens the object data.
+- `open_object_opt` opens the object data or returns `None`.
 - `stat` reads the object metadata.
+- `stat_opt` reads the object metadata or returns `None`.
 - `list` lists one page.
-- `list_all` lists all pages.
 - `delete_object` deletes one object.
 - `patch_metadata` patches the metadata map.
-- `copy_object` copies an object in the same bucket with `copyTo`.
 - `rewrite_object` copies an object in the same bucket with `rewriteToken`.
+- `move_object` moves an object in the same bucket.
 - `signed_get_url` builds a V4 signed GET URL.
 - `bucket` returns the bucket name.
 - `signer_email` returns the signer email.
 
-These methods are on `ObjectReader`:
+This method is on `ObjectReader`:
 
-- `read_to_vec` reads the object bytes.
 - `byte_stream` reads the object data as a byte stream.
 
 ## Operations log
@@ -257,6 +260,6 @@ The client does not include these items:
 - Upload gates.
 - Part stores and Cloudflare uploads.
 - Thumbnails and media rules.
-- Move and rename policy.
+- Rename policy for a prefix or a folder.
 - Axum and a product Store.
 - Extra access-token caches. The client keeps one access-token cache.
