@@ -29,18 +29,6 @@ pub(crate) enum Auth {
     },
 }
 
-impl std::fmt::Debug for Auth {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Auth::Metadata => f.write_str("Metadata"),
-            Auth::User { signer_email, .. } => f
-                .debug_struct("User")
-                .field("signer_email", signer_email)
-                .finish_non_exhaustive(),
-        }
-    }
-}
-
 impl Auth {
     pub(crate) async fn from_adc() -> Result<Self, GcsError> {
         if let Ok(path) = env::var("GOOGLE_APPLICATION_CREDENTIALS") {
@@ -92,6 +80,18 @@ impl Auth {
                 refresh_token,
                 ..
             } => user_token(http, client_id, client_secret, refresh_token).await,
+        }
+    }
+}
+
+impl std::fmt::Debug for Auth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Auth::Metadata => f.write_str("Metadata"),
+            Auth::User { signer_email, .. } => f
+                .debug_struct("User")
+                .field("signer_email", signer_email)
+                .finish_non_exhaustive(),
         }
     }
 }
