@@ -61,7 +61,7 @@ The event has these fields:
 
 ### Send
 
-The logger posts the queue to the route `POST /log` on the same origin. The route is in `spec/framework_rs/logging.md`.
+The logger posts the queue to the route `POST /log` on the same origin. The route is in `spec/framework_rs/logging/client-log.md`.
 
 | Trigger | `keepalive` |
 | --- | --- |
@@ -113,7 +113,7 @@ Value rule:
 - The patterns apply in list order.
 - The value rule does not mask a number or a `boolean`.
 
-The Rust shipper also masks the events from the log route. The browser patterns and the shipper patterns are different lists. The shipper rules are in `spec/framework_rs/logging.md`.
+The Rust shipper also masks the events from the log route. The browser patterns and the shipper patterns are different lists. The shipper rules are in `spec/framework_rs/logging/masking.md`.
 
 ## Out of scope
 

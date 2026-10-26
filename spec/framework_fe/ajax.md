@@ -62,4 +62,4 @@ This feature does not include these items:
 
 - The text for the user for each error message.
 - A retry or a timeout.
-- An `ApiError` body with a `code` field. The client reads only `message`. The Rust `ApiError` is in `spec/framework_rs/http.md`.
+- An `ApiError` body with a `code` field. The client reads only `message`. The Rust `ApiError` is in `spec/framework_rs/http/api-error.md`.

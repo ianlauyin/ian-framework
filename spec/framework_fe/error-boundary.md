@@ -44,7 +44,7 @@ When the component shows the fallback, it logs the error with `Logger.error` fro
 
 - The log message is `app error boundary caught an error`.
 - The log has the `extra` fields in the table below.
-- Each line break in these values becomes ` | `. The reason is that the log route drops a value with a line break. The log route is in `spec/framework_rs/logging.md`.
+- Each line break in these values becomes ` | `. The reason is that the log route drops a value with a line break. The log route is in `spec/framework_rs/logging/client-log.md`.
 
 | Field | Value | When |
 | --- | --- | --- |

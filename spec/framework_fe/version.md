@@ -49,7 +49,7 @@ pnpm test
 
 ## Behaviour
 
-The checker reads `GET /version` on the same origin with `credentials: "same-origin"`. The route is in `spec/framework_rs/http.md`.
+The checker reads `GET /version` on the same origin with `credentials: "same-origin"`. The route is in `spec/framework_rs/http/version-route.md`.
 
 The checker reads the route at these times:
 
