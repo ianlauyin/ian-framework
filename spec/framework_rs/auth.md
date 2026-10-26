@@ -25,8 +25,10 @@ Put this block in the project `Cargo.toml`:
 
 ```toml
 [dependencies]
-ian_framework = { version = "0.1", features = ["auth"] }
+ian_framework = { git = "https://github.com/ianlauyin/ian-framework", rev = "<commit>", features = ["auth"] }
 ```
+
+The crate is not on crates.io. A project adds the crate as a git dependency. The project pins `rev` to one commit.
 
 Use these commands in `framework_rs/`:
 

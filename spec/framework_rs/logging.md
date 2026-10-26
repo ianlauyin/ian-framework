@@ -20,8 +20,10 @@ Put this block in the project `Cargo.toml`:
 
 ```toml
 [dependencies]
-ian_framework = "0.1"
+ian_framework = { git = "https://github.com/ianlauyin/ian-framework", rev = "<commit>" }
 ```
+
+The crate is not on crates.io. A project adds the crate as a git dependency. The project pins `rev` to one commit.
 
 Use these commands in `framework_rs/`:
 
@@ -52,7 +54,7 @@ One event is one `LogEvent`. One event has these fields:
 | `action` | `{method} {path}`, or an empty string |
 | `status` | HTTP status, or null |
 | `latency_ms` | Latency in milliseconds, or null |
-| `level` | `info`, `warn`, or `error` |
+| `level` | One `LogLevel` value |
 | `message` | Short text |
 | `extra` | One JSON object |
 
@@ -65,6 +67,20 @@ One event is one `LogEvent`. One event has these fields:
 - The path does not include the query string.
 - An empty path with a method is `/`.
 - An empty method gives an empty `action`.
+
+### LogLevel
+
+`ian_framework::logging` exports the enum `LogLevel`. It is the type of the event `level`.
+
+| Variant | JSON text |
+| --- | --- |
+| `LogLevel::Info` | `info` |
+| `LogLevel::Warn` | `warn` |
+| `LogLevel::Error` | `error` |
+
+- `LogLevel` implements `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Serialize` and `Deserialize`.
+- The JSON text is the lowercase variant name.
+- A JSON text that is not in the table gives a deserialize error.
 
 ## Shipper
 
@@ -81,6 +97,8 @@ One event is one `LogEvent`. One event has these fields:
 
 - The caller can set `endpoint` on the config before `LogShipper::new`.
 - The ship request time limit is 10 seconds.
+- The connect time limit of the ship HTTP client is 10 seconds.
+- The ship HTTP client does not follow redirects.
 
 ### LogShipper::new
 
@@ -195,7 +213,7 @@ Capacity warning after a ship:
 Loop task:
 
 - The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
-- `LogShipper::spawn_ship_loop` takes one `ian_framework::shutdown::ShutdownReceiver`.
+- `LogShipper::spawn_ship_loop` takes one `ian_framework::shutdown::ShutdownReceiver`. The shutdown module is in `spec/framework_rs/shutdown.md`.
 - It returns `tokio::task::JoinHandle<()>`.
 - The interval is `ship_every` from the config.
 - A ship failure does not stop the loop.
@@ -228,7 +246,7 @@ Scope:
 - The shipper masks only the `extra` values. It does not mask the other event fields.
 - The shipper masks in buffered mode and in trace-only mode.
 - The shipper masks client events from `POST /log` and request events from the middleware.
-- The frontend logger also masks before it sends. The browser patterns and the shipper patterns are different lists.
+- The frontend logger also masks before it sends. The browser patterns and the shipper patterns are different lists. The frontend logger is in `spec/framework_fe/logger.md`.
 
 Key rule:
 
@@ -250,11 +268,12 @@ The default shipper posts to `{endpoint}/log/{app}`. A consumer that maps the ap
 
 ## Trace-only mode
 
+The shipper first removes the whitespace at the start and at the end of the endpoint. Then it reads the endpoint.
+
 These endpoints select trace-only mode:
 
 - An endpoint that is not set.
-- An empty endpoint.
-- An endpoint that has only spaces.
+- An endpoint that is empty after the removal of the whitespace. Thus an endpoint that has only whitespace selects trace-only mode.
 
 In trace-only mode, `LogShipper::record` writes each event with `tracing` at the event level:
 
@@ -288,7 +307,9 @@ Endpoint rules:
 - An endpoint with a username or a password.
 - An endpoint with a query.
 - An endpoint with a fragment.
-- An endpoint with whitespace.
+- An endpoint with whitespace inside it, after the removal of the whitespace at the start and at the end.
+- An endpoint that is not a valid URL.
+- An endpoint with no host.
 - An endpoint with a scheme other than `http` or `https`.
 
 ## Axum middleware
@@ -475,7 +496,9 @@ Request handling:
 
 - The body is one `LogBatch`.
 - The route does not check the content type.
-- The body size limit is 1 MiB. A larger body gets status 413.
+- The body size limit is 1 MiB.
+- A body that is larger than 1 MiB gets status 413.
+- When the server cannot read the body, the status is also 413.
 - A body that is not a `LogBatch` gets status 400.
 - The route calls `LogBatch::sanitize_untrusted_client`. When that call gives no batch, the status is 400 and the route records no event.
 - The route sets `ip` and `user_agent` of each kept event from the request. The sources are the same as in the Axum middleware.

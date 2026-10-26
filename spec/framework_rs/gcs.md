@@ -23,8 +23,10 @@ Put this block in the project `Cargo.toml`:
 
 ```toml
 [dependencies]
-ian_framework = { version = "0.1", features = ["gcs"] }
+ian_framework = { git = "https://github.com/ianlauyin/ian-framework", rev = "<commit>", features = ["gcs"] }
 ```
+
+The crate is not on crates.io. A project adds the crate as a git dependency. The project pins `rev` to one commit.
 
 Use these commands in `framework_rs/`:
 
@@ -90,8 +92,20 @@ An object result has these fields:
 
 A list page also has `prefixes` and `next_page_token`.
 
+`GcsClient::list` takes one `ListQuery`. A `ListQuery` has these fields:
+
+| Field | Type | Query parameter |
+| --- | --- | --- |
+| `prefix` | `Option<String>` | `prefix` |
+| `delimiter` | `Option<String>` | `delimiter` |
+| `page_token` | `Option<String>` | `pageToken` |
+| `max_results` | `Option<u32>` | `maxResults` |
+
+- The client sends a query parameter only when its field has a value.
+- When `max_results` has a value, the client sends that value as `maxResults`. GCS returns a maximum of that number of items on the page.
+- When `max_results` is `None`, the client sends no `maxResults`. Then GCS uses its own maximum page size.
+- The client does not change the `max_results` value. The client has no limit for that value.
 - The client does not remove prefixes.
-- The client does not set a maximum page size.
 - An empty `next_page_token` from GCS is `None`.
 - The client does not follow `next_page_token`.
 - A project writes its own page loop with its own limits.
@@ -147,6 +161,13 @@ The client builds a V4 signed GET URL.
 - An empty filename is a configuration error.
 - Without a filename, the URL has no `response-content-disposition`.
 
+## HTTP client
+
+One `GcsClient` has one HTTP client. The storage calls, the resumable upload, the token requests and the IAM `signBlob` call use that client.
+
+- The connect time limit is 10 seconds.
+- The HTTP client does not follow redirects. The client uses a redirect response as the final response.
+
 ## Transfer time limit
 
 The transfer time limit is 180 seconds. These items use it:
@@ -182,6 +203,15 @@ Attempts:
 
 - The client makes a maximum of 5 attempts for one offset.
 - The client resets that count when the committed offset increases.
+
+Rewinds:
+
+- A rewind occurs when a chunk step ends with a next offset that is lower than the start offset of that chunk. Then the client reads the data again from the lower offset and sends it again.
+- The client accepts a maximum of 5 rewinds.
+- The client resets the rewind count when a chunk step ends with a higher offset.
+- The sixth rewind before a higher offset stops the upload with a `Transport` error.
+- A chunk step that ends with a next offset equal to the start offset of that chunk stops the upload with an `Api` error.
+- A next offset that is larger than the object size stops the upload with an `Api` error.
 
 ## Rewrite and move
 
@@ -283,13 +313,29 @@ Failure records:
 - A failure record can include `error` in `extra`.
 - An `error` value does not contain a URL query.
 - A `GcsError` source does not contain the request URL.
-- A resumable chunk record includes `attempt` and `offset` in `extra`.
+- A resumable chunk failure record includes `attempt` and `offset` in `extra`.
+- A resumable probe failure record also includes `attempt` and `offset` in `extra`.
 
 These results write no operations record:
 
 - A response below 400.
 - A successful resumable probe.
 - A successful token request.
+
+## Error kind
+
+The client gives the `GcsErrorKind` from the GCS response status:
+
+| GCS response status | Kind |
+| --- | --- |
+| 401, 403 | `Auth` |
+| 404 | `NotFound` |
+| A different status that is not 2xx | `Api` |
+
+- This table applies to the storage calls and to the IAM `signBlob` call.
+- A transport failure is `Transport`.
+- A token request with a status that is not 2xx is `Auth`. This includes the metadata server.
+- A resumable chunk response or a probe response with status 308 gives the next offset. It does not give an error kind.
 
 ## HTTP error
 

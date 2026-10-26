@@ -40,7 +40,7 @@ The fallback fills the viewport height. It puts its content in the center.
 
 ### Error log
 
-When the component shows the fallback, it logs the error with `Logger.error` from `framework_fe/src/logger.ts`.
+When the component shows the fallback, it logs the error with `Logger.error` from `framework_fe/src/logger.ts`. The logger is in `spec/framework_fe/logger.md`.
 
 - The log message is `app error boundary caught an error`.
 - The log has the `extra` fields in the table below.
