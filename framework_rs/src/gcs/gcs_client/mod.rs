@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use chrono::Utc;
 
-use crate::logging::{LogEvent, LogLevel, LogShipper};
+use crate::logging::{LogLevel, LogShipper};
 
 use super::encode::{encode_object_id, encode_seg};
 use super::{GcsError, GcsErrorKind, API_ROOT};
@@ -543,29 +543,7 @@ impl GcsClient {
         let Some(shipper) = lock_ops(&self.inner.ops_log).clone() else {
             return;
         };
-        let mut event = LogEvent {
-            ts: Utc::now(),
-            id: String::new(),
-            ip: String::new(),
-            user_agent: String::new(),
-            action: action(op.method, op.url),
-            status: op.status,
-            latency_ms: op.latency_ms,
-            level: op.level,
-            message: op.message.to_string(),
-            extra: BTreeMap::new(),
-        };
-        for (key, value) in op.extra {
-            event.extra.insert(
-                (*key).to_string(),
-                serde_json::Value::String((*value).to_string()),
-            );
-        }
-        event.extra.insert(
-            "bucket".to_string(),
-            serde_json::Value::String(self.bucket().to_string()),
-        );
-        shipper.record(event);
+        shipper.record(op.into_event(self.bucket()));
     }
 
     async fn send(&self, call: &Call) -> Result<reqwest::Response, GcsError> {
@@ -884,25 +862,6 @@ struct SignBlobResponse {
     signed_blob: String,
 }
 
-fn action(method: &str, url: &str) -> String {
-    if method.is_empty() {
-        return String::new();
-    }
-    let path = path_only(url);
-    let path = if path.is_empty() { "/" } else { path.as_str() };
-    format!("{method} {path}")
-}
-
-fn path_only(url: &str) -> String {
-    if let Ok(parsed) = reqwest::Url::parse(url) {
-        return parsed.path().to_string();
-    }
-    match url.split_once('?') {
-        Some((path, _)) => path.to_string(),
-        None => url.to_string(),
-    }
-}
-
 async fn error_from_response(response: reqwest::Response) -> GcsError {
     let status = response.status().as_u16();
     let text = response.text().await.unwrap_or_default();
@@ -1162,17 +1121,6 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.kind(), GcsErrorKind::Auth);
         }
-    }
-
-    #[test]
-    fn path_only_omits_the_query() {
-        assert_eq!(
-            path_only(
-                "https://storage.googleapis.com/upload/storage/v1/b/bucket/o?uploadType=resumable&upload_id=secret"
-            ),
-            "/upload/storage/v1/b/bucket/o"
-        );
-        assert_eq!(path_only("/obj?upload_id=secret"), "/obj");
     }
 
     #[tokio::test]
