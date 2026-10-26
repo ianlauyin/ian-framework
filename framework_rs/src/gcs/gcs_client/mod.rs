@@ -166,7 +166,7 @@ impl GcsClient {
             let response = self
                 .send(&Call {
                     method: reqwest::Method::POST,
-                    url: rewrite_url(self.bucket(), from, to, token.as_deref()),
+                    url: RewriteStep::url(self.bucket(), from, to, token.as_deref()),
                     json: Some(serde_json::json!({})),
                     ..Default::default()
                 })
@@ -931,20 +931,6 @@ fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
         .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))
 }
 
-fn rewrite_url(bucket_name: &str, from: &str, to: &str, token: Option<&str>) -> String {
-    let mut url = format!(
-        "{}/rewriteTo/b/{}/o/{}",
-        object_url(bucket_name, from),
-        encode_seg(bucket_name),
-        encode_object_id(to),
-    );
-    if let Some(token) = token {
-        url.push_str("?rewriteToken=");
-        url.push_str(&encode_seg(token));
-    }
-    url
-}
-
 #[derive(serde::Deserialize)]
 struct SignBlobResponse {
     #[serde(rename = "signedBlob")]
@@ -1195,16 +1181,6 @@ mod tests {
         let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
         let err = client.move_object("a.txt", "a.txt").await.unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
-    }
-
-    #[test]
-    fn rewrite_url_sets_the_token_query() {
-        assert_eq!(
-            rewrite_url("buck", "a/b", "c d", None),
-            "https://storage.googleapis.com/storage/v1/b/buck/o/a%2Fb/rewriteTo/b/buck/o/c%20d"
-        );
-        let url = rewrite_url("buck", "a", "c", Some("tok/en"));
-        assert!(url.ends_with("?rewriteToken=tok%2Fen"));
     }
 
     #[tokio::test]
