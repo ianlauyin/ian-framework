@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 
 use crate::gcs::encode::encode_seg;
-use crate::gcs::gcs_client::{api_detail, truncate};
+use crate::gcs::error::{api_detail, truncate};
 use crate::gcs::{GcsError, GcsErrorKind};
 
 const METADATA_ROOT: &str =

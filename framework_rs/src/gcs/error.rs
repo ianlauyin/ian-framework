@@ -62,6 +62,19 @@ impl GcsError {
             source: Some(Box::new(source)),
         }
     }
+
+    pub(crate) async fn from_response(response: reqwest::Response) -> Self {
+        let status = response.status().as_u16();
+        let text = response.text().await.unwrap_or_default();
+        let detail = api_detail(&text).unwrap_or(text);
+        let detail = truncate(&detail, 500);
+        let kind = match status {
+            401 | 403 => GcsErrorKind::Auth,
+            404 => GcsErrorKind::NotFound,
+            _ => GcsErrorKind::Api,
+        };
+        Self::with_status(kind, status, format!("status {status}: {detail}"))
+    }
 }
 
 impl fmt::Debug for GcsError {
@@ -118,9 +131,41 @@ impl crate::http::IntoApiError for GcsError {
     }
 }
 
+pub(super) fn api_detail(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    if let Some(message) = value
+        .get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(|m| m.as_str())
+    {
+        return Some(message.to_string());
+    }
+    if let Some(message) = value.get("error_description").and_then(|m| m.as_str()) {
+        return Some(message.to_string());
+    }
+    None
+}
+
+pub(super) fn truncate(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn api_detail_reads_the_gcs_message() {
+        let body = r#"{"error":{"code":404,"message":"No such object"}}"#;
+        assert_eq!(api_detail(body).as_deref(), Some("No such object"));
+    }
 
     #[test]
     fn retryable_status_codes_match_the_upload_policy() {

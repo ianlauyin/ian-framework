@@ -23,6 +23,7 @@ use chrono::Utc;
 use crate::logging::{LogLevel, LogShipper};
 
 use crate::gcs::encode::{encode_object_id, encode_seg};
+use crate::gcs::error::truncate;
 use crate::gcs::{GcsError, GcsErrorKind, API_ROOT};
 
 use auth::{Auth, CachedToken};
@@ -377,7 +378,7 @@ impl GcsClient {
             if response.status().is_success() || call.extra_status.contains(&status) {
                 return Ok(response);
             }
-            return Err(error_from_response(response).await);
+            return Err(GcsError::from_response(response).await);
         }
     }
 
@@ -500,32 +501,6 @@ fn redact_query(text: &str) -> String {
     out
 }
 
-fn api_detail(body: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(body).ok()?;
-    if let Some(message) = value
-        .get("error")
-        .and_then(|error| error.get("message"))
-        .and_then(|m| m.as_str())
-    {
-        return Some(message.to_string());
-    }
-    if let Some(message) = value.get("error_description").and_then(|m| m.as_str()) {
-        return Some(message.to_string());
-    }
-    None
-}
-
-fn truncate(text: &str, max: usize) -> &str {
-    if text.len() <= max {
-        return text;
-    }
-    let mut end = max;
-    while end > 0 && !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
-}
-
 fn validate_bucket(bucket_name: &str) -> Result<(), GcsError> {
     if bucket_name.is_empty()
         || bucket_name.contains(['/', '\\', ' ', '\r', '\n'])
@@ -557,19 +532,6 @@ struct SignBlobResponse {
     signed_blob: String,
 }
 
-async fn error_from_response(response: reqwest::Response) -> GcsError {
-    let status = response.status().as_u16();
-    let text = response.text().await.unwrap_or_default();
-    let detail = api_detail(&text).unwrap_or(text);
-    let detail = truncate(&detail, 500);
-    let kind = match status {
-        401 | 403 => GcsErrorKind::Auth,
-        404 => GcsErrorKind::NotFound,
-        _ => GcsErrorKind::Api,
-    };
-    GcsError::with_status(kind, status, format!("status {status}: {detail}"))
-}
-
 fn millis_since(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
@@ -589,12 +551,6 @@ mod tests {
     use crate::logging::ShipperConfig;
 
     use super::*;
-
-    #[test]
-    fn api_detail_reads_the_gcs_message() {
-        let body = r#"{"error":{"code":404,"message":"No such object"}}"#;
-        assert_eq!(api_detail(body).as_deref(), Some("No such object"));
-    }
 
     #[test]
     fn object_url_encodes_slashes() {
