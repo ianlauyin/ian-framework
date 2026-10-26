@@ -5,9 +5,12 @@ mod list_query;
 mod object_meta;
 mod object_reader;
 mod ops_record;
+mod put_body;
 mod put_options;
+mod put_request;
 mod rewrite_step;
 mod signed_parts;
+mod upload_source;
 mod upload_step;
 
 use std::collections::BTreeMap;
@@ -20,7 +23,6 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use chrono::Utc;
 use serde_json::Value;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::logging::{LogEvent, LogLevel, LogShipper};
 
@@ -32,13 +34,16 @@ use call::Call;
 use ops_record::OpsRecord;
 use rewrite_step::RewriteStep;
 use signed_parts::SignedParts;
+use upload_source::UploadSource;
 use upload_step::UploadStep;
 
 pub use list_page::ListPage;
 pub use list_query::ListQuery;
 pub use object_meta::ObjectMeta;
 pub use object_reader::ObjectReader;
+pub use put_body::PutBody;
 pub use put_options::PutOptions;
+pub use put_request::PutRequest;
 
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -126,78 +131,14 @@ impl GcsClient {
         ListPage::from_slice(&bytes)
     }
 
-    pub async fn put_bytes(
-        &self,
-        name: &str,
-        bytes: &[u8],
-        options: &PutOptions,
-    ) -> Result<ObjectMeta, GcsError> {
+    pub async fn put(&self, request: &PutRequest) -> Result<ObjectMeta, GcsError> {
+        let name = request.name.as_str();
+        let options = &request.options;
         validate_object_name(name)?;
         let content_type = options.content_type()?;
         validate_metadata(&options.metadata)?;
-        let total = bytes.len() as u64;
-        let location = self
-            .start_resumable(name, &content_type, &options.metadata, total)
-            .await?;
-        if total == 0 {
-            return self
-                .put_chunk_retrying(&location, &content_type, b"", 0, 0, true)
-                .await?
-                .expect_done();
-        }
-        let mut offset = 0u64;
-        let mut rewinds = 0u32;
-        while offset < total {
-            let start = offset as usize;
-            let end = (start + CHUNK_SIZE).min(bytes.len());
-            let is_last = end == bytes.len();
-            let chunk = &bytes[start..end];
-            match self
-                .put_chunk_retrying(&location, &content_type, chunk, offset, total, is_last)
-                .await?
-            {
-                UploadStep::Done(meta) => return Ok(meta),
-                UploadStep::Continue { next } => {
-                    advance_offset(&mut offset, &mut rewinds, next, total)?;
-                }
-            }
-        }
-        Err(GcsError::new(
-            GcsErrorKind::Api,
-            "finished upload did not return object metadata",
-        ))
-    }
-
-    pub async fn put_file(
-        &self,
-        name: &str,
-        path: &Path,
-        options: &PutOptions,
-    ) -> Result<ObjectMeta, GcsError> {
-        validate_object_name(name)?;
-        let content_type = options.content_type()?;
-        validate_metadata(&options.metadata)?;
-        let mut file = tokio::fs::File::open(path).await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
-                format!("cannot open {}", path.display()),
-                err,
-            )
-        })?;
-        let meta = file.metadata().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
-                format!("cannot read metadata for {}", path.display()),
-                err,
-            )
-        })?;
-        if !meta.is_file() {
-            return Err(GcsError::new(
-                GcsErrorKind::Config,
-                format!("{} is not a file", path.display()),
-            ));
-        }
-        let total = meta.len();
+        let mut source = UploadSource::open(&request.body).await?;
+        let total = source.len();
         let location = self
             .start_resumable(name, &content_type, &options.metadata, total)
             .await?;
@@ -213,19 +154,7 @@ impl GcsClient {
             let remaining = total - offset;
             let is_last = remaining <= CHUNK_SIZE as u64;
             let len = usize::try_from(remaining.min(CHUNK_SIZE as u64)).unwrap_or(CHUNK_SIZE);
-            file.seek(std::io::SeekFrom::Start(offset))
-                .await
-                .map_err(|err| {
-                    GcsError::with_source(
-                        GcsErrorKind::Transport,
-                        "cannot seek in the upload file",
-                        err,
-                    )
-                })?;
-            let mut chunk = vec![0u8; len];
-            file.read_exact(&mut chunk).await.map_err(|err| {
-                GcsError::with_source(GcsErrorKind::Transport, "read file failed", err)
-            })?;
+            let chunk = source.read_chunk(offset, len).await?;
             match self
                 .put_chunk_retrying(&location, &content_type, &chunk, offset, total, is_last)
                 .await?

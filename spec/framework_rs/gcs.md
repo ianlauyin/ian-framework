@@ -46,7 +46,7 @@ cargo test --features gcs
 - `GcsError` and `GcsErrorKind`
 - `ListPage` and `ListQuery`
 - `ObjectMeta` and `ObjectReader`
-- `PutOptions`
+- `PutBody`, `PutOptions` and `PutRequest`
 
 The URL encoding functions are private to the crate.
 `GcsClient::sign_blob` is private to the crate.
@@ -87,6 +87,16 @@ The client does not set a maximum page size.
 An empty `next_page_token` from GCS is `None`.
 The client does not follow `next_page_token`.
 A project writes its own page loop with its own limits.
+
+## Put
+
+`GcsClient::put` takes one `PutRequest`.
+A `PutRequest` has `name`, `body` and `options`.
+`PutBody::Bytes` holds the object bytes in memory.
+`PutBody::File` holds a file path.
+The client reads a file one chunk at a time.
+The client does not read the whole file into memory.
+A path that is not a file is a configuration error.
 
 ## Metadata
 
@@ -169,8 +179,7 @@ A source and a destination with the same name is a configuration error.
 
 These methods are on `GcsClient`:
 
-- `put_bytes` puts bytes.
-- `put_file` puts a file path.
+- `put` puts one `PutRequest`.
 - `get_bytes` gets the object bytes.
 - `get_bytes_opt` gets the object bytes or `None`.
 - `open_object` opens the object data.
