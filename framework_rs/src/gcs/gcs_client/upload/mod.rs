@@ -1,7 +1,6 @@
 mod put_request;
 mod resumable_upload;
 mod upload_source;
-mod upload_step;
 
 pub use put_request::{PutBody, PutOptions, PutRequest};
 

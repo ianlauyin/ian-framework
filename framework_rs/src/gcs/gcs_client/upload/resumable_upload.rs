@@ -6,7 +6,6 @@ use crate::logging::LogLevel;
 use crate::gcs::encode::encode_seg;
 use crate::gcs::gcs_client::request::{logged_error, Call, OpsRecord};
 use crate::gcs::gcs_client::upload::upload_source::UploadSource;
-use crate::gcs::gcs_client::upload::upload_step::UploadStep;
 use crate::gcs::gcs_client::{GcsClient, TRANSFER_TIMEOUT};
 use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
 
@@ -255,6 +254,43 @@ impl<'a> ResumableUpload<'a> {
     }
 }
 
+enum UploadStep {
+    Done(ObjectMeta),
+    Continue { next: u64 },
+}
+
+impl UploadStep {
+    async fn from_response(
+        response: reqwest::Response,
+        fallback_next: u64,
+    ) -> Result<Self, GcsError> {
+        if response.status().is_success() {
+            return Ok(Self::Done(ObjectMeta::from_response(response).await?));
+        }
+        let header = response
+            .headers()
+            .get(reqwest::header::RANGE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let _ = response.bytes().await;
+        let next = match header {
+            Some(value) => next_offset_from_range(&value)?,
+            None => fallback_next,
+        };
+        Ok(Self::Continue { next })
+    }
+
+    fn expect_done(self) -> Result<ObjectMeta, GcsError> {
+        match self {
+            Self::Done(meta) => Ok(meta),
+            Self::Continue { .. } => Err(GcsError::new(
+                GcsErrorKind::Api,
+                "finished upload did not return object metadata",
+            )),
+        }
+    }
+}
+
 fn retry_delay(attempt: u32) -> Duration {
     CHUNK_BACKOFF.saturating_mul(u32::max(attempt, 1))
 }
@@ -320,6 +356,33 @@ fn chunk_content_range(start: u64, len: u64, total: u64) -> String {
 
 fn probe_content_range(total: u64) -> String {
     format!("bytes */{total}")
+}
+
+fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
+    let header = header.trim();
+    let rest = header
+        .strip_prefix("bytes=")
+        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    let rest = rest.split(',').next().unwrap_or(rest).trim();
+    let (start, end) = rest
+        .split_once('-')
+        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    let start: u64 = start
+        .trim()
+        .parse()
+        .map_err(|_| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    let end: u64 = end
+        .trim()
+        .parse()
+        .map_err(|_| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
+    if end < start {
+        return Err(GcsError::new(
+            GcsErrorKind::Api,
+            "resumable Range header is invalid",
+        ));
+    }
+    end.checked_add(1)
+        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))
 }
 
 #[cfg(test)]
@@ -433,5 +496,13 @@ mod tests {
             .unwrap();
         let head = server.await.unwrap();
         assert!(head.contains("\r\ncontent-length: 0\r\n"), "{head}");
+    }
+
+    #[test]
+    fn resume_range_is_the_end_plus_one() {
+        assert_eq!(next_offset_from_range("bytes=0-42").unwrap(), 43);
+        assert_eq!(next_offset_from_range("bytes=0-0").unwrap(), 1);
+        assert!(next_offset_from_range("bytes=*").is_err());
+        assert!(next_offset_from_range("0-1").is_err());
     }
 }
