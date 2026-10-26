@@ -475,20 +475,7 @@ impl GcsClient {
                 ..Default::default()
             })
             .await?;
-        if response.status().is_success() {
-            return Ok(UploadStep::Done(ObjectMeta::from_response(response).await?));
-        }
-        let header = response
-            .headers()
-            .get(reqwest::header::RANGE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_string);
-        let _ = response.bytes().await;
-        let next = match header {
-            Some(value) => next_offset_from_range(&value)?,
-            None => offset + chunk.len() as u64,
-        };
-        Ok(UploadStep::Continue { next })
+        UploadStep::from_response(response, offset + chunk.len() as u64).await
     }
 
     async fn probe_session(&self, location: &str, total: u64) -> Result<UploadStep, GcsError> {
@@ -506,20 +493,7 @@ impl GcsClient {
                 ..Default::default()
             })
             .await?;
-        if response.status().is_success() {
-            return Ok(UploadStep::Done(ObjectMeta::from_response(response).await?));
-        }
-        let header = response
-            .headers()
-            .get(reqwest::header::RANGE)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_string);
-        let _ = response.bytes().await;
-        let next = match header {
-            Some(value) => next_offset_from_range(&value)?,
-            None => 0,
-        };
-        Ok(UploadStep::Continue { next })
+        UploadStep::from_response(response, 0).await
     }
 
     async fn sign_blob(&self, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
@@ -904,33 +878,6 @@ fn probe_content_range(total: u64) -> String {
     format!("bytes */{total}")
 }
 
-fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
-    let header = header.trim();
-    let rest = header
-        .strip_prefix("bytes=")
-        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
-    let rest = rest.split(',').next().unwrap_or(rest).trim();
-    let (start, end) = rest
-        .split_once('-')
-        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
-    let start: u64 = start
-        .trim()
-        .parse()
-        .map_err(|_| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
-    let end: u64 = end
-        .trim()
-        .parse()
-        .map_err(|_| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))?;
-    if end < start {
-        return Err(GcsError::new(
-            GcsErrorKind::Api,
-            "resumable Range header is invalid",
-        ));
-    }
-    end.checked_add(1)
-        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))
-}
-
 #[derive(serde::Deserialize)]
 struct SignBlobResponse {
     #[serde(rename = "signedBlob")]
@@ -1059,14 +1006,6 @@ mod tests {
         assert_eq!(chunk_content_range(0, 0, 0), "bytes */0");
         assert_eq!(chunk_content_range(8, 0, 8), "bytes */8");
         assert_eq!(chunk_content_range(0, 4, 4), "bytes 0-3/4");
-    }
-
-    #[test]
-    fn resume_range_is_the_end_plus_one() {
-        assert_eq!(next_offset_from_range("bytes=0-42").unwrap(), 43);
-        assert_eq!(next_offset_from_range("bytes=0-0").unwrap(), 1);
-        assert!(next_offset_from_range("bytes=*").is_err());
-        assert!(next_offset_from_range("0-1").is_err());
     }
 
     #[test]
