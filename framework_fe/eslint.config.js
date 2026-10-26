@@ -1,17 +1,15 @@
+import { defineConfig } from "eslint/config";
 import solid from "eslint-plugin-solid";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
-      "**/build/**",
-      "**/website/**",
       "**/.vite/**",
       "**/coverage/**",
-      "**/bundled-single-file/**",
     ],
   },
   ...tseslint.configs.recommended,
