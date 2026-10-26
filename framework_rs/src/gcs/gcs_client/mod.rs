@@ -45,7 +45,6 @@ const CHUNK_ALIGN: u64 = 256 * 1024;
 const CHUNK_ATTEMPTS: u32 = 5;
 const CHUNK_BACKOFF: Duration = Duration::from_millis(200);
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
-const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
 
 #[derive(Clone)]
 pub struct GcsClient {
@@ -252,18 +251,14 @@ impl GcsClient {
         attachment_filename: Option<&str>,
     ) -> Result<String, GcsError> {
         validate_object_name(name)?;
-        let seconds = signed_lifetime_seconds(expires_in)?;
-        let disposition = attachment_filename
-            .map(attachment_disposition)
-            .transpose()?;
         let parts = SignedParts::v4_get(
             self.bucket(),
             name,
             self.signer_email(),
             Utc::now(),
-            seconds,
-            disposition.as_deref(),
-        );
+            expires_in,
+            attachment_filename,
+        )?;
         let signature = self.sign_blob(parts.string_to_sign.as_bytes()).await?;
         Ok(format!(
             "{}&X-Goog-Signature={}",
@@ -950,52 +945,6 @@ fn rewrite_url(bucket_name: &str, from: &str, to: &str, token: Option<&str>) -> 
     url
 }
 
-fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError> {
-    let Some(expires_in) = expires_in else {
-        return Err(GcsError::new(
-            GcsErrorKind::Auth,
-            "signed URL lifetime is missing",
-        ));
-    };
-    let seconds = expires_in.as_secs();
-    if seconds == 0 {
-        return Err(GcsError::new(
-            GcsErrorKind::Auth,
-            "signed URL lifetime must be at least 1 second",
-        ));
-    }
-    if seconds > MAX_SIGNED_URL_SECONDS {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "signed URL lifetime must be at most 604800 seconds",
-        ));
-    }
-    Ok(seconds)
-}
-
-fn attachment_disposition(filename: &str) -> Result<String, GcsError> {
-    if filename.is_empty() {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "attachment filename is empty",
-        ));
-    }
-    let fallback: String = filename
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii() && !ch.is_ascii_control() && ch != '"' && ch != '\\' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    Ok(format!(
-        "attachment; filename=\"{fallback}\"; filename*=UTF-8''{}",
-        encode_seg(filename)
-    ))
-}
-
 #[derive(serde::Deserialize)]
 struct SignBlobResponse {
     #[serde(rename = "signedBlob")]
@@ -1050,8 +999,6 @@ fn level_for_status(status: u16) -> Option<LogLevel> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
-
     use crate::logging::ShipperConfig;
 
     use super::*;
@@ -1260,44 +1207,6 @@ mod tests {
         assert!(url.ends_with("?rewriteToken=tok%2Fen"));
     }
 
-    #[test]
-    fn v4_signs_the_attachment_disposition_after_the_goog_params() {
-        let now = DateTime::parse_from_rfc3339("2018-10-26T21:19:42Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        let disposition = attachment_disposition("報告 \"v2\".pdf").unwrap();
-        assert_eq!(
-            disposition,
-            "attachment; filename=\"__ _v2_.pdf\"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%20%22v2%22.pdf"
-        );
-        let parts = SignedParts::v4_get(
-            "b",
-            "a.pdf",
-            "s@example.iam.gserviceaccount.com",
-            now,
-            60,
-            Some(&disposition),
-        );
-        assert!(parts.url_prefix.ends_with(
-            "&X-Goog-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3D%22__%20_v2_.pdf%22%3B%20filename%2A%3DUTF-8%27%27%25E5%25A0%25B1%25E5%2591%258A%2520%2522v2%2522.pdf"
-        ));
-        let without = SignedParts::v4_get(
-            "b",
-            "a.pdf",
-            "s@example.iam.gserviceaccount.com",
-            now,
-            60,
-            None,
-        );
-        assert_ne!(parts.string_to_sign, without.string_to_sign);
-    }
-
-    #[test]
-    fn attachment_disposition_rejects_an_empty_filename() {
-        let err = attachment_disposition("").unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
-    }
-
     #[tokio::test]
     async fn signed_url_rejects_a_lifetime_over_seven_days() {
         let client = GcsClient::new(
@@ -1338,17 +1247,6 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.kind(), GcsErrorKind::Auth);
         }
-    }
-
-    #[test]
-    fn signed_lifetime_never_returns_zero() {
-        assert!(signed_lifetime_seconds(None).is_err());
-        assert!(signed_lifetime_seconds(Some(Duration::ZERO)).is_err());
-        assert!(signed_lifetime_seconds(Some(Duration::from_millis(999))).is_err());
-        assert_eq!(
-            signed_lifetime_seconds(Some(Duration::from_secs(1))).unwrap(),
-            1
-        );
     }
 
     #[test]
