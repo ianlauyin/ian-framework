@@ -17,7 +17,11 @@ pub struct ObjectMeta {
 impl ObjectMeta {
     pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, GcsError> {
         let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Transport, "object response is not bytes", err)
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                "object response is not bytes",
+                err.without_url(),
+            )
         })?;
         Self::from_slice(&bytes)
     }

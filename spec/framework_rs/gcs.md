@@ -244,6 +244,7 @@ The client requests a new access token and sends that call again.
 A later HTTP 401 writes `gcs response`.
 A failure record can include `error` in `extra`.
 An `error` value does not contain a URL query.
+A `GcsError` source does not contain the request URL.
 A resumable chunk record includes `attempt` and `offset` in `extra`.
 A response below 400 writes no operations record.
 A successful resumable probe writes no operations record.

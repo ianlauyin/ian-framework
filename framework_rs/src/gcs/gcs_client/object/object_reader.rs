@@ -11,7 +11,11 @@ pub struct ObjectReader {
 impl ObjectReader {
     pub(crate) async fn read_to_vec(self) -> Result<Vec<u8>, GcsError> {
         let bytes = self.response.bytes().await.map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                "read object body failed",
+                err.without_url(),
+            )
         })?;
         Ok(bytes.to_vec())
     }
@@ -19,7 +23,11 @@ impl ObjectReader {
     pub fn byte_stream(self) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, GcsError>> + Send>> {
         Box::pin(self.response.bytes_stream().map(|item| {
             item.map(|chunk| chunk.to_vec()).map_err(|err| {
-                GcsError::with_source(GcsErrorKind::Transport, "read object body failed", err)
+                GcsError::with_source(
+                    GcsErrorKind::Transport,
+                    "read object body failed",
+                    err.without_url(),
+                )
             })
         }))
     }

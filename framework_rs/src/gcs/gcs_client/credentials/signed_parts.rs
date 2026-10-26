@@ -94,7 +94,7 @@ async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, GcsErr
         GcsError::with_source(
             GcsErrorKind::Transport,
             "signBlob response is not bytes",
-            err,
+            err.without_url(),
         )
     })?;
     let parsed: SignBlobResponse = serde_json::from_slice(&bytes).map_err(|err| {

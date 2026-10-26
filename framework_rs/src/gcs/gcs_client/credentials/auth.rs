@@ -108,7 +108,7 @@ async fn metadata_email(http: &reqwest::Client) -> Result<String, GcsError> {
         GcsError::with_source(
             GcsErrorKind::Auth,
             "metadata server email response is not text",
-            err,
+            err.without_url(),
         )
     })?;
     if !status.is_success() {
@@ -152,7 +152,13 @@ async fn user_token(
         ])
         .send()
         .await
-        .map_err(|err| GcsError::with_source(GcsErrorKind::Auth, "token refresh failed", err))?;
+        .map_err(|err| {
+            GcsError::with_source(
+                GcsErrorKind::Auth,
+                "token refresh failed",
+                err.without_url(),
+            )
+        })?;
     token_from_response(response).await
 }
 
@@ -163,14 +169,22 @@ async fn metadata_get(http: &reqwest::Client, url: &str) -> Result<reqwest::Resp
         .send()
         .await
         .map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Auth, "metadata server request failed", err)
+            GcsError::with_source(
+                GcsErrorKind::Auth,
+                "metadata server request failed",
+                err.without_url(),
+            )
         })
 }
 
 async fn token_from_response(response: reqwest::Response) -> Result<CachedToken, GcsError> {
     let status = response.status();
     let body = response.text().await.map_err(|err| {
-        GcsError::with_source(GcsErrorKind::Auth, "token response is not text", err)
+        GcsError::with_source(
+            GcsErrorKind::Auth,
+            "token response is not text",
+            err.without_url(),
+        )
     })?;
     if !status.is_success() {
         let detail = api_detail(&body).unwrap_or(body);

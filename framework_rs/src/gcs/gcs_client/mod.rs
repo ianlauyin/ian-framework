@@ -94,7 +94,11 @@ impl GcsClient {
             })
             .await?;
         let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Transport, "list response is not bytes", err)
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                "list response is not bytes",
+                err.without_url(),
+            )
         })?;
         ListPage::from_slice(&bytes)
     }
@@ -129,7 +133,7 @@ impl GcsClient {
                 GcsError::with_source(
                     GcsErrorKind::Transport,
                     "rewrite response is not bytes",
-                    err,
+                    err.without_url(),
                 )
             })?;
             let next = match RewriteStep::from_slice(&bytes)? {
@@ -308,7 +312,7 @@ impl GcsClient {
                     return Err(GcsError::with_source(
                         GcsErrorKind::Transport,
                         "gcs request failed",
-                        err,
+                        err.without_url(),
                     ));
                 }
             };
@@ -630,6 +634,30 @@ mod tests {
             latency_ms: None,
             extra: &[],
         });
+    }
+
+    #[tokio::test]
+    async fn send_error_source_omits_the_url() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+        *client.inner.token.lock().await = Some(CachedToken {
+            value: "token".to_string(),
+            expires_at: Instant::now() + Duration::from_secs(600),
+        });
+        let err = client
+            .send(&Call {
+                method: reqwest::Method::PUT,
+                url: format!("http://{addr}/upload?upload_id=secret"),
+                ..Default::default()
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        let source = std::error::Error::source(&err).unwrap().to_string();
+        assert!(!source.contains("secret"), "{source}");
+        assert!(!source.contains("upload_id"), "{source}");
     }
 
     #[test]
