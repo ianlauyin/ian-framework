@@ -38,8 +38,11 @@ export const ajax = async <
   let parsedUrl =
     "/ajax" +
     url.replace(/{(\w+)}/g, (_, key) => {
-      if (!pathParams?.[key]) throw new Error(`Path param ${key} is required`);
-      return pathParams?.[key];
+      const value = pathParams?.[key];
+      if (value === undefined || value === null || value === "") {
+        throw new Error(`Path param ${key} is required`);
+      }
+      return encodeURIComponent(String(value));
     });
   if (isGetOrDelete && request) {
     parsedUrl = parsedUrl + "?" + new URLSearchParams(request).toString();

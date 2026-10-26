@@ -35,7 +35,9 @@ This feature is not product business logic.
 
 - The client adds the prefix `/ajax` to `url`. The project serves its JSON routes under `/ajax` on the same origin.
 - The client replaces each `{name}` in `url` with `pathParams[name]`.
-- If a path param has no value, the client throws an `Error`. The client does not send the request.
+- The client changes the path param value to text. Then the client encodes the text with `encodeURIComponent`. The client puts the encoded text in the URL.
+- If a path param value is `undefined`, `null` or the empty string, the client throws an `Error`. The client does not send the request.
+- The values `0` and `false` are valid path param values.
 
 ### Request
 

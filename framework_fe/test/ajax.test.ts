@@ -44,6 +44,45 @@ describe("ajax", () => {
     );
   });
 
+  it("puts the path param value 0 in the URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ajax("/x/{id}", "GET", null, { id: 0 });
+
+    expect(fetchMock).toHaveBeenCalledWith("/ajax/x/0", expect.anything());
+  });
+
+  it("encodes path param values", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ajax("/x/{id}", "GET", null, { id: "a/b" });
+
+    expect(fetchMock).toHaveBeenCalledWith("/ajax/x/a%2Fb", expect.anything());
+  });
+
+  it.each([undefined, null, ""])(
+    "throws and sends no request when a path param is %j",
+    async (value) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(ajax("/x/{id}", "GET", null, { id: value })).rejects.toThrow(
+        "Path param id is required",
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
   it("throws AjaxError when the response is not ok", async () => {
     vi.stubGlobal(
       "fetch",
