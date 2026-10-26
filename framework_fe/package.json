@@ -15,11 +15,16 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "eslint": "10.11.0",
+    "eslint-plugin-solid": "0.18.0",
+    "globals": "17.13.0",
     "solid-js": "1.9.17",
     "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0",
     "vitest": "5.0.3"
   },
   "peerDependencies": {
