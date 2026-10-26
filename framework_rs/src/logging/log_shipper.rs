@@ -43,6 +43,8 @@ impl LogShipper {
                     let parsed = reqwest::Url::parse(trimmed).ok()?;
                     if (parsed.scheme() != "http" && parsed.scheme() != "https")
                         || parsed.host_str().is_none()
+                        || !parsed.username().is_empty()
+                        || parsed.password().is_some()
                         || parsed.query().is_some()
                         || parsed.fragment().is_some()
                     {
@@ -396,6 +398,17 @@ mod tests {
         ];
         for config in cases {
             assert!(LogShipper::new(config).is_none());
+        }
+    }
+
+    #[test]
+    fn endpoint_with_user_info_is_rejected() {
+        for endpoint in [
+            "https://user:pass@logs.example",
+            "https://user@logs.example",
+            "https://:pass@logs.example",
+        ] {
+            assert!(LogShipper::new(config("api", endpoint)).is_none());
         }
     }
 

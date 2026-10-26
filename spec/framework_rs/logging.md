@@ -253,6 +253,7 @@ Trace-only mode does not open an HTTP connection.
 A missing log server does not panic the shipper.
 An `http` or `https` endpoint sends batches.
 The shipper removes a trailing slash from that URL.
+An endpoint with a username or a password returns no shipper.
 An endpoint with a query returns no shipper.
 An endpoint with a fragment returns no shipper.
 An endpoint with whitespace returns no shipper.
