@@ -12,5 +12,6 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | Cookie sessions and password hashes | `spec/framework_rs/auth/context.md` |
 | Shutdown signal `ShutdownReceiver` | `spec/framework_rs/shutdown/context.md` |
 | Environment variable read helpers | `spec/framework_rs/env/context.md` |
+| Time and time zone helpers, Hong Kong time `hkt_now` | `spec/framework_rs/time/context.md` |
 
 The log shipper posts each batch to `/log/{app}`. `app` is the routing name.

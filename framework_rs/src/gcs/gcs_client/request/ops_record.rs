@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use crate::logging::{hkt_now, LogEvent, LogLevel};
+use crate::logging::{LogEvent, LogLevel};
+use crate::time::hkt_now;
 
 use crate::gcs::error::truncate;
 

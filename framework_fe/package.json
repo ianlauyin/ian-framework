@@ -8,6 +8,7 @@
     "./version": "./src/version.ts",
     "./ajax": "./src/ajax.ts",
     "./logger": "./src/logger.ts",
+    "./time": "./src/time.ts",
     "./error-boundary": {
       "solid": "./src/error-boundary/index.tsx",
       "default": "./src/error-boundary/index.tsx"

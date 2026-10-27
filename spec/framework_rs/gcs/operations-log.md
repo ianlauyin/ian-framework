@@ -26,7 +26,7 @@ Record content:
 - An operations record has an empty `ip`.
 - An operations record has an empty `user_agent`.
 - Each record has `bucket` in `extra`. The value is the bucket name.
-- The record `ts` is the current HKT time, from `hkt_now()`. The time rules are in `spec/framework_rs/logging/event.md`.
+- The record `ts` is the current HKT time, from `ian_framework::time::hkt_now()`. The time rules are in `spec/framework_rs/time/hkt.md`.
 
 | Case | Level | Message |
 | --- | --- | --- |

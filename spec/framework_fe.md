@@ -8,3 +8,4 @@ This file is the index of the feature documents for the frontend library in `fra
 | Ajax client | `spec/framework_fe/ajax.md` |
 | App error boundary | `spec/framework_fe/error-boundary.md` |
 | Browser logger | `spec/framework_fe/logger.md` |
+| Time helpers, Hong Kong time `hktIsoString` | `spec/framework_fe/time.md` |

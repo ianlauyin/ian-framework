@@ -25,9 +25,7 @@ One event is one `LogEvent`. One event has these fields:
 ### Time
 
 - The type of `ts` is `chrono::DateTime<chrono::FixedOffset>`.
-- HKT is the fixed offset UTC+08:00. HKT has no daylight saving time.
-- Each event that the framework makes gets `ts` from `ian_framework::logging::hkt_now()`.
-- `hkt_now()` gives the current time with the offset `+08:00`.
+- Each event that the framework makes gets `ts` from `ian_framework::time::hkt_now()`. The HKT rules are in `spec/framework_rs/time/hkt.md`.
 - The JSON text of `ts` has the offset `+08:00`.
 - Deserialize accepts each RFC 3339 offset. A `Z` value is valid. Deserialize keeps the offset of the text.
 

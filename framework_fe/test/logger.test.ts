@@ -45,14 +45,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("hktIsoString", () => {
-  it("gives the HKT time with the +08:00 offset", async () => {
-    const { hktIsoString } = await import("../src/logger");
-    expect(hktIsoString(new Date("2026-10-27T06:30:00.123Z"))).toBe("2026-10-27T14:30:00.123+08:00");
-    expect(hktIsoString(new Date("2026-12-31T20:00:00.000Z"))).toBe("2027-01-01T04:00:00.000+08:00");
-  });
-});
-
 describe("Logger", () => {
   it("sends the queued events as one batch on each 1 minute interval", async () => {
     const Logger = await loadLogger();
