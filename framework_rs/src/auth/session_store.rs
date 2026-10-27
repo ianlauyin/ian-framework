@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn glob_characters_in_the_prefix_are_escaped() {
-        assert_eq!(escape_glob("ics:session:"), "ics:session:");
+        assert_eq!(escape_glob("my-app:session:"), "my-app:session:");
         assert_eq!(escape_glob("a*b?[c]\\"), "a\\*b\\?\\[c\\]\\\\");
     }
 
@@ -557,8 +557,8 @@ mod tests {
     #[test]
     fn clear_cookie_expires_at_once() {
         assert_eq!(
-            clear_value("ics_session"),
-            "ics_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+            clear_value("my_session"),
+            "my_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
         );
     }
 }

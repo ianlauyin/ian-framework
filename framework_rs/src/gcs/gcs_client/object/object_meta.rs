@@ -76,7 +76,7 @@ mod tests {
             "size": "2048",
             "contentType": "image/jpeg",
             "updated": "2020-01-02T03:04:05.678Z",
-            "metadata": {"uploaded-by": "ian", "uploaded-by-id": "7"}
+            "metadata": {"owner": "alice", "owner-id": "7"}
         }"#;
         let meta = ObjectMeta::from_slice(json).unwrap();
         assert_eq!(meta.name, "photos/cat.jpeg");
@@ -91,13 +91,10 @@ mod tests {
             )
         );
         assert_eq!(
-            meta.metadata.get("uploaded-by").map(String::as_str),
-            Some("ian")
+            meta.metadata.get("owner").map(String::as_str),
+            Some("alice")
         );
-        assert_eq!(
-            meta.metadata.get("uploaded-by-id").map(String::as_str),
-            Some("7")
-        );
+        assert_eq!(meta.metadata.get("owner-id").map(String::as_str), Some("7"));
     }
 
     #[test]

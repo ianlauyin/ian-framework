@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn endpoint_is_normalized() {
-        let shipper = LogShipper::new(config("cs", "http://logs.example/ingest/")).unwrap();
+        let shipper = LogShipper::new(config("my-app", "http://logs.example/ingest/")).unwrap();
         assert_eq!(
             shipper.inner.endpoint.as_deref(),
             Some("http://logs.example/ingest")
@@ -557,20 +557,20 @@ mod tests {
             .insert("TOKEN".to_string(), serde_json::json!(1234));
         event.extra.insert(
             "nested".to_string(),
-            serde_json::json!({"token": {"a": 1}, "user": "ian"}),
+            serde_json::json!({"token": {"a": 1}, "user": "alice"}),
         );
         event
             .extra
-            .insert("user".to_string(), serde_json::json!("ian"));
+            .insert("user".to_string(), serde_json::json!("alice"));
         shipper.record(event);
         let stored = shipper.buffered_events().remove(0);
         assert_eq!(stored.extra["password"], serde_json::json!("***"));
         assert_eq!(stored.extra["TOKEN"], serde_json::json!("***"));
         assert_eq!(
             stored.extra["nested"],
-            serde_json::json!({"token": "***", "user": "ian"})
+            serde_json::json!({"token": "***", "user": "alice"})
         );
-        assert_eq!(stored.extra["user"], serde_json::json!("ian"));
+        assert_eq!(stored.extra["user"], serde_json::json!("alice"));
     }
 
     #[test]
@@ -753,10 +753,10 @@ mod tests {
 
     #[test]
     fn batch_url_uses_the_app_path() {
-        let shipper = LogShipper::new(config("cs", "http://logs.example/ingest/")).unwrap();
+        let shipper = LogShipper::new(config("my-app", "http://logs.example/ingest/")).unwrap();
         assert_eq!(
             shipper.batch_url(shipper.inner.endpoint.as_deref().unwrap()),
-            "http://logs.example/ingest/log/cs"
+            "http://logs.example/ingest/log/my-app"
         );
     }
 
@@ -778,7 +778,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unreachable_log_server_keeps_the_buffer() {
+    async fn unreachable_endpoint_keeps_the_buffer() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         drop(listener);
@@ -793,7 +793,7 @@ mod tests {
     #[tokio::test]
     async fn ship_batch_posts_json_to_the_app_path() {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-        let config = config("cs", endpoint);
+        let config = config("my-app", endpoint);
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("", "one", LogLevel::Info));
         shipper.record(event("", "two", LogLevel::Warn));
@@ -801,8 +801,8 @@ mod tests {
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
         let captured = rx.recv().await.unwrap();
-        assert_eq!(captured.app, "cs");
-        assert_eq!(captured.path, "/log/cs");
+        assert_eq!(captured.app, "my-app");
+        assert_eq!(captured.path, "/log/my-app");
         assert_eq!(captured.content_type, "application/json");
         assert_eq!(captured.authorization, None);
         let events = parse_body(&captured.body);
@@ -974,7 +974,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn shutdown_flush_stops_when_the_log_server_fails() {
+    async fn shutdown_flush_stops_when_the_endpoint_fails() {
         let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
         let shipper = LogShipper::new(config("api", endpoint)).unwrap();
         shipper.record(event("", "keep", LogLevel::Info));

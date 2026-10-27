@@ -267,11 +267,11 @@ mod tests {
     #[tokio::test]
     async fn middleware_leaves_out_empty_fields() {
         let shipper = shipper();
-        let body = json!({"name": "ian"}).to_string();
+        let body = json!({"name": "alice"}).to_string();
         post_body(&shipper, "/echo?", "application/json", body).await;
         let event = &shipper.buffered_events()[0];
         assert_eq!(event.extra.len(), 1);
-        assert_eq!(event.extra["body"], json!({"name": "ian"}));
+        assert_eq!(event.extra["body"], json!({"name": "alice"}));
         assert!(!event.extra.contains_key("query"));
     }
 
@@ -289,7 +289,7 @@ mod tests {
     #[tokio::test]
     async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
         let shipper = shipper();
-        let body = json!({"name": "ian", "age": 3, "tags": ["a"]}).to_string();
+        let body = json!({"name": "alice", "age": 3, "tags": ["a"]}).to_string();
         let (status, echoed) = post_body(
             &shipper,
             "/echo?x=1",
@@ -303,7 +303,7 @@ mod tests {
         assert_eq!(event.action, "POST /echo");
         assert_eq!(
             event.extra["body"],
-            json!({"name": "ian", "age": 3, "tags": ["a"]})
+            json!({"name": "alice", "age": 3, "tags": ["a"]})
         );
         assert_eq!(event.extra["query"], json!({"x": "1"}));
     }
@@ -313,8 +313,11 @@ mod tests {
         let shipper = shipper();
         let large = json!({"data": "x".repeat(BODY_LOG_LIMIT)}).to_string();
         let cases = [
-            ("text/plain", "name=ian".to_string()),
-            ("application/x-www-form-urlencoded", "name=ian".to_string()),
+            ("text/plain", "name=alice".to_string()),
+            (
+                "application/x-www-form-urlencoded",
+                "name=alice".to_string(),
+            ),
             ("application/json", "[1, 2]".to_string()),
             ("application/json", "{not json".to_string()),
             ("application/json", large),
@@ -335,13 +338,13 @@ mod tests {
         config.endpoint = Some("http://logs.example".to_string());
         config.mask_patterns = vec![r"^(password|token)$".to_string()];
         let shipper = LogShipper::new(config).unwrap();
-        let body = json!({"user": "ian", "password": "hunter2"}).to_string();
+        let body = json!({"user": "alice", "password": "hunter2"}).to_string();
         post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
         let event = &shipper.buffered_events()[0];
         assert_eq!(event.extra["query"], json!({"token": "***", "page": "2"}));
         assert_eq!(
             event.extra["body"],
-            json!({"user": "ian", "password": "***"})
+            json!({"user": "alice", "password": "***"})
         );
     }
 

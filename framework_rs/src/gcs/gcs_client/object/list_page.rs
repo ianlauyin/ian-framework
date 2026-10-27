@@ -42,16 +42,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn list_keeps_trash_prefixes() {
+    fn list_keeps_prefixes() {
         let json = br#"{
             "items": [{"name":"keep.txt","size":"3","metadata":null}],
-            "prefixes": [".trash/", "photos/"],
+            "prefixes": ["docs/", "photos/"],
             "nextPageToken": "next"
         }"#;
         let page = ListPage::from_slice(json).unwrap();
         assert_eq!(
             page.prefixes,
-            vec![".trash/".to_string(), "photos/".to_string()]
+            vec!["docs/".to_string(), "photos/".to_string()]
         );
         assert_eq!(page.objects.len(), 1);
         assert!(page.objects[0].metadata.is_empty());
