@@ -16,10 +16,10 @@ describe("ajax", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await ajax("/guest", "GET");
+    await ajax("/item", "GET");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/ajax/guest",
+      "/ajax/item",
       expect.objectContaining({ method: "GET", credentials: "same-origin" }),
     );
   });
@@ -32,10 +32,10 @@ describe("ajax", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await ajax("/guest/{id}", "PUT", { name: "Alice" }, { id: "guest-1" });
+    await ajax("/item/{id}", "PUT", { name: "Alice" }, { id: "item-1" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/ajax/guest/guest-1",
+      "/ajax/item/item-1",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ name: "Alice" }),
@@ -89,15 +89,15 @@ describe("ajax", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 404,
-        text: async () => JSON.stringify({ message: "Guest not found" }),
+        text: async () => JSON.stringify({ message: "Item not found" }),
       }),
     );
 
     await expect(
-      ajax("/guest/{id}", "DELETE", null, { id: "missing" }),
+      ajax("/item/{id}", "DELETE", null, { id: "missing" }),
     ).rejects.toMatchObject({
       name: "Error",
-      message: "Guest not found",
+      message: "Item not found",
       code: 404,
     } satisfies Partial<AjaxError>);
   });
@@ -114,7 +114,7 @@ describe("ajax", () => {
       }),
     );
 
-    await expect(ajax("/guest", "GET")).rejects.toMatchObject({
+    await expect(ajax("/item", "GET")).rejects.toMatchObject({
       message: "Unknown error",
       code: 401,
     } satisfies Partial<AjaxError>);
@@ -132,7 +132,7 @@ describe("ajax", () => {
       status: 502,
       text: async () => "<html><body>Bad Gateway</body></html>",
     });
-    await expect(ajax("/guest", "GET")).rejects.toMatchObject({
+    await expect(ajax("/item", "GET")).rejects.toMatchObject({
       name: "Error",
       message: "Unknown error",
       code: 502,
@@ -143,7 +143,7 @@ describe("ajax", () => {
       status: 401,
       text: async () => "Unauthorized",
     });
-    await expect(ajax("/guest", "GET")).rejects.toMatchObject({
+    await expect(ajax("/item", "GET")).rejects.toMatchObject({
       message: "Unknown error",
       code: 401,
     } satisfies Partial<AjaxError>);
@@ -162,7 +162,7 @@ describe("ajax", () => {
     );
 
     await expect(
-      ajax("/admin/login", "POST", { username: "x", password: "y" }),
+      ajax("/login", "POST", { username: "x", password: "y" }),
     ).rejects.toMatchObject({
       message: "Invalid username or password",
       code: 403,
@@ -180,7 +180,7 @@ describe("ajax", () => {
     );
 
     await expect(
-      ajax("/admin/login", "POST", { username: "admin", password: "secret" }),
+      ajax("/login", "POST", { username: "admin", password: "secret" }),
     ).resolves.toBeNull();
   });
 
@@ -195,9 +195,8 @@ describe("ajax", () => {
     );
 
     await expect(
-      ajax("/guest", "POST", {
+      ajax("/item", "POST", {
         name: "Alice",
-        relationship: "groom_friend",
         count: 1,
       }),
     ).resolves.toBeNull();
