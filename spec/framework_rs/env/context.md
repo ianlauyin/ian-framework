@@ -33,7 +33,7 @@ The install line for the crate is in `spec/framework_rs/logging/context.md`.
 
 - A test that sets an environment variable holds one shared lock.
 - The test restores the previous value of the variable before it releases the lock.
-- The shared test helpers are in `pub(crate) mod tests` of `framework_rs/src/env/mod.rs`. `with_var` sets one variable and `with_vars` sets several variables under the lock. `block_on` runs one future on a current-thread Tokio runtime. The env tests and the `ShipperConfig` tests use these helpers.
+- The shared test helpers are in `pub(crate) mod tests` of `framework_rs/src/env/mod.rs`. `with_var` sets one variable and `with_vars` sets several variables under the lock. `block_on` runs one future on a current-thread Tokio runtime. The env tests use these helpers. The Secret Manager tests use `with_var`.
 - The tests do not call Google Cloud. With the `gcp` feature, `block_on` first sets the shared Secret Manager state to "no credentials". The lookup tests use a fake Secret Manager on a local test server. The shared fake is in the test module of `framework_rs/src/gcp/mod.rs`.
 
 ## Out of scope

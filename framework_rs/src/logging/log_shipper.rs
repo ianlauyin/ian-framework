@@ -354,7 +354,6 @@ mod tests {
     fn config(app: &str, endpoint: impl Into<String>) -> ShipperConfig {
         let mut config = ShipperConfig::new(app);
         config.endpoint = Some(endpoint.into());
-        config.post_api_key = None;
         config
     }
 
@@ -385,8 +384,7 @@ mod tests {
             let shipper = LogShipper::new(config("api", endpoint)).unwrap();
             assert_eq!(shipper.inner.endpoint, None);
         }
-        let mut unset = ShipperConfig::new("api");
-        unset.endpoint = None;
+        let unset = ShipperConfig::new("api");
         assert_eq!(LogShipper::new(unset).unwrap().inner.endpoint, None);
     }
 

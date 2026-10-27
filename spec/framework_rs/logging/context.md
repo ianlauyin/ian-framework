@@ -13,12 +13,14 @@ This feature is not product business logic.
 | Axum request middleware | `spec/framework_rs/logging/middleware.md` |
 | Untrusted client intake and client log route | `spec/framework_rs/logging/client-log.md` |
 
-## Environment variables
+## App settings
 
-| Variable | Use |
+The framework does not read an environment variable for the log server settings. The app reads its own environment variables, with the names that the app chooses, and gives the values to `ShipperConfig`. `ShipperConfig` is in `spec/framework_rs/logging/shipper.md`.
+
+| Setting | Use |
 | --- | --- |
-| `LOG_ENDPOINT` | The base URL of the log server. When it is not set or blank, the shipper is trace-only. |
-| `LOG_POST_API_KEY` | The POST API key of the log server. The shipper sends it as `Authorization: Bearer {key}` on each batch POST. When it is not set or blank, the shipper sends no `Authorization` header. |
+| `endpoint` | The base URL of the log server. When it is not set or blank, the shipper is trace-only. |
+| `post_api_key` | The POST API key of the log server. The shipper sends it as `Authorization: Bearer {key}` on each batch POST. When it is not set or blank, the shipper sends no `Authorization` header. |
 
 The log server trusts each event of an authorized POST. Thus it stores the `ip` and `user_agent` that the project backend sets.
 
@@ -31,7 +33,7 @@ The log server trusts each event of an authorized POST. Thus it stores the `ip` 
 
 ## Build
 
-Each build compiles this module. With the Cargo feature `gcp`, `ShipperConfig::from_env` reads the POST API key from Secret Manager first.
+Each build compiles this module. This module does not use the `gcp` feature.
 
 - The `gcs` feature is optional. The Google Cloud Storage client is in `spec/framework_rs/gcs/context.md`.
 - The `gcp` feature is optional. The `gcs` feature enables it. The Secret Manager access is in `spec/framework_rs/gcp/context.md`.
