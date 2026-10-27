@@ -6,7 +6,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 A server can use a bearer API key to authenticate a request.
 
-The module has these functions:
+The module `ian_framework::http::headers` has these functions:
 
 | Function | Result |
 | --- | --- |

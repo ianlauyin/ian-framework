@@ -87,7 +87,7 @@ A token is 32 random bytes from the OS random source, in lowercase hex. A token 
 
 ## Cookie
 
-`SessionStore::token` reads the session token from the `Cookie` request headers with `ian_framework::http::read_cookie`.
+`SessionStore::token` reads the session token from the `Cookie` request headers with `ian_framework::http::headers::read_cookie`.
 
 - It takes the value of the first cookie with the name `cookie_name`.
 - It returns no token when no cookie has the name.

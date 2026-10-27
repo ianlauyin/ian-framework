@@ -25,7 +25,26 @@ This feature is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::http`.
+- The header helper module path is `ian_framework::http::headers`.
 - `rust-toolchain.toml` gives the Rust version for this repository.
+
+## Public items
+
+`ian_framework::http` exports only these items:
+
+- `ApiError`
+- `IntoApiError`
+- `require_same_origin`
+- `version_router`
+- The module `headers`
+
+`ian_framework::http::headers` exports only these items:
+
+- `bearer_token`, `is_token68` and `key_matches`
+- `read_cookie` and `sets_cookie`
+- `is_same_origin`
+
+Each item has only one public path.
 
 ## Build
 

@@ -18,6 +18,7 @@ This client is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::gcs`.
+- The client module path is `ian_framework::gcs::gcs_client`.
 - `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Feature `gcs`
@@ -56,11 +57,17 @@ cargo test --features gcs
 
 `ian_framework::gcs` exports only these items:
 
-- `GcsClient`
 - `GcsError` and `GcsErrorKind`
+- The module `gcs_client`
+
+`ian_framework::gcs::gcs_client` exports only these items:
+
+- `GcsClient`
 - `ListPage` and `ListQuery`
 - `ObjectMeta` and `ObjectReader`
 - `PutBody`, `PutOptions` and `PutRequest`
+
+Each item has only one public path.
 
 These items are private to the crate:
 

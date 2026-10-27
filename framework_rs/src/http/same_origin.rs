@@ -3,7 +3,8 @@ use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
-use super::{is_same_origin, ApiError};
+use super::headers::is_same_origin;
+use super::ApiError;
 
 pub async fn require_same_origin(request: Request, next: Next) -> Response {
     if !is_same_origin(request.headers()) {

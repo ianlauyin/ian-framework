@@ -4,7 +4,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 ## Same-origin check
 
-The module has this function:
+The module `ian_framework::http::headers` has this function:
 
 | Function | Result |
 | --- | --- |

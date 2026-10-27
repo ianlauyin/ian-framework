@@ -2,7 +2,8 @@ use std::borrow::Cow;
 
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-use crate::gcs::{GcsError, GcsErrorKind, PutBody};
+use crate::gcs::gcs_client::PutBody;
+use crate::gcs::{GcsError, GcsErrorKind};
 
 // The source must re-read any range because the session can move the offset back.
 pub(crate) enum UploadSource<'a> {

@@ -10,7 +10,7 @@ The middleware reads the token before the inner handler runs. After the handler 
 
 1. When the response status is 401, it returns the response with no change.
 2. When the request has no token, it returns the response with no change.
-3. When the response has a `Set-Cookie` for `cookie_name`, it returns the response with no change. It uses `ian_framework::http::sets_cookie` for this check. This step keeps the cookie of a login handler or a logout handler.
+3. When the response has a `Set-Cookie` for `cookie_name`, it returns the response with no change. It uses `ian_framework::http::headers::sets_cookie` for this check. This step keeps the cookie of a login handler or a logout handler.
 4. It calls `touch` for the token.
 5. When `touch` returns `true`, it adds one `Set-Cookie` with `cookie(token)`. It keeps the other `Set-Cookie` values of the response.
 

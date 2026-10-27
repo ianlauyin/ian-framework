@@ -6,8 +6,8 @@ use crate::logging::LogLevel;
 use crate::gcs::encode::encode_seg;
 use crate::gcs::gcs_client::request::{logged_error, Call, OpsRecord};
 use crate::gcs::gcs_client::upload::upload_source::UploadSource;
-use crate::gcs::gcs_client::{GcsClient, TRANSFER_TIMEOUT};
-use crate::gcs::{GcsError, GcsErrorKind, ObjectMeta};
+use crate::gcs::gcs_client::{GcsClient, ObjectMeta, TRANSFER_TIMEOUT};
+use crate::gcs::{GcsError, GcsErrorKind};
 
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
 const CHUNK_SIZE: usize = 8 * 1024 * 1024;

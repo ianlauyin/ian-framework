@@ -4,7 +4,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 ## Cookie headers
 
-The module has these functions:
+The module `ian_framework::http::headers` has these functions:
 
 | Function | Result |
 | --- | --- |

@@ -8,7 +8,7 @@ use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use redis::AsyncCommands;
 use sha2::{Digest, Sha256};
 
-use crate::http::read_cookie;
+use crate::http::headers::read_cookie;
 
 use super::{AuthError, AuthErrorKind, SessionConfig};
 
