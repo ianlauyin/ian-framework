@@ -1,6 +1,8 @@
-use std::env;
 use std::fmt;
 use std::time::Duration;
+
+use crate::env;
+use crate::env::EnvError;
 
 const DEFAULT_CAPACITY: usize = 10_000;
 const ENDPOINT_ENV: &str = "LOG_ENDPOINT";
@@ -23,8 +25,8 @@ impl ShipperConfig {
     pub fn new(app: impl Into<String>) -> Self {
         Self {
             app: app.into(),
-            endpoint: env::var(ENDPOINT_ENV).ok(),
-            post_api_key: env::var(POST_API_KEY_ENV).ok(),
+            endpoint: std::env::var(ENDPOINT_ENV).ok(),
+            post_api_key: std::env::var(POST_API_KEY_ENV).ok(),
             capacity: DEFAULT_CAPACITY,
             mask_patterns: DEFAULT_MASK_PATTERNS
                 .iter()
@@ -32,6 +34,12 @@ impl ShipperConfig {
                 .collect(),
             ship_every: DEFAULT_SHIP_EVERY,
         }
+    }
+
+    pub async fn from_env(app: impl Into<String>) -> Result<Self, EnvError> {
+        let mut config = Self::new(app);
+        config.post_api_key = env::optional(POST_API_KEY_ENV).await?;
+        Ok(config)
     }
 }
 
@@ -50,7 +58,10 @@ impl fmt::Debug for ShipperConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use super::*;
+    use crate::env::tests::{block_on, with_var};
 
     #[test]
     fn defaults() {
@@ -67,17 +78,7 @@ mod tests {
     }
 
     fn with_post_api_key<T>(value: Option<&str>, read: impl FnOnce() -> T) -> T {
-        let previous = env::var_os(POST_API_KEY_ENV);
-        match value {
-            Some(value) => env::set_var(POST_API_KEY_ENV, value),
-            None => env::remove_var(POST_API_KEY_ENV),
-        }
-        let result = read();
-        match previous {
-            Some(previous) => env::set_var(POST_API_KEY_ENV, previous),
-            None => env::remove_var(POST_API_KEY_ENV),
-        }
-        result
+        with_var(POST_API_KEY_ENV, value.map(OsStr::new), read)
     }
 
     #[test]
@@ -87,6 +88,21 @@ mod tests {
         assert_eq!(set.post_api_key.as_deref(), Some("log-post-key"));
         let unset = with_post_api_key(None, || ShipperConfig::new("api"));
         assert_eq!(unset.post_api_key, None);
+    }
+
+    fn from_env_with(key: Option<&str>) -> Result<ShipperConfig, EnvError> {
+        with_post_api_key(key, || block_on(ShipperConfig::from_env("api")))
+    }
+
+    #[test]
+    fn from_env_reads_the_trimmed_key_or_none() {
+        let set = from_env_with(Some(" log-post-key ")).unwrap();
+        assert_eq!(set.app, "api");
+        assert_eq!(set.post_api_key.as_deref(), Some("log-post-key"));
+        let unset = from_env_with(None).unwrap();
+        assert_eq!(unset.post_api_key, None);
+        let blank = from_env_with(Some(" ")).unwrap();
+        assert_eq!(blank.post_api_key, None);
     }
 
     #[test]

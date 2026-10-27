@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::logging::{LogEvent, LogLevel};
 use crate::time::hkt_now;
 
-use crate::gcs::error::truncate;
+use crate::gcp::truncate;
 
 pub(crate) struct OpsRecord<'a> {
     pub(crate) level: LogLevel,

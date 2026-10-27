@@ -1,25 +1,22 @@
-use std::env::{self, VarError};
+use crate::env::{optional, EnvError, EnvErrorKind};
 
-use crate::env::{EnvError, EnvErrorKind};
-
-pub fn required(name: &str) -> Result<String, EnvError> {
-    match env::var(name) {
-        Ok(value) if !value.trim().is_empty() => Ok(value.trim().to_string()),
-        Ok(_) | Err(VarError::NotPresent) => Err(EnvError::new(EnvErrorKind::Missing, name)),
-        Err(VarError::NotUnicode(_)) => Err(EnvError::new(EnvErrorKind::NotUnicode, name)),
-    }
+pub async fn required(name: &str) -> Result<String, EnvError> {
+    optional(name)
+        .await?
+        .ok_or_else(|| EnvError::new(EnvErrorKind::Missing, name))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::env::tests::{not_unicode, with_var};
     use std::ffi::OsStr;
+
+    use super::*;
+    use crate::env::tests::{block_on, not_unicode, with_var};
 
     const NAME: &str = "IAN_FRAMEWORK_TEST_REQUIRED";
 
     fn read(value: Option<&str>) -> Result<String, EnvError> {
-        with_var(NAME, value.map(OsStr::new), || required(NAME))
+        with_var(NAME, value.map(OsStr::new), || block_on(required(NAME)))
     }
 
     #[test]
@@ -38,8 +35,15 @@ mod tests {
 
     #[test]
     fn rejects_a_value_that_is_not_unicode() {
-        let error = with_var(NAME, Some(not_unicode()), || required(NAME)).unwrap_err();
+        let error = with_var(NAME, Some(not_unicode()), || block_on(required(NAME))).unwrap_err();
         assert_eq!(error.kind(), EnvErrorKind::NotUnicode);
         assert_eq!(error.name(), NAME);
+    }
+
+    #[test]
+    fn the_future_is_send() {
+        fn assert_send<T: Send>(_: &T) {}
+        let future = required(NAME);
+        assert_send(&future);
     }
 }

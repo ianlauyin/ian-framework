@@ -1,4 +1,4 @@
-use std::env::{self, VarError};
+use std::env;
 
 use crate::env::{EnvError, EnvErrorKind};
 
@@ -7,8 +7,8 @@ pub fn u64_or(name: &str, default: u64) -> Result<u64, EnvError> {
         Ok(value) => value
             .parse()
             .map_err(|_| EnvError::new(EnvErrorKind::Invalid, name)),
-        Err(VarError::NotPresent) => Ok(default),
-        Err(VarError::NotUnicode(_)) => Err(EnvError::new(EnvErrorKind::NotUnicode, name)),
+        Err(env::VarError::NotPresent) => Ok(default),
+        Err(env::VarError::NotUnicode(_)) => Err(EnvError::new(EnvErrorKind::NotUnicode, name)),
     }
 }
 

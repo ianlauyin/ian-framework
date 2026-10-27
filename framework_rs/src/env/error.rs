@@ -5,6 +5,7 @@ pub enum EnvErrorKind {
     Missing,
     NotUnicode,
     Invalid,
+    Secret,
 }
 
 // The error never holds the value of the variable, because the value can be a secret.
@@ -12,6 +13,7 @@ pub enum EnvErrorKind {
 pub struct EnvError {
     kind: EnvErrorKind,
     name: String,
+    detail: Option<String>,
 }
 
 impl EnvError {
@@ -31,6 +33,16 @@ impl EnvError {
         Self {
             kind,
             name: name.to_string(),
+            detail: None,
+        }
+    }
+
+    #[cfg(feature = "gcp")]
+    pub(crate) fn with_detail(kind: EnvErrorKind, name: &str, detail: String) -> Self {
+        Self {
+            kind,
+            name: name.to_string(),
+            detail: Some(detail),
         }
     }
 }
@@ -38,10 +50,15 @@ impl EnvError {
 impl fmt::Display for EnvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            EnvErrorKind::Missing => write!(f, "{} is required", self.name),
-            EnvErrorKind::NotUnicode => write!(f, "{} is not valid unicode", self.name),
-            EnvErrorKind::Invalid => write!(f, "{} is not valid", self.name),
+            EnvErrorKind::Missing => write!(f, "{} is required", self.name)?,
+            EnvErrorKind::NotUnicode => write!(f, "{} is not valid unicode", self.name)?,
+            EnvErrorKind::Invalid => write!(f, "{} is not valid", self.name)?,
+            EnvErrorKind::Secret => write!(f, "{} cannot be read from Secret Manager", self.name)?,
         }
+        if let Some(detail) = &self.detail {
+            write!(f, ": {detail}")?;
+        }
+        Ok(())
     }
 }
 
@@ -71,6 +88,10 @@ mod tests {
         assert_eq!(
             EnvError::invalid("APP_KEY").to_string(),
             "APP_KEY is not valid"
+        );
+        assert_eq!(
+            EnvError::new(EnvErrorKind::Secret, "APP_KEY").to_string(),
+            "APP_KEY cannot be read from Secret Manager"
         );
     }
 

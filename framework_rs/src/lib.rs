@@ -7,5 +7,8 @@ pub mod time;
 #[cfg(feature = "auth")]
 pub mod auth;
 
+#[cfg(feature = "gcp")]
+pub mod gcp;
+
 #[cfg(feature = "gcs")]
 pub mod gcs;

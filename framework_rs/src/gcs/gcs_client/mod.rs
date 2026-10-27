@@ -11,12 +11,13 @@ use std::time::{Duration, Instant};
 
 use chrono::Utc;
 
+use crate::gcp::{http_client_builder, CachedToken};
 use crate::logging::{LogLevel, LogShipper};
 
 use crate::gcs::encode::{encode_object_id, encode_seg};
 use crate::gcs::{GcsError, GcsErrorKind, API_ROOT};
 
-use credentials::{Auth, CachedToken, SignedParts};
+use credentials::{Auth, SignedParts};
 use request::{logged_error, Call, OpsRecord};
 use rewrite_step::RewriteStep;
 use upload::{ResumableUpload, UploadSource};
@@ -25,7 +26,6 @@ pub use object::{ListPage, ListQuery, ObjectMeta, ObjectReader};
 pub use upload::{PutBody, PutOptions, PutRequest};
 
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone)]
 pub struct GcsClient {
@@ -459,10 +459,7 @@ fn validate_bucket(bucket_name: &str) -> Result<(), GcsError> {
 }
 
 fn http_client() -> Result<reqwest::Client, GcsError> {
-    let builder = reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("ian_framework/", env!("CARGO_PKG_VERSION")));
+    let builder = http_client_builder();
     #[cfg(target_os = "linux")]
     let builder = builder.tcp_user_timeout(TRANSFER_TIMEOUT);
     builder.build().map_err(|err| {
@@ -486,6 +483,7 @@ fn level_for_status(status: u16) -> Option<LogLevel> {
 
 #[cfg(test)]
 mod tests {
+    use crate::gcp::UserCredentials;
     use crate::logging::ShipperConfig;
 
     use super::*;
@@ -500,9 +498,12 @@ mod tests {
 
     fn user_auth() -> Auth {
         Auth::User {
-            client_id: "client".to_string(),
-            client_secret: "secret".to_string(),
-            refresh_token: "refresh".to_string(),
+            credentials: UserCredentials {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                refresh_token: "refresh".to_string(),
+                quota_project_id: None,
+            },
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         }
     }
@@ -528,9 +529,12 @@ mod tests {
     #[tokio::test]
     async fn client_rejects_an_incomplete_user() {
         let auth = Auth::User {
-            client_id: String::new(),
-            client_secret: "secret".to_string(),
-            refresh_token: "refresh".to_string(),
+            credentials: UserCredentials {
+                client_id: String::new(),
+                client_secret: "secret".to_string(),
+                refresh_token: "refresh".to_string(),
+                quota_project_id: None,
+            },
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         };
         let err = GcsClient::new("my-bucket", auth).await.unwrap_err();

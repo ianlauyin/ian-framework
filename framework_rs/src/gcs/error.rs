@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::gcp::{api_detail, truncate, GcpError, GcpErrorKind};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GcsErrorKind {
     Auth,
@@ -102,6 +104,24 @@ impl std::error::Error for GcsError {
     }
 }
 
+impl From<GcpError> for GcsError {
+    fn from(err: GcpError) -> Self {
+        let kind = match err.kind() {
+            GcpErrorKind::Auth => GcsErrorKind::Auth,
+            GcpErrorKind::Config => GcsErrorKind::Config,
+            GcpErrorKind::Api => GcsErrorKind::Api,
+            GcpErrorKind::Transport => GcsErrorKind::Transport,
+        };
+        let (message, source) = err.into_parts();
+        Self {
+            kind,
+            status: None,
+            message,
+            source,
+        }
+    }
+}
+
 impl crate::http::IntoApiError for GcsError {
     fn status_code(&self) -> u16 {
         match self.kind {
@@ -131,41 +151,9 @@ impl crate::http::IntoApiError for GcsError {
     }
 }
 
-pub(super) fn api_detail(body: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(body).ok()?;
-    if let Some(message) = value
-        .get("error")
-        .and_then(|error| error.get("message"))
-        .and_then(|m| m.as_str())
-    {
-        return Some(message.to_string());
-    }
-    if let Some(message) = value.get("error_description").and_then(|m| m.as_str()) {
-        return Some(message.to_string());
-    }
-    None
-}
-
-pub(super) fn truncate(text: &str, max: usize) -> &str {
-    if text.len() <= max {
-        return text;
-    }
-    let mut end = max;
-    while end > 0 && !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn api_detail_reads_the_gcs_message() {
-        let body = r#"{"error":{"code":404,"message":"No such object"}}"#;
-        assert_eq!(api_detail(body).as_deref(), Some("No such object"));
-    }
 
     #[test]
     fn retryable_status_codes_match_the_upload_policy() {

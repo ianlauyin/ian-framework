@@ -26,6 +26,7 @@ This client is not product business logic.
 - The Cargo feature name is `gcs`.
 - The `gcs` feature is optional.
 - The default build does not compile this client.
+- The `gcs` feature enables the `gcp` feature. The shared Google Cloud code is in `spec/framework_rs/gcp/context.md`.
 - A project sets the Cargo feature `gcs` to compile this client.
 - A project can select the dependency feature `ian_framework/gcs`.
 - The logging module is in `spec/framework_rs/logging/context.md`.
@@ -84,8 +85,9 @@ A project uses `GcsClient::signed_get_url` for a signed URL.
 
 One `GcsClient` has one HTTP client. The storage calls, the resumable upload, the token requests and the IAM `signBlob` call use that client.
 
-- The connect time limit is 10 seconds.
-- The HTTP client does not follow redirects. The client uses a redirect response as the final response.
+- The HTTP client uses the shared settings in `spec/framework_rs/gcp/context.md`. Thus the connect time limit is 10 seconds, and the client does not follow redirects.
+- The client uses a redirect response as the final response.
+- On Linux, the client also sets `TCP_USER_TIMEOUT`. The rule is in `spec/framework_rs/gcs/upload.md`.
 
 ## Error kind
 

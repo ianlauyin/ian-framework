@@ -31,9 +31,10 @@ The log server trusts each event of an authorized POST. Thus it stores the `ip` 
 
 ## Build
 
-This module has no Cargo feature. Each build compiles this module.
+Each build compiles this module. With the Cargo feature `gcp`, `ShipperConfig::from_env` reads the POST API key from Secret Manager first.
 
-The `gcs` feature is optional. The Google Cloud Storage client is in `spec/framework_rs/gcs/context.md`.
+- The `gcs` feature is optional. The Google Cloud Storage client is in `spec/framework_rs/gcs/context.md`.
+- The `gcp` feature is optional. The `gcs` feature enables it. The Secret Manager access is in `spec/framework_rs/gcp/context.md`.
 
 Put this block in the project `Cargo.toml`:
 
@@ -51,6 +52,9 @@ cargo check
 cargo test
 cargo check --features gcs
 cargo test --features gcs
+cargo check --features gcp
+cargo test --all-features
+cargo clippy --all-features --all-targets
 ```
 
 | Command | Effect |
@@ -59,6 +63,9 @@ cargo test --features gcs
 | `cargo test` | Runs the tests with no optional feature. |
 | `cargo check --features gcs` | Checks the build with the `gcs` feature. |
 | `cargo test --features gcs` | Runs the tests with the `gcs` feature. |
+| `cargo check --features gcp` | Checks the build with the `gcp` feature. |
+| `cargo test --all-features` | Runs the tests with all the optional features. |
+| `cargo clippy --all-features --all-targets` | Lints the build and the tests with all the optional features. |
 
 ## Out of scope
 

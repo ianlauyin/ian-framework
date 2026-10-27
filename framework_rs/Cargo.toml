@@ -9,13 +9,16 @@ auth = [
     "dep:redis",
     "redis/tokio-rustls-comp",
 ]
-gcs = [
+gcp = [
     "dep:base64",
-    "dep:futures-util",
     "reqwest/form",
+    "tokio/fs",
+]
+gcs = [
+    "gcp",
+    "dep:futures-util",
     "reqwest/json",
     "reqwest/stream",
-    "tokio/fs",
     "tokio/io-util",
 ]
 

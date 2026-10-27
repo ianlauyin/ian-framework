@@ -4,12 +4,13 @@ The parts that apply to all of this feature are in `spec/framework_rs/gcs/contex
 
 ## Authentication
 
-The client accepts only Application Default Credentials.
+The client accepts only Application Default Credentials. The shared credentials code reads them and gets the access tokens. Its rules are in `spec/framework_rs/gcp/credentials.md`.
 
 - If there is no credentials file, metadata auth uses the service account on the VM metadata server.
 - The client rejects a service account JSON key.
 - The client rejects impersonated application default credentials.
-- User application default credentials need `GCS_SIGNER_EMAIL`.
+- User application default credentials need `GCS_SIGNER_EMAIL`. The client adds this check to the shared credentials read.
+- The client does not send the quota project of user credentials.
 - `GCS_SIGNER_EMAIL` is the service account email that signs URLs.
 
 Scopes:

@@ -11,7 +11,8 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | HTTP boundary error, request header helpers, same-origin middleware, and process version route | `spec/framework_rs/http/context.md` |
 | Cookie sessions and password hashes | `spec/framework_rs/auth/context.md` |
 | Shutdown signal `ShutdownReceiver` | `spec/framework_rs/shutdown/context.md` |
-| Environment variable read helpers | `spec/framework_rs/env/context.md` |
+| Environment variable read helpers. With the `gcp` feature, `required` and `optional` read Secret Manager first. | `spec/framework_rs/env/context.md` |
+| Shared Google Cloud code (Cargo feature `gcp`): credentials, access tokens, HTTP client settings and Secret Manager access | `spec/framework_rs/gcp/context.md` |
 | Time and time zone helpers, Hong Kong time `hkt_now` | `spec/framework_rs/time/context.md` |
 
 The log shipper posts each batch to `/log/{app}`. `app` is the routing name.

@@ -389,7 +389,8 @@ fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
 mod tests {
     use std::time::Instant;
 
-    use crate::gcs::gcs_client::credentials::{Auth, CachedToken};
+    use crate::gcp::{CachedToken, UserCredentials};
+    use crate::gcs::gcs_client::credentials::Auth;
 
     use super::*;
 
@@ -472,9 +473,12 @@ mod tests {
             String::from_utf8(head).unwrap().to_ascii_lowercase()
         });
         let auth = Auth::User {
-            client_id: "client".to_string(),
-            client_secret: "secret".to_string(),
-            refresh_token: "refresh".to_string(),
+            credentials: UserCredentials {
+                client_id: "client".to_string(),
+                client_secret: "secret".to_string(),
+                refresh_token: "refresh".to_string(),
+                quota_project_id: None,
+            },
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         };
         let client = GcsClient::new("my-bucket", auth).await.unwrap();

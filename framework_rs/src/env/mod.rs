@@ -1,13 +1,15 @@
 mod error;
+mod optional;
 mod required;
 mod u64_or;
 
 pub use error::{EnvError, EnvErrorKind};
+pub use optional::optional;
 pub use required::required;
 pub use u64_or::u64_or;
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
     use std::sync::{Mutex, MutexGuard};
@@ -22,12 +24,33 @@ mod tests {
     }
 
     pub(crate) fn with_var<T>(name: &str, value: Option<&OsStr>, read: impl FnOnce() -> T) -> T {
+        with_vars(&[(name, value)], read)
+    }
+
+    pub(crate) fn with_vars<T>(vars: &[(&str, Option<&OsStr>)], read: impl FnOnce() -> T) -> T {
         let _guard = env_lock();
-        let previous = std::env::var_os(name);
-        set_or_remove(name, value);
+        let previous: Vec<_> = vars
+            .iter()
+            .map(|(name, _)| (*name, std::env::var_os(name)))
+            .collect();
+        for (name, value) in vars {
+            set_or_remove(name, *value);
+        }
         let result = read();
-        set_or_remove(name, previous.as_deref());
+        for (name, value) in &previous {
+            set_or_remove(name, value.as_deref());
+        }
         result
+    }
+
+    pub(crate) fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
+        #[cfg(feature = "gcp")]
+        crate::gcp::tests::no_secret_manager();
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(future)
     }
 
     fn set_or_remove(name: &str, value: Option<&OsStr>) {

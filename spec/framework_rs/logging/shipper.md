@@ -17,6 +17,19 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 | `ship_every` | 5 seconds |
 
 - The caller can set `endpoint` and `post_api_key` on the config before `LogShipper::new`.
+- `ShipperConfig::new` is not async. It reads only the environment variables. It does not read Secret Manager.
+
+### ShipperConfig::from_env
+
+Each build compiles this constructor.
+
+`pub async fn from_env(app: impl Into<String>) -> Result<ShipperConfig, ian_framework::env::EnvError>`
+
+- `from_env` gives the same config as `ShipperConfig::new`. Then it sets `post_api_key` from `ian_framework::env::optional("LOG_POST_API_KEY")`.
+- With the `gcp` feature, the key comes from the Secret Manager secret `LOG_POST_API_KEY` first. Else it comes from the environment variable `LOG_POST_API_KEY`.
+- When the key is in neither place, `post_api_key` is not set.
+- A Secret Manager read failure gives an error of the kind `Secret`.
+- The lookup rules of `optional` are in `spec/framework_rs/env/read.md`.
 - `post_api_key` is the POST API key of the log server. It is a secret.
 - The `Debug` output of `ShipperConfig` does not show the `post_api_key` value. When `post_api_key` is set, the output shows `***`.
 - The ship request time limit is 10 seconds.
