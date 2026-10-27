@@ -8,7 +8,7 @@ One event is one `LogEvent`. One event has these fields:
 
 | Field | Value |
 | --- | --- |
-| `ts` | UTC time in RFC 3339 |
+| `ts` | Hong Kong time (HKT) in RFC 3339, with the offset `+08:00` |
 | `id` | Event id, or an empty string |
 | `ip` | Client address, or an empty string |
 | `user_agent` | `user-agent` header, or an empty string |
@@ -21,6 +21,15 @@ One event is one `LogEvent`. One event has these fields:
 
 - The event has no `app` field.
 - The event has no `project` field.
+
+### Time
+
+- The type of `ts` is `chrono::DateTime<chrono::FixedOffset>`.
+- HKT is the fixed offset UTC+08:00. HKT has no daylight saving time.
+- Each event that the framework makes gets `ts` from `ian_framework::logging::hkt_now()`.
+- `hkt_now()` gives the current time with the offset `+08:00`.
+- The JSON text of `ts` has the offset `+08:00`.
+- Deserialize accepts each RFC 3339 offset. A `Z` value is valid. Deserialize keeps the offset of the text.
 
 `action` is one string with these rules:
 

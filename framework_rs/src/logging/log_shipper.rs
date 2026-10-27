@@ -602,9 +602,7 @@ mod tests {
         oldest.status = Some(500);
         oldest.latency_ms = Some(9);
         oldest.extra.insert("k".to_string(), serde_json::json!("v"));
-        oldest.ts = DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        oldest.ts = DateTime::parse_from_rfc3339("2020-01-01T08:00:00+08:00").unwrap();
         let ts = oldest.ts;
         shipper.record(oldest);
         shipper.record(event("", "second", LogLevel::Info));
@@ -640,6 +638,7 @@ mod tests {
         assert_eq!(capacity_warn_count(&events), 1);
         assert_capacity_warn(&events[4]);
         assert!(events[4].ts >= before && events[4].ts <= after);
+        assert_eq!(events[4].ts.offset().local_minus_utc(), 8 * 3600);
         shipper.record(event("", "fifth", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(

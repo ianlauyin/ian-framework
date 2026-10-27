@@ -78,7 +78,7 @@ The warning has these fields:
 
 | Field | Value |
 | --- | --- |
-| `ts` | Current UTC time |
+| `ts` | Current HKT time, from `hkt_now()` |
 | `id` | Empty string |
 | `ip` | Empty string |
 | `user_agent` | Empty string |

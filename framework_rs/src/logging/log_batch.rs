@@ -24,14 +24,12 @@ impl LogBatch {
 mod tests {
     use super::*;
     use crate::logging::{event, LogLevel};
-    use chrono::{DateTime, Utc};
+    use chrono::DateTime;
     use serde_json::{json, Value};
 
     fn sample() -> LogEvent {
         let mut event = event("GET /health", "request", LogLevel::Info);
-        event.ts = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
         event.id = "req-1".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "demo-agent".to_string();

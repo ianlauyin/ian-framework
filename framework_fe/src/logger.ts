@@ -2,6 +2,7 @@ const LOG_URL = "/log";
 const FLUSH_INTERVAL = 60_000;
 const MAX_QUEUE = 1000;
 const MASK = "***";
+const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 export type LogLevel = "info" | "warn" | "error";
 export type LogExtra = Record<string, string | number | boolean>;
@@ -18,6 +19,10 @@ type ClientLogEvent = {
   message: string;
   extra: LogExtra;
 };
+
+export function hktIsoString(date: Date): string {
+  return new Date(date.getTime() + HKT_OFFSET_MS).toISOString().replace("Z", "+08:00");
+}
 
 export class Logger {
   private static queue: ClientLogEvent[] = [];
@@ -60,7 +65,7 @@ export class Logger {
 
     if (Logger.queue.length >= MAX_QUEUE) Logger.queue.shift();
     Logger.queue.push({
-      ts: new Date().toISOString(),
+      ts: hktIsoString(new Date()),
       id: "",
       ip: "",
       user_agent: "",

@@ -18,6 +18,7 @@ This feature is not product business logic.
 | `Logger` | class | The logger. All methods are static. |
 | `LogLevel` | type | `"info"`, `"warn"` or `"error"`. |
 | `LogExtra` | type | `Record<string, string \| number \| boolean>`. |
+| `hktIsoString(date)` | function | Gives `date` as HKT ISO 8601 text with milliseconds and the offset `+08:00`. HKT is the fixed offset UTC+08:00. |
 
 `Logger` has these methods:
 
@@ -42,7 +43,7 @@ The event has these fields:
 
 | Field | Value |
 | --- | --- |
-| `ts` | The current time in ISO 8601 UTC text. |
+| `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString`. The browser time zone does not change the value. |
 | `id` | Empty string |
 | `ip` | Empty string |
 | `user_agent` | Empty string |

@@ -25,7 +25,7 @@ The function sets the fields of the result as follows:
 | `user_agent` | Empty string. The client value is not kept. |
 | `status` | null. The client value is not kept. |
 | `latency_ms` | null. The client value is not kept. |
-| `ts` | The current UTC time. The client value is not kept. |
+| `ts` | The current HKT time, from `hkt_now()`. The client value is not kept. |
 | `level` | The client value. |
 | `action` | The client value. |
 | `message` | The client value, after the removal of the spaces. |

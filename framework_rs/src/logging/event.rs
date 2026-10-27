@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::logging::hkt_now;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -14,7 +16,7 @@ pub enum LogLevel {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
-    pub ts: DateTime<Utc>,
+    pub ts: DateTime<FixedOffset>,
     pub id: String,
     pub ip: String,
     pub user_agent: String,
@@ -33,7 +35,7 @@ impl LogEvent {
             return None;
         }
         Some(LogEvent {
-            ts: Utc::now(),
+            ts: hkt_now(),
             id: String::new(),
             ip: String::new(),
             user_agent: String::new(),
@@ -89,9 +91,7 @@ mod tests {
 
     fn sample() -> LogEvent {
         let mut event = event("GET /health", "request", LogLevel::Info);
-        event.ts = DateTime::parse_from_rfc3339("2026-10-18T12:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
         event.id = "req-1".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "demo-agent".to_string();
@@ -121,10 +121,7 @@ mod tests {
         }
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
-        assert!(value["ts"]
-            .as_str()
-            .unwrap()
-            .contains("2026-10-18T12:00:00"));
+        assert_eq!(value["ts"], "2026-10-18T20:00:00+08:00");
         assert_eq!(value["id"], "req-1");
         assert_eq!(value["ip"], "203.0.113.8");
         assert_eq!(value["user_agent"], "demo-agent");
@@ -138,8 +135,6 @@ mod tests {
         assert_eq!(value["level"], "info");
         assert_eq!(value["message"], "request");
         assert_eq!(value["extra"]["region"], "asia");
-        let parsed = DateTime::parse_from_rfc3339(value["ts"].as_str().unwrap()).unwrap();
-        assert_eq!(parsed.offset().local_minus_utc(), 0);
     }
 
     #[test]
@@ -168,6 +163,30 @@ mod tests {
     }
 
     #[test]
+    fn a_new_event_ts_has_the_hkt_offset() {
+        let value = serde_json::to_value(event("", "note", LogLevel::Info)).unwrap();
+        assert!(value["ts"].as_str().unwrap().ends_with("+08:00"));
+    }
+
+    #[test]
+    fn a_sanitized_event_ts_has_the_hkt_offset() {
+        let stored = event("/files", "note", LogLevel::Info)
+            .sanitize_untrusted_client()
+            .unwrap();
+        let value = serde_json::to_value(stored).unwrap();
+        assert!(value["ts"].as_str().unwrap().ends_with("+08:00"));
+    }
+
+    #[test]
+    fn a_utc_ts_is_accepted() {
+        let mut value = serde_json::to_value(sample()).unwrap();
+        value["ts"] = json!("2026-10-18T12:00:00Z");
+        let parsed: LogEvent = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.ts, sample().ts);
+        assert_eq!(parsed.ts.offset().local_minus_utc(), 0);
+    }
+
+    #[test]
     fn a_missing_schema_field_is_rejected() {
         let json = r#"{"ts":"2026-10-18T12:00:00Z","message":"note"}"#;
         assert!(serde_json::from_str::<LogEvent>(json).is_err());
@@ -180,17 +199,15 @@ mod tests {
             "  saved file  ",
             LogLevel::Warn,
         );
-        event.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
+        event.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z").unwrap();
         event.id = "client-id".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "browser".to_string();
         event.status = Some(500);
         event.latency_ms = Some(42);
-        let before = Utc::now();
+        let before = hkt_now();
         let stored = event.sanitize_untrusted_client().unwrap();
-        let after = Utc::now();
+        let after = hkt_now();
         assert_eq!(event.id, "client-id");
         assert_eq!(stored.id, "");
         assert_eq!(stored.ip, "");

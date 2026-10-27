@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use chrono::Utc;
-
-use crate::logging::{LogEvent, LogLevel};
+use crate::logging::{hkt_now, LogEvent, LogLevel};
 
 use crate::gcs::error::truncate;
 
@@ -19,7 +17,7 @@ pub(crate) struct OpsRecord<'a> {
 impl OpsRecord<'_> {
     pub(crate) fn into_event(self, bucket: &str) -> LogEvent {
         let mut event = LogEvent {
-            ts: Utc::now(),
+            ts: hkt_now(),
             id: String::new(),
             ip: String::new(),
             user_agent: String::new(),
@@ -100,6 +98,21 @@ mod tests {
         assert!(!text.contains("secret"));
         assert!(!text.contains("upload_id"));
         assert!(text.contains("connection reset"));
+    }
+
+    #[test]
+    fn into_event_ts_has_the_hkt_offset() {
+        let record = OpsRecord {
+            level: LogLevel::Info,
+            message: "uploaded",
+            method: "PUT",
+            url: "/obj",
+            status: Some(200),
+            latency_ms: Some(5),
+            extra: &[],
+        };
+        let event = record.into_event("bucket");
+        assert_eq!(event.ts.offset().local_minus_utc(), 8 * 3600);
     }
 
     #[test]
