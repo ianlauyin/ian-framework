@@ -12,6 +12,7 @@ The module has these functions:
 | --- | --- |
 | `bearer_token(headers: &axum::http::HeaderMap)` | The token, `Option<&str>`. |
 | `key_matches(token: &str, key: &str)` | The match result, `bool`. |
+| `is_token68(token: &str)` | The token68 check result, `bool`. |
 
 ### bearer_token
 
@@ -19,7 +20,7 @@ The module has these functions:
 
 - The header value must be the scheme `Bearer`, then one space, then the token.
 - The scheme match is not case sensitive.
-- The token is an RFC 9110 `token68`. It has one or more of the characters `A`-`Z`, `a`-`z`, `0`-`9`, `-`, `.`, `_`, `~`, `+`, `/`. Then it has zero or more `=`.
+- The token is an RFC 9110 `token68`. The rule is in the `is_token68` section.
 
 `bearer_token` gives `None` in these conditions:
 
@@ -28,6 +29,15 @@ The module has these functions:
 - The scheme is not `Bearer`.
 - The header value has no space.
 - The token is not a `token68`.
+
+### is_token68
+
+`is_token68` gives `true` only if the text is an RFC 9110 `token68`.
+
+- The text has one or more of the characters `A`-`Z`, `a`-`z`, `0`-`9`, `-`, `.`, `_`, `~`, `+`, `/`.
+- Then the text has zero or more `=`.
+- `bearer_token` uses `is_token68` for the token.
+- A project can use `is_token68` to reject an API key at startup. `bearer_token` never gives a token that is not a `token68`. Thus such a key never matches.
 
 ### key_matches
 
@@ -41,4 +51,5 @@ The module has these functions:
 ### Project tasks
 
 - The project keeps the API key.
+- The project can check the API key with `is_token68` at startup.
 - The project selects the HTTP status and the error for a rejected request.

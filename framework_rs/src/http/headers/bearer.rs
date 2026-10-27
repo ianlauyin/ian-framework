@@ -23,7 +23,7 @@ pub fn key_matches(token: &str, key: &str) -> bool {
 }
 
 // RFC 9110 token68: one or more of ALPHA DIGIT "-" "." "_" "~" "+" "/", then any "=".
-fn is_token68(token: &str) -> bool {
+pub fn is_token68(token: &str) -> bool {
     let body = token.trim_end_matches('=');
     !body.is_empty()
         && body
@@ -90,6 +90,15 @@ mod tests {
             bearer_token(&headers_with(&format!("Bearer {token}"))),
             Some(token)
         );
+    }
+
+    #[test]
+    fn checks_a_token68() {
+        assert!(is_token68("aZ09-._~+/=="));
+        assert!(is_token68("a"));
+        for token in ["", "===", "a=b", "a b", "key!value", " a", "a\tb"] {
+            assert!(!is_token68(token), "{token:?}");
+        }
     }
 
     #[test]
