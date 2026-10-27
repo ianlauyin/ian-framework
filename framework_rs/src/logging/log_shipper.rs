@@ -54,6 +54,23 @@ impl LogShipper {
                 }
             }
         };
+        let post_api_key = match config.post_api_key {
+            None => None,
+            Some(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    None
+                } else if trimmed.chars().any(char::is_whitespace) {
+                    return None;
+                } else {
+                    let mut value =
+                        reqwest::header::HeaderValue::from_str(&format!("Bearer {trimmed}"))
+                            .ok()?;
+                    value.set_sensitive(true);
+                    Some(value)
+                }
+            }
+        };
         let masks = config
             .mask_patterns
             .iter()
@@ -80,6 +97,7 @@ impl LogShipper {
             inner: Arc::new(Inner {
                 app: config.app,
                 endpoint,
+                post_api_key,
                 capacity: config.capacity,
                 ship_every: config.ship_every,
                 masks,
@@ -184,17 +202,19 @@ impl LogShipper {
         let posted = match serde_json::to_string(&LogBatch {
             events: batch.clone(),
         }) {
-            Ok(body) => match client
-                .post(&url)
-                .timeout(SHIP_TIMEOUT)
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .body(body)
-                .send()
-                .await
-            {
-                Ok(response) => response.status().is_success(),
-                Err(_) => false,
-            },
+            Ok(body) => {
+                let mut request = client
+                    .post(&url)
+                    .timeout(SHIP_TIMEOUT)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json");
+                if let Some(post_api_key) = &self.inner.post_api_key {
+                    request = request.header(reqwest::header::AUTHORIZATION, post_api_key.clone());
+                }
+                match request.body(body).send().await {
+                    Ok(response) => response.status().is_success(),
+                    Err(_) => false,
+                }
+            }
             Err(_) => false,
         };
         if !posted {
@@ -228,6 +248,10 @@ impl std::fmt::Debug for LogShipper {
         f.debug_struct("LogShipper")
             .field("app", &self.inner.app)
             .field("endpoint", &self.inner.endpoint)
+            .field(
+                "post_api_key",
+                &self.inner.post_api_key.as_ref().map(|_| MASK),
+            )
             .field("buffered", &self.buffered_len())
             .finish_non_exhaustive()
     }
@@ -241,6 +265,7 @@ struct Buffer {
 struct Inner {
     app: String,
     endpoint: Option<String>,
+    post_api_key: Option<reqwest::header::HeaderValue>,
     capacity: usize,
     ship_every: Duration,
     masks: Vec<regex::Regex>,
@@ -329,6 +354,7 @@ mod tests {
     fn config(app: &str, endpoint: impl Into<String>) -> ShipperConfig {
         let mut config = ShipperConfig::new(app);
         config.endpoint = Some(endpoint.into());
+        config.post_api_key = None;
         config
     }
 
@@ -410,6 +436,27 @@ mod tests {
         ] {
             assert!(LogShipper::new(config("api", endpoint)).is_none());
         }
+    }
+
+    #[test]
+    fn invalid_post_api_key_is_rejected() {
+        for post_api_key in ["log post key", "log\u{7f}key"] {
+            let mut config = config("api", "http://logs.example");
+            config.post_api_key = Some(post_api_key.to_string());
+            assert!(LogShipper::new(config).is_none());
+        }
+    }
+
+    #[test]
+    fn debug_hides_the_post_api_key() {
+        let mut with_key = config("api", "http://logs.example");
+        with_key.post_api_key = Some("log-post-key".to_string());
+        let shipper = LogShipper::new(with_key).unwrap();
+        let debug = format!("{shipper:?}");
+        assert!(!debug.contains("log-post-key"));
+        assert!(debug.contains("post_api_key: Some(\"***\")"));
+        let unset = LogShipper::new(config("api", "http://logs.example")).unwrap();
+        assert!(format!("{unset:?}").contains("post_api_key: None"));
     }
 
     fn buffered() -> LogShipper {
@@ -757,6 +804,7 @@ mod tests {
         assert_eq!(captured.app, "cs");
         assert_eq!(captured.path, "/log/cs");
         assert_eq!(captured.content_type, "application/json");
+        assert_eq!(captured.authorization, None);
         let events = parse_body(&captured.body);
         assert_eq!(events.len(), 3);
         assert_eq!(events[0].message, "one");
@@ -775,6 +823,37 @@ mod tests {
         assert!(serde_json::from_str::<Vec<LogEvent>>(&captured.body).is_err());
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
+    }
+
+    #[tokio::test]
+    async fn ship_batch_sends_the_post_api_key_as_a_bearer_token() {
+        let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
+        let mut config = config("api", endpoint);
+        config.post_api_key = Some("  log-post-key  ".to_string());
+        let shipper = LogShipper::new(config).unwrap();
+        shipper.record(event("", "one", LogLevel::Info));
+        shipper.ship_batch().await;
+        let captured = rx.recv().await.unwrap();
+        assert_eq!(
+            captured.authorization.as_deref(),
+            Some("Bearer log-post-key")
+        );
+        assert_eq!(shipper.buffered_len(), 0);
+    }
+
+    #[tokio::test]
+    async fn blank_post_api_key_sends_no_authorization() {
+        for post_api_key in [None, Some(""), Some("   ")] {
+            let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
+            let mut config = config("api", endpoint);
+            config.post_api_key = post_api_key.map(str::to_string);
+            let shipper = LogShipper::new(config).unwrap();
+            assert!(shipper.inner.post_api_key.is_none());
+            shipper.record(event("", "one", LogLevel::Info));
+            shipper.ship_batch().await;
+            let captured = rx.recv().await.unwrap();
+            assert_eq!(captured.authorization, None);
+        }
     }
 
     #[tokio::test]
@@ -1048,6 +1127,7 @@ mod tests {
         app: String,
         path: String,
         content_type: String,
+        authorization: Option<String>,
         body: String,
     }
 
@@ -1089,10 +1169,15 @@ mod tests {
                             .and_then(|value| value.to_str().ok())
                             .unwrap_or("")
                             .to_string();
+                        let authorization = headers
+                            .get(axum::http::header::AUTHORIZATION)
+                            .and_then(|value| value.to_str().ok())
+                            .map(str::to_string);
                         let _ = capture.tx.send(Captured {
                             app,
                             path: uri.path().to_string(),
                             content_type,
+                            authorization,
                             body,
                         });
                         if capture.action == 1 || capture.action == 3 {

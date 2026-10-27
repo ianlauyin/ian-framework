@@ -13,6 +13,15 @@ This feature is not product business logic.
 | Axum request middleware | `spec/framework_rs/logging/middleware.md` |
 | Untrusted client intake and client log route | `spec/framework_rs/logging/client-log.md` |
 
+## Environment variables
+
+| Variable | Use |
+| --- | --- |
+| `LOG_ENDPOINT` | The base URL of the log server. When it is not set or blank, the shipper is trace-only. |
+| `LOG_POST_API_KEY` | The POST API key of the log server. The shipper sends it as `Authorization: Bearer {key}` on each batch POST. When it is not set or blank, the shipper sends no `Authorization` header. |
+
+The log server trusts each event of an authorized POST. Thus it stores the `ip` and `user_agent` that the project backend sets.
+
 ## Crate
 
 - The package name is `ian_framework`.
@@ -56,7 +65,7 @@ cargo test --features gcs
 This feature does not include these items:
 
 - A log server process.
-- Authentication to the log server. The bearer API key check is in `spec/framework_rs/http/bearer-key.md`.
+- The log server check of the POST API key. The shipper only sends the key. The shipper rules are in `spec/framework_rs/logging/shipper.md`. The bearer API key check is in `spec/framework_rs/http/bearer-key.md`.
 - A product log policy.
 - Trash rules, browse caps, or upload gates.
 - An adapter that maps the app to a different path.

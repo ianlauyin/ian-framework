@@ -11,11 +11,14 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 | Field | Start value |
 | --- | --- |
 | `endpoint` | The environment variable `LOG_ENDPOINT`. When `LOG_ENDPOINT` is not set, `endpoint` is not set. |
+| `post_api_key` | The environment variable `LOG_POST_API_KEY`. When `LOG_POST_API_KEY` is not set, `post_api_key` is not set. |
 | `capacity` | 10000 events |
 | `mask_patterns` | The default patterns in `spec/framework_rs/logging/masking.md` |
 | `ship_every` | 5 seconds |
 
-- The caller can set `endpoint` on the config before `LogShipper::new`.
+- The caller can set `endpoint` and `post_api_key` on the config before `LogShipper::new`.
+- `post_api_key` is the POST API key of the log server. It is a secret.
+- The `Debug` output of `ShipperConfig` does not show the `post_api_key` value. When `post_api_key` is set, the output shows `***`.
 - The ship request time limit is 10 seconds.
 - The connect time limit of the ship HTTP client is 10 seconds.
 - The ship HTTP client does not follow redirects.
@@ -35,11 +38,28 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - A `mask_patterns` item is not a valid regex.
 - `ship_every` is zero.
 - The endpoint is not valid. The endpoint rules are in the Trace-only mode section.
+- The POST API key is not valid. The POST API key rules are in the POST API key section.
 
 `LogShipper::new` writes one `tracing` info event with the field `app`. The message is one of these:
 
 - `log shipping posts to the log server`, when the shipper has an endpoint.
 - `log shipping is trace-only`, when the shipper has no endpoint.
+
+### POST API key
+
+The shipper first removes the whitespace at the start and at the end of `post_api_key`. Then it reads the key.
+
+These keys give a shipper with no POST API key:
+
+- A key that is not set.
+- A key that is empty after the removal of the whitespace.
+
+`LogShipper::new` returns no shipper for these keys:
+
+- A key with whitespace inside it, after the removal of the whitespace at the start and at the end.
+- A key that is not a valid HTTP header value.
+
+The `Debug` output of `LogShipper` does not show the POST API key. When the shipper has a key, the output shows `***`.
 
 ### Record
 
@@ -98,6 +118,8 @@ The request has these properties:
 - The HTTP method is POST.
 - The URL is `{endpoint}/log/{app}`. `{app}` is the shipper app.
 - The content type is `application/json`.
+- When the shipper has a POST API key, the request has the header `Authorization: Bearer {key}`.
+- When the shipper has no POST API key, the request has no `Authorization` header.
 - The request time limit is 10 seconds.
 
 The body is one JSON object of type `LogBatch`:
