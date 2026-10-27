@@ -1,3 +1,4 @@
+pub mod env;
 pub mod http;
 pub mod logging;
 pub mod shutdown;
