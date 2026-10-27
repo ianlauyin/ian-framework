@@ -41,8 +41,11 @@ impl GcsClient {
         &self.inner.email
     }
 
-    pub async fn from_adc(bucket_name: impl Into<String>) -> Result<Self, GcsError> {
-        Self::new(bucket_name, Auth::from_adc().await?).await
+    pub async fn from_adc(
+        bucket_name: impl Into<String>,
+        signer_email: Option<&str>,
+    ) -> Result<Self, GcsError> {
+        Self::new(bucket_name, Auth::from_adc(signer_email).await?).await
     }
 
     pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, GcsError> {

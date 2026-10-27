@@ -33,10 +33,12 @@ The build always has all the variants. Only the `gcp` feature gives `Secret`.
 
 | Method | Signature | Effect |
 | --- | --- | --- |
+| `EnvError::missing` | `fn missing(name: &str) -> Self` | Makes one error of the kind `Missing` for the variable `name`. Its `Display` text is `NAME is required`. |
 | `EnvError::invalid` | `fn invalid(name: &str) -> Self` | Makes one error of the kind `Invalid` for the variable `name`. |
 | `kind` | `fn kind(&self) -> EnvErrorKind` | Gives the kind of the error. |
 | `name` | `fn name(&self) -> &str` | Gives the name of the variable. |
 
+- A project uses `EnvError::missing` when it reads a value with `std::env::var` and the value is not set.
 - A project uses `EnvError::invalid` when its own check of a value fails.
 - `EnvError` holds the kind, the name of the variable and an optional detail.
 - Only the kind `Secret` has a detail. The detail is the Secret Manager read error. It does not hold the secret value.

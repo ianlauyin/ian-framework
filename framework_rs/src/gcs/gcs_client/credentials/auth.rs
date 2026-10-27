@@ -1,5 +1,3 @@
-use std::env;
-
 use crate::gcp::{
     metadata_get, metadata_token, truncate, CachedToken, Credentials, UserCredentials,
 };
@@ -19,9 +17,9 @@ pub(crate) enum Auth {
 }
 
 impl Auth {
-    pub(crate) async fn from_adc() -> Result<Self, GcsError> {
+    pub(crate) async fn from_adc(signer_email: Option<&str>) -> Result<Self, GcsError> {
         let credentials = Credentials::from_adc().await?;
-        auth_from_credentials(credentials, signer_email_from_env().as_deref())
+        auth_from_credentials(credentials, signer_email)
     }
 
     pub(crate) fn validate(&self) -> Result<(), GcsError> {
@@ -102,15 +100,6 @@ fn validate_signer_email(email: &str) -> Result<(), GcsError> {
     Ok(())
 }
 
-fn signer_email_from_env() -> Option<String> {
-    let value = env::var("GCS_SIGNER_EMAIL").ok()?;
-    let value = value.trim();
-    if value.is_empty() {
-        return None;
-    }
-    Some(value.to_string())
-}
-
 fn auth_from_credentials(
     credentials: Credentials,
     signer_email: Option<&str>,
@@ -121,7 +110,7 @@ fn auth_from_credentials(
             let signer_email = signer_email.ok_or_else(|| {
                 GcsError::new(
                     GcsErrorKind::Config,
-                    "user application default credentials require GCS_SIGNER_EMAIL",
+                    "user application default credentials require a signer email",
                 )
             })?;
             // GcsClient::new checks that the fields are not empty and the signer email is valid.
@@ -156,7 +145,9 @@ mod tests {
     fn user_adc_requires_a_signer_email() {
         let err = auth_from_credentials(user_credentials(), None).unwrap_err();
         assert_eq!(err.kind(), GcsErrorKind::Config);
-        assert!(err.to_string().contains("GCS_SIGNER_EMAIL"));
+        assert!(err
+            .to_string()
+            .contains("user application default credentials require a signer email"));
     }
 
     #[test]

@@ -79,7 +79,10 @@ A project uses `GcsClient::signed_get_url` for a signed URL.
 
 ## Constructors
 
-`GcsClient::from_adc` reads Application Default Credentials for one bucket.
+`pub async fn from_adc(bucket_name: impl Into<String>, signer_email: Option<&str>) -> Result<GcsClient, GcsError>` reads Application Default Credentials for one bucket.
+
+- `signer_email` is the service account email that signs URLs. The project reads it from its own env variable.
+- User application default credentials require `Some` signer email. The rules are in `spec/framework_rs/gcs/authentication.md`.
 
 ## HTTP client
 

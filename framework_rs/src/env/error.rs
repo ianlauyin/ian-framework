@@ -17,6 +17,10 @@ pub struct EnvError {
 }
 
 impl EnvError {
+    pub fn missing(name: &str) -> Self {
+        Self::new(EnvErrorKind::Missing, name)
+    }
+
     pub fn invalid(name: &str) -> Self {
         Self::new(EnvErrorKind::Invalid, name)
     }
@@ -76,9 +80,17 @@ mod tests {
     }
 
     #[test]
+    fn missing_reports_the_name() {
+        let error = EnvError::missing("APP_KEY");
+        assert_eq!(error.kind(), EnvErrorKind::Missing);
+        assert_eq!(error.name(), "APP_KEY");
+        assert_eq!(error.to_string(), "APP_KEY is required");
+    }
+
+    #[test]
     fn display_gives_one_message_for_each_kind() {
         assert_eq!(
-            EnvError::new(EnvErrorKind::Missing, "APP_KEY").to_string(),
+            EnvError::missing("APP_KEY").to_string(),
             "APP_KEY is required"
         );
         assert_eq!(
