@@ -451,7 +451,7 @@
                     const g = shown.filter(i => i.spec === s.spec);
                     if (!g.length) return "";
                     return `<section class="group"><div class="group-head"><h2 id="${s.spec}">${esc(s.spec)} · ${fmt(s.title)}</h2>
-      <div class="ctx">spec/{package}/${esc(s.spec)}/business-logic.md · ${fmt(s.context)}</div></div>${g.map(card).join("")}</section>`;
+      <div class="ctx">{feature-document} · ${fmt(s.context)}</div></div>${g.map(card).join("")}</section>`;
                 }).join("");
                 document.getElementById("list").innerHTML = html || `<p class="empty">No item matches these filters. Clear the search or a chip to see more.</p>`;
             }

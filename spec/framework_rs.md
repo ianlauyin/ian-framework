@@ -21,7 +21,7 @@ The log shipper posts each batch to `/log/{app}`. `app` is the routing name.
 
 An open item is a known behaviour that is not resolved. Each library that has open items has one open-behaviour file. The Rust file is `spec/framework_rs/open-behaviour.html`. The frontend file is `spec/framework_fe/open-behaviour.html`. A feature does not have its own file for open items. Before you change a behaviour, read the open items of its library.
 
-- To add the file for a library, copy `spec/open-behaviour.html` to `spec/framework_rs/open-behaviour.html` or to `spec/framework_fe/open-behaviour.html`. Replace `{package}` with `framework_rs` or `framework_fe`. Replace `{Package}` with the library name.
+- To add the file for a library, copy `spec/open-behaviour.html` to `spec/framework_rs/open-behaviour.html` or to `spec/framework_fe/open-behaviour.html`. Replace `{package}` with `framework_rs` or `framework_fe`. Replace `{Package}` with the library name. In the Rust copy, replace `{feature-document}` with `spec/framework_rs/${esc(s.spec)}/context.md`. In the frontend copy, replace `{feature-document}` with `spec/framework_fe/${esc(s.spec)}.md`.
 - The data is the JSON in `<script id="open-behaviour">`. Edit only that block. The page shows the data. To read the items, open the file in a browser.
 - For the Rust library, write one entry for each feature folder that has open items. Use the order of the feature table in this file.
 - For the frontend library, write one entry for each feature document that has open items. Use the order of the feature table in `spec/framework_fe.md`.
