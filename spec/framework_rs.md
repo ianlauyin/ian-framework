@@ -19,10 +19,10 @@ The log shipper posts each batch to `/log/{app}`. `app` is the routing name.
 
 ## Open behaviour
 
-An open item is a known behaviour that is not resolved. Each library that has open items has one open-behaviour file. The Rust file is `spec/framework_rs/open-behaviour.html`. The frontend file is `spec/framework_fe/open-behaviour.html`. A feature does not have its own file for open items. Before you change a behaviour, read the open items of its library.
+An open item is a known behaviour that is not resolved. Each library that has open items has one open-behaviour file. The Rust file is `spec/framework_rs/open-behaviour.json`. The frontend file is `spec/framework_fe/open-behaviour.json`. A feature does not have its own file for open items. Before you change a behaviour, read the open items of its library.
 
-- To add the file for a library, copy `spec/open-behaviour.html` to `spec/framework_rs/open-behaviour.html` or to `spec/framework_fe/open-behaviour.html`. Replace `{package}` with `framework_rs` or `framework_fe`. Replace `{Package}` with the library name. In the Rust copy, replace `{feature-document}` with `spec/framework_rs/${esc(s.spec)}/context.md`. In the frontend copy, replace `{feature-document}` with `spec/framework_fe/${esc(s.spec)}.md`.
-- The data is the JSON in `<script id="open-behaviour">`. Edit only that block. The page shows the data. To read the items, open the file in a browser.
+- To add the file for a library, copy `spec/open-behaviour.json` to `spec/framework_rs/open-behaviour.json` or to `spec/framework_fe/open-behaviour.json`.
+- The file has only the JSON data: a list of entries. Do not add an HTML page or other text to the file.
 - For the Rust library, write one entry for each feature folder that has open items. Use the order of the feature table in this file.
 - For the frontend library, write one entry for each feature document that has open items. Use the order of the feature table in `spec/framework_fe.md`.
 - Each entry has `spec`, `title`, `context` and `items`. `spec` is the feature folder name, or the feature document name without `.md`. `context` gives the repo, the commit and the date of the last check, and the path conventions.
@@ -43,10 +43,10 @@ Each item has these fields:
 
 - Put an item in the file of the library that has the behaviour.
 - If an item occurs in both libraries, put a copy in the file of each library. In `note`, give the location of the other copy.
-- A Rust feature document refers to its items as `` `spec/framework_rs/open-behaviour.html` (`feature`) ``.
-- A frontend feature document refers to its items as `` `spec/framework_fe/open-behaviour.html` (`feature`) ``.
+- A Rust feature document refers to its items as `` `spec/framework_rs/open-behaviour.json` (`feature`) ``.
+- A frontend feature document refers to its items as `` `spec/framework_fe/open-behaviour.json` (`feature`) ``.
 - To resolve an item, fix the code and the spec in the same change. Then delete the item.
 - If a feature entry has no items, delete the entry and its references in the feature documents.
-- If the Rust library has no open items, delete `spec/framework_rs/open-behaviour.html`.
-- If the frontend library has no open items, delete `spec/framework_fe/open-behaviour.html`.
+- If the Rust library has no open items, delete `spec/framework_rs/open-behaviour.json`.
+- If the frontend library has no open items, delete `spec/framework_fe/open-behaviour.json`.
 
