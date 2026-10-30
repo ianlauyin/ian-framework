@@ -16,7 +16,6 @@ This feature is not product business logic.
 - The module path is `ian_framework::time`.
 - The source files are `framework_rs/src/time/mod.rs` and `framework_rs/src/time/hkt.rs`.
 - The tests are in `framework_rs/src/time/hkt.rs`.
-- `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Build
 

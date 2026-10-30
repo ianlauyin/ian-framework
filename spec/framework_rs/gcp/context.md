@@ -17,7 +17,6 @@ This code is not product business logic.
 - The module path is `ian_framework::gcp`.
 - The source files are `framework_rs/src/gcp/mod.rs`, `framework_rs/src/gcp/error.rs`, `framework_rs/src/gcp/credentials.rs`, `framework_rs/src/gcp/http_client.rs` and `framework_rs/src/gcp/secret_manager.rs`.
 - The tests are in the same source files. The shared test helpers are in the test module of `framework_rs/src/gcp/mod.rs`: a one-request local test server, a closed local address and a fake `SecretManager`.
-- `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Build
 

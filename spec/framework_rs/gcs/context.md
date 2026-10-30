@@ -19,7 +19,6 @@ This client is not product business logic.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::gcs`.
 - The client module path is `ian_framework::gcs::gcs_client`.
-- `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Feature `gcs`
 

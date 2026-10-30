@@ -29,7 +29,6 @@ The log server trusts each event of an authorized POST. Thus it stores the `ip` 
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::logging`.
-- `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Build
 

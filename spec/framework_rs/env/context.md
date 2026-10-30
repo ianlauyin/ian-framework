@@ -17,7 +17,6 @@ This feature is not product business logic.
 - The source files are `framework_rs/src/env/mod.rs`, `framework_rs/src/env/error.rs`, `framework_rs/src/env/optional.rs`, `framework_rs/src/env/required.rs` and `framework_rs/src/env/u64_or.rs`.
 - The tests are in the same source files.
 - The shared test helpers are in the test module of `framework_rs/src/env/mod.rs`.
-- `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Build
 

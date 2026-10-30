@@ -26,7 +26,6 @@ This feature is not product business logic.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::http`.
 - The header helper module path is `ian_framework::http::headers`.
-- `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Public items
 

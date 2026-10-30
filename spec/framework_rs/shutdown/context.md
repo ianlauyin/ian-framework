@@ -16,7 +16,6 @@ This feature is not product business logic.
 - The module path is `ian_framework::shutdown`.
 - The source files are `framework_rs/src/shutdown/mod.rs` and `framework_rs/src/shutdown/shutdown_receiver.rs`.
 - The tests are in `framework_rs/src/shutdown/shutdown_receiver.rs`.
-- `rust-toolchain.toml` gives the Rust version for this repository.
 
 ## Build
 
