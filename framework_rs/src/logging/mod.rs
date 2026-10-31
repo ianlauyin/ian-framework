@@ -1,4 +1,5 @@
 mod client_log;
+mod cpu_monitor;
 mod event;
 mod log_batch;
 mod log_request;
@@ -10,6 +11,7 @@ use std::collections::BTreeMap;
 use crate::time::hkt_now;
 
 pub use client_log::client_log_router;
+pub use cpu_monitor::{CpuMonitor, CpuMonitorConfig};
 pub use event::{LogEvent, LogLevel};
 pub use log_batch::LogBatch;
 pub use log_request::log_request;

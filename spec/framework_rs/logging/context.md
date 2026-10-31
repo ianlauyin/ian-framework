@@ -9,6 +9,7 @@ This feature is not product business logic.
 | --- | --- |
 | Event and log level | `spec/framework_rs/logging/event.md` |
 | Shipper, adapter and trace-only mode | `spec/framework_rs/logging/shipper.md` |
+| CPU monitor on the VM, for a shipper or a direct store | `spec/framework_rs/logging/cpu-monitor.md` |
 | Masking | `spec/framework_rs/logging/masking.md` |
 | Axum request middleware | `spec/framework_rs/logging/middleware.md` |
 | Untrusted client intake and client log route | `spec/framework_rs/logging/client-log.md` |
