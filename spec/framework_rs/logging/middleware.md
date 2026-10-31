@@ -28,9 +28,10 @@ General rules:
 
 The `ip` sources are in this order:
 
-1. The first item in the header `x-forwarded-for`.
-2. The header `x-real-ip`.
-3. The host of `ConnectInfo<SocketAddr>`.
+1. The header `cf-connecting-ip`. Cloudflare sets it to the real client IP.
+2. The first item in the header `x-forwarded-for`.
+3. The header `x-real-ip`.
+4. The host of `ConnectInfo<SocketAddr>`.
 
 Header rules:
 

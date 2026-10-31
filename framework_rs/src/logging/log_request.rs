@@ -105,6 +105,9 @@ fn request_path(path: &str) -> String {
 }
 
 pub(super) fn client_ip(request: &Request) -> String {
+    if let Some(ip) = header_text(request.headers(), "cf-connecting-ip") {
+        return ip;
+    }
     if let Some(ip) = first_forwarded_ip(request.headers()) {
         return ip;
     }
@@ -369,7 +372,8 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .uri("/status/200")
-                    .header("x-forwarded-for", " 203.0.113.8, 10.0.0.1 ")
+                    .header("cf-connecting-ip", " 203.0.113.9 ")
+                    .header("x-forwarded-for", "203.0.113.8, 10.0.0.1")
                     .header("x-real-ip", "198.51.100.4")
                     .header("user-agent", " demo-agent ")
                     .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
@@ -380,9 +384,26 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let event = &shipper.buffered_events()[0];
-        assert_eq!(event.ip, "203.0.113.8");
+        assert_eq!(event.ip, "203.0.113.9");
         assert_eq!(event.user_agent, "demo-agent");
         assert_eq!(event.action, "API/GET:/status/200");
+    }
+
+    #[tokio::test]
+    async fn middleware_uses_the_first_forwarded_ip_without_cloudflare() {
+        let shipper = shipper();
+        app(shipper.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/status/200")
+                    .header("x-forwarded-for", " 203.0.113.8, 10.0.0.1 ")
+                    .header("x-real-ip", "198.51.100.4")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(shipper.buffered_events()[0].ip, "203.0.113.8");
     }
 
     #[tokio::test]
