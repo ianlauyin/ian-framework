@@ -12,11 +12,9 @@ One event is one `LogEvent`. One event has these fields:
 | `id` | Event id, or an empty string |
 | `ip` | Client address, or an empty string |
 | `user_agent` | `user-agent` header, or an empty string |
-| `action` | `{method} {path}`, or an empty string |
-| `status` | HTTP status, or null |
+| `action` | `{method} {path}`, a client text, or an empty string |
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
-| `message` | Short text |
 | `extra` | One JSON object |
 
 - The event has no `app` field.

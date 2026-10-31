@@ -29,10 +29,9 @@ pub async fn log_request(
         None => StatusCode::BAD_REQUEST.into_response(),
     };
     let status = response.status().as_u16();
-    let mut event = event(action(&method, &path), "request", level_for_status(status));
+    let mut event = event(action(&method, &path), level_for_status(status));
     event.ip = ip;
     event.user_agent = user_agent;
-    event.status = Some(status);
     event.latency_ms = Some(millis_since(started));
     for (key, fields) in [("query", query), ("body", body)] {
         if let Some(fields) = fields.filter(|fields| !fields.is_empty()) {
@@ -249,10 +248,8 @@ mod tests {
         assert_eq!(event.action, "GET /status/204");
         assert_eq!(event.ip, "");
         assert_eq!(event.user_agent, "");
-        assert_eq!(event.status, Some(204));
         assert!(event.latency_ms.is_some());
         assert_eq!(event.level, LogLevel::Info);
-        assert_eq!(event.message, "request");
         let json = serde_json::to_string(event).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
@@ -362,9 +359,7 @@ mod tests {
         );
         let events = shipper.buffered_events();
         assert_eq!(events[0].level, LogLevel::Warn);
-        assert_eq!(events[0].status, Some(404));
         assert_eq!(events[1].level, LogLevel::Error);
-        assert_eq!(events[1].status, Some(503));
     }
 
     #[tokio::test]

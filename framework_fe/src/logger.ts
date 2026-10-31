@@ -14,10 +14,8 @@ type ClientLogEvent = {
   ip: string;
   user_agent: string;
   action: string;
-  status: null;
   latency_ms: null;
   level: LogLevel;
-  message: string;
   extra: LogExtra;
 };
 
@@ -56,7 +54,6 @@ export class Logger {
   }
 
   private static record(level: LogLevel, message: string, extra?: LogExtra): void {
-    // The route rejects the whole batch when one message is empty.
     if (message.trim() === "") return;
     Logger.start();
 
@@ -66,11 +63,9 @@ export class Logger {
       id: "",
       ip: "",
       user_agent: "",
-      action: "",
-      status: null,
+      action: message,
       latency_ms: null,
       level,
-      message,
       extra: Logger.mask({ page: location.pathname, ...extra }),
     });
   }

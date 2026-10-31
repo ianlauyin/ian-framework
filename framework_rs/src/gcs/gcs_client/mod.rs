@@ -612,7 +612,8 @@ mod tests {
         assert_eq!(events[0].id, "");
         assert_eq!(events[0].ip, "");
         assert_eq!(events[0].user_agent, "");
-        assert_eq!(events[0].status, Some(200));
+        assert_eq!(events[0].extra["status"], "200");
+        assert_eq!(events[0].extra["message"], "gcs response");
         assert_eq!(events[0].latency_ms, Some(3));
         assert_eq!(
             events[0]

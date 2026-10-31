@@ -57,26 +57,21 @@ mod tests {
         LogShipper::new(config).unwrap()
     }
 
-    fn client_event(message: &str) -> serde_json::Value {
+    fn client_event(action: &str) -> serde_json::Value {
         json!({
             "ts": "2026-10-25T12:00:00Z",
             "id": "client-id",
             "ip": "10.0.0.1",
             "user_agent": "fake-agent",
-            "action": "",
-            "status": 200,
+            "action": action,
             "latency_ms": 5,
             "level": "error",
-            "message": message,
             "extra": { "page": "/home" },
         })
     }
 
-    fn batch_body(messages: &[&str]) -> Body {
-        let events: Vec<_> = messages
-            .iter()
-            .map(|message| client_event(message))
-            .collect();
+    fn batch_body(actions: &[&str]) -> Body {
+        let events: Vec<_> = actions.iter().map(|action| client_event(action)).collect();
         Body::from(json!({ "events": events }).to_string())
     }
 
@@ -105,12 +100,11 @@ mod tests {
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 2);
         let event = &events[0];
-        assert_eq!(event.message, "boom");
+        assert_eq!(event.action, "boom");
         assert_eq!(event.level, LogLevel::Error);
         assert_eq!(event.ip, "203.0.113.8");
         assert_eq!(event.user_agent, "demo-agent");
         assert_eq!(event.id, "");
-        assert_eq!(event.status, None);
         assert_eq!(event.latency_ms, None);
         assert_eq!(event.extra["page"], "/home");
     }
@@ -179,10 +173,6 @@ mod tests {
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            send(&shipper, &headers, batch_body(&["boom", " "])).await,
-            StatusCode::BAD_REQUEST
-        );
-        assert_eq!(
             send(&shipper, &headers, Body::from(vec![b' '; BODY_LIMIT + 1])).await,
             StatusCode::PAYLOAD_TOO_LARGE
         );
@@ -220,8 +210,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 2);
-        assert_eq!(events[0].message, "boom");
-        assert_eq!(events[1].message, "request");
+        assert_eq!(events[0].action, "boom");
         assert_eq!(events[1].action, "POST /log");
     }
 }

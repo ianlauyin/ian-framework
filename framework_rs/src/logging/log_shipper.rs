@@ -317,7 +317,7 @@ fn mask_text(masks: &[regex::Regex], text: &mut String) {
 }
 
 fn capacity_warn_event() -> LogEvent {
-    event("", CAPACITY_WARN_NOTE, LogLevel::Warn)
+    event(CAPACITY_WARN_NOTE, LogLevel::Warn)
 }
 
 fn trace_event(app: &str, event: &LogEvent) {
@@ -330,11 +330,8 @@ fn trace_event(app: &str, event: &LogEvent) {
                 ip = %event.ip,
                 user_agent = %event.user_agent,
                 action = %event.action,
-                status = ?event.status,
                 latency_ms = ?event.latency_ms,
-                extra = %extra,
-                "{}",
-                event.message
+                extra = %extra
             )
         };
     }
@@ -461,25 +458,23 @@ mod tests {
         LogShipper::new(config("api", "http://logs.example")).unwrap()
     }
 
-    fn messages_of(events: &[LogEvent]) -> Vec<&str> {
-        events.iter().map(|event| event.message.as_str()).collect()
+    fn actions_of(events: &[LogEvent]) -> Vec<&str> {
+        events.iter().map(|event| event.action.as_str()).collect()
     }
 
     fn capacity_warn_count(events: &[LogEvent]) -> usize {
         events
             .iter()
-            .filter(|event| event.message == CAPACITY_WARN_NOTE)
+            .filter(|event| event.action == CAPACITY_WARN_NOTE)
             .count()
     }
 
     fn assert_capacity_warn(event: &LogEvent) {
         assert_eq!(event.level, LogLevel::Warn);
-        assert_eq!(event.message, CAPACITY_WARN_NOTE);
         assert_eq!(event.id, "");
         assert_eq!(event.ip, "");
         assert_eq!(event.user_agent, "");
-        assert_eq!(event.action, "");
-        assert_eq!(event.status, None);
+        assert_eq!(event.action, CAPACITY_WARN_NOTE);
         assert_eq!(event.latency_ms, None);
         assert!(event.extra.is_empty());
     }
@@ -493,10 +488,10 @@ mod tests {
     #[test]
     fn record_omits_scope_keys() {
         let shipper = buffered();
-        shipper.record(event("", "kept", LogLevel::Info));
+        shipper.record(event("kept", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].message, "kept");
+        assert_eq!(events[0].action, "kept");
         assert_eq!(shipper.inner.app, "api");
         assert_no_scope_keys(&serde_json::to_string(&events[0]).unwrap());
     }
@@ -509,11 +504,7 @@ mod tests {
             r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
         ];
         let shipper = LogShipper::new(config).unwrap();
-        let mut event = event(
-            "POST /login?password=x",
-            "login password=hunter2 ok",
-            LogLevel::Info,
-        );
+        let mut event = event("POST /login?password=x", LogLevel::Info);
         event.id = "password=1".to_string();
         event.user_agent = "agent BEARER abc.def".to_string();
         event
@@ -529,7 +520,6 @@ mod tests {
         );
         shipper.record(event);
         let stored = shipper.buffered_events().remove(0);
-        assert_eq!(stored.message, "login password=hunter2 ok");
         assert_eq!(stored.action, "POST /login?password=x");
         assert_eq!(stored.id, "password=1");
         assert_eq!(stored.user_agent, "agent BEARER abc.def");
@@ -546,7 +536,7 @@ mod tests {
         let mut config = config("api", "http://logs.example");
         config.mask_patterns = vec![r"(?i)^(password|token)$".to_string()];
         let shipper = LogShipper::new(config).unwrap();
-        let mut event = event("", "login", LogLevel::Info);
+        let mut event = event("login", LogLevel::Info);
         event
             .extra
             .insert("password".to_string(), serde_json::json!("hunter2"));
@@ -577,20 +567,20 @@ mod tests {
         config.endpoint = Some("http://logs.example".to_string());
         config.mask_patterns = Vec::new();
         let shipper = LogShipper::new(config).unwrap();
-        let mut event = event("", "password=hunter2", LogLevel::Info);
+        let mut event = event("password=hunter2", LogLevel::Info);
         event
             .extra
             .insert("note".to_string(), serde_json::json!("password=hunter2"));
         shipper.record(event);
         let stored = shipper.buffered_events().remove(0);
-        assert_eq!(stored.message, "password=hunter2");
+        assert_eq!(stored.action, "password=hunter2");
         assert_eq!(stored.extra["note"], serde_json::json!("password=hunter2"));
     }
 
     #[test]
     fn unset_endpoint_traces_without_buffering() {
         let shipper = LogShipper::new(config("api", "")).unwrap();
-        shipper.record(event("GET /", "traced", LogLevel::Error));
+        shipper.record(event("GET /", LogLevel::Error));
         assert!(shipper.buffered_events().is_empty());
     }
 
@@ -599,36 +589,30 @@ mod tests {
         let mut config = config("api", "http://logs.example");
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("", "a", LogLevel::Info));
-        shipper.record(event("", "b", LogLevel::Info));
-        shipper.record(event("", "c", LogLevel::Info));
-        let messages: Vec<_> = shipper
+        shipper.record(event("a", LogLevel::Info));
+        shipper.record(event("b", LogLevel::Info));
+        shipper.record(event("c", LogLevel::Info));
+        let actions: Vec<_> = shipper
             .buffered_events()
             .into_iter()
-            .map(|event| event.message)
+            .map(|event| event.action)
             .collect();
-        assert_eq!(messages, [CAPACITY_WARN_NOTE.to_string(), "c".to_string()]);
+        assert_eq!(actions, [CAPACITY_WARN_NOTE.to_string(), "c".to_string()]);
     }
 
     #[test]
-    fn record_keeps_long_message_request_id_ip_and_user_agent() {
+    fn record_keeps_long_action_request_id_ip_and_user_agent() {
         let shipper = buffered();
-        let mut event = event(
-            format!("GET /{}", "p".repeat(3000)),
-            "é".repeat(5000),
-            LogLevel::Info,
-        );
+        let mut event = event(format!("GET /{}", "p".repeat(3000)), LogLevel::Info);
         event.id = "i".repeat(200);
         event.ip = "1".repeat(80);
         event.user_agent = "é".repeat(2000);
-        let message = event.message.clone();
         let action = event.action.clone();
         let id = event.id.clone();
         let ip = event.ip.clone();
         let user_agent = event.user_agent.clone();
         shipper.record(event);
         let stored = shipper.buffered_events().remove(0);
-        assert_eq!(stored.message, message);
         assert_eq!(stored.action, action);
         assert_eq!(stored.id, id);
         assert_eq!(stored.ip, ip);
@@ -640,61 +624,58 @@ mod tests {
         let mut config = config("api", "http://logs.example");
         config.capacity = 5;
         let shipper = LogShipper::new(config).unwrap();
-        let mut oldest = event("GET /a", "first", LogLevel::Error);
+        let mut oldest = event("first", LogLevel::Error);
         oldest.id = "id-1".to_string();
         oldest.ip = "203.0.113.9".to_string();
         oldest.user_agent = "agent".to_string();
-        oldest.status = Some(500);
         oldest.latency_ms = Some(9);
         oldest.extra.insert("k".to_string(), serde_json::json!("v"));
         oldest.ts = DateTime::parse_from_rfc3339("2020-01-01T08:00:00+08:00").unwrap();
         let ts = oldest.ts;
         shipper.record(oldest);
-        shipper.record(event("", "second", LogLevel::Info));
-        shipper.record(event("", "third", LogLevel::Info));
+        shipper.record(event("second", LogLevel::Info));
+        shipper.record(event("third", LogLevel::Info));
         let below = shipper.buffered_events();
         assert_eq!(below.len(), 3);
         assert_eq!(capacity_warn_count(&below), 0);
         assert_eq!(below[0].level, LogLevel::Error);
-        assert_eq!(below[0].message, "first");
+        assert_eq!(below[0].action, "first");
         let before = Utc::now();
-        shipper.record(event("", "fourth", LogLevel::Info));
+        shipper.record(event("fourth", LogLevel::Info));
         let after = Utc::now();
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 5);
         assert_eq!(events[0].level, LogLevel::Error);
-        assert_eq!(events[0].message, "first");
+        assert_eq!(events[0].action, "first");
         assert_eq!(events[0].ts, ts);
         assert_eq!(events[0].id, "id-1");
         assert_eq!(events[0].ip, "203.0.113.9");
         assert_eq!(events[0].user_agent, "agent");
-        assert_eq!(events[0].action, "GET /a");
-        assert_eq!(events[0].status, Some(500));
         assert_eq!(events[0].latency_ms, Some(9));
         assert_eq!(
             events[0].extra.get("k").and_then(|value| value.as_str()),
             Some("v")
         );
-        assert_eq!(events[1].message, "second");
+        assert_eq!(events[1].action, "second");
         assert_eq!(events[1].level, LogLevel::Info);
-        assert_eq!(events[2].message, "third");
-        assert_eq!(events[3].message, "fourth");
+        assert_eq!(events[2].action, "third");
+        assert_eq!(events[3].action, "fourth");
         assert_eq!(events[3].level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&events), 1);
         assert_capacity_warn(&events[4]);
         assert!(events[4].ts >= before && events[4].ts <= after);
         assert_eq!(events[4].ts.offset().local_minus_utc(), 8 * 3600);
-        shipper.record(event("", "fifth", LogLevel::Info));
+        shipper.record(event("fifth", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(
-            messages_of(&events),
+            actions_of(&events),
             ["second", "third", "fourth", CAPACITY_WARN_NOTE, "fifth"]
         );
         assert_eq!(capacity_warn_count(&events), 1);
-        shipper.record(event("", "sixth", LogLevel::Info));
+        shipper.record(event("sixth", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(
-            messages_of(&events),
+            actions_of(&events),
             ["third", "fourth", CAPACITY_WARN_NOTE, "fifth", "sixth"]
         );
         assert_eq!(capacity_warn_count(&events), 1);
@@ -705,22 +686,22 @@ mod tests {
         let mut config = config("api", "http://logs.example");
         config.capacity = 4;
         let shipper = LogShipper::new(config).unwrap();
-        for message in ["a", "b", "c"] {
-            shipper.record(event("", message, LogLevel::Info));
+        for action in ["a", "b", "c"] {
+            shipper.record(event(action, LogLevel::Info));
         }
         let below = shipper.buffered_events();
-        assert_eq!(messages_of(&below), ["a", "b", "c"]);
+        assert_eq!(actions_of(&below), ["a", "b", "c"]);
         assert_eq!(capacity_warn_count(&below), 0);
-        shipper.record(event("", "d", LogLevel::Info));
+        shipper.record(event("d", LogLevel::Info));
         let events = shipper.buffered_events();
-        assert_eq!(messages_of(&events), ["b", "c", "d", CAPACITY_WARN_NOTE]);
+        assert_eq!(actions_of(&events), ["b", "c", "d", CAPACITY_WARN_NOTE]);
         assert_eq!(events[0].level, LogLevel::Info);
         assert_eq!(events[1].level, LogLevel::Info);
         assert_eq!(events[2].level, LogLevel::Info);
         assert_capacity_warn(&events[3]);
-        shipper.record(event("", "e", LogLevel::Info));
+        shipper.record(event("e", LogLevel::Info));
         let events = shipper.buffered_events();
-        assert_eq!(messages_of(&events), ["c", "d", CAPACITY_WARN_NOTE, "e"]);
+        assert_eq!(actions_of(&events), ["c", "d", CAPACITY_WARN_NOTE, "e"]);
         assert_eq!(capacity_warn_count(&events), 1);
     }
 
@@ -729,14 +710,14 @@ mod tests {
         let mut config = config("api", "http://logs.example");
         config.capacity = 1;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("GET /", "hello", LogLevel::Info));
+        shipper.record(event("GET /", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
         assert_capacity_warn(&events[0]);
-        shipper.record(event("", "next", LogLevel::Info));
+        shipper.record(event("next", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].message, "next");
+        assert_eq!(events[0].action, "next");
         assert_eq!(events[0].level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&events), 0);
     }
@@ -761,7 +742,7 @@ mod tests {
     #[tokio::test]
     async fn unset_endpoint_ships_without_http() {
         let shipper = trace_only();
-        shipper.record(event("", "local", LogLevel::Info));
+        shipper.record(event("local", LogLevel::Info));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
         assert!(shipper.inner.http.is_none());
@@ -782,10 +763,10 @@ mod tests {
         drop(listener);
         let config = config("api", format!("http://{addr}"));
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("", "down", LogLevel::Error));
+        shipper.record(event("down", LogLevel::Error));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 1);
-        assert_eq!(shipper.buffered_events()[0].message, "down");
+        assert_eq!(shipper.buffered_events()[0].action, "down");
     }
 
     #[tokio::test]
@@ -793,9 +774,9 @@ mod tests {
         let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
         let config = config("my-app", endpoint);
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("", "one", LogLevel::Info));
-        shipper.record(event("", "two", LogLevel::Warn));
-        shipper.record(event("", "three", LogLevel::Error));
+        shipper.record(event("one", LogLevel::Info));
+        shipper.record(event("two", LogLevel::Warn));
+        shipper.record(event("three", LogLevel::Error));
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
         let captured = rx.recv().await.unwrap();
@@ -805,9 +786,9 @@ mod tests {
         assert_eq!(captured.authorization, None);
         let events = parse_body(&captured.body);
         assert_eq!(events.len(), 3);
-        assert_eq!(events[0].message, "one");
-        assert_eq!(events[1].message, "two");
-        assert_eq!(events[2].message, "three");
+        assert_eq!(events[0].action, "one");
+        assert_eq!(events[1].action, "two");
+        assert_eq!(events[2].action, "three");
         let body: serde_json::Value = serde_json::from_str(&captured.body).unwrap();
         assert!(body.as_object().is_some());
         assert!(body.as_array().is_none());
@@ -829,7 +810,7 @@ mod tests {
         let mut config = config("api", endpoint);
         config.post_api_key = Some("  log-post-key  ".to_string());
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("", "one", LogLevel::Info));
+        shipper.record(event("one", LogLevel::Info));
         shipper.ship_batch().await;
         let captured = rx.recv().await.unwrap();
         assert_eq!(
@@ -847,7 +828,7 @@ mod tests {
             config.post_api_key = post_api_key.map(str::to_string);
             let shipper = LogShipper::new(config).unwrap();
             assert!(shipper.inner.post_api_key.is_none());
-            shipper.record(event("", "one", LogLevel::Info));
+            shipper.record(event("one", LogLevel::Info));
             shipper.ship_batch().await;
             let captured = rx.recv().await.unwrap();
             assert_eq!(captured.authorization, None);
@@ -860,31 +841,31 @@ mod tests {
         let shipper = LogShipper::new(config("api", endpoint)).unwrap();
         let total = SHIP_CHUNK + 1;
         for index in 0..total {
-            shipper.record(event("", index.to_string(), LogLevel::Info));
+            shipper.record(event(index.to_string(), LogLevel::Info));
         }
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 1);
         let captured = rx.recv().await.unwrap();
         let events = parse_body(&captured.body);
         assert_eq!(events.len(), SHIP_CHUNK);
-        assert_eq!(events[0].message, "0");
-        assert_eq!(events[SHIP_CHUNK - 1].message, (SHIP_CHUNK - 1).to_string());
-        assert_eq!(shipper.buffered_events()[0].message, SHIP_CHUNK.to_string());
+        assert_eq!(events[0].action, "0");
+        assert_eq!(events[SHIP_CHUNK - 1].action, (SHIP_CHUNK - 1).to_string());
+        assert_eq!(shipper.buffered_events()[0].action, SHIP_CHUNK.to_string());
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
         let rest = rx.recv().await.unwrap();
         let rest_events = parse_body(&rest.body);
         assert_eq!(rest_events.len(), 1);
-        assert_eq!(rest_events[0].message, SHIP_CHUNK.to_string());
+        assert_eq!(rest_events[0].action, SHIP_CHUNK.to_string());
     }
 
     #[tokio::test]
     async fn http_error_restores_the_batch() {
         let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
         let shipper = LogShipper::new(config("api", endpoint)).unwrap();
-        shipper.record(event("", "keep", LogLevel::Info));
+        shipper.record(event("keep", LogLevel::Info));
         shipper.ship_batch().await;
-        assert_eq!(shipper.buffered_events()[0].message, "keep");
+        assert_eq!(shipper.buffered_events()[0].action, "keep");
     }
 
     #[tokio::test]
@@ -893,8 +874,8 @@ mod tests {
         let mut config = config("api", endpoint);
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("", "a", LogLevel::Info));
-        shipper.record(event("", "b", LogLevel::Info));
+        shipper.record(event("a", LogLevel::Info));
+        shipper.record(event("b", LogLevel::Info));
         let shipper_task = shipper.clone();
         let ship = tokio::spawn(async move { shipper_task.ship_batch().await });
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -904,11 +885,11 @@ mod tests {
         })
         .await
         .unwrap();
-        shipper.record(event("", "c", LogLevel::Info));
+        shipper.record(event("c", LogLevel::Info));
         ship.await.unwrap();
         let left = shipper.buffered_events();
         assert_eq!(left.len(), 1);
-        assert_eq!(left[0].message, "c");
+        assert_eq!(left[0].action, "c");
     }
 
     #[tokio::test]
@@ -917,8 +898,8 @@ mod tests {
         let mut config = config("api", endpoint);
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("", "a", LogLevel::Info));
-        shipper.record(event("", "b", LogLevel::Info));
+        shipper.record(event("a", LogLevel::Info));
+        shipper.record(event("b", LogLevel::Info));
         let shipper_task = shipper.clone();
         let ship = tokio::spawn(async move { shipper_task.ship_batch().await });
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -928,12 +909,12 @@ mod tests {
         })
         .await
         .unwrap();
-        shipper.record(event("", "c", LogLevel::Info));
+        shipper.record(event("c", LogLevel::Info));
         ship.await.unwrap();
         let left: Vec<_> = shipper
             .buffered_events()
             .into_iter()
-            .map(|event| event.message)
+            .map(|event| event.action)
             .collect();
         assert_eq!(left, ["b".to_string(), CAPACITY_WARN_NOTE.to_string()]);
     }
@@ -943,7 +924,7 @@ mod tests {
         let mut config = config("api", "");
         config.ship_every = Duration::from_millis(10);
         let shipper = LogShipper::new(config).unwrap();
-        shipper.record(event("", "traced", LogLevel::Info));
+        shipper.record(event("traced", LogLevel::Info));
         let handle = shipper.spawn_ship_loop(ShutdownReceiver::new());
         tokio::time::sleep(Duration::from_millis(40)).await;
         assert!(!handle.is_finished());
@@ -959,7 +940,7 @@ mod tests {
         let handle = shipper.spawn_ship_loop(shutdown.clone());
         tokio::time::sleep(Duration::from_millis(20)).await;
         for index in 0..SHIP_CHUNK + 1 {
-            shipper.record(event("", index.to_string(), LogLevel::Info));
+            shipper.record(event(index.to_string(), LogLevel::Info));
         }
         shutdown.trigger();
         tokio::time::timeout(Duration::from_secs(2), handle)
@@ -975,7 +956,7 @@ mod tests {
     async fn shutdown_flush_stops_when_the_endpoint_fails() {
         let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
         let shipper = LogShipper::new(config("api", endpoint)).unwrap();
-        shipper.record(event("", "keep", LogLevel::Info));
+        shipper.record(event("keep", LogLevel::Info));
         let shutdown = ShutdownReceiver::new();
         shutdown.trigger();
         let handle = shipper.spawn_ship_loop(shutdown);
@@ -983,7 +964,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(shipper.buffered_events()[0].message, "keep");
+        assert_eq!(shipper.buffered_events()[0].action, "keep");
     }
 
     #[tokio::test]
@@ -992,25 +973,25 @@ mod tests {
         let mut config = config("api", endpoint);
         config.capacity = 5;
         let shipper = LogShipper::new(config).unwrap();
-        for message in ["a", "b", "c", "d"] {
-            shipper.record(event("", message, LogLevel::Info));
+        for action in ["a", "b", "c", "d"] {
+            shipper.record(event(action, LogLevel::Info));
         }
         shipper.ship_batch().await;
         let events = shipper.buffered_events();
         assert_eq!(
-            messages_of(&events),
+            actions_of(&events),
             ["a", "b", "c", "d", CAPACITY_WARN_NOTE]
         );
         assert_eq!(events[0].level, LogLevel::Info);
         assert_capacity_warn(&events[4]);
-        shipper.record(event("", "e", LogLevel::Info));
+        shipper.record(event("e", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(
-            messages_of(&events),
+            actions_of(&events),
             ["b", "c", "d", CAPACITY_WARN_NOTE, "e"]
         );
         assert_eq!(capacity_warn_count(&events), 1);
-        assert_eq!(events[0].message, "b");
+        assert_eq!(events[0].action, "b");
         assert_eq!(events[0].level, LogLevel::Info);
     }
 
@@ -1020,37 +1001,37 @@ mod tests {
         let mut config = config("api", endpoint);
         config.capacity = 5;
         let shipper = LogShipper::new(config).unwrap();
-        for message in ["a", "b", "c", "d"] {
-            shipper.record(event("", message, LogLevel::Info));
+        for action in ["a", "b", "c", "d"] {
+            shipper.record(event(action, LogLevel::Info));
         }
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
         let posted = parse_body(&rx.recv().await.unwrap().body);
         assert_eq!(
-            messages_of(&posted),
+            actions_of(&posted),
             ["a", "b", "c", "d", CAPACITY_WARN_NOTE]
         );
         assert_eq!(posted[0].level, LogLevel::Info);
-        assert_eq!(posted[3].message, "d");
+        assert_eq!(posted[3].action, "d");
         assert_capacity_warn(&posted[4]);
-        for message in ["e", "f", "g"] {
-            shipper.record(event("", message, LogLevel::Info));
+        for action in ["e", "f", "g"] {
+            shipper.record(event(action, LogLevel::Info));
         }
         let events = shipper.buffered_events();
-        assert_eq!(messages_of(&events), ["e", "f", "g"]);
+        assert_eq!(actions_of(&events), ["e", "f", "g"]);
         assert_eq!(capacity_warn_count(&events), 0);
-        shipper.record(event("", "h", LogLevel::Info));
+        shipper.record(event("h", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(
-            messages_of(&events),
+            actions_of(&events),
             ["e", "f", "g", "h", CAPACITY_WARN_NOTE]
         );
         assert_eq!(events[0].level, LogLevel::Info);
         assert_capacity_warn(&events[4]);
-        shipper.record(event("", "i", LogLevel::Info));
+        shipper.record(event("i", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(
-            messages_of(&events),
+            actions_of(&events),
             ["f", "g", "h", CAPACITY_WARN_NOTE, "i"]
         );
         assert_eq!(capacity_warn_count(&events), 1);
@@ -1063,16 +1044,16 @@ mod tests {
         config.capacity = 5_000;
         let shipper = LogShipper::new(config).unwrap();
         for index in 0..4_000 {
-            shipper.record(event("", index.to_string(), LogLevel::Info));
+            shipper.record(event(index.to_string(), LogLevel::Info));
         }
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 4_001);
-        assert_eq!(events[0].message, "0");
+        assert_eq!(events[0].action, "0");
         assert_eq!(events[0].level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&events), 1);
         assert_capacity_warn(events.last().unwrap());
         for index in 4_000..4_999 {
-            shipper.record(event("", index.to_string(), LogLevel::Info));
+            shipper.record(event(index.to_string(), LogLevel::Info));
         }
         assert_eq!(shipper.buffered_len(), 5_000);
         assert_eq!(capacity_warn_count(&shipper.buffered_events()), 1);
@@ -1080,36 +1061,36 @@ mod tests {
         assert_eq!(shipper.buffered_len(), 4_000);
         let posted = parse_body(&rx.recv().await.unwrap().body);
         assert_eq!(posted.len(), SHIP_CHUNK);
-        assert_eq!(posted[0].message, "0");
+        assert_eq!(posted[0].action, "0");
         assert_eq!(posted[0].level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&posted), 0);
         let left = shipper.buffered_events();
-        assert_eq!(left[0].message, "1000");
+        assert_eq!(left[0].action, "1000");
         assert_eq!(left[0].level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&left), 1);
-        shipper.record(event("", "more", LogLevel::Info));
+        shipper.record(event("more", LogLevel::Info));
         let left = shipper.buffered_events();
         assert_eq!(left.len(), 4_001);
-        assert_eq!(left[0].message, "1000");
-        assert_eq!(left.last().unwrap().message, "more");
+        assert_eq!(left[0].action, "1000");
+        assert_eq!(left.last().unwrap().action, "more");
         assert_eq!(left.last().unwrap().level, LogLevel::Info);
         assert_eq!(capacity_warn_count(&left), 1);
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 3_001);
         let second = parse_body(&rx.recv().await.unwrap().body);
-        assert_eq!(second[0].message, "1000");
+        assert_eq!(second[0].action, "1000");
         assert_eq!(capacity_warn_count(&second), 0);
         assert_eq!(capacity_warn_count(&shipper.buffered_events()), 1);
         for index in 0..998 {
-            shipper.record(event("", format!("extra-{index}"), LogLevel::Info));
+            shipper.record(event(format!("extra-{index}"), LogLevel::Info));
         }
         assert_eq!(shipper.buffered_len(), 3_999);
         assert_eq!(capacity_warn_count(&shipper.buffered_events()), 1);
-        shipper.record(event("", "cross", LogLevel::Info));
+        shipper.record(event("cross", LogLevel::Info));
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 4_001);
         assert_eq!(capacity_warn_count(&events), 2);
-        assert_eq!(events[events.len() - 2].message, "cross");
+        assert_eq!(events[events.len() - 2].action, "cross");
         assert_eq!(events[events.len() - 2].level, LogLevel::Info);
         assert_capacity_warn(events.last().unwrap());
     }

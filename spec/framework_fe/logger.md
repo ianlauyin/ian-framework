@@ -34,7 +34,7 @@ This feature is not product business logic.
 ### Record
 
 - The logger keeps one queue in memory for the page.
-- When `message` has only whitespace or is empty, the logger does not record the event. The log route rejects the full batch when one message is empty.
+- When `message` has only whitespace or is empty, the logger does not record the event.
 - The first recorded event starts the send timers.
 - The queue keeps a maximum of 1000 events. When the queue is full, a new event removes the oldest event.
 
@@ -46,11 +46,9 @@ The event has these fields:
 | `id` | Empty string |
 | `ip` | Empty string |
 | `user_agent` | Empty string |
-| `action` | Empty string |
-| `status` | `null` |
+| `action` | `message`, with no change. |
 | `latency_ms` | `null` |
 | `level` | The level of the method. |
-| `message` | `message`, with no change. |
 | `extra` | The `extra` values after the masking. |
 
 `extra` rules:
@@ -99,7 +97,7 @@ The logger masks `extra` before it puts the event in the queue.
 - `Logger.setMaskPatterns` replaces the full list.
 - The logger adds the `g` flag to each pattern that does not have it. It keeps the other flags.
 - The masking applies to the `page` key also.
-- The masking does not apply to `message`.
+- The masking does not apply to `action`.
 
 Key rule:
 

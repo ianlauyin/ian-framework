@@ -18,21 +18,15 @@ pub use shipper_config::ShipperConfig;
 
 const SHIP_CHUNK: usize = 1_000;
 
-pub(crate) fn event(
-    action: impl Into<String>,
-    message: impl Into<String>,
-    level: LogLevel,
-) -> LogEvent {
+pub(crate) fn event(action: impl Into<String>, level: LogLevel) -> LogEvent {
     LogEvent {
         ts: hkt_now(),
         id: String::new(),
         ip: String::new(),
         user_agent: String::new(),
         action: action.into(),
-        status: None,
         latency_ms: None,
         level,
-        message: message.into(),
         extra: BTreeMap::new(),
     }
 }

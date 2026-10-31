@@ -23,12 +23,20 @@ impl OpsRecord<'_> {
             ip: String::new(),
             user_agent: String::new(),
             action: action(self.method, self.url),
-            status: self.status,
             latency_ms: self.latency_ms,
             level: self.level,
-            message: self.message.to_string(),
             extra: BTreeMap::new(),
         };
+        event.extra.insert(
+            "message".to_string(),
+            serde_json::Value::String(self.message.to_string()),
+        );
+        if let Some(status) = self.status {
+            event.extra.insert(
+                "status".to_string(),
+                serde_json::Value::String(status.to_string()),
+            );
+        }
         for (key, value) in self.extra {
             event.extra.insert(
                 (*key).to_string(),

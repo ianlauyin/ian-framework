@@ -70,7 +70,7 @@ The `Debug` output of `LogShipper` does not show the POST API key. When the ship
 - Before it stores or traces the event, `LogShipper::record` masks the event `extra` values.
 - In trace-only mode, `LogShipper::record` writes the event with `tracing`. It does not store the event.
 - The shipper does not write `app` into the event.
-- The shipper stores the full `message`, `action`, `id`, `ip`, and `user_agent`.
+- The shipper stores the full `action`, `id`, `ip`, and `user_agent`.
 - The buffer keeps a maximum of `capacity` events.
 - When the buffer is full, a new event removes the oldest event.
 
@@ -104,11 +104,9 @@ The warning has these fields:
 | `id` | Empty string |
 | `ip` | Empty string |
 | `user_agent` | Empty string |
-| `action` | Empty string |
-| `status` | null |
+| `action` | `capacity meets 80%` |
 | `latency_ms` | null |
 | `level` | `warn` |
-| `message` | `capacity meets 80%` |
 | `extra` | Empty object |
 
 ### Ship loop
@@ -194,8 +192,7 @@ In trace-only mode, `LogShipper::record` writes each event with `tracing` at the
 | `warn` | `tracing::warn!` |
 | `error` | `tracing::error!` |
 
-- The tracing message is the event `message`.
-- The tracing fields are `app`, `id`, `ip`, `user_agent`, `action`, `status`, `latency_ms`, and `extra`.
+- The tracing fields are `app`, `id`, `ip`, `user_agent`, `action`, `latency_ms`, and `extra`.
 - `extra` is the JSON text of the event `extra`.
 - The project installs a `tracing` subscriber to show these logs.
 

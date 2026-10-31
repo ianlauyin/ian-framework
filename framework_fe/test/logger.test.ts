@@ -68,16 +68,14 @@ describe("Logger", () => {
         id: "",
         ip: "",
         user_agent: "",
-        action: "",
-        status: null,
+        action: "started",
         latency_ms: null,
         level: "info",
-        message: "started",
         extra: { page: "/home" },
       },
       expect.objectContaining({
         level: "error",
-        message: "boom",
+        action: "boom",
         extra: { page: "/other", code: 42 },
       }),
     ]);
@@ -115,7 +113,7 @@ describe("Logger", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     const events = sentEvents(0);
     expect(events).toHaveLength(1000);
-    expect(events[0].message).toBe("event 1");
+    expect(events[0].action).toBe("event 1");
   });
 
   it("masks the value of a matching extra key and each match in a string value", async () => {
@@ -129,7 +127,7 @@ describe("Logger", () => {
     });
     hidePage();
     const [event] = sentEvents(0);
-    expect(event.message).toBe("login secret=keep");
+    expect(event.action).toBe("login secret=keep");
     expect(event.extra).toEqual({
       page: "/home",
       password: "***",
@@ -171,9 +169,9 @@ describe("Logger", () => {
     windowListeners.unhandledrejection({ reason: new Error("rejected") });
     windowListeners.unhandledrejection({ reason: 42 });
     hidePage();
-    const sent = sentEvents(0).map((event: { level: string; message: string }) => [
+    const sent = sentEvents(0).map((event: { level: string; action: string }) => [
       event.level,
-      event.message,
+      event.action,
     ]);
     expect(sent).toEqual([
       ["error", "boom"],

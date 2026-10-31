@@ -11,10 +11,8 @@ A client can send log events. The client is not trusted.
 `LogEvent::sanitize_untrusted_client` checks one event.
 
 - The input is a reference to one `LogEvent`.
-- The result is one event, or no event.
+- The result is one event.
 - The function does not change the input event.
-- The function removes spaces at the start and at the end of `message`.
-- An empty message after that removal gives no event.
 
 The function sets the fields of the result as follows:
 
@@ -23,12 +21,10 @@ The function sets the fields of the result as follows:
 | `id` | Empty string. The client value is not kept. |
 | `ip` | Empty string. The client value is not kept. |
 | `user_agent` | Empty string. The client value is not kept. |
-| `status` | null. The client value is not kept. |
 | `latency_ms` | null. The client value is not kept. |
 | `ts` | The current HKT time, from `ian_framework::time::hkt_now()`. The client value is not kept. |
 | `level` | The client value. |
 | `action` | The client value. |
-| `message` | The client value, after the removal of the spaces. |
 | `extra` | The client keys and values that obey the `extra` rules below. |
 
 The function reads each `extra` key:
@@ -64,9 +60,8 @@ The function stores the full value text.
 - The result is a list of events, or no batch.
 - An empty `events` list gives no batch.
 - The function gives no batch when `events` has more than 1000 events.
-- The function accepts 1000 events when each event gives an event.
+- The function accepts 1000 events.
 - One ship batch uses this same limit of 1000 events.
-- The function gives no batch when one event gives no event.
 - The function does not call `LogShipper::record`.
 - The caller calls `LogShipper::record` for each kept event.
 

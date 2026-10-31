@@ -22,10 +22,8 @@ General rules:
 | `action` | `{method} {path}`. One space separates the method and the path. `method` is the request method. `path` is the request path, with no query string. An empty path is `/`. |
 | `ip` | The first source that is not empty. The sources are below. |
 | `user_agent` | The header `user-agent`. A missing header gives an empty `user_agent`. |
-| `status` | The response status. |
 | `latency_ms` | The handler time in milliseconds. It includes the body read. |
-| `message` | `request` |
-| `level` | From the status. The rules are below. |
+| `level` | From the response status. The rules are below. |
 | `extra` | The keys `query` and `body`. The rules are below. |
 
 The `ip` sources are in this order:

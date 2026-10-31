@@ -21,31 +21,23 @@ pub struct LogEvent {
     pub ip: String,
     pub user_agent: String,
     pub action: String,
-    pub status: Option<u16>,
     pub latency_ms: Option<u64>,
     pub level: LogLevel,
-    pub message: String,
     pub extra: BTreeMap<String, Value>,
 }
 
 impl LogEvent {
-    pub fn sanitize_untrusted_client(&self) -> Option<LogEvent> {
-        let message = self.message.trim();
-        if message.is_empty() {
-            return None;
-        }
-        Some(LogEvent {
+    pub fn sanitize_untrusted_client(&self) -> LogEvent {
+        LogEvent {
             ts: hkt_now(),
             id: String::new(),
             ip: String::new(),
             user_agent: String::new(),
             action: self.action.clone(),
-            status: None,
             latency_ms: None,
             level: self.level,
-            message: message.to_string(),
             extra: client_extra(&self.extra),
-        })
+        }
     }
 }
 
@@ -90,12 +82,11 @@ mod tests {
     use serde_json::json;
 
     fn sample() -> LogEvent {
-        let mut event = event("GET /health", "request", LogLevel::Info);
+        let mut event = event("GET /health", LogLevel::Info);
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
         event.id = "req-1".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "demo-agent".to_string();
-        event.status = Some(204);
         event.latency_ms = Some(12);
         event.extra.insert("region".to_string(), json!("asia"));
         event
@@ -111,10 +102,8 @@ mod tests {
             "ip",
             "user_agent",
             "action",
-            "status",
             "latency_ms",
             "level",
-            "message",
             "extra",
         ] {
             assert!(value.get(key).is_some(), "{key}");
@@ -130,16 +119,14 @@ mod tests {
         assert!(value.get("request_id").is_none());
         assert!(value.get("method").is_none());
         assert!(value.get("path").is_none());
-        assert_eq!(value["status"], 204);
         assert_eq!(value["latency_ms"], 12);
         assert_eq!(value["level"], "info");
-        assert_eq!(value["message"], "request");
         assert_eq!(value["extra"]["region"], "asia");
     }
 
     #[test]
     fn empty_http_fields_are_null_or_empty() {
-        let json = serde_json::to_string(&event("", "note", LogLevel::Warn)).unwrap();
+        let json = serde_json::to_string(&event("", LogLevel::Warn)).unwrap();
         let value: Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
@@ -148,7 +135,6 @@ mod tests {
         assert_eq!(value["user_agent"], "");
         assert_eq!(value["action"], "");
         assert!(value.get("request").is_none());
-        assert!(value["status"].is_null());
         assert!(value["latency_ms"].is_null());
         assert_eq!(value["level"], "warn");
         assert!(value["extra"].as_object().unwrap().is_empty());
@@ -164,15 +150,13 @@ mod tests {
 
     #[test]
     fn a_new_event_ts_has_the_hkt_offset() {
-        let value = serde_json::to_value(event("", "note", LogLevel::Info)).unwrap();
+        let value = serde_json::to_value(event("", LogLevel::Info)).unwrap();
         assert!(value["ts"].as_str().unwrap().ends_with("+08:00"));
     }
 
     #[test]
     fn a_sanitized_event_ts_has_the_hkt_offset() {
-        let stored = event("/files", "note", LogLevel::Info)
-            .sanitize_untrusted_client()
-            .unwrap();
+        let stored = event("/files", LogLevel::Info).sanitize_untrusted_client();
         let value = serde_json::to_value(stored).unwrap();
         assert!(value["ts"].as_str().unwrap().ends_with("+08:00"));
     }
@@ -188,34 +172,27 @@ mod tests {
 
     #[test]
     fn a_missing_schema_field_is_rejected() {
-        let json = r#"{"ts":"2026-10-18T12:00:00Z","message":"note"}"#;
+        let json = r#"{"ts":"2026-10-18T12:00:00Z","action":"note"}"#;
         assert!(serde_json::from_str::<LogEvent>(json).is_err());
     }
 
     #[test]
     fn sanitize_untrusted_client_drops_untrusted_fields() {
-        let mut event = event(
-            "GET /download?sig=abc#top",
-            "  saved file  ",
-            LogLevel::Warn,
-        );
+        let mut event = event("GET /download?sig=abc#top", LogLevel::Warn);
         event.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z").unwrap();
         event.id = "client-id".to_string();
         event.ip = "203.0.113.8".to_string();
         event.user_agent = "browser".to_string();
-        event.status = Some(500);
         event.latency_ms = Some(42);
         let before = hkt_now();
-        let stored = event.sanitize_untrusted_client().unwrap();
+        let stored = event.sanitize_untrusted_client();
         let after = hkt_now();
         assert_eq!(event.id, "client-id");
         assert_eq!(stored.id, "");
         assert_eq!(stored.ip, "");
         assert_eq!(stored.user_agent, "");
-        assert_eq!(stored.status, None);
         assert_eq!(stored.latency_ms, None);
         assert_eq!(stored.level, LogLevel::Warn);
-        assert_eq!(stored.message, "saved file");
         assert_eq!(stored.action, "GET /download?sig=abc#top");
         assert_ne!(stored.ts, event.ts);
         assert!(stored.ts >= before && stored.ts <= after);
@@ -235,16 +212,14 @@ mod tests {
             "GET /api/foo?token=secret",
             "plain",
         ] {
-            let stored = event(action, "ok", LogLevel::Info)
-                .sanitize_untrusted_client()
-                .unwrap();
+            let stored = event(action, LogLevel::Info).sanitize_untrusted_client();
             assert_eq!(stored.action, action);
         }
     }
 
     #[test]
     fn sanitize_untrusted_client_filters_extra() {
-        let mut client = event("/files", "note", LogLevel::Info);
+        let mut client = event("/files", LogLevel::Info);
         client.extra.insert("bad key".to_string(), json!("no"));
         client.extra.insert("k01".to_string(), json!("kept"));
         client.extra.insert("k02".to_string(), json!("a\nb"));
@@ -257,7 +232,7 @@ mod tests {
             .insert("k07".to_string(), json!("x".repeat(250)));
         client.extra.insert("k08".to_string(), json!("ninth"));
         client.extra.insert("k09".to_string(), json!(true));
-        let stored = client.sanitize_untrusted_client().unwrap();
+        let stored = client.sanitize_untrusted_client();
         assert_eq!(
             stored.extra.keys().cloned().collect::<Vec<_>>(),
             vec![
@@ -273,7 +248,7 @@ mod tests {
         assert_eq!(stored.extra["k09"], json!("true"));
         assert!(!stored.extra.contains_key("bad key"));
 
-        let mut scalars = event("/files", "note", LogLevel::Error);
+        let mut scalars = event("/files", LogLevel::Error);
         scalars.extra.insert("a/b".to_string(), json!("no"));
         scalars.extra.insert("a_b-c.d".to_string(), json!("yes"));
         scalars.extra.insert("a".repeat(65), json!("long-key"));
@@ -281,7 +256,7 @@ mod tests {
         scalars.extra.insert("flag".to_string(), json!(true));
         scalars.extra.insert("off".to_string(), json!(false));
         scalars.extra.insert("ratio".to_string(), json!(1.5));
-        let stored = scalars.sanitize_untrusted_client().unwrap();
+        let stored = scalars.sanitize_untrusted_client();
         assert_eq!(stored.extra.get("a/b"), None);
         assert_eq!(stored.extra[&"a".repeat(65)], json!("long-key"));
         assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
@@ -290,37 +265,25 @@ mod tests {
         assert_eq!(stored.extra["off"], json!("false"));
         assert_eq!(stored.extra["ratio"], json!("1.5"));
 
-        let mut text = event("/files", "note", LogLevel::Info);
+        let mut text = event("/files", LogLevel::Info);
         text.extra.insert(String::new(), json!("no"));
         text.extra.insert("café".to_string(), json!("no"));
         text.extra.insert("ok!".to_string(), json!("no"));
         let long = "中".repeat(67);
         text.extra.insert("text".to_string(), json!(long));
-        let stored = text.sanitize_untrusted_client().unwrap();
+        let stored = text.sanitize_untrusted_client();
         assert_eq!(stored.extra.get(""), None);
         assert_eq!(stored.extra.get("café"), None);
         assert_eq!(stored.extra.get("ok!"), None);
         assert_eq!(stored.extra["text"], json!(long));
 
-        let mut later = event("/files", "note", LogLevel::Info);
+        let mut later = event("/files", LogLevel::Info);
         for index in 0..8 {
             later.extra.insert(format!("bad {index}"), json!("no"));
         }
         later.extra.insert("zzzz".to_string(), json!("yes"));
-        let stored = later.sanitize_untrusted_client().unwrap();
+        let stored = later.sanitize_untrusted_client();
         assert_eq!(stored.extra.len(), 1);
         assert_eq!(stored.extra["zzzz"], json!("yes"));
-    }
-
-    #[test]
-    fn sanitize_untrusted_client_rejects_a_blank_message() {
-        for message in ["", " ", "\n", "\t", " \r\n "] {
-            assert!(
-                event("/ok", message, LogLevel::Info)
-                    .sanitize_untrusted_client()
-                    .is_none(),
-                "{message:?}"
-            );
-        }
     }
 }
