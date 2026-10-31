@@ -1,4 +1,4 @@
-import { ErrorBoundary, JSX } from "solid-js";
+import { ErrorBoundary, type JSX } from "solid-js";
 
 import { Logger } from "../logger";
 import "./index.css";
