@@ -1,21 +1,14 @@
-# Rust framework features
+# Rust framework context
 
-This file is the index of the feature documents for the Rust library in `framework_rs/`.
+This document gives the parts that apply to all of the Rust library in `framework_rs/`.
+This library is not product business logic.
 
-Each feature has one folder. The `context.md` file of each folder gives the parts that apply to all of the feature and the list of the sub-feature documents.
+The feature index is `spec/framework_rs/structure.md`.
 
-| Feature | Document |
-| --- | --- |
-| Request and event logging, and the browser log route `POST /log` | `spec/framework_rs/logging/context.md` |
-| Google Cloud Storage client | `spec/framework_rs/gcs/context.md` |
-| HTTP boundary error, request header helpers, same-origin middleware, and process version route | `spec/framework_rs/http/context.md` |
-| Cookie sessions and password hashes | `spec/framework_rs/auth/context.md` |
-| Shutdown signal `ShutdownReceiver` | `spec/framework_rs/shutdown/context.md` |
-| Environment variable read helpers. With the `gcp` feature, `required` and `optional` read Secret Manager first. | `spec/framework_rs/env/context.md` |
-| Shared Google Cloud code (Cargo feature `gcp`): credentials, access tokens, HTTP client settings and Secret Manager access | `spec/framework_rs/gcp/context.md` |
-| Time and time zone helpers, Hong Kong time `hkt_now` | `spec/framework_rs/time/context.md` |
+## Crate
 
-The log shipper posts each batch to `/log/{app}`. `app` is the routing name.
+- The package name is `ian_framework`.
+- The crate path is `framework_rs/`.
 
 ## Open behaviour
 
@@ -23,8 +16,8 @@ An open item is a known behaviour that is not resolved. Each library that has op
 
 - To add the file for a library, copy `spec/open-behaviour.json` to `spec/framework_rs/open-behaviour.json` or to `spec/framework_fe/open-behaviour.json`.
 - The file has only the JSON data: a list of entries. Do not add an HTML page or other text to the file.
-- For the Rust library, write one entry for each feature folder that has open items. Use the order of the feature table in this file.
-- For the frontend library, write one entry for each feature document that has open items. Use the order of the feature table in `spec/framework_fe.md`.
+- For the Rust library, write one entry for each feature folder that has open items. Use the order of the feature table in `spec/framework_rs/structure.md`.
+- For the frontend library, write one entry for each feature document that has open items. Use the order of the feature table in `spec/framework_fe/structure.md`.
 - Each entry has `spec`, `title`, `context` and `items`. `spec` is the feature folder name, or the feature document name without `.md`. `context` gives the repo, the commit and the date of the last check, and the path conventions.
 
 Each item has these fields:
@@ -49,4 +42,3 @@ Each item has these fields:
 - If a feature entry has no items, delete the entry and its references in the feature documents.
 - If the Rust library has no open items, delete `spec/framework_rs/open-behaviour.json`.
 - If the frontend library has no open items, delete `spec/framework_fe/open-behaviour.json`.
-

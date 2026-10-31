@@ -1,6 +1,8 @@
-# Frontend framework features
+# Frontend framework structure
 
-This file is the index of the feature documents for the frontend library in `framework_fe/`.
+This file is the index of the feature documents of the frontend library in `framework_fe/`.
+
+The `spec/framework_fe/context.md` file gives the parts that apply to all of the library.
 
 | Feature | Document |
 | --- | --- |
