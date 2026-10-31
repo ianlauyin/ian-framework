@@ -3,7 +3,7 @@
 This document gives the parts that apply to all of the Rust library in `framework_rs/`.
 This library is not product business logic.
 
-The feature index is `spec/framework_rs/structure.md`.
+The feature index is `spec/structure.md`.
 
 ## Crate
 
@@ -16,8 +16,8 @@ An open item is a known behaviour that is not resolved. Each library that has op
 
 - To add the file for a library, copy `spec/open-behaviour.json` to `spec/framework_rs/open-behaviour.json` or to `spec/framework_fe/open-behaviour.json`.
 - The file has only the JSON data: a list of entries. Do not add an HTML page or other text to the file.
-- For the Rust library, write one entry for each feature folder that has open items. Use the order of the feature table in `spec/framework_rs/structure.md`.
-- For the frontend library, write one entry for each feature document that has open items. Use the order of the feature table in `spec/framework_fe/structure.md`.
+- For the Rust library, write one entry for each feature folder that has open items. Use the order of the table "Rust features" in `spec/structure.md`.
+- For the frontend library, write one entry for each feature document that has open items. Use the order of the table "Frontend features" in `spec/structure.md`.
 - Each entry has `spec`, `title`, `context` and `items`. `spec` is the feature folder name, or the feature document name without `.md`. `context` gives the repo, the commit and the date of the last check, and the path conventions.
 
 Each item has these fields:

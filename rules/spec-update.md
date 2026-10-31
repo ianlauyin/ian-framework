@@ -2,7 +2,7 @@
 
 When you change the code, update the spec for that code in the same change. A spec that is not up to date is a bug.
 
-The Rust feature index is `spec/framework_rs/structure.md`. The frontend feature index is `spec/framework_fe/structure.md`.
+The feature index of both libraries is `spec/structure.md`.
 
 Update the feature document when the change affects the behaviour, a rule, or the contract of that feature.
 

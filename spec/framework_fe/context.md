@@ -3,7 +3,7 @@
 This document gives the parts that apply to all of the frontend library in `framework_fe/`.
 This library is not product business logic.
 
-The feature index is `spec/framework_fe/structure.md`.
+The feature index is `spec/structure.md`.
 
 ## Package
 
