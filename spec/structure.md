@@ -16,6 +16,7 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | Feature | Document |
 | --- | --- |
 | Request and event logging, and the browser log route `POST /log` | `spec/framework_rs/logging/context.md` |
+| CPU and disk monitors (Cargo feature `monitor`) that make a `LogEvent` when the usage meets a threshold | `spec/framework_rs/monitor/context.md` |
 | Google Cloud Storage client | `spec/framework_rs/gcs/context.md` |
 | HTTP boundary error, request header helpers, same-origin middleware, and process version route | `spec/framework_rs/http/context.md` |
 | Cookie sessions and password hashes | `spec/framework_rs/auth/context.md` |

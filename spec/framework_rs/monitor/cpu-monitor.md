@@ -1,6 +1,6 @@
 # CPU monitor
 
-The parts that apply to all of this feature are in `spec/framework_rs/logging/context.md`.
+The parts that apply to all of this feature are in `spec/framework_rs/monitor/context.md`.
 
 The CPU monitor checks the CPU usage of a Linux host on an interval. When the usage meets a threshold, it makes one `LogEvent` and gives the event to a sink that the caller supplies. The monitor does not know the shipper or the log server store.
 
