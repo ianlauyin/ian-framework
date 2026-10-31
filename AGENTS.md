@@ -9,8 +9,6 @@ The frontend library is `framework_fe/`.
 Rust framework structure: `spec/framework_rs.md`
 Frontend framework structure: `spec/framework_fe.md`
 
-Before you change a behaviour, read the open items of its library. The rules are in `spec/framework_rs.md`.
-
 ## Rules
 
 | File | When to read |
