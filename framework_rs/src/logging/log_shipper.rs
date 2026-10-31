@@ -9,7 +9,7 @@ use crate::shutdown::ShutdownReceiver;
 use super::{event, LogBatch, LogEvent, LogLevel, ShipperConfig, SHIP_CHUNK};
 
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
-const CAPACITY_WARN_NOTE: &str = "capacity meets 80%";
+const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacity meets 80%";
 const MASK: &str = "***";
 
 #[derive(Clone)]

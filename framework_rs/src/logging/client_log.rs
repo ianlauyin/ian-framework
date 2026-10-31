@@ -211,6 +211,6 @@ mod tests {
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].action, "boom");
-        assert_eq!(events[1].action, "POST /log");
+        assert_eq!(events[1].action, "API/POST:/log");
     }
 }

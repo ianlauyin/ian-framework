@@ -42,7 +42,7 @@ The fallback fills the viewport height. It puts its content in the center.
 
 When the component shows the fallback, it logs the error with `Logger.error` from `framework_fe/src/logger.ts`. The logger is in `spec/framework_fe/logger.md`.
 
-- The log message is `app error boundary caught an error`.
+- The log message is `ERROR-BOUNDARY/caught an error`.
 - The log has the `extra` fields in the table below.
 - Each line break in these values becomes ` | `. The reason is that the log route drops a value with a line break. The log route is in `spec/framework_rs/logging/client-log.md`.
 

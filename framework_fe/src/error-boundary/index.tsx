@@ -49,14 +49,14 @@ function ErrorFallback(props: FallbackProps) {
 function logError(error: unknown) {
   const oneLine = (text: string) => text.replace(/\r?\n\s*/g, " | ");
   if (error instanceof Error) {
-    Logger.error("app error boundary caught an error", {
+    Logger.error("ERROR-BOUNDARY/caught an error", {
       error_name: error.name,
       error_message: oneLine(error.message),
       error_stack: oneLine(error.stack ?? ""),
     });
     return;
   }
-  Logger.error("app error boundary caught an error", {
+  Logger.error("ERROR-BOUNDARY/caught an error", {
     error_message: oneLine(String(error)),
   });
 }

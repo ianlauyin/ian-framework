@@ -19,7 +19,7 @@ General rules:
 
 | Field | Value |
 | --- | --- |
-| `action` | `{method} {path}`. One space separates the method and the path. `method` is the request method. `path` is the request path, with no query string. An empty path is `/`. |
+| `action` | `API/{method}:{path}`. `method` is the request method. `path` is the request path, with no query string. An empty path is `/`. |
 | `ip` | The first source that is not empty. The sources are below. |
 | `user_agent` | The header `user-agent`. A missing header gives an empty `user_agent`. |
 | `latency_ms` | The handler time in milliseconds. It includes the body read. |

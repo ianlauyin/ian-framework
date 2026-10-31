@@ -8,7 +8,7 @@ use crate::shutdown::ShutdownReceiver;
 
 const DEFAULT_PATH: &str = "/";
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(60);
-const ACTION: &str = "disk usage meets threshold";
+const ACTION: &str = "DISK/meets threshold";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiskMonitorConfig {
@@ -194,7 +194,7 @@ mod tests {
         let mut alert = Alert::new(90.0, PathBuf::from("/data"));
         assert!(alert.check(89.9).is_none());
         let event = alert.check(91.26).unwrap();
-        assert_eq!(event.action, "disk usage meets threshold");
+        assert_eq!(event.action, "DISK/meets threshold");
         assert_eq!(event.level, LogLevel::Warn);
         assert_eq!(event.extra["disk_percent"], json!(91.3));
         assert_eq!(event.extra["threshold_percent"], json!(90.0));

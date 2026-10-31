@@ -82,7 +82,7 @@ fn action(method: &str, url: &str) -> String {
     }
     let path = path_only(url);
     let path = if path.is_empty() { "/" } else { path.as_str() };
-    format!("{method} {path}")
+    format!("GCS/{method}:{path}")
 }
 
 fn path_only(url: &str) -> String {

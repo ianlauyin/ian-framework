@@ -19,7 +19,7 @@ Record content:
 - An operations record has no `project` field.
 - The client does not write product rules in these records.
 - The client does not write access tokens.
-- The record `action` is `{method} {path}`. One space separates the method and the path.
+- The record `action` is `GCS/{method}:{path}`. The path starts with `/`.
 - The path is the URL path. The client does not write the URL query.
 - A token record has an empty `action`.
 - An operations record has an empty `id`.

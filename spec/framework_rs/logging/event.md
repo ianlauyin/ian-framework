@@ -12,7 +12,7 @@ One event is one `LogEvent`. One event has these fields:
 | `id` | Event id, or an empty string |
 | `ip` | Client address, or an empty string |
 | `user_agent` | `user-agent` header, or an empty string |
-| `action` | `{method} {path}`, a client text, or an empty string |
+| `action` | `API/{method}:{path}`, a client text, or an empty string |
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
 | `extra` | One JSON object |
@@ -29,10 +29,12 @@ One event is one `LogEvent`. One event has these fields:
 
 `action` is one string with these rules:
 
-- The shape is `{method} {path}`. One space separates the method and the path.
+- The shape of a request event is `API/{method}:{path}`. The path starts with `/`.
 - The path does not include the query string.
 - An empty path with a method is `/`.
 - An empty method gives an empty `action`.
+
+An event that the framework makes for itself, not for a request, uses the shape `{scope}/{action}`. `scope` is the feature name in upper case, such as `API`, `GCS`, `CPU`, `DISK`, `SHIPPER` or `ERROR-BOUNDARY`. `action` is a short lowercase phrase, such as `meets threshold`.
 
 ### LogLevel
 

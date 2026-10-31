@@ -608,7 +608,7 @@ mod tests {
         });
         let events = shipper.buffered_events();
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].action, "GET /storage/v1/b/my-bucket/o/file");
+        assert_eq!(events[0].action, "GCS/GET:/storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");
         assert_eq!(events[0].ip, "");
         assert_eq!(events[0].user_agent, "");

@@ -93,7 +93,7 @@ fn action(method: &str, path: &str) -> String {
         return String::new();
     }
     let path = if path.is_empty() { "/" } else { path };
-    format!("{method} {path}")
+    format!("API/{method}:{path}")
 }
 
 fn request_path(path: &str) -> String {
@@ -220,8 +220,8 @@ mod tests {
 
     #[test]
     fn action_joins_method_and_path() {
-        assert_eq!(action("GET", "/api/foo"), "GET /api/foo");
-        assert_eq!(action("POST", ""), "POST /");
+        assert_eq!(action("GET", "/api/foo"), "API/GET:/api/foo");
+        assert_eq!(action("POST", ""), "API/POST:/");
         assert_eq!(action("", "/api/foo"), "");
         assert_eq!(action("", ""), "");
     }
@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(events.len(), 1);
         let event = &events[0];
         assert_eq!(event.id, "");
-        assert_eq!(event.action, "GET /status/204");
+        assert_eq!(event.action, "API/GET:/status/204");
         assert_eq!(event.ip, "");
         assert_eq!(event.user_agent, "");
         assert!(event.latency_ms.is_some());
@@ -255,7 +255,7 @@ mod tests {
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
         assert_eq!(value["id"], "");
-        assert_eq!(value["action"], "GET /status/204");
+        assert_eq!(value["action"], "API/GET:/status/204");
         assert!(!json.contains("req-1"));
         assert!(value.get("request").is_none());
         assert_eq!(value["extra"], json!({"query": {"token": "***"}}));
@@ -297,7 +297,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(echoed, body);
         let event = &shipper.buffered_events()[0];
-        assert_eq!(event.action, "POST /echo");
+        assert_eq!(event.action, "API/POST:/echo");
         assert_eq!(
             event.extra["body"],
             json!({"name": "alice", "age": 3, "tags": ["a"]})
@@ -382,7 +382,7 @@ mod tests {
         let event = &shipper.buffered_events()[0];
         assert_eq!(event.ip, "203.0.113.8");
         assert_eq!(event.user_agent, "demo-agent");
-        assert_eq!(event.action, "GET /status/200");
+        assert_eq!(event.action, "API/GET:/status/200");
     }
 
     #[tokio::test]
@@ -415,6 +415,6 @@ mod tests {
         assert_eq!(events[0].ip, "198.51.100.4");
         assert_eq!(events[0].user_agent, "");
         assert_eq!(events[1].ip, "192.0.2.10");
-        assert_eq!(events[1].action, "GET /status/201");
+        assert_eq!(events[1].action, "API/GET:/status/201");
     }
 }

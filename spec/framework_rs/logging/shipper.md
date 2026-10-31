@@ -104,7 +104,7 @@ The warning has these fields:
 | `id` | Empty string |
 | `ip` | Empty string |
 | `user_agent` | Empty string |
-| `action` | `capacity meets 80%` |
+| `action` | `SHIPPER/capacity meets 80%` |
 | `latency_ms` | null |
 | `level` | `warn` |
 | `extra` | Empty object |

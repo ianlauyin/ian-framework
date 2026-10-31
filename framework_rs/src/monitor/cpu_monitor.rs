@@ -7,7 +7,7 @@ use crate::shutdown::ShutdownReceiver;
 
 const STAT_PATH: &str = "/proc/stat";
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(30);
-const ACTION: &str = "cpu usage meets threshold";
+const ACTION: &str = "CPU/meets threshold";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CpuMonitorConfig {
@@ -205,7 +205,7 @@ mod tests {
         let mut alert = Alert::new(80.0);
         assert!(alert.check(79.9).is_none());
         let event = alert.check(85.26).unwrap();
-        assert_eq!(event.action, "cpu usage meets threshold");
+        assert_eq!(event.action, "CPU/meets threshold");
         assert_eq!(event.level, LogLevel::Warn);
         assert_eq!(event.extra["cpu_percent"], json!(85.3));
         assert_eq!(event.extra["threshold_percent"], json!(80.0));

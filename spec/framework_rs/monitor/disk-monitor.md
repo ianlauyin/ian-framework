@@ -50,7 +50,7 @@ The monitor makes one event when the usage rises to the threshold or above it. I
 | `id` | Empty string |
 | `ip` | Empty string |
 | `user_agent` | Empty string |
-| `action` | `disk usage meets threshold` |
+| `action` | `DISK/meets threshold` |
 | `latency_ms` | null |
 | `level` | `warn` |
 | `extra.disk_percent` | The usage, rounded to one decimal, as a JSON number |
