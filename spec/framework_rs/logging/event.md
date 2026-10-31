@@ -47,3 +47,5 @@ One event is one `LogEvent`. One event has these fields:
 - `LogLevel` implements `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Serialize` and `Deserialize`.
 - The JSON text is the lowercase variant name.
 - A JSON text that is not in the table gives a deserialize error.
+- `LogLevel::as_str` returns the JSON text of the variant.
+- `LogLevel::parse` takes a JSON text and returns `Some` variant. It returns `None` for a text that is not in the table. It does not change the letter case.

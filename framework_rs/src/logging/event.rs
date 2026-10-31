@@ -14,6 +14,25 @@ pub enum LogLevel {
     Error,
 }
 
+impl LogLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LogLevel::Info => "info",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<LogLevel> {
+        match text {
+            "info" => Some(LogLevel::Info),
+            "warn" => Some(LogLevel::Warn),
+            "error" => Some(LogLevel::Error),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     pub ts: DateTime<FixedOffset>,
@@ -80,6 +99,17 @@ mod tests {
     use super::*;
     use crate::logging::event;
     use serde_json::json;
+
+    #[test]
+    fn level_text_matches_the_json_text_and_parses_back() {
+        for level in [LogLevel::Info, LogLevel::Warn, LogLevel::Error] {
+            assert_eq!(serde_json::to_value(level).unwrap(), json!(level.as_str()));
+            assert_eq!(LogLevel::parse(level.as_str()), Some(level));
+        }
+        for text in ["", "INFO", "Info", "debug", " info"] {
+            assert_eq!(LogLevel::parse(text), None, "{text:?}");
+        }
+    }
 
     fn sample() -> LogEvent {
         let mut event = event("GET /health", LogLevel::Info);
