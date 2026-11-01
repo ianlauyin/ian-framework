@@ -27,7 +27,7 @@ mod tests {
     use crate::logging::LogValue;
     use crate::logging::{event, LogLevel};
     use chrono::DateTime;
-    use serde_json::Value;
+    use serde_json::{json, Value};
 
     fn sample() -> LogEvent {
         let mut event = event("GET /health", LogLevel::Info);
@@ -40,9 +40,7 @@ mod tests {
             .context
             .insert("user_agent".to_string(), LogValue::from("demo-agent"));
         event.latency_ms = Some(12);
-        event
-            .info
-            .insert("region".to_string(), LogValue::from("asia"));
+        event.info.insert("region".to_string(), json!("asia"));
         event
     }
 

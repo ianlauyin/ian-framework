@@ -7,6 +7,8 @@ mod shipper_config;
 
 use std::collections::BTreeMap;
 
+use serde_json::Map;
+
 use crate::time::hkt_now;
 
 pub use client_log::client_log_router;
@@ -26,6 +28,6 @@ pub(crate) fn event(action: impl Into<String>, level: LogLevel) -> LogEvent {
         latency_ms: None,
         level,
         context: BTreeMap::new(),
-        info: BTreeMap::new(),
+        info: Map::new(),
     }
 }

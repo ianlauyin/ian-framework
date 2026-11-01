@@ -14,7 +14,7 @@ One event is one `LogEvent`. One event has these fields:
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
 | `context` | One JSON object with the facts about where the event came from. Each value is a string, a number, or a `bool`. |
-| `info` | One JSON object with the data of the event. Each value is a string, a number, or a `bool`. |
+| `info` | One JSON object with the data of the event |
 
 - The event has no `ip` field and no `user_agent` field. The route middleware and the client log route put them in `context`.
 - The event has no `app` field.
@@ -22,8 +22,9 @@ One event is one `LogEvent`. One event has these fields:
 
 ### Values
 
-- The type of a `context` value and of an `info` value is `ian_framework::logging::LogValue`. It is a string, a number, or a `bool`.
-- Deserialize of an event rejects an array, an object, or null in `context` or in `info`.
+- The type of a `context` value is `ian_framework::logging::LogValue`. It is a string, a number, or a `bool`.
+- Deserialize of an event rejects an array, an object, or null in `context`.
+- The type of `info` is `serde_json::Map<String, serde_json::Value>`. It is a JSON object, and its values can be nested.
 
 ### Time
 

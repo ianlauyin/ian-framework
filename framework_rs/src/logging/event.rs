@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde_json::{Map, Number, Value};
 
 use crate::time::hkt_now;
 
@@ -94,7 +94,7 @@ pub struct LogEvent {
     pub latency_ms: Option<u64>,
     pub level: LogLevel,
     pub context: BTreeMap<String, LogValue>,
-    pub info: BTreeMap<String, LogValue>,
+    pub info: Map<String, Value>,
 }
 
 impl LogEvent {
@@ -111,8 +111,8 @@ impl LogEvent {
     }
 }
 
-fn client_info(info: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValue> {
-    let mut kept = BTreeMap::new();
+fn client_info(info: &Map<String, Value>) -> Map<String, Value> {
+    let mut kept = Map::new();
     for (key, value) in info {
         if !info_key_ok(key) {
             continue;
@@ -120,7 +120,7 @@ fn client_info(info: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValue> 
         let Some(text) = info_value(value) else {
             continue;
         };
-        kept.insert(key.clone(), LogValue::String(text));
+        kept.insert(key.clone(), Value::String(text));
     }
     kept
 }
@@ -132,11 +132,12 @@ fn info_key_ok(key: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
 }
 
-fn info_value(value: &LogValue) -> Option<String> {
+fn info_value(value: &Value) -> Option<String> {
     let text = match value {
-        LogValue::String(text) => text.clone(),
-        LogValue::Number(number) => number.to_string(),
-        LogValue::Bool(flag) => flag.to_string(),
+        Value::String(text) => text.clone(),
+        Value::Number(number) => number.to_string(),
+        Value::Bool(flag) => flag.to_string(),
+        _ => return None,
     };
     if text.contains('\r') || text.contains('\n') {
         return None;
@@ -172,9 +173,7 @@ mod tests {
             .context
             .insert("user_agent".to_string(), LogValue::from("demo-agent"));
         event.latency_ms = Some(12);
-        event
-            .info
-            .insert("region".to_string(), LogValue::from("asia"));
+        event.info.insert("region".to_string(), json!("asia"));
         event
     }
 
@@ -257,8 +256,8 @@ mod tests {
     }
 
     #[test]
-    fn a_non_scalar_context_or_info_value_is_rejected() {
-        for field in ["context", "info"] {
+    fn a_non_scalar_context_value_is_rejected() {
+        for field in ["context"] {
             for bad in [json!(null), json!({"a": 1}), json!([1])] {
                 let mut value = serde_json::to_value(sample()).unwrap();
                 value[field]["bad"] = bad;
@@ -317,25 +316,15 @@ mod tests {
     #[test]
     fn sanitize_untrusted_client_filters_info() {
         let mut client = event("/files", LogLevel::Info);
+        client.info.insert("bad key".to_string(), json!("no"));
+        client.info.insert("k01".to_string(), json!("kept"));
+        client.info.insert("k02".to_string(), json!("a\nb"));
+        client.info.insert("k03".to_string(), json!("a\rb"));
         client
             .info
-            .insert("bad key".to_string(), LogValue::from("no"));
-        client
-            .info
-            .insert("k01".to_string(), LogValue::from("kept"));
-        client
-            .info
-            .insert("k02".to_string(), LogValue::from("a\nb"));
-        client
-            .info
-            .insert("k03".to_string(), LogValue::from("a\rb"));
-        client
-            .info
-            .insert("k07".to_string(), LogValue::from("x".repeat(250)));
-        client
-            .info
-            .insert("k08".to_string(), LogValue::from("ninth"));
-        client.info.insert("k09".to_string(), LogValue::from(true));
+            .insert("k07".to_string(), json!("x".repeat(250)));
+        client.info.insert("k08".to_string(), json!("ninth"));
+        client.info.insert("k09".to_string(), json!(true));
         let stored = client.sanitize_untrusted_client();
         assert_eq!(
             stored.info.keys().cloned().collect::<Vec<_>>(),
@@ -353,23 +342,13 @@ mod tests {
         assert!(!stored.info.contains_key("bad key"));
 
         let mut scalars = event("/files", LogLevel::Error);
-        scalars.info.insert("a/b".to_string(), LogValue::from("no"));
-        scalars
-            .info
-            .insert("a_b-c.d".to_string(), LogValue::from("yes"));
-        scalars
-            .info
-            .insert("a".repeat(65), LogValue::from("long-key"));
-        scalars.info.insert("count".to_string(), LogValue::from(12));
-        scalars
-            .info
-            .insert("flag".to_string(), LogValue::from(true));
-        scalars
-            .info
-            .insert("off".to_string(), LogValue::from(false));
-        scalars
-            .info
-            .insert("ratio".to_string(), LogValue::from(1.5));
+        scalars.info.insert("a/b".to_string(), json!("no"));
+        scalars.info.insert("a_b-c.d".to_string(), json!("yes"));
+        scalars.info.insert("a".repeat(65), json!("long-key"));
+        scalars.info.insert("count".to_string(), json!(12));
+        scalars.info.insert("flag".to_string(), json!(true));
+        scalars.info.insert("off".to_string(), json!(false));
+        scalars.info.insert("ratio".to_string(), json!(1.5));
         let stored = scalars.sanitize_untrusted_client();
         assert_eq!(stored.info.get("a/b"), None);
         assert_eq!(stored.info[&"a".repeat(65)], json!("long-key"));
@@ -380,12 +359,11 @@ mod tests {
         assert_eq!(stored.info["ratio"], json!("1.5"));
 
         let mut text = event("/files", LogLevel::Info);
-        text.info.insert(String::new(), LogValue::from("no"));
-        text.info.insert("café".to_string(), LogValue::from("no"));
-        text.info.insert("ok!".to_string(), LogValue::from("no"));
+        text.info.insert(String::new(), json!("no"));
+        text.info.insert("café".to_string(), json!("no"));
+        text.info.insert("ok!".to_string(), json!("no"));
         let long = "中".repeat(67);
-        text.info
-            .insert("text".to_string(), LogValue::from(long.clone()));
+        text.info.insert("text".to_string(), json!(long.clone()));
         let stored = text.sanitize_untrusted_client();
         assert_eq!(stored.info.get(""), None);
         assert_eq!(stored.info.get("café"), None);
@@ -394,11 +372,9 @@ mod tests {
 
         let mut later = event("/files", LogLevel::Info);
         for index in 0..8 {
-            later
-                .info
-                .insert(format!("bad {index}"), LogValue::from("no"));
+            later.info.insert(format!("bad {index}"), json!("no"));
         }
-        later.info.insert("zzzz".to_string(), LogValue::from("yes"));
+        later.info.insert("zzzz".to_string(), json!("yes"));
         let stored = later.sanitize_untrusted_client();
         assert_eq!(stored.info.len(), 1);
         assert_eq!(stored.info["zzzz"], json!("yes"));

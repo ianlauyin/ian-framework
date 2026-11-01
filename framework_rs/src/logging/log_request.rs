@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::time::Instant;
 
@@ -9,7 +8,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value};
 
-use super::{event, LogLevel, LogShipper, LogValue};
+use super::{event, LogLevel, LogShipper};
 
 const BODY_LOG_LIMIT: usize = 64 * 1024;
 
@@ -43,37 +42,10 @@ pub async fn log_request(
         .insert("request_url".to_string(), request_url.into());
     event.latency_ms = Some(millis_since(started));
     if let Some(fields) = body {
-        for (key, value) in fields {
-            flatten_body(&format!("body.{key}"), value, &mut event.info);
-        }
+        event.info = fields;
     }
     shipper.record(event);
     response
-}
-
-fn flatten_body(key: &str, value: Value, info: &mut BTreeMap<String, LogValue>) {
-    match value {
-        Value::Null => {}
-        Value::Bool(flag) => {
-            info.insert(key.to_string(), flag.into());
-        }
-        Value::Number(number) => {
-            info.insert(key.to_string(), LogValue::Number(number));
-        }
-        Value::String(text) => {
-            info.insert(key.to_string(), text.into());
-        }
-        Value::Array(items) => {
-            for (index, item) in items.into_iter().enumerate() {
-                flatten_body(&format!("{key}.{index}"), item, info);
-            }
-        }
-        Value::Object(map) => {
-            for (name, item) in map {
-                flatten_body(&format!("{key}.{name}"), item, info);
-            }
-        }
-    }
 }
 
 async fn split_json_body(request: Request) -> (Option<Request>, Option<Map<String, Value>>) {
@@ -292,7 +264,7 @@ mod tests {
         post_body(&shipper, "/echo?", "application/json", body).await;
         let event = &shipper.buffered_events()[0];
         assert_eq!(event.info.len(), 1);
-        assert_eq!(event.info["body.name"], "alice");
+        assert_eq!(event.info["name"], "alice");
     }
 
     #[tokio::test]
@@ -321,11 +293,10 @@ mod tests {
         assert_eq!(echoed, body);
         let event = &shipper.buffered_events()[0];
         assert_eq!(event.action, "API/POST:/echo");
-        assert_eq!(event.info.len(), 4);
-        assert_eq!(event.info["body.name"], "alice");
-        assert_eq!(event.info["body.age"], json!(3));
-        assert_eq!(event.info["body.tags.0"], "a");
-        assert_eq!(event.info["body.nested.ok"], json!(true));
+        assert_eq!(event.info["name"], "alice");
+        assert_eq!(event.info["age"], json!(3));
+        assert_eq!(event.info["tags"], json!(["a"]));
+        assert_eq!(event.info["nested"], json!({"ok": true, "none": null}));
         assert_eq!(event.context["request_url"], "/echo?x=1");
     }
 
@@ -363,8 +334,8 @@ mod tests {
         post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
         let event = &shipper.buffered_events()[0];
         assert_eq!(event.context["request_url"], "/echo?***&page=2");
-        assert_eq!(event.info["body.user"], "alice");
-        assert_eq!(event.info["body.password"], "***");
+        assert_eq!(event.info["user"], "alice");
+        assert_eq!(event.info["password"], "***");
     }
 
     #[tokio::test]

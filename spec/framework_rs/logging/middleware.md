@@ -23,7 +23,7 @@ General rules:
 | `latency_ms` | The handler time in milliseconds. It includes the body read. |
 | `level` | From the response status. The rules are below. |
 | `context` | The keys `ip`, `user_agent` and `request_url`. The rules are below. |
-| `info` | The keys `body.{path}`. The rules are below. |
+| `info` | The JSON body. The rules are below. |
 
 ### Context
 
@@ -59,11 +59,7 @@ Level rules:
 
 ### Info
 
-`info` has only the keys `body.{path}`. Each key has one scalar body value:
-
-| Key | Value |
-| --- | --- |
-| `body.{path}` | One string, number, or `bool` of the body. `path` is the field names, and the array positions that start at 0, joined with `.`. |
+`info` is the JSON object of the request body. A request with no logged body has an empty `info`.
 
 The middleware reads the body only when all these rules are true:
 
@@ -73,13 +69,12 @@ The middleware reads the body only when all these rules are true:
 Body rules:
 
 - The body is one JSON object.
-- The middleware writes each nested object and each array as keys with a longer `path`.
-- The middleware leaves out a null value.
-- A JSON body that is not an object gives no `body.{path}` key.
-- A body that is not valid JSON gives no `body.{path}` key.
+- The middleware keeps each nested value.
+- A JSON body that is not an object gives an empty `info`.
+- A body that is not valid JSON gives an empty `info`.
 - The middleware does not log a body of a different media type.
-- An empty object gives no `body.{path}` key.
+- An empty object gives an empty `info`.
 - The middleware gives the same body bytes to the inner handler.
 - The middleware does not read a different body. Thus a large body or a body without `content-length` goes to the handler as a stream.
 - When the body read fails, the middleware does not call the inner handler. It returns status 400 and records the event with status 400.
-- The shipper masks `context` and `info` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. The key rule applies to the full key, which includes the names of the parents. The pattern rule applies to the text of `request_url`.
+- The shipper masks `context` and `info` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. `info` can have nested values, so the key rule applies to their keys. The pattern rule applies to the text of `request_url`.

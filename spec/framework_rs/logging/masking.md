@@ -25,10 +25,12 @@ Key rule:
 
 - When a `context` key or an `info` key matches a pattern, the shipper replaces the full value with the string `***`.
 - This rule applies to a value of each type.
+- This rule also applies to a key in a nested object of `info`.
 - The shipper does not change the key.
 
 Value rule:
 
 - When the key does not match, the shipper replaces each match of each pattern in a string value with `***`.
 - The patterns apply in list order.
-- The value rule does not mask a number or a `bool`.
+- The value rule also applies to a string in a nested array or a nested object of `info`.
+- The value rule does not mask a number, a `bool`, or null.

@@ -24,7 +24,7 @@ impl OpsRecord<'_> {
             latency_ms: self.latency_ms,
             level: self.level,
             context: BTreeMap::new(),
-            info: BTreeMap::new(),
+            info: serde_json::Map::new(),
         };
         event
             .info
