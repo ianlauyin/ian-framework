@@ -22,6 +22,9 @@
 		},
 		"rules": {
 			"preset": "recommended",
+			"complexity": {
+				"noStaticOnlyClass": "off"
+			},
 			"style": {
 				"noDescendingSpecificity": "off",
 				"noRestrictedImports": {
