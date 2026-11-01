@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::time::Instant;
 
@@ -8,7 +9,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value};
 
-use super::{event, LogLevel, LogShipper};
+use super::{event, LogLevel, LogShipper, LogValue};
 
 const BODY_LOG_LIMIT: usize = 64 * 1024;
 
@@ -21,7 +22,10 @@ pub async fn log_request(
     let path = request_path(request.uri().path());
     let ip = client_ip(&request);
     let user_agent = user_agent(request.headers());
-    let query = request.uri().query().map(query_fields);
+    let request_url = request
+        .uri()
+        .path_and_query()
+        .map_or_else(|| path.clone(), |url| url.as_str().to_string());
     let started = Instant::now();
     let (request, body) = split_json_body(request).await;
     let response = match request {
@@ -30,16 +34,46 @@ pub async fn log_request(
     };
     let status = response.status().as_u16();
     let mut event = event(action(&method, &path), level_for_status(status));
-    event.ip = ip;
-    event.user_agent = user_agent;
+    event.context.insert("ip".to_string(), ip.into());
+    event
+        .context
+        .insert("user_agent".to_string(), user_agent.into());
+    event
+        .context
+        .insert("request_url".to_string(), request_url.into());
     event.latency_ms = Some(millis_since(started));
-    for (key, fields) in [("query", query), ("body", body)] {
-        if let Some(fields) = fields.filter(|fields| !fields.is_empty()) {
-            event.extra.insert(key.to_string(), Value::Object(fields));
+    if let Some(fields) = body {
+        for (key, value) in fields {
+            flatten_body(&format!("body.{key}"), value, &mut event.info);
         }
     }
     shipper.record(event);
     response
+}
+
+fn flatten_body(key: &str, value: Value, info: &mut BTreeMap<String, LogValue>) {
+    match value {
+        Value::Null => {}
+        Value::Bool(flag) => {
+            info.insert(key.to_string(), flag.into());
+        }
+        Value::Number(number) => {
+            info.insert(key.to_string(), LogValue::Number(number));
+        }
+        Value::String(text) => {
+            info.insert(key.to_string(), text.into());
+        }
+        Value::Array(items) => {
+            for (index, item) in items.into_iter().enumerate() {
+                flatten_body(&format!("{key}.{index}"), item, info);
+            }
+        }
+        Value::Object(map) => {
+            for (name, item) in map {
+                flatten_body(&format!("{key}.{name}"), item, info);
+            }
+        }
+    }
 }
 
 async fn split_json_body(request: Request) -> (Option<Request>, Option<Map<String, Value>>) {
@@ -71,21 +105,6 @@ fn is_small_json_body(headers: &HeaderMap) -> bool {
         .trim()
         .to_ascii_lowercase();
     mime == "application/json" || mime.ends_with("+json")
-}
-
-fn query_fields(query: &str) -> Map<String, Value> {
-    let mut fields = Map::new();
-    for (key, value) in form_urlencoded::parse(query.as_bytes()) {
-        let value = Value::String(value.into_owned());
-        match fields.get_mut(key.as_ref()) {
-            None => {
-                fields.insert(key.into_owned(), value);
-            }
-            Some(Value::Array(values)) => values.push(value),
-            Some(first) => *first = Value::Array(vec![first.take(), value]),
-        }
-    }
-    fields
 }
 
 fn action(method: &str, path: &str) -> String {
@@ -249,8 +268,9 @@ mod tests {
         let event = &events[0];
         assert_eq!(event.id, "");
         assert_eq!(event.action, "API/GET:/status/204");
-        assert_eq!(event.ip, "");
-        assert_eq!(event.user_agent, "");
+        assert_eq!(event.context["ip"], "");
+        assert_eq!(event.context["user_agent"], "");
+        assert_eq!(event.context["request_url"], "/status/204?***=***");
         assert!(event.latency_ms.is_some());
         assert_eq!(event.level, LogLevel::Info);
         let json = serde_json::to_string(event).unwrap();
@@ -261,7 +281,8 @@ mod tests {
         assert_eq!(value["action"], "API/GET:/status/204");
         assert!(!json.contains("req-1"));
         assert!(value.get("request").is_none());
-        assert_eq!(value["extra"], json!({"query": {"token": "***"}}));
+        assert_eq!(value["info"], json!({}));
+        assert_eq!(value["context"]["request_url"], "/status/204?***=***");
     }
 
     #[tokio::test]
@@ -270,26 +291,25 @@ mod tests {
         let body = json!({"name": "alice"}).to_string();
         post_body(&shipper, "/echo?", "application/json", body).await;
         let event = &shipper.buffered_events()[0];
-        assert_eq!(event.extra.len(), 1);
-        assert_eq!(event.extra["body"], json!({"name": "alice"}));
-        assert!(!event.extra.contains_key("query"));
+        assert_eq!(event.info.len(), 1);
+        assert_eq!(event.info["body.name"], "alice");
     }
 
     #[tokio::test]
-    async fn middleware_logs_each_query_field() {
+    async fn middleware_logs_the_request_url_with_its_query() {
         let shipper = shipper();
-        send(app(shipper.clone()), "/status/200?a=1&b=x%20y&a=2&flag").await;
+        send(app(shipper.clone()), "/status/200?a=1&b=x%20y&flag").await;
         let event = &shipper.buffered_events()[0];
-        assert_eq!(
-            event.extra["query"],
-            json!({"a": ["1", "2"], "b": "x y", "flag": ""})
-        );
+        assert_eq!(event.context["request_url"], "/status/200?a=1&b=x%20y&flag");
+        assert!(!event.info.contains_key("query"));
     }
 
     #[tokio::test]
     async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
         let shipper = shipper();
-        let body = json!({"name": "alice", "age": 3, "tags": ["a"]}).to_string();
+        let body =
+            json!({"name": "alice", "age": 3, "tags": ["a"], "nested": {"ok": true, "none": null}})
+                .to_string();
         let (status, echoed) = post_body(
             &shipper,
             "/echo?x=1",
@@ -301,11 +321,12 @@ mod tests {
         assert_eq!(echoed, body);
         let event = &shipper.buffered_events()[0];
         assert_eq!(event.action, "API/POST:/echo");
-        assert_eq!(
-            event.extra["body"],
-            json!({"name": "alice", "age": 3, "tags": ["a"]})
-        );
-        assert_eq!(event.extra["query"], json!({"x": "1"}));
+        assert_eq!(event.info.len(), 4);
+        assert_eq!(event.info["body.name"], "alice");
+        assert_eq!(event.info["body.age"], json!(3));
+        assert_eq!(event.info["body.tags.0"], "a");
+        assert_eq!(event.info["body.nested.ok"], json!(true));
+        assert_eq!(event.context["request_url"], "/echo?x=1");
     }
 
     #[tokio::test]
@@ -328,24 +349,22 @@ mod tests {
             assert_eq!(echoed, body);
         }
         for event in shipper.buffered_events() {
-            assert!(!event.extra.contains_key("body"));
+            assert!(event.info.is_empty());
         }
     }
 
     #[tokio::test]
-    async fn middleware_masks_query_and_body_fields_by_key() {
+    async fn middleware_masks_request_url_and_body_fields() {
         let mut config = ShipperConfig::new("api");
         config.endpoint = Some("http://logs.example".to_string());
-        config.mask_patterns = vec![r"^(password|token)$".to_string()];
+        config.mask_patterns = vec![r"password".to_string(), r"token=[^&]+".to_string()];
         let shipper = LogShipper::new(config).unwrap();
         let body = json!({"user": "alice", "password": "hunter2"}).to_string();
         post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
         let event = &shipper.buffered_events()[0];
-        assert_eq!(event.extra["query"], json!({"token": "***", "page": "2"}));
-        assert_eq!(
-            event.extra["body"],
-            json!({"user": "alice", "password": "***"})
-        );
+        assert_eq!(event.context["request_url"], "/echo?***&page=2");
+        assert_eq!(event.info["body.user"], "alice");
+        assert_eq!(event.info["body.password"], "***");
     }
 
     #[tokio::test]
@@ -384,8 +403,8 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let event = &shipper.buffered_events()[0];
-        assert_eq!(event.ip, "203.0.113.9");
-        assert_eq!(event.user_agent, "demo-agent");
+        assert_eq!(event.context["ip"], "203.0.113.9");
+        assert_eq!(event.context["user_agent"], "demo-agent");
         assert_eq!(event.action, "API/GET:/status/200");
     }
 
@@ -403,7 +422,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(shipper.buffered_events()[0].ip, "203.0.113.8");
+        assert_eq!(shipper.buffered_events()[0].context["ip"], "203.0.113.8");
     }
 
     #[tokio::test]
@@ -433,9 +452,9 @@ mod tests {
             .await
             .unwrap();
         let events = shipper.buffered_events();
-        assert_eq!(events[0].ip, "198.51.100.4");
-        assert_eq!(events[0].user_agent, "");
-        assert_eq!(events[1].ip, "192.0.2.10");
+        assert_eq!(events[0].context["ip"], "198.51.100.4");
+        assert_eq!(events[0].context["user_agent"], "");
+        assert_eq!(events[1].context["ip"], "192.0.2.10");
         assert_eq!(events[1].action, "API/GET:/status/201");
     }
 }

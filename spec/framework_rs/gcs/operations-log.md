@@ -23,14 +23,13 @@ Record content:
 - The path is the URL path. The client does not write the URL query.
 - A token record has an empty `action`.
 - An operations record has an empty `id`.
-- An operations record has an empty `ip`.
-- An operations record has an empty `user_agent`.
-- Each record has `bucket` in `extra`. The value is the bucket name.
-- Each record has `message` in `extra`. The values are in the table below.
-- A record with an HTTP status has `status` in `extra`. The value is the status as text.
+- An operations record has an empty `context`.
+- Each record has `bucket` in `info`. The value is the bucket name.
+- Each record has `message` in `info`. The values are in the table below.
+- A record with an HTTP status has `status` in `info`. The value is the status as text.
 - The record `ts` is the current HKT time, from `ian_framework::time::hkt_now()`. The time rules are in `spec/framework_rs/time/hkt.md`.
 
-| Case | Level | `extra.message` |
+| Case | Level | `info.message` |
 | --- | --- | --- |
 | HTTP status 500 or higher | `error` | `gcs response` |
 | HTTP status 400 through 499 | `warn` | `gcs response` |
@@ -48,11 +47,11 @@ HTTP 401 rules:
 
 Failure records:
 
-- A failure record can include `error` in `extra`.
+- A failure record can include `error` in `info`.
 - An `error` value does not contain a URL query.
 - A `GcsError` source does not contain the request URL.
-- A resumable chunk failure record includes `attempt` and `offset` in `extra`.
-- A resumable probe failure record also includes `attempt` and `offset` in `extra`.
+- A resumable chunk failure record includes `attempt` and `offset` in `info`.
+- A resumable probe failure record also includes `attempt` and `offset` in `info`.
 
 These results write no operations record:
 

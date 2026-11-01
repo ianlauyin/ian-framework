@@ -17,15 +17,15 @@ This feature is not product business logic.
 | --- | --- | --- |
 | `Logger` | class | The logger. All methods are static. |
 | `LogLevel` | type | `"info"`, `"warn"` or `"error"`. |
-| `LogExtra` | type | `Record<string, string \| number \| boolean>`. |
+| `LogFields` | type | `Record<string, string \| number \| boolean>`. |
 
 `Logger` has these methods:
 
 | Method | Effect |
 | --- | --- |
-| `Logger.info(message, extra?)` | Records one event with the level `info`. |
-| `Logger.warn(message, extra?)` | Records one event with the level `warn`. |
-| `Logger.error(message, extra?)` | Records one event with the level `error`. |
+| `Logger.info(message, info?)` | Records one event with the level `info`. |
+| `Logger.warn(message, info?)` | Records one event with the level `warn`. |
+| `Logger.error(message, info?)` | Records one event with the level `error`. |
 | `Logger.setMaskPatterns(patterns)` | Sets the mask patterns. `patterns` is a `RegExp[]`. |
 | `Logger.watchWindowErrors()` | Records the window errors and the unhandled promise rejections. |
 
@@ -44,17 +44,16 @@ The event has these fields:
 | --- | --- |
 | `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe/time`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
 | `id` | Empty string |
-| `ip` | Empty string |
-| `user_agent` | Empty string |
 | `action` | `message`, with no change. |
 | `latency_ms` | `null` |
 | `level` | The level of the method. |
-| `extra` | The `extra` values after the masking. |
+| `context` | Empty object |
+| `info` | The `info` values after the masking. |
 
-`extra` rules:
+`info` rules:
 
 - The logger adds the key `page`. The value is `location.pathname`.
-- A `page` key in the caller `extra` replaces that value.
+- A `page` key in the caller `info` replaces that value.
 - The logger keeps the other caller keys.
 
 ### Send
@@ -91,9 +90,9 @@ Send rules:
 
 ### Masking
 
-The logger masks `extra` before it puts the event in the queue.
+The logger masks `info` before it puts the event in the queue.
 
-- The start list of patterns is empty. With no pattern, the logger does not change `extra`.
+- The start list of patterns is empty. With no pattern, the logger does not change `info`.
 - `Logger.setMaskPatterns` replaces the full list.
 - The logger adds the `g` flag to each pattern that does not have it. It keeps the other flags.
 - The masking applies to the `page` key also.
@@ -120,4 +119,4 @@ This feature does not include these items:
 - A default mask pattern.
 - A retry of a failed send.
 - A send on a page unload other than the `visibilitychange` event.
-- Nested values in `extra`.
+- Nested values in `info`.

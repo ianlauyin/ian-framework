@@ -24,18 +24,25 @@ impl LogBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::LogValue;
     use crate::logging::{event, LogLevel};
     use chrono::DateTime;
-    use serde_json::{json, Value};
+    use serde_json::Value;
 
     fn sample() -> LogEvent {
         let mut event = event("GET /health", LogLevel::Info);
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
         event.id = "req-1".to_string();
-        event.ip = "203.0.113.8".to_string();
-        event.user_agent = "demo-agent".to_string();
+        event
+            .context
+            .insert("ip".to_string(), LogValue::from("203.0.113.8"));
+        event
+            .context
+            .insert("user_agent".to_string(), LogValue::from("demo-agent"));
         event.latency_ms = Some(12);
-        event.extra.insert("region".to_string(), json!("asia"));
+        event
+            .info
+            .insert("region".to_string(), LogValue::from("asia"));
         event
     }
 
@@ -73,8 +80,7 @@ mod tests {
         assert_eq!(stored[0].action, "/a?x=1");
         assert_eq!(stored[0].level, LogLevel::Info);
         assert_eq!(stored[0].id, "");
-        assert_eq!(stored[0].ip, "");
-        assert_eq!(stored[0].user_agent, "");
+        assert!(stored[0].context.is_empty());
         assert_eq!(stored[0].latency_ms, None);
         assert_eq!(stored[1].action, "#frag");
         assert_eq!(stored[1].level, LogLevel::Error);

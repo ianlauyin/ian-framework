@@ -45,7 +45,7 @@ function ErrorFallback(props: FallbackProps) {
   );
 }
 
-// The log route drops an extra value that contains a line break.
+// The log route drops an info value that contains a line break.
 function logError(error: unknown) {
   const oneLine = (text: string) => text.replace(/\r?\n\s*/g, " | ");
   if (error instanceof Error) {

@@ -103,15 +103,16 @@ impl Alert {
         self.active = true;
         let mut event = event(ACTION, LogLevel::Warn);
         event
-            .extra
-            .insert("disk_percent".to_string(), json!(round_one(percent)));
-        event.extra.insert(
+            .info
+            .insert("disk_percent".to_string(), round_one(percent).into());
+        event.info.insert(
             "threshold_percent".to_string(),
-            json!(self.threshold_percent),
+            self.threshold_percent.into(),
         );
-        event
-            .extra
-            .insert("path".to_string(), json!(self.path.to_string_lossy()));
+        event.info.insert(
+            "path".to_string(),
+            self.path.to_string_lossy().into_owned().into(),
+        );
         Some(event)
     }
 }
@@ -196,9 +197,9 @@ mod tests {
         let event = alert.check(91.26).unwrap();
         assert_eq!(event.action, "DISK/meets threshold");
         assert_eq!(event.level, LogLevel::Warn);
-        assert_eq!(event.extra["disk_percent"], json!(91.3));
-        assert_eq!(event.extra["threshold_percent"], json!(90.0));
-        assert_eq!(event.extra["path"], json!("/data"));
+        assert_eq!(event.info["disk_percent"], json!(91.3));
+        assert_eq!(event.info["threshold_percent"], json!(90.0));
+        assert_eq!(event.info["path"], json!("/data"));
         assert!(alert.check(95.0).is_none());
         assert!(alert.check(90.0).is_none());
         assert!(alert.check(10.0).is_none());

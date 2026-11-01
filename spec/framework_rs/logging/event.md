@@ -10,15 +10,20 @@ One event is one `LogEvent`. One event has these fields:
 | --- | --- |
 | `ts` | Hong Kong time (HKT) in RFC 3339, with the offset `+08:00` |
 | `id` | Event id, or an empty string |
-| `ip` | Client address, or an empty string |
-| `user_agent` | `user-agent` header, or an empty string |
 | `action` | `API/{method}:{path}`, a client text, or an empty string |
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
-| `extra` | One JSON object |
+| `context` | One JSON object with the facts about where the event came from. Each value is a string, a number, or a `bool`. |
+| `info` | One JSON object with the data of the event. Each value is a string, a number, or a `bool`. |
 
+- The event has no `ip` field and no `user_agent` field. The route middleware and the client log route put them in `context`.
 - The event has no `app` field.
 - The event has no `project` field.
+
+### Values
+
+- The type of a `context` value and of an `info` value is `ian_framework::logging::LogValue`. It is a string, a number, or a `bool`.
+- Deserialize of an event rejects an array, an object, or null in `context` or in `info`.
 
 ### Time
 

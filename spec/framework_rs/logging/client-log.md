@@ -19,15 +19,14 @@ The function sets the fields of the result as follows:
 | Field | Stored value |
 | --- | --- |
 | `id` | Empty string. The client value is not kept. |
-| `ip` | Empty string. The client value is not kept. |
-| `user_agent` | Empty string. The client value is not kept. |
 | `latency_ms` | null. The client value is not kept. |
 | `ts` | The current HKT time, from `ian_framework::time::hkt_now()`. The client value is not kept. |
 | `level` | The client value. |
 | `action` | The client value. |
-| `extra` | The client keys and values that obey the `extra` rules below. |
+| `context` | Empty object. The client value is not kept. |
+| `info` | The client keys and values that obey the `info` rules below. |
 
-The function reads each `extra` key:
+The function reads each `info` key:
 
 - The function does not store an empty key.
 - The function stores a key only when each character is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.
@@ -104,6 +103,6 @@ Request handling:
 - When the server cannot read the body, the status is also 413.
 - A body that is not a `LogBatch` gets status 400.
 - The route calls `LogBatch::sanitize_untrusted_client`. When that call gives no batch, the status is 400 and the route records no event.
-- The route sets `ip` and `user_agent` of each kept event from the request. The sources are the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
+- The route sets `ip` and `user_agent` in the `context` of each kept event from the request. The sources are the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
 - The route calls `LogShipper::record` for each kept event.
 - The response status is 204 with an empty body.

@@ -35,8 +35,10 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
         return StatusCode::BAD_REQUEST;
     };
     for mut event in events {
-        event.ip = ip.clone();
-        event.user_agent = user_agent.clone();
+        event.context.insert("ip".to_string(), ip.clone().into());
+        event
+            .context
+            .insert("user_agent".to_string(), user_agent.clone().into());
         shipper.record(event);
     }
     StatusCode::NO_CONTENT
@@ -61,12 +63,11 @@ mod tests {
         json!({
             "ts": "2026-10-25T12:00:00Z",
             "id": "client-id",
-            "ip": "10.0.0.1",
-            "user_agent": "fake-agent",
             "action": action,
             "latency_ms": 5,
             "level": "error",
-            "extra": { "page": "/home" },
+            "context": { "ip": "10.0.0.1", "user_agent": "fake-agent" },
+            "info": { "page": "/home" },
         })
     }
 
@@ -102,11 +103,11 @@ mod tests {
         let event = &events[0];
         assert_eq!(event.action, "boom");
         assert_eq!(event.level, LogLevel::Error);
-        assert_eq!(event.ip, "203.0.113.8");
-        assert_eq!(event.user_agent, "demo-agent");
+        assert_eq!(event.context["ip"], "203.0.113.8");
+        assert_eq!(event.context["user_agent"], "demo-agent");
         assert_eq!(event.id, "");
         assert_eq!(event.latency_ms, None);
-        assert_eq!(event.extra["page"], "/home");
+        assert_eq!(event.info["page"], "/home");
     }
 
     #[tokio::test]

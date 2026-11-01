@@ -6,17 +6,16 @@ const MAX_QUEUE = 1000;
 const MASK = "***";
 
 export type LogLevel = "info" | "warn" | "error";
-export type LogExtra = Record<string, string | number | boolean>;
+export type LogFields = Record<string, string | number | boolean>;
 
 type ClientLogEvent = {
   ts: string;
   id: string;
-  ip: string;
-  user_agent: string;
   action: string;
   latency_ms: null;
   level: LogLevel;
-  extra: LogExtra;
+  context: LogFields;
+  info: LogFields;
 };
 
 export class Logger {
@@ -41,19 +40,19 @@ export class Logger {
     });
   }
 
-  public static info(message: string, extra?: LogExtra): void {
-    Logger.record("info", message, extra);
+  public static info(message: string, info?: LogFields): void {
+    Logger.record("info", message, info);
   }
 
-  public static warn(message: string, extra?: LogExtra): void {
-    Logger.record("warn", message, extra);
+  public static warn(message: string, info?: LogFields): void {
+    Logger.record("warn", message, info);
   }
 
-  public static error(message: string, extra?: LogExtra): void {
-    Logger.record("error", message, extra);
+  public static error(message: string, info?: LogFields): void {
+    Logger.record("error", message, info);
   }
 
-  private static record(level: LogLevel, message: string, extra?: LogExtra): void {
+  private static record(level: LogLevel, message: string, info?: LogFields): void {
     if (message.trim() === "") return;
     Logger.start();
 
@@ -61,20 +60,19 @@ export class Logger {
     Logger.queue.push({
       ts: hktIsoString(new Date()),
       id: "",
-      ip: "",
-      user_agent: "",
       action: message,
       latency_ms: null,
       level,
-      extra: Logger.mask({ page: location.pathname, ...extra }),
+      context: {},
+      info: Logger.mask({ page: location.pathname, ...info }),
     });
   }
 
-  private static mask(extra: LogExtra): LogExtra {
-    if (Logger.masks.length === 0) return extra;
+  private static mask(info: LogFields): LogFields {
+    if (Logger.masks.length === 0) return info;
 
-    const masked: LogExtra = {};
-    for (const [key, value] of Object.entries(extra)) {
+    const masked: LogFields = {};
+    for (const [key, value] of Object.entries(info)) {
       if (Logger.masks.some((mask) => key.search(mask) !== -1)) {
         masked[key] = MASK;
       } else if (typeof value === "string") {

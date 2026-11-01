@@ -20,33 +20,28 @@ impl OpsRecord<'_> {
         let mut event = LogEvent {
             ts: hkt_now(),
             id: String::new(),
-            ip: String::new(),
-            user_agent: String::new(),
             action: action(self.method, self.url),
             latency_ms: self.latency_ms,
             level: self.level,
-            extra: BTreeMap::new(),
+            context: BTreeMap::new(),
+            info: BTreeMap::new(),
         };
-        event.extra.insert(
-            "message".to_string(),
-            serde_json::Value::String(self.message.to_string()),
-        );
+        event
+            .info
+            .insert("message".to_string(), self.message.to_string().into());
         if let Some(status) = self.status {
-            event.extra.insert(
-                "status".to_string(),
-                serde_json::Value::String(status.to_string()),
-            );
+            event
+                .info
+                .insert("status".to_string(), status.to_string().into());
         }
         for (key, value) in self.extra {
-            event.extra.insert(
-                (*key).to_string(),
-                serde_json::Value::String((*value).to_string()),
-            );
+            event
+                .info
+                .insert((*key).to_string(), (*value).to_string().into());
         }
-        event.extra.insert(
-            "bucket".to_string(),
-            serde_json::Value::String(bucket.to_string()),
-        );
+        event
+            .info
+            .insert("bucket".to_string(), bucket.to_string().into());
         event
     }
 }

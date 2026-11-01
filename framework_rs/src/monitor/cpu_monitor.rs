@@ -104,11 +104,11 @@ impl Alert {
         self.active = true;
         let mut event = event(ACTION, LogLevel::Warn);
         event
-            .extra
-            .insert("cpu_percent".to_string(), json!(round_one(percent)));
-        event.extra.insert(
+            .info
+            .insert("cpu_percent".to_string(), round_one(percent).into());
+        event.info.insert(
             "threshold_percent".to_string(),
-            json!(self.threshold_percent),
+            self.threshold_percent.into(),
         );
         Some(event)
     }
@@ -207,8 +207,8 @@ mod tests {
         let event = alert.check(85.26).unwrap();
         assert_eq!(event.action, "CPU/meets threshold");
         assert_eq!(event.level, LogLevel::Warn);
-        assert_eq!(event.extra["cpu_percent"], json!(85.3));
-        assert_eq!(event.extra["threshold_percent"], json!(80.0));
+        assert_eq!(event.info["cpu_percent"], json!(85.3));
+        assert_eq!(event.info["threshold_percent"], json!(80.0));
         assert!(alert.check(95.0).is_none());
         assert!(alert.check(80.0).is_none());
         assert!(alert.check(10.0).is_none());

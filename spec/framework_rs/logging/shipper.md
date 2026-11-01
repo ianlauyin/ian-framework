@@ -67,10 +67,10 @@ The `Debug` output of `LogShipper` does not show the POST API key. When the ship
 
 `LogShipper::record` stores one event in the local buffer.
 
-- Before it stores or traces the event, `LogShipper::record` masks the event `extra` values.
+- Before it stores or traces the event, `LogShipper::record` masks the event `context` values and `info` values.
 - In trace-only mode, `LogShipper::record` writes the event with `tracing`. It does not store the event.
 - The shipper does not write `app` into the event.
-- The shipper stores the full `action`, `id`, `ip`, and `user_agent`.
+- The shipper stores the full `action`, `id`, and `context`.
 - The buffer keeps a maximum of `capacity` events.
 - When the buffer is full, a new event removes the oldest event.
 
@@ -102,12 +102,11 @@ The warning has these fields:
 | --- | --- |
 | `ts` | Current HKT time, from `ian_framework::time::hkt_now()` |
 | `id` | Empty string |
-| `ip` | Empty string |
-| `user_agent` | Empty string |
 | `action` | `SHIPPER/capacity meets 80%` |
 | `latency_ms` | null |
 | `level` | `warn` |
-| `extra` | Empty object |
+| `context` | Empty object |
+| `info` | Empty object |
 
 ### Ship loop
 
@@ -192,8 +191,9 @@ In trace-only mode, `LogShipper::record` writes each event with `tracing` at the
 | `warn` | `tracing::warn!` |
 | `error` | `tracing::error!` |
 
-- The tracing fields are `app`, `id`, `ip`, `user_agent`, `action`, `latency_ms`, and `extra`.
-- `extra` is the JSON text of the event `extra`.
+- The tracing fields are `app`, `id`, `action`, `latency_ms`, `context`, and `info`.
+- `context` is the JSON text of the event `context`.
+- `info` is the JSON text of the event `info`.
 - The project installs a `tracing` subscriber to show these logs.
 
 Trace-only mode does not do these things:

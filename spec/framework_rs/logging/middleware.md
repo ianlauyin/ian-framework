@@ -20,11 +20,20 @@ General rules:
 | Field | Value |
 | --- | --- |
 | `action` | `API/{method}:{path}`. `method` is the request method. `path` is the request path, with no query string. An empty path is `/`. |
-| `ip` | The first source that is not empty. The sources are below. |
-| `user_agent` | The header `user-agent`. A missing header gives an empty `user_agent`. |
 | `latency_ms` | The handler time in milliseconds. It includes the body read. |
 | `level` | From the response status. The rules are below. |
-| `extra` | The keys `query` and `body`. The rules are below. |
+| `context` | The keys `ip`, `user_agent` and `request_url`. The rules are below. |
+| `info` | The keys `body.{path}`. The rules are below. |
+
+### Context
+
+`context` has only these keys:
+
+| Key | Value |
+| --- | --- |
+| `ip` | The first source that is not empty. The sources are below. |
+| `user_agent` | The header `user-agent`. A missing header gives an empty string. |
+| `request_url` | The request path with the query string, as the request line gives it. An empty path is `/`. |
 
 The `ip` sources are in this order:
 
@@ -48,22 +57,13 @@ Level rules:
 | 400 through 499 | `warn` |
 | Below 400 | `info` |
 
-### Extra
+### Info
 
-`extra` has only these keys:
+`info` has only the keys `body.{path}`. Each key has one scalar body value:
 
 | Key | Value |
 | --- | --- |
-| `query` | One object with each query field, when the query has a field. |
-| `body` | One object with each body field, when the body has a field. |
-
-Query rules:
-
-- The middleware leaves out `query` when the request has no query or the query has no field.
-- The middleware reads the query as `application/x-www-form-urlencoded` text. It decodes each name and each value.
-- A query field without `=` has an empty string value.
-- Each query value is a string.
-- A query name that occurs more than one time has one array of its string values, in query order.
+| `body.{path}` | One string, number, or `bool` of the body. `path` is the field names, and the array positions that start at 0, joined with `.`. |
 
 The middleware reads the body only when all these rules are true:
 
@@ -72,13 +72,14 @@ The middleware reads the body only when all these rules are true:
 
 Body rules:
 
-- `body` is the JSON object.
-- The middleware keeps each nested value.
-- A JSON body that is not an object gives no `body`.
-- A body that is not valid JSON gives no `body`.
+- The body is one JSON object.
+- The middleware writes each nested object and each array as keys with a longer `path`.
+- The middleware leaves out a null value.
+- A JSON body that is not an object gives no `body.{path}` key.
+- A body that is not valid JSON gives no `body.{path}` key.
 - The middleware does not log a body of a different media type.
-- An empty object gives no `body`.
+- An empty object gives no `body.{path}` key.
 - The middleware gives the same body bytes to the inner handler.
 - The middleware does not read a different body. Thus a large body or a body without `content-length` goes to the handler as a stream.
 - When the body read fails, the middleware does not call the inner handler. It returns status 400 and records the event with status 400.
-- The shipper masks `query` and `body` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. `query` and `body` are nested objects, so the key rule applies to their keys.
+- The shipper masks `context` and `info` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. The key rule applies to the full key, which includes the names of the parents. The pattern rule applies to the text of `request_url`.

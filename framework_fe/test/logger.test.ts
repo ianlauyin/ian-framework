@@ -68,17 +68,16 @@ describe("Logger", () => {
       {
         ts: "2026-10-25T20:00:00.000+08:00",
         id: "",
-        ip: "",
-        user_agent: "",
         action: "started",
         latency_ms: null,
         level: "info",
-        extra: { page: "/home" },
+        context: {},
+        info: { page: "/home" },
       },
       expect.objectContaining({
         level: "error",
         action: "boom",
-        extra: { page: "/other", code: 42 },
+        info: { page: "/other", code: 42 },
       }),
     ]);
 
@@ -118,7 +117,7 @@ describe("Logger", () => {
     expect(events[0].action).toBe("event 1");
   });
 
-  it("masks the value of a matching extra key and each match in a string value", async () => {
+  it("masks the value of a matching info key and each match in a string value", async () => {
     const Logger = await loadLogger();
     Logger.setMaskPatterns([/^(password|token)$/i, /secret=\S+/]);
     Logger.info("login secret=keep", {
@@ -130,7 +129,7 @@ describe("Logger", () => {
     hidePage();
     const [event] = sentEvents(0);
     expect(event.action).toBe("login secret=keep");
-    expect(event.extra).toEqual({
+    expect(event.info).toEqual({
       page: "/home",
       password: "***",
       TOKEN: "***",
@@ -139,11 +138,11 @@ describe("Logger", () => {
     });
   });
 
-  it("keeps the extra values when no mask pattern is set", async () => {
+  it("keeps the info values when no mask pattern is set", async () => {
     const Logger = await loadLogger();
     Logger.info("login", { password: "hunter2" });
     hidePage();
-    expect(sentEvents(0)[0].extra).toEqual({ page: "/home", password: "hunter2" });
+    expect(sentEvents(0)[0].info).toEqual({ page: "/home", password: "hunter2" });
   });
 
   it("ignores a failed send", async () => {

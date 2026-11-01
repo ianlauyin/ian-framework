@@ -48,14 +48,13 @@ The monitor makes one event when the usage rises to the threshold or above it. I
 | --- | --- |
 | `ts` | Current HKT time |
 | `id` | Empty string |
-| `ip` | Empty string |
-| `user_agent` | Empty string |
+| `context` | Empty object |
 | `action` | `DISK/meets threshold` |
 | `latency_ms` | null |
 | `level` | `warn` |
-| `extra.disk_percent` | The usage, rounded to one decimal, as a JSON number |
-| `extra.threshold_percent` | The threshold, as a JSON number |
-| `extra.path` | The monitored path |
+| `info.disk_percent` | The usage, rounded to one decimal, as a JSON number |
+| `info.threshold_percent` | The threshold, as a JSON number |
+| `info.path` | The monitored path |
 
 ## Stop
 

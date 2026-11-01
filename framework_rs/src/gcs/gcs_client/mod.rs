@@ -610,14 +610,13 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].action, "GCS/GET:/storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");
-        assert_eq!(events[0].ip, "");
-        assert_eq!(events[0].user_agent, "");
-        assert_eq!(events[0].extra["status"], "200");
-        assert_eq!(events[0].extra["message"], "gcs response");
+        assert!(events[0].context.is_empty());
+        assert_eq!(events[0].info["status"], "200");
+        assert_eq!(events[0].info["message"], "gcs response");
         assert_eq!(events[0].latency_ms, Some(3));
         assert_eq!(
             events[0]
-                .extra
+                .info
                 .get("bucket")
                 .and_then(|value| value.as_str()),
             Some("my-bucket")

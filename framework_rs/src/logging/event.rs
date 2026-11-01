@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 use crate::time::hkt_now;
 
@@ -34,15 +34,67 @@ impl LogLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LogValue {
+    Bool(bool),
+    Number(Number),
+    String(String),
+}
+
+impl From<&str> for LogValue {
+    fn from(value: &str) -> Self {
+        LogValue::String(value.to_string())
+    }
+}
+
+impl From<String> for LogValue {
+    fn from(value: String) -> Self {
+        LogValue::String(value)
+    }
+}
+
+impl From<bool> for LogValue {
+    fn from(value: bool) -> Self {
+        LogValue::Bool(value)
+    }
+}
+
+impl From<u64> for LogValue {
+    fn from(value: u64) -> Self {
+        LogValue::Number(value.into())
+    }
+}
+
+impl From<f64> for LogValue {
+    fn from(value: f64) -> Self {
+        match Number::from_f64(value) {
+            Some(number) => LogValue::Number(number),
+            None => LogValue::String(value.to_string()),
+        }
+    }
+}
+
+impl PartialEq<&str> for LogValue {
+    fn eq(&self, other: &&str) -> bool {
+        matches!(self, LogValue::String(text) if text == other)
+    }
+}
+
+impl PartialEq<Value> for LogValue {
+    fn eq(&self, other: &Value) -> bool {
+        serde_json::to_value(self).is_ok_and(|value| &value == other)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     pub ts: DateTime<FixedOffset>,
     pub id: String,
-    pub ip: String,
-    pub user_agent: String,
     pub action: String,
     pub latency_ms: Option<u64>,
     pub level: LogLevel,
-    pub extra: BTreeMap<String, Value>,
+    pub context: BTreeMap<String, LogValue>,
+    pub info: BTreeMap<String, LogValue>,
 }
 
 impl LogEvent {
@@ -50,43 +102,41 @@ impl LogEvent {
         LogEvent {
             ts: hkt_now(),
             id: String::new(),
-            ip: String::new(),
-            user_agent: String::new(),
             action: self.action.clone(),
             latency_ms: None,
             level: self.level,
-            extra: client_extra(&self.extra),
+            context: BTreeMap::new(),
+            info: client_info(&self.info),
         }
     }
 }
 
-fn client_extra(extra: &BTreeMap<String, Value>) -> BTreeMap<String, Value> {
+fn client_info(info: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValue> {
     let mut kept = BTreeMap::new();
-    for (key, value) in extra {
-        if !extra_key_ok(key) {
+    for (key, value) in info {
+        if !info_key_ok(key) {
             continue;
         }
-        let Some(text) = extra_value(value) else {
+        let Some(text) = info_value(value) else {
             continue;
         };
-        kept.insert(key.clone(), Value::String(text));
+        kept.insert(key.clone(), LogValue::String(text));
     }
     kept
 }
 
-fn extra_key_ok(key: &str) -> bool {
+fn info_key_ok(key: &str) -> bool {
     !key.is_empty()
         && key
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
 }
 
-fn extra_value(value: &Value) -> Option<String> {
+fn info_value(value: &LogValue) -> Option<String> {
     let text = match value {
-        Value::String(text) => text.clone(),
-        Value::Number(number) => number.to_string(),
-        Value::Bool(flag) => flag.to_string(),
-        _ => return None,
+        LogValue::String(text) => text.clone(),
+        LogValue::Number(number) => number.to_string(),
+        LogValue::Bool(flag) => flag.to_string(),
     };
     if text.contains('\r') || text.contains('\n') {
         return None;
@@ -115,10 +165,16 @@ mod tests {
         let mut event = event("GET /health", LogLevel::Info);
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
         event.id = "req-1".to_string();
-        event.ip = "203.0.113.8".to_string();
-        event.user_agent = "demo-agent".to_string();
+        event
+            .context
+            .insert("ip".to_string(), LogValue::from("203.0.113.8"));
+        event
+            .context
+            .insert("user_agent".to_string(), LogValue::from("demo-agent"));
         event.latency_ms = Some(12);
-        event.extra.insert("region".to_string(), json!("asia"));
+        event
+            .info
+            .insert("region".to_string(), LogValue::from("asia"));
         event
     }
 
@@ -129,12 +185,11 @@ mod tests {
         for key in [
             "ts",
             "id",
-            "ip",
-            "user_agent",
             "action",
             "latency_ms",
             "level",
-            "extra",
+            "context",
+            "info",
         ] {
             assert!(value.get(key).is_some(), "{key}");
         }
@@ -142,8 +197,10 @@ mod tests {
         assert!(value.get("project").is_none());
         assert_eq!(value["ts"], "2026-10-18T20:00:00+08:00");
         assert_eq!(value["id"], "req-1");
-        assert_eq!(value["ip"], "203.0.113.8");
-        assert_eq!(value["user_agent"], "demo-agent");
+        assert!(value.get("ip").is_none());
+        assert!(value.get("user_agent").is_none());
+        assert_eq!(value["context"]["ip"], "203.0.113.8");
+        assert_eq!(value["context"]["user_agent"], "demo-agent");
         assert_eq!(value["action"], "GET /health");
         assert!(value.get("request").is_none());
         assert!(value.get("request_id").is_none());
@@ -151,7 +208,7 @@ mod tests {
         assert!(value.get("path").is_none());
         assert_eq!(value["latency_ms"], 12);
         assert_eq!(value["level"], "info");
-        assert_eq!(value["extra"]["region"], "asia");
+        assert_eq!(value["info"]["region"], "asia");
     }
 
     #[test]
@@ -161,13 +218,12 @@ mod tests {
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
         assert_eq!(value["id"], "");
-        assert_eq!(value["ip"], "");
-        assert_eq!(value["user_agent"], "");
+        assert!(value["context"].as_object().unwrap().is_empty());
         assert_eq!(value["action"], "");
         assert!(value.get("request").is_none());
         assert!(value["latency_ms"].is_null());
         assert_eq!(value["level"], "warn");
-        assert!(value["extra"].as_object().unwrap().is_empty());
+        assert!(value["info"].as_object().unwrap().is_empty());
     }
 
     #[test]
@@ -201,6 +257,17 @@ mod tests {
     }
 
     #[test]
+    fn a_non_scalar_context_or_info_value_is_rejected() {
+        for field in ["context", "info"] {
+            for bad in [json!(null), json!({"a": 1}), json!([1])] {
+                let mut value = serde_json::to_value(sample()).unwrap();
+                value[field]["bad"] = bad;
+                assert!(serde_json::from_value::<LogEvent>(value).is_err());
+            }
+        }
+    }
+
+    #[test]
     fn a_missing_schema_field_is_rejected() {
         let json = r#"{"ts":"2026-10-18T12:00:00Z","action":"note"}"#;
         assert!(serde_json::from_str::<LogEvent>(json).is_err());
@@ -211,16 +278,16 @@ mod tests {
         let mut event = event("GET /download?sig=abc#top", LogLevel::Warn);
         event.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z").unwrap();
         event.id = "client-id".to_string();
-        event.ip = "203.0.113.8".to_string();
-        event.user_agent = "browser".to_string();
+        event
+            .context
+            .insert("ip".to_string(), LogValue::from("203.0.113.8"));
         event.latency_ms = Some(42);
         let before = hkt_now();
         let stored = event.sanitize_untrusted_client();
         let after = hkt_now();
         assert_eq!(event.id, "client-id");
         assert_eq!(stored.id, "");
-        assert_eq!(stored.ip, "");
-        assert_eq!(stored.user_agent, "");
+        assert!(stored.context.is_empty());
         assert_eq!(stored.latency_ms, None);
         assert_eq!(stored.level, LogLevel::Warn);
         assert_eq!(stored.action, "GET /download?sig=abc#top");
@@ -248,23 +315,30 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_untrusted_client_filters_extra() {
+    fn sanitize_untrusted_client_filters_info() {
         let mut client = event("/files", LogLevel::Info);
-        client.extra.insert("bad key".to_string(), json!("no"));
-        client.extra.insert("k01".to_string(), json!("kept"));
-        client.extra.insert("k02".to_string(), json!("a\nb"));
-        client.extra.insert("k03".to_string(), json!("a\rb"));
-        client.extra.insert("k04".to_string(), json!(null));
-        client.extra.insert("k05".to_string(), json!({"a": 1}));
-        client.extra.insert("k06".to_string(), json!([1]));
         client
-            .extra
-            .insert("k07".to_string(), json!("x".repeat(250)));
-        client.extra.insert("k08".to_string(), json!("ninth"));
-        client.extra.insert("k09".to_string(), json!(true));
+            .info
+            .insert("bad key".to_string(), LogValue::from("no"));
+        client
+            .info
+            .insert("k01".to_string(), LogValue::from("kept"));
+        client
+            .info
+            .insert("k02".to_string(), LogValue::from("a\nb"));
+        client
+            .info
+            .insert("k03".to_string(), LogValue::from("a\rb"));
+        client
+            .info
+            .insert("k07".to_string(), LogValue::from("x".repeat(250)));
+        client
+            .info
+            .insert("k08".to_string(), LogValue::from("ninth"));
+        client.info.insert("k09".to_string(), LogValue::from(true));
         let stored = client.sanitize_untrusted_client();
         assert_eq!(
-            stored.extra.keys().cloned().collect::<Vec<_>>(),
+            stored.info.keys().cloned().collect::<Vec<_>>(),
             vec![
                 "k01".to_string(),
                 "k07".to_string(),
@@ -272,48 +346,61 @@ mod tests {
                 "k09".to_string(),
             ]
         );
-        assert_eq!(stored.extra["k01"], json!("kept"));
-        assert_eq!(stored.extra["k07"], json!("x".repeat(250)));
-        assert_eq!(stored.extra["k08"], json!("ninth"));
-        assert_eq!(stored.extra["k09"], json!("true"));
-        assert!(!stored.extra.contains_key("bad key"));
+        assert_eq!(stored.info["k01"], json!("kept"));
+        assert_eq!(stored.info["k07"], json!("x".repeat(250)));
+        assert_eq!(stored.info["k08"], json!("ninth"));
+        assert_eq!(stored.info["k09"], json!("true"));
+        assert!(!stored.info.contains_key("bad key"));
 
         let mut scalars = event("/files", LogLevel::Error);
-        scalars.extra.insert("a/b".to_string(), json!("no"));
-        scalars.extra.insert("a_b-c.d".to_string(), json!("yes"));
-        scalars.extra.insert("a".repeat(65), json!("long-key"));
-        scalars.extra.insert("count".to_string(), json!(12));
-        scalars.extra.insert("flag".to_string(), json!(true));
-        scalars.extra.insert("off".to_string(), json!(false));
-        scalars.extra.insert("ratio".to_string(), json!(1.5));
+        scalars.info.insert("a/b".to_string(), LogValue::from("no"));
+        scalars
+            .info
+            .insert("a_b-c.d".to_string(), LogValue::from("yes"));
+        scalars
+            .info
+            .insert("a".repeat(65), LogValue::from("long-key"));
+        scalars.info.insert("count".to_string(), LogValue::from(12));
+        scalars
+            .info
+            .insert("flag".to_string(), LogValue::from(true));
+        scalars
+            .info
+            .insert("off".to_string(), LogValue::from(false));
+        scalars
+            .info
+            .insert("ratio".to_string(), LogValue::from(1.5));
         let stored = scalars.sanitize_untrusted_client();
-        assert_eq!(stored.extra.get("a/b"), None);
-        assert_eq!(stored.extra[&"a".repeat(65)], json!("long-key"));
-        assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
-        assert_eq!(stored.extra["count"], json!("12"));
-        assert_eq!(stored.extra["flag"], json!("true"));
-        assert_eq!(stored.extra["off"], json!("false"));
-        assert_eq!(stored.extra["ratio"], json!("1.5"));
+        assert_eq!(stored.info.get("a/b"), None);
+        assert_eq!(stored.info[&"a".repeat(65)], json!("long-key"));
+        assert_eq!(stored.info["a_b-c.d"], json!("yes"));
+        assert_eq!(stored.info["count"], json!("12"));
+        assert_eq!(stored.info["flag"], json!("true"));
+        assert_eq!(stored.info["off"], json!("false"));
+        assert_eq!(stored.info["ratio"], json!("1.5"));
 
         let mut text = event("/files", LogLevel::Info);
-        text.extra.insert(String::new(), json!("no"));
-        text.extra.insert("café".to_string(), json!("no"));
-        text.extra.insert("ok!".to_string(), json!("no"));
+        text.info.insert(String::new(), LogValue::from("no"));
+        text.info.insert("café".to_string(), LogValue::from("no"));
+        text.info.insert("ok!".to_string(), LogValue::from("no"));
         let long = "中".repeat(67);
-        text.extra.insert("text".to_string(), json!(long));
+        text.info
+            .insert("text".to_string(), LogValue::from(long.clone()));
         let stored = text.sanitize_untrusted_client();
-        assert_eq!(stored.extra.get(""), None);
-        assert_eq!(stored.extra.get("café"), None);
-        assert_eq!(stored.extra.get("ok!"), None);
-        assert_eq!(stored.extra["text"], json!(long));
+        assert_eq!(stored.info.get(""), None);
+        assert_eq!(stored.info.get("café"), None);
+        assert_eq!(stored.info.get("ok!"), None);
+        assert_eq!(stored.info["text"], json!(long));
 
         let mut later = event("/files", LogLevel::Info);
         for index in 0..8 {
-            later.extra.insert(format!("bad {index}"), json!("no"));
+            later
+                .info
+                .insert(format!("bad {index}"), LogValue::from("no"));
         }
-        later.extra.insert("zzzz".to_string(), json!("yes"));
+        later.info.insert("zzzz".to_string(), LogValue::from("yes"));
         let stored = later.sanitize_untrusted_client();
-        assert_eq!(stored.extra.len(), 1);
-        assert_eq!(stored.extra["zzzz"], json!("yes"));
+        assert_eq!(stored.info.len(), 1);
+        assert_eq!(stored.info["zzzz"], json!("yes"));
     }
 }
