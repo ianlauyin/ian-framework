@@ -45,7 +45,7 @@ export const ajax = async <
       return encodeURIComponent(String(value));
     });
   if (isGetOrDelete && request) {
-    parsedUrl = parsedUrl + "?" + new URLSearchParams(request).toString();
+    parsedUrl = `${parsedUrl}?${new URLSearchParams(request).toString()}`;
   }
 
   const response: Response = await fetch(parsedUrl, {

@@ -11,7 +11,9 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 function hidePage(): void {
   fakeDocument.visibilityState = "hidden";
-  fakeDocument.listeners.forEach((listener) => listener());
+  fakeDocument.listeners.forEach((listener) => {
+    listener();
+  });
 }
 
 function sentEvents(call: number) {

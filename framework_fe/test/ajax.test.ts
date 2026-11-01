@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AjaxError, ajax, setUnauthorizedHandler } from "../src/ajax";
+import { type AjaxError, ajax, setUnauthorizedHandler } from "../src/ajax";
 
 describe("ajax", () => {
   afterEach(() => {

@@ -15,7 +15,9 @@ function respondWith(version: string): void {
 
 function showPage(): void {
   fakeDocument.visibilityState = "visible";
-  fakeDocument.listeners.forEach((listener) => listener());
+  fakeDocument.listeners.forEach((listener) => {
+    listener();
+  });
 }
 
 async function flush(): Promise<void> {
@@ -79,7 +81,9 @@ describe("VersionChecker", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     fakeDocument.visibilityState = "hidden";
-    fakeDocument.listeners.forEach((listener) => listener());
+    fakeDocument.listeners.forEach((listener) => {
+      listener();
+    });
     await flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
