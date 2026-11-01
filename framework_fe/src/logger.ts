@@ -22,12 +22,23 @@ export class Logger {
   private static queue: ClientLogEvent[] = [];
   private static started = false;
   private static masks: RegExp[] = [];
+  private static context: LogFields = {};
 
   public static setMaskPatterns(patterns: RegExp[]): void {
     Logger.masks = patterns.map(
       (pattern) =>
         new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`),
     );
+  }
+
+  public static addContext(key: string, value: string | number | boolean): void {
+    Logger.context = { ...Logger.context, [key]: value };
+  }
+
+  public static removeContext(...keys: string[]): void {
+    const kept = { ...Logger.context };
+    for (const key of keys) delete kept[key];
+    Logger.context = kept;
   }
 
   public static watchWindowErrors(): void {
@@ -40,30 +51,53 @@ export class Logger {
     });
   }
 
-  public static info(message: string, info?: LogFields): void {
-    Logger.record("info", message, info);
+  public static info(action: string, info?: LogFields): void {
+    Logger.record("info", action, info);
   }
 
-  public static warn(message: string, info?: LogFields): void {
-    Logger.record("warn", message, info);
+  public static warn(action: string, info?: LogFields): void {
+    Logger.record("warn", action, info);
   }
 
-  public static error(message: string, info?: LogFields): void {
-    Logger.record("error", message, info);
+  public static error(action: string, info?: LogFields): void {
+    Logger.record("error", action, info);
   }
 
-  private static record(level: LogLevel, message: string, info?: LogFields): void {
-    if (message.trim() === "") return;
+  public static wrapAction<Args extends unknown[], Result>(
+    name: string,
+    action: (...args: Args) => Result,
+  ): (...args: Args) => Result {
+    return (...args) => {
+      Logger.info(name);
+      try {
+        const result = action(...args);
+        if (result instanceof Promise) {
+          result.catch((error: unknown) => Logger.error(name, Logger.failure(error)));
+        }
+        return result;
+      } catch (error) {
+        Logger.error(name, Logger.failure(error));
+        throw error;
+      }
+    };
+  }
+
+  private static failure(error: unknown): LogFields {
+    return { error: error instanceof Error ? error.message : "unknown error" };
+  }
+
+  private static record(level: LogLevel, action: string, info?: LogFields): void {
+    if (action.trim() === "") return;
     Logger.start();
 
     if (Logger.queue.length >= MAX_QUEUE) Logger.queue.shift();
     Logger.queue.push({
       ts: hktIsoString(new Date()),
       id: "",
-      action: message,
+      action,
       latency_ms: null,
       level,
-      context: {},
+      context: { ...Logger.context },
       info: Logger.mask({ page: location.pathname, ...info }),
     });
   }

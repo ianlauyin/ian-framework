@@ -181,4 +181,74 @@ describe("Logger", () => {
       ["error", "unhandled rejection"],
     ]);
   });
+
+  describe("wrapAction", () => {
+    it("records an info event with the action name and returns the result", async () => {
+      const Logger = await loadLogger();
+      const add = Logger.wrapAction("cart/add", (a: number, b: number) => a + b);
+
+      expect(add(1, 2)).toBe(3);
+      vi.advanceTimersByTime(60_000);
+
+      const events = sentEvents(0);
+      expect(events).toHaveLength(1);
+      expect(events[0].action).toBe("cart/add");
+      expect(events[0].level).toBe("info");
+    });
+
+    it("records an error event and rethrows when the action throws", async () => {
+      const Logger = await loadLogger();
+      const fail = Logger.wrapAction("cart/remove", () => {
+        throw new Error("boom");
+      });
+
+      expect(() => fail()).toThrow("boom");
+      vi.advanceTimersByTime(60_000);
+
+      const events = sentEvents(0);
+      expect(events.map((event: { level: string }) => event.level)).toEqual(["info", "error"]);
+      expect(events[1].info.error).toBe("boom");
+    });
+
+    it("records an error event when the async action rejects", async () => {
+      const Logger = await loadLogger();
+      const fail = Logger.wrapAction("cart/save", async () => {
+        throw new Error("denied");
+      });
+
+      await expect(fail()).rejects.toThrow("denied");
+      vi.advanceTimersByTime(60_000);
+
+      const events = sentEvents(0);
+      expect(events[1].level).toBe("error");
+      expect(events[1].info.error).toBe("denied");
+    });
+  });
+
+  describe("context", () => {
+    it("puts the added context in each later event", async () => {
+      const Logger = await loadLogger();
+      Logger.info("before");
+      Logger.addContext("user", "u1");
+      Logger.addContext("beta", true);
+      Logger.addContext("user", "u2");
+      Logger.info("after");
+      vi.advanceTimersByTime(60_000);
+
+      const events = sentEvents(0);
+      expect(events[0].context).toEqual({});
+      expect(events[1].context).toEqual({ user: "u2", beta: true });
+    });
+
+    it("removes the named keys", async () => {
+      const Logger = await loadLogger();
+      Logger.addContext("user", "u1");
+      Logger.addContext("beta", true);
+      Logger.removeContext("user", "missing");
+      Logger.info("after");
+      vi.advanceTimersByTime(60_000);
+
+      expect(sentEvents(0)[0].context).toEqual({ beta: true });
+    });
+  });
 });

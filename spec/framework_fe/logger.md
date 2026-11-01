@@ -23,9 +23,12 @@ This feature is not product business logic.
 
 | Method | Effect |
 | --- | --- |
-| `Logger.info(message, info?)` | Records one event with the level `info`. |
-| `Logger.warn(message, info?)` | Records one event with the level `warn`. |
-| `Logger.error(message, info?)` | Records one event with the level `error`. |
+| `Logger.info(action, info?)` | Records one event with the level `info`. |
+| `Logger.warn(action, info?)` | Records one event with the level `warn`. |
+| `Logger.error(action, info?)` | Records one event with the level `error`. |
+| `Logger.wrapAction(name, action)` | Returns a function that logs each run of `action`. The rules are in the section "Action log". |
+| `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `boolean`. A key that exists gets the new value. |
+| `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 | `Logger.setMaskPatterns(patterns)` | Sets the mask patterns. `patterns` is a `RegExp[]`. |
 | `Logger.watchWindowErrors()` | Records the window errors and the unhandled promise rejections. |
 
@@ -34,7 +37,7 @@ This feature is not product business logic.
 ### Record
 
 - The logger keeps one queue in memory for the page.
-- When `message` has only whitespace or is empty, the logger does not record the event.
+- When `action` has only whitespace or is empty, the logger does not record the event.
 - The first recorded event starts the send timers.
 - The queue keeps a maximum of 1000 events. When the queue is full, a new event removes the oldest event.
 
@@ -44,10 +47,10 @@ The event has these fields:
 | --- | --- |
 | `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe/time`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
 | `id` | Empty string |
-| `action` | `message`, with no change. |
+| `action` | The `action` argument of the method, with no change. |
 | `latency_ms` | `null` |
 | `level` | The level of the method. |
-| `context` | Empty object |
+| `context` | A copy of the context of the logger. The context is empty until `Logger.addContext` adds keys. |
 | `info` | The `info` values after the masking. |
 
 `info` rules:
@@ -55,6 +58,21 @@ The event has these fields:
 - The logger adds the key `page`. The value is `location.pathname`.
 - A `page` key in the caller `info` replaces that value.
 - The logger keeps the other caller keys.
+
+### Context
+
+- The logger keeps one context object in memory for the page. It is empty at the start.
+- `Logger.addContext` and `Logger.removeContext` change the context for the events that the logger records after the call. They do not change the events that are already in the queue.
+- The Rust log route does not keep the `context` of a browser event. The route rules are in `spec/framework_rs/logging/client-log.md`.
+
+### Action log
+
+A project wraps each of its context actions with `Logger.wrapAction(name, action)`. The returned function has the same arguments and the same result as `action`.
+
+- Each call records one `info` event. `action` is `name`. The event is recorded before the wrapped function runs.
+- When the wrapped function throws, the wrapper records one `error` event and throws the same error again. `action` of the event is `name`. `info` has the key `error`.
+- When the wrapped function returns a promise that rejects, the wrapper records the same `error` event. The returned promise is the promise of the wrapped function, so the rejection still reaches the caller.
+- The value of `error` is the `message` of the error when it is an `Error`. Else the value is `unknown error`.
 
 ### Send
 
@@ -96,7 +114,7 @@ The logger masks `info` before it puts the event in the queue.
 - `Logger.setMaskPatterns` replaces the full list.
 - The logger adds the `g` flag to each pattern that does not have it. It keeps the other flags.
 - The masking applies to the `page` key also.
-- The masking does not apply to `action`.
+- The masking does not apply to `action` and `context`.
 
 Key rule:
 
