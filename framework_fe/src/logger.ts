@@ -12,7 +12,7 @@ type ClientLogEvent = {
   ts: string;
   id: string;
   action: string;
-  latency_ms: null;
+  latency_ms: number | null;
   level: LogLevel;
   context: LogFields;
   info: LogFields;
@@ -68,25 +68,59 @@ export class Logger {
     action: (...args: Args) => Result,
   ): (...args: Args) => Result {
     return (...args) => {
-      Logger.info(name);
+      const start = performance.now();
+      const argsInfo = Logger.argsInfo(args);
+      const succeed = () => Logger.record("info", name, argsInfo, performance.now() - start);
+      const fail = (error: unknown) =>
+        Logger.record(
+          "error",
+          name,
+          { ...argsInfo, ...Logger.failure(error) },
+          performance.now() - start,
+        );
+
+      let result: Result;
       try {
-        const result = action(...args);
-        if (result instanceof Promise) {
-          result.catch((error: unknown) => Logger.error(name, Logger.failure(error)));
-        }
-        return result;
+        result = action(...args);
       } catch (error) {
-        Logger.error(name, Logger.failure(error));
+        fail(error);
         throw error;
       }
+      if (!(result instanceof Promise)) {
+        succeed();
+        return result;
+      }
+      return result.then(
+        (value) => {
+          succeed();
+          return value;
+        },
+        (error: unknown) => {
+          fail(error);
+          throw error;
+        },
+      ) as Result;
     };
+  }
+
+  private static argsInfo(args: unknown[]): LogFields {
+    try {
+      return { args: JSON.stringify(args) };
+    } catch {
+      return { args: "unserializable" };
+    }
   }
 
   private static failure(error: unknown): LogFields {
     return { error: error instanceof Error ? error.message : "unknown error" };
   }
 
-  private static record(level: LogLevel, action: string, info?: LogFields): void {
+  private static record(
+    level: LogLevel,
+    action: string,
+    info?: LogFields,
+    latencyMs?: number,
+  ): void {
     if (action.trim() === "") return;
     Logger.start();
 
@@ -95,7 +129,7 @@ export class Logger {
       ts: hktIsoString(new Date()),
       id: "",
       action,
-      latency_ms: null,
+      latency_ms: latencyMs === undefined ? null : Math.round(latencyMs),
       level,
       context: { ...Logger.context },
       info: Logger.mask({ page: location.pathname, ...info }),

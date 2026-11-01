@@ -48,7 +48,7 @@ The event has these fields:
 | `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe/time`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
 | `id` | Empty string |
 | `action` | The `action` argument of the method, with no change. |
-| `latency_ms` | `null` |
+| `latency_ms` | `null`, or the time of the action for an event from `Logger.wrapAction`. |
 | `level` | The level of the method. |
 | `context` | A copy of the context of the logger. The context is empty until `Logger.addContext` adds keys. |
 | `info` | The `info` values after the masking. |
@@ -69,9 +69,13 @@ The event has these fields:
 
 A project wraps each of its context actions with `Logger.wrapAction(name, action)`. The returned function has the same arguments and the same result as `action`.
 
-- Each call records one `info` event. `action` is `name`. The event is recorded before the wrapped function runs.
-- When the wrapped function throws, the wrapper records one `error` event and throws the same error again. `action` of the event is `name`. `info` has the key `error`.
-- When the wrapped function returns a promise that rejects, the wrapper records the same `error` event. The returned promise is the promise of the wrapped function, so the rejection still reaches the caller.
+- Each call records one event, after the wrapped function succeeds or fails. The wrapper does not record an event before the wrapped function runs.
+- The wrapper starts a timer with `performance.now()` before the wrapped function runs. `latency_ms` is the time to the end, in milliseconds, rounded to an integer.
+- When the wrapped function returns, the event has the level `info`. `action` of the event is `name`.
+- When the wrapped function throws, the event has the level `error`, and the wrapper throws the same error again. `info` has the key `error`.
+- When the wrapped function returns a promise, the wrapper records the event after the promise settles. The time includes the wait for the promise. A rejection still reaches the caller.
+- `info` has the key `args`. The value is the JSON text of the array of the arguments of the call. When the arguments cannot be made into JSON text, the value is `unserializable`.
+- The masking rules apply to `args`.
 - The value of `error` is the `message` of the error when it is an `Error`. Else the value is `unknown error`.
 
 ### Send

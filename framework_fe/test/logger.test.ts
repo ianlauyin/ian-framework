@@ -183,9 +183,12 @@ describe("Logger", () => {
   });
 
   describe("wrapAction", () => {
-    it("records an info event with the action name and returns the result", async () => {
+    it("records one info event with the latency and returns the result", async () => {
       const Logger = await loadLogger();
-      const add = Logger.wrapAction("cart/add", (a: number, b: number) => a + b);
+      const add = Logger.wrapAction("cart/add", (a: number, b: number) => {
+        vi.advanceTimersByTime(25);
+        return a + b;
+      });
 
       expect(add(1, 2)).toBe(3);
       vi.advanceTimersByTime(60_000);
@@ -194,11 +197,14 @@ describe("Logger", () => {
       expect(events).toHaveLength(1);
       expect(events[0].action).toBe("cart/add");
       expect(events[0].level).toBe("info");
+      expect(events[0].latency_ms).toBe(25);
+      expect(events[0].info.args).toBe("[1,2]");
     });
 
-    it("records an error event and rethrows when the action throws", async () => {
+    it("records one error event with the latency and rethrows when the action throws", async () => {
       const Logger = await loadLogger();
       const fail = Logger.wrapAction("cart/remove", () => {
+        vi.advanceTimersByTime(10);
         throw new Error("boom");
       });
 
@@ -206,22 +212,59 @@ describe("Logger", () => {
       vi.advanceTimersByTime(60_000);
 
       const events = sentEvents(0);
-      expect(events.map((event: { level: string }) => event.level)).toEqual(["info", "error"]);
-      expect(events[1].info.error).toBe("boom");
+      expect(events).toHaveLength(1);
+      expect(events[0].level).toBe("error");
+      expect(events[0].latency_ms).toBe(10);
+      expect(events[0].info.error).toBe("boom");
+      expect(events[0].info.args).toBe("[]");
     });
 
-    it("records an error event when the async action rejects", async () => {
+    it("records unserializable args as a fixed text", async () => {
       const Logger = await loadLogger();
-      const fail = Logger.wrapAction("cart/save", async () => {
-        throw new Error("denied");
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      Logger.wrapAction("cart/view", (_value: unknown) => undefined)(circular);
+      vi.advanceTimersByTime(60_000);
+
+      expect(sentEvents(0)[0].info.args).toBe("unserializable");
+    });
+
+    it("records the event after the async action resolves", async () => {
+      const Logger = await loadLogger();
+      const save = Logger.wrapAction("cart/save", async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return "ok";
       });
 
-      await expect(fail()).rejects.toThrow("denied");
+      const pending = save();
+      vi.advanceTimersByTime(40);
+      await expect(pending).resolves.toBe("ok");
       vi.advanceTimersByTime(60_000);
 
       const events = sentEvents(0);
-      expect(events[1].level).toBe("error");
-      expect(events[1].info.error).toBe("denied");
+      expect(events).toHaveLength(1);
+      expect(events[0].level).toBe("info");
+      expect(events[0].latency_ms).toBe(40);
+    });
+
+    it("records one error event when the async action rejects", async () => {
+      const Logger = await loadLogger();
+      const fail = Logger.wrapAction("cart/save", async () => {
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        throw new Error("denied");
+      });
+
+      const pending = fail();
+      const assertion = expect(pending).rejects.toThrow("denied");
+      vi.advanceTimersByTime(15);
+      await assertion;
+      vi.advanceTimersByTime(60_000);
+
+      const events = sentEvents(0);
+      expect(events).toHaveLength(1);
+      expect(events[0].level).toBe("error");
+      expect(events[0].latency_ms).toBe(15);
+      expect(events[0].info.error).toBe("denied");
     });
   });
 
