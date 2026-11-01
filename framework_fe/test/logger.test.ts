@@ -182,6 +182,25 @@ describe("Logger", () => {
     ]);
   });
 
+  describe("contextWrapper", () => {
+    it("wraps each function with the action name module/function_name", async () => {
+      const Logger = await loadLogger();
+      const cart = Logger.contextWrapper("cart", {
+        add: (a: number, b: number) => a + b,
+        limit: 5,
+      });
+
+      expect(cart.add(1, 2)).toBe(3);
+      expect(cart.limit).toBe(5);
+      vi.advanceTimersByTime(60_000);
+
+      const events = sentEvents(0);
+      expect(events).toHaveLength(1);
+      expect(events[0].action).toBe("cart/add");
+      expect(events[0].info.args).toBe("[1,2]");
+    });
+  });
+
   describe("wrapAction", () => {
     it("records one info event with the latency and returns the result", async () => {
       const Logger = await loadLogger();

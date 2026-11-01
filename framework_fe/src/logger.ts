@@ -103,6 +103,20 @@ export class Logger {
     };
   }
 
+  public static contextWrapper<Context extends Record<string, unknown>>(
+    module: string,
+    context: Context,
+  ): Context {
+    const wrapped: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(context)) {
+      wrapped[key] =
+        typeof value === "function"
+          ? Logger.wrapAction(`${module}/${key}`, value as (...args: unknown[]) => unknown)
+          : value;
+    }
+    return wrapped as Context;
+  }
+
   private static argsInfo(args: unknown[]): LogFields {
     try {
       return { args: JSON.stringify(args) };

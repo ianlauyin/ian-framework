@@ -27,6 +27,7 @@ This feature is not product business logic.
 | `Logger.warn(action, info?)` | Records one event with the level `warn`. |
 | `Logger.error(action, info?)` | Records one event with the level `error`. |
 | `Logger.wrapAction(name, action)` | Returns a function that logs each run of `action`. The rules are in the section "Action log". |
+| `Logger.contextWrapper(module, context)` | Returns a new object that has the keys of `context`. Each function value is wrapped with `Logger.wrapAction`. The rules are in the section "Action log". |
 | `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `boolean`. A key that exists gets the new value. |
 | `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 | `Logger.setMaskPatterns(patterns)` | Sets the mask patterns. `patterns` is a `RegExp[]`. |
@@ -77,6 +78,12 @@ A project wraps each of its context actions with `Logger.wrapAction(name, action
 - `info` has the key `args`. The value is the JSON text of the array of the arguments of the call. When the arguments cannot be made into JSON text, the value is `unserializable`.
 - The masking rules apply to `args`.
 - The value of `error` is the `message` of the error when it is an `Error`. Else the value is `unknown error`.
+
+`Logger.contextWrapper(module, context)` wraps the actions of a context object.
+
+- Each own key of `context` with a function value gets `Logger.wrapAction` with the name `module/key`. `key` is the name of the function in the object.
+- The other values are copied with no change.
+- `context` is not changed.
 
 ### Send
 
