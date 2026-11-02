@@ -23,6 +23,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 - A `refill_per_sec` below zero is the same as zero. With zero, a bucket never refills.
 - A request with no whole token left is refused.
 - When the map holds 10 000 keys or more, and a request has a new key, the limiter first deletes each bucket that is full again.
+- If the map still holds 10 000 keys after that, the limiter also deletes the bucket that was used longest ago. Thus the map does not grow past 10 000 keys.
 - The state is in the memory of the process. Each limiter has its own state. A restart clears it.
 
 ## Refused request

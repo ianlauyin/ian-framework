@@ -57,6 +57,15 @@ impl RateLimiter {
         if buckets.len() >= PRUNE_AT && !buckets.contains_key(key) {
             buckets.retain(|_, bucket| refilled(bucket, now, refill, capacity) < capacity);
         }
+        if buckets.len() >= PRUNE_AT && !buckets.contains_key(key) {
+            let oldest = buckets
+                .iter()
+                .min_by_key(|(_, bucket)| bucket.updated)
+                .map(|(name, _)| name.clone());
+            if let Some(name) = oldest {
+                buckets.remove(&name);
+            }
+        }
         let bucket = buckets.entry(key.to_string()).or_insert(Bucket {
             tokens: capacity,
             updated: now,
@@ -166,6 +175,23 @@ mod tests {
         let later = now + Duration::from_secs(10);
         assert!(limiter.check("new", later).is_ok());
         assert_eq!(limiter.buckets.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn evicts_the_oldest_bucket_when_no_bucket_is_full() {
+        let limiter = limiter(2, 0.001);
+        let now = Instant::now();
+        for index in 0..PRUNE_AT {
+            let at = now + Duration::from_millis(index as u64);
+            assert!(limiter.check(&index.to_string(), at).is_ok());
+        }
+        let at = now + Duration::from_millis(PRUNE_AT as u64);
+        assert!(limiter.check("new", at).is_ok());
+        let buckets = limiter.buckets.lock().unwrap();
+        assert_eq!(buckets.len(), PRUNE_AT);
+        assert!(!buckets.contains_key("0"));
+        assert!(buckets.contains_key("1"));
+        assert!(buckets.contains_key("new"));
     }
 
     async fn send(router: &Router, forwarded: &str) -> Response {
