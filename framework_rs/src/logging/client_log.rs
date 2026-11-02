@@ -30,7 +30,7 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
     let Ok(batch) = serde_json::from_slice::<LogBatch>(&body) else {
         return StatusCode::BAD_REQUEST;
     };
-    let Some(events) = batch.new() else {
+    let Some(events) = batch.events_opt() else {
         return StatusCode::BAD_REQUEST;
     };
     for mut event in events {

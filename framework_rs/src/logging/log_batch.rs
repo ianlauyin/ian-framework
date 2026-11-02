@@ -8,7 +8,7 @@ pub struct LogBatch {
 }
 
 impl LogBatch {
-    pub fn new(&self) -> Option<Vec<LogEvent>> {
+    pub fn events_opt(&self) -> Option<Vec<LogEvent>> {
         if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
             return None;
         }
@@ -60,20 +60,20 @@ mod tests {
     }
 
     #[test]
-    fn new_rejects_an_empty_batch() {
+    fn events_opt_rejects_an_empty_batch() {
         let body = LogBatch { events: vec![] };
-        assert!(body.new().is_none());
+        assert!(body.events_opt().is_none());
     }
 
     #[test]
-    fn new_returns_sanitized_events() {
+    fn events_opt_returns_sanitized_events() {
         let body = LogBatch {
             events: vec![
                 event("/a?x=1", LogLevel::Info),
                 event("#frag", LogLevel::Error),
             ],
         };
-        let stored = body.new().unwrap();
+        let stored = body.events_opt().unwrap();
         assert_eq!(stored.len(), 2);
         assert_eq!(stored[0].action, "/a?x=1");
         assert_eq!(stored[0].level, LogLevel::Info);
@@ -85,25 +85,25 @@ mod tests {
     }
 
     #[test]
-    fn new_accepts_a_batch_at_the_ship_chunk() {
+    fn events_opt_accepts_a_batch_at_the_ship_chunk() {
         let body = LogBatch {
             events: (0..SHIP_CHUNK)
                 .map(|_| event("/ok", LogLevel::Info))
                 .collect(),
         };
-        let stored = body.new().unwrap();
+        let stored = body.events_opt().unwrap();
         assert_eq!(stored.len(), SHIP_CHUNK);
         assert_eq!(stored[0].id, "");
     }
 
     #[test]
-    fn new_rejects_a_batch_above_the_ship_chunk() {
+    fn events_opt_rejects_a_batch_above_the_ship_chunk() {
         let body = LogBatch {
             events: (0..=SHIP_CHUNK)
                 .map(|_| event("/ok", LogLevel::Info))
                 .collect(),
         };
         assert_eq!(body.events.len(), SHIP_CHUNK + 1);
-        assert!(body.new().is_none());
+        assert!(body.events_opt().is_none());
     }
 }
