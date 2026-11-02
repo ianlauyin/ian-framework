@@ -7,5 +7,5 @@
 
 ## Git commits
 
-- Write the commit message on one line, in the format `scope: subject`.
+- Write the commit message in the format `scope: subject`.
 - Usually, do not add a body. Add a body only if the subject cannot fully describe the change.
