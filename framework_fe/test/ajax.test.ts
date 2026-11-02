@@ -37,6 +37,21 @@ describe("ajax", () => {
     expect(fetchMock).toHaveBeenCalledWith("/ajax/item?page=2", expect.anything());
   });
 
+  it("adds no question mark when there is no query value", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "[]",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ajax("/item", "GET", {});
+    await ajax("/item", "GET", { filter: undefined });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/ajax/item", expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/ajax/item", expect.anything());
+  });
+
   it("substitutes path parameters and sends JSON bodies for PUT requests", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -213,5 +228,53 @@ describe("ajax", () => {
         count: 1,
       }),
     ).resolves.toBeNull();
+  });
+
+  it("keeps the code string of the error body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({ code: "rate_limited", message: "too many requests" }),
+      }),
+    );
+
+    await expect(ajax("/item", "GET")).rejects.toMatchObject({
+      message: "too many requests",
+      code: 429,
+      errorCode: "rate_limited",
+    } satisfies Partial<AjaxError>);
+  });
+
+  it("has no error code string when the error body has none", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ message: "bad", code: 7 }),
+      }),
+    );
+
+    await expect(ajax("/item", "GET")).rejects.toMatchObject({
+      errorCode: undefined,
+    } satisfies Partial<AjaxError>);
+  });
+
+  it("throws AjaxError when a 2xx body is not JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => "<html>gateway page</html>",
+      }),
+    );
+
+    await expect(ajax("/item", "GET")).rejects.toMatchObject({
+      message: "Unknown error",
+      code: 200,
+    } satisfies Partial<AjaxError>);
   });
 });

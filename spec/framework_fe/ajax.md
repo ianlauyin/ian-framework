@@ -17,7 +17,7 @@ This feature is not product business logic.
 | --- | --- | --- |
 | `ajax(url, method, request?, pathParams?)` | function | Sends one request and returns the parsed JSON body. |
 | `AjaxError` | class | The error for a response status that is not 2xx. |
-| `ErrorBody` | type | The error body: `{ message: string }`. |
+| `ErrorBody` | type | The error body: `{ message: string, code?: string }`. |
 | `setUnauthorizedHandler(handler?)` | function | Sets the handler for a 401 response. A call with no handler removes the handler. |
 
 `method` is one of `GET`, `DELETE`, `POST` and `PUT`.
@@ -28,6 +28,7 @@ This feature is not product business logic.
 | --- | --- | --- |
 | `code` | `number` | The HTTP status. |
 | `message` | `string` | `message` from the error body. If the body has no message, the value is `Unknown error`. |
+| `errorCode` | `string \| undefined` | `code` from the error body when it is a string. Otherwise `undefined`. |
 
 ## Behaviour
 
@@ -43,7 +44,7 @@ This feature is not product business logic.
 
 | Method | Request data | Body |
 | --- | --- | --- |
-| `GET`, `DELETE` | The client adds `request` to the URL as a query string. It leaves out a key whose value is `undefined`. | No body. |
+| `GET`, `DELETE` | The client adds `request` to the URL as a query string. It leaves out a key whose value is `undefined`. When no key is left, the URL has no `?`. | No body. |
 | `POST`, `PUT` | The client sends `request` as a JSON body. | JSON. The request has the header `Content-Type: application/json`. |
 
 Each request uses `credentials: "same-origin"`.
@@ -55,6 +56,7 @@ Each request uses `credentials: "same-origin"`.
 - When the status is not 2xx and the body is empty or not valid JSON, the error body is `null`. Then the message is `Unknown error`.
 - When the status is 2xx and the body is empty, the result is `null`.
 - When the status is 2xx and the body is not empty, the client parses the body as JSON.
+- When the status is 2xx and the body is not valid JSON, the client throws `AjaxError` with the HTTP status as `code` and the message `Unknown error`.
 
 ## Out of scope
 
@@ -62,4 +64,4 @@ This feature does not include these items:
 
 - The text for the user for each error message.
 - A retry or a timeout.
-- An `ApiError` body with a `code` field. The client reads only `message`. The Rust `ApiError` is in `spec/framework_rs/http/api-error.md`.
+- A rule for the values of `errorCode`. The client gives the string as it is. The Rust `ApiError` is in `spec/framework_rs/http/api-error.md`.
