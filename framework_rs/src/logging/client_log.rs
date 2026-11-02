@@ -5,7 +5,7 @@ use axum::middleware::from_fn;
 use axum::routing::post;
 use axum::Router;
 
-use crate::http::middleware::{client_ip, require_same_origin, user_agent};
+use crate::http::middleware::{request_ip, require_same_origin, user_agent};
 
 use super::{LogBatch, LogShipper};
 
@@ -22,7 +22,7 @@ pub fn client_log_router(shipper: LogShipper) -> Router {
 }
 
 async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusCode {
-    let ip = client_ip(&request);
+    let ip = request_ip(&request);
     let user_agent = user_agent(request.headers());
     let Ok(body) = to_bytes(request.into_body(), BODY_LIMIT).await else {
         return StatusCode::PAYLOAD_TOO_LARGE;
@@ -47,10 +47,14 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
 mod tests {
     use super::*;
     use crate::http::middleware::log_request;
+    use crate::http::middleware::{set_client_ip, ClientIpSource};
+    use crate::logging::tests::buffered_events;
     use crate::logging::{LogLevel, ShipperConfig};
     use axum::body::Body;
+    use axum::extract::ConnectInfo;
     use axum::middleware::from_fn_with_state;
     use serde_json::json;
+    use std::net::SocketAddr;
     use tower::ServiceExt;
 
     fn shipper() -> LogShipper {
@@ -98,7 +102,7 @@ mod tests {
         ];
         let status = send(&shipper, &headers, batch_body(&["boom", "again"])).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events.len(), 2);
         let event = &events[0];
         assert_eq!(event.action, "boom");
@@ -108,6 +112,24 @@ mod tests {
         assert_eq!(event.id, "");
         assert_eq!(event.latency_ms, None);
         assert_eq!(event.info["page"], "/home");
+    }
+
+    #[tokio::test]
+    async fn uses_the_ip_that_set_client_ip_gives() {
+        let shipper = shipper();
+        let router = client_log_router(shipper.clone())
+            .layer(from_fn_with_state(ClientIpSource::Socket, set_client_ip));
+        let request = Request::builder()
+            .method("POST")
+            .uri("/log")
+            .header("sec-fetch-site", "same-origin")
+            .header("x-real-ip", "203.0.113.8")
+            .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
+            .body(batch_body(&["boom"]))
+            .unwrap();
+        let status = router.oneshot(request).await.unwrap().status();
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(buffered_events(&shipper)[0].context["ip"], "192.0.2.10");
     }
 
     #[tokio::test]
@@ -125,7 +147,7 @@ mod tests {
         ];
         let status = send(&shipper, &headers, batch_body(&["boom"])).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
-        assert!(shipper.buffered_events().is_empty());
+        assert!(buffered_events(&shipper).is_empty());
     }
 
     #[tokio::test]
@@ -158,7 +180,7 @@ mod tests {
             send(&shipper, &[], batch_body(&["boom"])).await,
             StatusCode::FORBIDDEN
         );
-        assert_eq!(shipper.buffered_events().len(), 1);
+        assert_eq!(buffered_events(&shipper).len(), 1);
     }
 
     #[tokio::test]
@@ -177,7 +199,7 @@ mod tests {
             send(&shipper, &headers, Body::from(vec![b' '; BODY_LIMIT + 1])).await,
             StatusCode::PAYLOAD_TOO_LARGE
         );
-        assert!(shipper.buffered_events().is_empty());
+        assert!(buffered_events(&shipper).is_empty());
     }
 
     #[tokio::test]
@@ -209,7 +231,7 @@ mod tests {
             .unwrap();
         let response = router.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].action, "boom");
         assert_eq!(events[1].action, "API/POST:/log");

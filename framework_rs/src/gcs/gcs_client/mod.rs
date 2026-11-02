@@ -490,6 +490,7 @@ mod tests {
     use crate::logging::ShipperConfig;
 
     use super::*;
+    use crate::logging::tests::buffered_events;
 
     #[test]
     fn object_url_encodes_slashes() {
@@ -606,7 +607,7 @@ mod tests {
             latency_ms: Some(3),
             extra: &[],
         });
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].action, "GCS/GET:/storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");

@@ -29,3 +29,12 @@ pub(crate) fn event(action: impl Into<String>, level: LogLevel) -> LogEvent {
         info: Map::new(),
     }
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    pub(crate) fn buffered_events(shipper: &LogShipper) -> Vec<LogEvent> {
+        shipper.lock_buffer().events.iter().cloned().collect()
+    }
+}

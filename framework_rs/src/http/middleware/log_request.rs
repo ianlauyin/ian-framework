@@ -153,6 +153,7 @@ fn millis_since(started: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::tests::buffered_events;
     use crate::logging::{LogShipper, ShipperConfig};
     use axum::body::Body;
     use axum::extract::Path;
@@ -236,7 +237,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
         assert!(response.headers().get("x-request-id").is_none());
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
         let event = &events[0];
         assert_eq!(event.id, "");
@@ -263,7 +264,7 @@ mod tests {
         let shipper = shipper();
         let body = json!({"name": "alice"}).to_string();
         post_body(&shipper, "/echo?", "application/json", body).await;
-        let event = &shipper.buffered_events()[0];
+        let event = &buffered_events(&shipper)[0];
         assert_eq!(event.info.len(), 1);
         assert_eq!(event.info["name"], "alice");
     }
@@ -272,7 +273,7 @@ mod tests {
     async fn middleware_logs_the_request_url_with_its_query() {
         let shipper = shipper();
         send(app(shipper.clone()), "/status/200?a=1&b=x%20y&flag").await;
-        let event = &shipper.buffered_events()[0];
+        let event = &buffered_events(&shipper)[0];
         assert_eq!(event.context["request_url"], "/status/200?a=1&b=x%20y&flag");
         assert!(!event.info.contains_key("query"));
     }
@@ -292,7 +293,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(echoed, body);
-        let event = &shipper.buffered_events()[0];
+        let event = &buffered_events(&shipper)[0];
         assert_eq!(event.action, "API/POST:/echo");
         assert_eq!(event.info["name"], "alice");
         assert_eq!(event.info["age"], json!(3));
@@ -320,7 +321,7 @@ mod tests {
             assert_eq!(status, StatusCode::OK);
             assert_eq!(echoed, body);
         }
-        for event in shipper.buffered_events() {
+        for event in buffered_events(&shipper) {
             assert!(event.info.is_empty());
         }
     }
@@ -333,7 +334,7 @@ mod tests {
         let shipper = LogShipper::new(config).unwrap();
         let body = json!({"user": "alice", "password": "hunter2"}).to_string();
         post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
-        let event = &shipper.buffered_events()[0];
+        let event = &buffered_events(&shipper)[0];
         assert_eq!(event.context["request_url"], "/echo?***&page=2");
         assert_eq!(event.info["user"], "alice");
         assert_eq!(event.info["password"], "***");
@@ -351,7 +352,7 @@ mod tests {
             send(router, "/status/503").await.status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events[0].level, LogLevel::Warn);
         assert_eq!(events[1].level, LogLevel::Error);
     }
@@ -374,7 +375,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let event = &shipper.buffered_events()[0];
+        let event = &buffered_events(&shipper)[0];
         assert_eq!(event.context["ip"], "203.0.113.9");
         assert_eq!(event.context["user_agent"], "demo-agent");
         assert_eq!(event.action, "API/GET:/status/200");
@@ -394,7 +395,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(shipper.buffered_events()[0].context["ip"], "203.0.113.8");
+        assert_eq!(buffered_events(&shipper)[0].context["ip"], "203.0.113.8");
     }
 
     #[tokio::test]
@@ -423,7 +424,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let events = shipper.buffered_events();
+        let events = buffered_events(&shipper);
         assert_eq!(events[0].context["ip"], "198.51.100.4");
         assert_eq!(events[0].context["user_agent"], "");
         assert_eq!(events[1].context["ip"], "192.0.2.10");
