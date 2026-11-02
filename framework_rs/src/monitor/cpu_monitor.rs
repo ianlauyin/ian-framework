@@ -1,13 +1,11 @@
 use std::time::Duration;
 
-use serde_json::json;
-
 use crate::logging::{event, LogEvent, LogLevel};
 use crate::shutdown::ShutdownReceiver;
 
 const STAT_PATH: &str = "/proc/stat";
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(30);
-const ACTION: &str = "CPU/meets threshold";
+const ACTION: &str = "CPU/meetsThreshold";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CpuMonitorConfig {
@@ -155,6 +153,8 @@ fn round_one(value: f64) -> f64 {
 mod tests {
     use super::*;
 
+    use serde_json::json;
+
     fn sample(idle: u64, total: u64) -> CpuSample {
         CpuSample { idle, total }
     }
@@ -205,7 +205,7 @@ mod tests {
         let mut alert = Alert::new(80.0);
         assert!(alert.check(79.9).is_none());
         let event = alert.check(85.26).unwrap();
-        assert_eq!(event.action, "CPU/meets threshold");
+        assert_eq!(event.action, "CPU/meetsThreshold");
         assert_eq!(event.level, LogLevel::Warn);
         assert_eq!(event.info["cpu_percent"], json!(85.3));
         assert_eq!(event.info["threshold_percent"], json!(80.0));
