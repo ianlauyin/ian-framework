@@ -4,7 +4,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 ## Axum middleware
 
-`log_request` is the Axum middleware function. Use it with `axum::middleware::from_fn_with_state` and one shipper.
+`ian_framework::http::middleware::log_request` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/log_request.rs`. Use it with `axum::middleware::from_fn_with_state` and one shipper.
 
 General rules:
 
@@ -37,6 +37,7 @@ General rules:
 
 The `ip` sources are in this order:
 
+0. The `ClientIp` in the request extensions, when `set_client_ip` put one there. The rules are in `spec/framework_rs/http/client-ip.md`. When `ClientIp` is there, the sources below are not used.
 1. The header `cf-connecting-ip`. Cloudflare sets it to the real client IP.
 2. The first item in the header `x-forwarded-for`.
 3. The header `x-real-ip`.

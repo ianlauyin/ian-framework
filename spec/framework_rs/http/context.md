@@ -6,6 +6,10 @@ This document describes these items in the framework:
 - The bearer API key check.
 - The cookie header helpers.
 - The same-origin check and the same-origin middleware.
+- The client IP middleware and the rate limit middleware.
+- The security header middleware and the no-store middleware.
+- The API key middleware.
+- The request timeout, catch panic and body limit middleware.
 - The process version route.
 
 This feature is not product business logic.
@@ -18,7 +22,14 @@ This feature is not product business logic.
 | Bearer API key check | `spec/framework_rs/http/bearer-key.md` |
 | Cookie header helpers | `spec/framework_rs/http/cookie.md` |
 | Same-origin check and same-origin middleware | `spec/framework_rs/http/same-origin.md` |
+| Client IP middleware | `spec/framework_rs/http/client-ip.md` |
+| Rate limit middleware | `spec/framework_rs/http/rate-limit.md` |
+| Security header middleware and no-store middleware | `spec/framework_rs/http/response-headers.md` |
+| API key middleware | `spec/framework_rs/http/api-key-middleware.md` |
+| Request timeout, catch panic and body limit middleware | `spec/framework_rs/http/limits.md` |
 | Process version route | `spec/framework_rs/http/version-route.md` |
+
+The session middleware `require_session` is in `spec/framework_rs/auth/require-session.md`.
 
 ## Crate
 
@@ -33,9 +44,24 @@ This feature is not product business logic.
 
 - `ApiError`
 - `IntoApiError`
-- `require_same_origin`
 - `version_router`
 - The module `headers`
+- The module `middleware`
+
+`ian_framework::http::middleware` exports only these items:
+
+- `body_limit` and `BodyLimit`
+- `catch_panic`
+- `log_request`
+- `no_store`
+- `rate_limit`, `RateLimitConfig` and `RateLimiter`
+- `request_timeout` and `RequestTimeout`
+- `require_api_key`, `ApiKeyRule`, `ApiKeyRules` and `PathMatch`
+- `require_same_origin`
+- `security_headers`
+- `set_client_ip`, `ClientIp` and `ClientIpSource`
+- `require_session` and `SessionSubject`, only with the Cargo feature `auth`
+- `slide_session`, only with the Cargo feature `auth`
 
 `ian_framework::http::headers` exports only these items:
 
@@ -54,6 +80,7 @@ This module uses these dependencies:
 - `axum`
 - `getrandom`
 - `hex`
+- `http-body-util`
 - `serde`
 - `serde_json`
 - `sha2`

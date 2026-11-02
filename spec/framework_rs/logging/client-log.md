@@ -90,7 +90,7 @@ Shared shipper:
 Same-origin rules:
 
 - The route accepts only a same-origin request.
-- The `POST` method router has the layer `ian_framework::http::require_same_origin`. The rules are in `spec/framework_rs/http/same-origin.md`.
+- The `POST` method router has the layer `ian_framework::http::middleware::require_same_origin`. The rules are in `spec/framework_rs/http/same-origin.md`.
 - Each other request gets status 403 with the body `{"code":"cross_origin","message":"cross-origin request"}`.
 - The layer is on the `POST` method only. Thus a request with a different method still gets status 405.
 

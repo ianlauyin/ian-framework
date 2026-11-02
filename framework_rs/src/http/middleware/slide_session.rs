@@ -3,9 +3,8 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
 
+use crate::auth::SessionStore;
 use crate::http::headers::sets_cookie;
-
-use super::SessionStore;
 
 pub async fn slide_session(
     State(store): State<SessionStore>,

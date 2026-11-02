@@ -8,7 +8,8 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value};
 
-use super::{event, LogLevel, LogShipper};
+use crate::http::middleware::set_client_ip::request_ip;
+use crate::logging::{event, LogLevel, LogShipper};
 
 const BODY_LOG_LIMIT: usize = 64 * 1024;
 
@@ -19,7 +20,7 @@ pub async fn log_request(
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
-    let ip = client_ip(&request);
+    let ip = request_ip(&request);
     let user_agent = user_agent(request.headers());
     let request_url = request
         .uri()
@@ -95,7 +96,7 @@ fn request_path(path: &str) -> String {
     }
 }
 
-pub(super) fn client_ip(request: &Request) -> String {
+pub(crate) fn client_ip(request: &Request) -> String {
     if let Some(ip) = header_text(request.headers(), "cf-connecting-ip") {
         return ip;
     }
@@ -122,7 +123,7 @@ fn first_forwarded_ip(headers: &HeaderMap) -> Option<String> {
     }
 }
 
-pub(super) fn user_agent(headers: &HeaderMap) -> String {
+pub(crate) fn user_agent(headers: &HeaderMap) -> String {
     header_text(headers, "user-agent").unwrap_or_default()
 }
 

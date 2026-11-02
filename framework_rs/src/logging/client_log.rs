@@ -5,9 +5,8 @@ use axum::middleware::from_fn;
 use axum::routing::post;
 use axum::Router;
 
-use crate::http::require_same_origin;
+use crate::http::middleware::{client_ip, require_same_origin, user_agent};
 
-use super::log_request::{client_ip, user_agent};
 use super::{LogBatch, LogShipper};
 
 const CLIENT_LOG_PATH: &str = "/log";
@@ -47,7 +46,8 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::{log_request, LogLevel, ShipperConfig};
+    use crate::http::middleware::log_request;
+    use crate::logging::{LogLevel, ShipperConfig};
     use axum::body::Body;
     use axum::middleware::from_fn_with_state;
     use serde_json::json;

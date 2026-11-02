@@ -4,7 +4,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/auth/conte
 
 ## Sliding session
 
-`slide_session` is the Axum middleware function. Use it with `axum::middleware::from_fn_with_state` and one `SessionStore`. The session store is in `spec/framework_rs/auth/session-store.md`.
+`ian_framework::http::middleware::slide_session` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/slide_session.rs`. It is available with the Cargo feature `auth`. Use it with `axum::middleware::from_fn_with_state` and one `SessionStore`. The session store is in `spec/framework_rs/auth/session-store.md`.
 
 The middleware reads the token before the inner handler runs. After the handler returns, the middleware does these steps:
 

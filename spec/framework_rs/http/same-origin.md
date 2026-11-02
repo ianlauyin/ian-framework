@@ -19,8 +19,8 @@ A browser that does not send `Sec-Fetch-Site` still sends `Origin` on a `POST`.
 
 ## Same-origin middleware
 
-- The source file is `framework_rs/src/http/same_origin.rs`.
-- `ian_framework::http::require_same_origin` is an Axum middleware function.
+- The source file is `framework_rs/src/http/middleware/same_origin.rs`.
+- `ian_framework::http::middleware::require_same_origin` is an Axum middleware function.
 - The project adds it to a router with `axum::middleware::from_fn`.
 
 The middleware calls `is_same_origin` for each request:
