@@ -36,11 +36,13 @@ pub(crate) fn request_ip(request: &Request) -> String {
 }
 
 fn socket_ip(request: &Request) -> String {
-    request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(addr)| addr.ip().to_string())
-        .unwrap_or_default()
+    match request.extensions().get::<ConnectInfo<SocketAddr>>() {
+        Some(ConnectInfo(addr)) => addr.ip().to_string(),
+        None => {
+            tracing::warn!("request has no ConnectInfo, so the client ip is empty");
+            String::new()
+        }
+    }
 }
 
 #[cfg(test)]

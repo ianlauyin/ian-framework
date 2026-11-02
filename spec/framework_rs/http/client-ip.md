@@ -25,6 +25,6 @@ Usage rules:
 
 - Use `Headers` only when a trusted proxy is the only way to reach the process. A client that reaches the process directly can send any value in these headers.
 - Use `Socket` when clients reach the process directly.
-- The server must be started with `into_make_service_with_connect_info::<SocketAddr>()`. Without it, `Socket` gives an empty IP.
+- The server must be started with `into_make_service_with_connect_info::<SocketAddr>()`. Without it, `Socket` gives an empty IP and the middleware logs a warning.
 - `log_request` and `rate_limit` read `ClientIp` from the request extensions. When the request has no `ClientIp`, they use the `Headers` rules.
 - Put the middleware outside `log_request` and `rate_limit`.
