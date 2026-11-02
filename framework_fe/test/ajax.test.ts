@@ -24,6 +24,19 @@ describe("ajax", () => {
     );
   });
 
+  it("leaves out undefined query values", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "[]",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ajax("/item", "GET", { page: 2, filter: undefined });
+
+    expect(fetchMock).toHaveBeenCalledWith("/ajax/item?page=2", expect.anything());
+  });
+
   it("substitutes path parameters and sends JSON bodies for PUT requests", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

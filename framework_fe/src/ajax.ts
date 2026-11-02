@@ -45,7 +45,11 @@ export const ajax = async <
       return encodeURIComponent(String(value));
     });
   if (isGetOrDelete && request) {
-    parsedUrl = `${parsedUrl}?${new URLSearchParams(request).toString()}`;
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(request)) {
+      if (value !== undefined) query.append(key, String(value));
+    }
+    parsedUrl = `${parsedUrl}?${query.toString()}`;
   }
 
   const response: Response = await fetch(parsedUrl, {

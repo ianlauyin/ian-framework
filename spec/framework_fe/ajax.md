@@ -43,7 +43,7 @@ This feature is not product business logic.
 
 | Method | Request data | Body |
 | --- | --- | --- |
-| `GET`, `DELETE` | The client adds `request` to the URL as a query string. | No body. |
+| `GET`, `DELETE` | The client adds `request` to the URL as a query string. It leaves out a key whose value is `undefined`. | No body. |
 | `POST`, `PUT` | The client sends `request` as a JSON body. | JSON. The request has the header `Content-Type: application/json`. |
 
 Each request uses `credentials: "same-origin"`.
