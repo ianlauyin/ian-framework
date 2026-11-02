@@ -29,8 +29,6 @@ This feature is not product business logic.
 | Request timeout, catch panic and body limit middleware | `spec/framework_rs/http/limits.md` |
 | Process version route | `spec/framework_rs/http/version-route.md` |
 
-The session middleware `require_session` is in `spec/framework_rs/auth/require-session.md`.
-
 ## Crate
 
 - The package name is `ian_framework`.
@@ -60,7 +58,6 @@ The session middleware `require_session` is in `spec/framework_rs/auth/require-s
 - `require_same_origin`
 - `security_headers`
 - `set_client_ip`, `ClientIp` and `ClientIpSource`
-- `require_session` and `SessionSubject`, only with the Cargo feature `auth`
 - `slide_session`, only with the Cargo feature `auth`
 
 `ian_framework::http::headers` exports only these items:

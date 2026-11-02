@@ -9,7 +9,6 @@ This feature is not product business logic.
 | --- | --- |
 | Session store and cookie | `spec/framework_rs/auth/session-store.md` |
 | Sliding session | `spec/framework_rs/auth/sliding-session.md` |
-| Require session middleware | `spec/framework_rs/auth/require-session.md` |
 | Password hash | `spec/framework_rs/auth/password.md` |
 
 ## Crate

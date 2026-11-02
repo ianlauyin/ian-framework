@@ -39,5 +39,5 @@ Usage rules:
 
 - The middleware counts every request, also a request that a later middleware rejects. Thus a request with a wrong password or a wrong API key uses a token.
 - To use a stricter limit on one route, add a second `RateLimiter` to that route only.
-- Put `rate_limit` outside `require_api_key` and `require_session`.
+- Put `rate_limit` outside `require_api_key`.
 - Put `rate_limit` inside `set_client_ip`.
