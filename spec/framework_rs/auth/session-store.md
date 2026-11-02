@@ -58,6 +58,12 @@ The connection manager stops early when Redis is down. It uses these settings:
 - The value is `{deadline}:{subject}`.
 - `deadline` is the creation time plus `max_age_secs`, in Unix seconds.
 - The key expires after `ttl_secs`.
+- Each subject has one Redis set with the key `{prefix}subject:{hash}`. `hash` is the SHA-256 of the subject, in lowercase hex.
+- The set holds the Redis keys of the sessions of that subject.
+- `create` stores the session and adds its key to the set in one transaction. It sets the expiry of the set to `max_age_secs`.
+- `remove` deletes the key and takes it out of the set in one transaction.
+- A session that expires on its own stays in the set until the set expires or `remove_subject` runs. Deleting a key that does not exist has no effect.
+- A session that was created before the set existed is not in a set. `remove_subject` does not end it. It ends when it expires.
 
 ### Methods
 
@@ -65,7 +71,7 @@ The connection manager stops early when Redis is down. It uses these settings:
 | --- | --- |
 | `create(subject)` | Makes a new token, stores the session, and returns the token. |
 | `subject(token)` | Returns the subject. Returns no subject when the session is missing, expired, or past its deadline. |
-| `touch(token)` | Sets the expiry to the smaller of `ttl_secs` and the time to the deadline. Returns `false` when the session is missing or past its deadline. |
+| `touch(token)` | Sets the expiry to the smaller of `ttl_secs` and the time to the deadline. Returns `false` when the session is missing or past its deadline. It runs as one Lua script, so no other command comes between the read and the expiry. |
 | `remove(token)` | Removes one session. |
 | `remove_subject(subject)` | Removes each session of that subject. |
 | `remove_subject_except(subject, keep_token)` | Removes each session of that subject, but not the session of `keep_token`. |
@@ -75,13 +81,14 @@ A token is 32 random bytes from the OS random source, in lowercase hex. A token 
 
 `remove_subject` uses these rules:
 
-- It scans the keys that start with `prefix`.
-- It removes each key whose value has the subject.
-- A project with many sessions must use a prefix that only the session store uses.
+- It reads the set of the subject.
+- It deletes each session key in the set and takes the keys out of the set in one transaction.
+- It does not scan the keys of Redis. Its cost depends on the sessions of the subject only.
+- A project does not need a prefix that only the session store uses.
 
 `remove_subject_except` uses these rules:
 
-- It does the same scan as `remove_subject`. It skips the key of `keep_token`.
+- It does the same as `remove_subject`. It skips the key of `keep_token`.
 - `keep_token` continues to work. It does not make a new token.
 - A project calls it after a password change. This ends the other sessions of that user and keeps the current session.
 

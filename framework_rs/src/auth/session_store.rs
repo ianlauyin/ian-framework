@@ -5,7 +5,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use axum::http::HeaderMap;
 use chrono::{DateTime, Utc};
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
-use redis::AsyncCommands;
 use sha2::{Digest, Sha256};
 
 use crate::http::headers::read_cookie;
@@ -14,6 +13,17 @@ use super::{AuthError, AuthErrorKind, SessionConfig};
 
 // Browsers cap a cookie lifetime at 400 days.
 const MAX_AGE_LIMIT_SECS: u64 = 400 * 24 * 60 * 60;
+
+// Sets the expiry to the smaller of the ttl and the time to the deadline in one step.
+const TOUCH_SCRIPT: &str = r#"
+local value = redis.call('GET', KEYS[1])
+if not value then return 0 end
+local deadline = tonumber(string.match(value, '^(%d+):'))
+if not deadline then return 0 end
+local left = deadline - tonumber(ARGV[1])
+if left <= 0 then return 0 end
+return redis.call('EXPIRE', KEYS[1], math.min(tonumber(ARGV[2]), left))
+"#;
 
 #[derive(Clone)]
 pub struct SessionStore {
@@ -49,11 +59,24 @@ impl SessionStore {
         let token = random_token()?;
         let max_age = self.inner.config.max_age_secs;
         let deadline = now_secs().saturating_add(max_age);
-        redis::cmd("SET")
-            .arg(self.key(&token))
+        let key = self.key(&token);
+        let subject_key = self.subject_key(subject);
+        redis::pipe()
+            .atomic()
+            .cmd("SET")
+            .arg(&key)
             .arg(format!("{deadline}:{subject}"))
             .arg("EX")
             .arg(self.ttl_secs().min(max_age))
+            .ignore()
+            .cmd("SADD")
+            .arg(&subject_key)
+            .arg(&key)
+            .ignore()
+            .cmd("EXPIRE")
+            .arg(&subject_key)
+            .arg(max_age)
+            .ignore()
             .query_async::<()>(&mut self.conn())
             .await
             .map_err(store_err)?;
@@ -74,6 +97,18 @@ impl SessionStore {
     }
 
     pub async fn touch(&self, token: &str) -> Result<bool, AuthError> {
+        redis::cmd("EVAL")
+            .arg(TOUCH_SCRIPT)
+            .arg(1)
+            .arg(self.key(token))
+            .arg(now_secs())
+            .arg(self.ttl_secs())
+            .query_async(&mut self.conn())
+            .await
+            .map_err(store_err)
+    }
+
+    pub async fn remove(&self, token: &str) -> Result<(), AuthError> {
         let key = self.key(token);
         let mut conn = self.conn();
         let value: Option<String> = redis::cmd("GET")
@@ -81,27 +116,15 @@ impl SessionStore {
             .query_async(&mut conn)
             .await
             .map_err(store_err)?;
-        let Some((deadline, _)) = value.as_deref().and_then(parse_value) else {
-            return Ok(false);
-        };
-        let left = deadline.saturating_sub(now_secs());
-        if left == 0 {
-            return Ok(false);
+        let mut pipe = redis::pipe();
+        pipe.atomic().cmd("DEL").arg(&key).ignore();
+        if let Some((_, subject)) = value.as_deref().and_then(parse_value) {
+            pipe.cmd("SREM")
+                .arg(self.subject_key(subject))
+                .arg(&key)
+                .ignore();
         }
-        redis::cmd("EXPIRE")
-            .arg(&key)
-            .arg(self.ttl_secs().min(left))
-            .query_async(&mut conn)
-            .await
-            .map_err(store_err)
-    }
-
-    pub async fn remove(&self, token: &str) -> Result<(), AuthError> {
-        redis::cmd("DEL")
-            .arg(self.key(token))
-            .query_async::<()>(&mut self.conn())
-            .await
-            .map_err(store_err)
+        pipe.query_async::<()>(&mut conn).await.map_err(store_err)
     }
 
     pub async fn remove_subject(&self, subject: &str) -> Result<(), AuthError> {
@@ -143,45 +166,38 @@ impl SessionStore {
         format!("{}{hash}", self.inner.config.prefix)
     }
 
+    // The set holds the keys of the sessions of one subject. It is hashed so the subject cannot change the key.
+    fn subject_key(&self, subject: &str) -> String {
+        let hash = hex::encode(Sha256::digest(subject.as_bytes()));
+        format!("{}subject:{hash}", self.inner.config.prefix)
+    }
+
     async fn remove_subject_keys(
         &self,
         subject: &str,
         keep_key: Option<&str>,
     ) -> Result<(), AuthError> {
+        let subject_key = self.subject_key(subject);
         let mut conn = self.conn();
-        let pattern = format!("{}*", escape_glob(&self.inner.config.prefix));
-        let mut keys = Vec::new();
-        {
-            let mut iter = conn
-                .scan_match::<_, String>(pattern)
-                .await
-                .map_err(store_err)?;
-            while let Some(key) = iter.next_item().await {
-                keys.push(key.map_err(store_err)?);
-            }
+        let members: Vec<String> = redis::cmd("SMEMBERS")
+            .arg(&subject_key)
+            .query_async(&mut conn)
+            .await
+            .map_err(store_err)?;
+        let removed: Vec<&String> = members
+            .iter()
+            .filter(|key| keep_key != Some(key.as_str()))
+            .collect();
+        if removed.is_empty() {
+            return Ok(());
         }
-        for key in keys {
-            if keep_key == Some(key.as_str()) {
-                continue;
-            }
-            let value: Option<String> = redis::cmd("GET")
-                .arg(&key)
-                .query_async(&mut conn)
-                .await
-                .map_err(store_err)?;
-            let owner = value
-                .as_deref()
-                .and_then(parse_value)
-                .map(|(_, owner)| owner);
-            if owner == Some(subject) {
-                redis::cmd("DEL")
-                    .arg(&key)
-                    .query_async::<()>(&mut conn)
-                    .await
-                    .map_err(store_err)?;
-            }
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+        for key in &removed {
+            pipe.cmd("DEL").arg(key).ignore();
         }
-        Ok(())
+        pipe.cmd("SREM").arg(&subject_key).arg(&removed).ignore();
+        pipe.query_async::<()>(&mut conn).await.map_err(store_err)
     }
 }
 
@@ -266,17 +282,6 @@ fn random_token() -> Result<String, AuthError> {
     Ok(hex::encode(bytes))
 }
 
-fn escape_glob(prefix: &str) -> String {
-    let mut out = String::with_capacity(prefix.len());
-    for ch in prefix.chars() {
-        if matches!(ch, '*' | '?' | '[' | ']' | '\\') {
-            out.push('\\');
-        }
-        out.push(ch);
-    }
-    out
-}
-
 // A token from `create` is 64 lowercase hex characters. Other values skip the Redis call.
 fn is_token(value: &str) -> bool {
     value.len() == 64
@@ -345,6 +350,32 @@ mod tests {
         assert_eq!(store.subject(&second).await.unwrap(), None);
         assert_eq!(store.subject(&other).await.unwrap().as_deref(), Some("8"));
         store.remove(&other).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn removing_sessions_leaves_no_subject_index() {
+        let Some(store) = store_or_skip().await else {
+            return;
+        };
+        let first = store.create("7").await.unwrap();
+        let second = store.create("7").await.unwrap();
+        let mut conn = store.conn();
+        let index = store.subject_key("7");
+        let size: usize = redis::cmd("SCARD")
+            .arg(&index)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(size, 2);
+        store.remove(&first).await.unwrap();
+        store.remove_subject("7").await.unwrap();
+        assert_eq!(store.subject(&second).await.unwrap(), None);
+        let exists: bool = redis::cmd("EXISTS")
+            .arg(&index)
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        assert!(!exists);
     }
 
     #[tokio::test]
@@ -520,12 +551,6 @@ mod tests {
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
         assert_ne!(token, random_token().unwrap());
-    }
-
-    #[test]
-    fn glob_characters_in_the_prefix_are_escaped() {
-        assert_eq!(escape_glob("my-app:session:"), "my-app:session:");
-        assert_eq!(escape_glob("a*b?[c]\\"), "a\\*b\\?\\[c\\]\\\\");
     }
 
     #[test]
