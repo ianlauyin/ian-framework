@@ -6,9 +6,9 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 A client can send log events. The client is not trusted.
 
-### LogEvent::sanitize_untrusted_client
+### LogEvent::new
 
-`LogEvent::sanitize_untrusted_client` checks one event.
+`LogEvent::new` checks one event.
 
 - The input is a reference to one `LogEvent`.
 - The result is one event.
@@ -51,9 +51,9 @@ Each stored value is a string:
 
 The function stores the full value text.
 
-### LogBatch::sanitize_untrusted_client
+### LogBatch::new
 
-`LogBatch::sanitize_untrusted_client` checks one batch.
+`LogBatch::new` checks one batch.
 
 - The input is one `LogBatch`.
 - The result is a list of events, or no batch.
@@ -102,7 +102,7 @@ Request handling:
 - A body that is larger than 1 MiB gets status 413.
 - When the server cannot read the body, the status is also 413.
 - A body that is not a `LogBatch` gets status 400.
-- The route calls `LogBatch::sanitize_untrusted_client`. When that call gives no batch, the status is 400 and the route records no event.
+- The route calls `LogBatch::new`. When that call gives no batch, the status is 400 and the route records no event.
 - The route sets `ip` and `user_agent` in the `context` of each kept event from the request. The sources are the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
 - The route calls `LogShipper::record` for each kept event.
 - The response status is 204 with an empty body.

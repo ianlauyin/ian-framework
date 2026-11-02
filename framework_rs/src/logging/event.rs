@@ -88,17 +88,49 @@ impl PartialEq<Value> for LogValue {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
-    pub ts: DateTime<FixedOffset>,
-    pub id: String,
-    pub action: String,
-    pub latency_ms: Option<u64>,
-    pub level: LogLevel,
-    pub context: BTreeMap<String, LogValue>,
-    pub info: Map<String, Value>,
+    pub(crate) ts: DateTime<FixedOffset>,
+    pub(crate) id: String,
+    pub(crate) action: String,
+    pub(crate) latency_ms: Option<u64>,
+    pub(crate) level: LogLevel,
+    pub(crate) context: BTreeMap<String, LogValue>,
+    pub(crate) info: Map<String, Value>,
 }
 
 impl LogEvent {
-    pub fn sanitize_untrusted_client(&self) -> LogEvent {
+    pub fn ts(&self) -> DateTime<FixedOffset> {
+        self.ts
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn set_id(&mut self, id: String) {
+        self.id = id;
+    }
+
+    pub fn action(&self) -> &str {
+        &self.action
+    }
+
+    pub fn latency_ms(&self) -> Option<u64> {
+        self.latency_ms
+    }
+
+    pub fn level(&self) -> LogLevel {
+        self.level
+    }
+
+    pub fn context(&self) -> &BTreeMap<String, LogValue> {
+        &self.context
+    }
+
+    pub fn info(&self) -> &Map<String, Value> {
+        &self.info
+    }
+
+    pub fn new(&self) -> LogEvent {
         LogEvent {
             ts: hkt_now(),
             id: String::new(),
@@ -226,6 +258,19 @@ mod tests {
     }
 
     #[test]
+    fn getters_and_set_id_expose_the_fields() {
+        let mut event = sample();
+        event.set_id("req-2".to_string());
+        assert_eq!(event.ts(), sample().ts);
+        assert_eq!(event.id(), "req-2");
+        assert_eq!(event.action(), "GET /health");
+        assert_eq!(event.latency_ms(), Some(12));
+        assert_eq!(event.level(), LogLevel::Info);
+        assert_eq!(event.context()["ip"], "203.0.113.8");
+        assert_eq!(event.info()["region"], "asia");
+    }
+
+    #[test]
     fn json_object_round_trips() {
         let event = sample();
         let parsed: LogEvent =
@@ -241,7 +286,7 @@ mod tests {
 
     #[test]
     fn a_sanitized_event_ts_has_the_hkt_offset() {
-        let stored = event("/files", LogLevel::Info).sanitize_untrusted_client();
+        let stored = event("/files", LogLevel::Info).new();
         let value = serde_json::to_value(stored).unwrap();
         assert!(value["ts"].as_str().unwrap().ends_with("+08:00"));
     }
@@ -273,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_untrusted_client_drops_untrusted_fields() {
+    fn new_drops_untrusted_fields() {
         let mut event = event("GET /download?sig=abc#top", LogLevel::Warn);
         event.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z").unwrap();
         event.id = "client-id".to_string();
@@ -282,7 +327,7 @@ mod tests {
             .insert("ip".to_string(), LogValue::from("203.0.113.8"));
         event.latency_ms = Some(42);
         let before = hkt_now();
-        let stored = event.sanitize_untrusted_client();
+        let stored = event.new();
         let after = hkt_now();
         assert_eq!(event.id, "client-id");
         assert_eq!(stored.id, "");
@@ -295,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_untrusted_client_keeps_the_client_action() {
+    fn new_keeps_the_client_action() {
         for action in [
             "/api/foo?x=1",
             "/api/foo#part",
@@ -308,13 +353,13 @@ mod tests {
             "GET /api/foo?token=secret",
             "plain",
         ] {
-            let stored = event(action, LogLevel::Info).sanitize_untrusted_client();
+            let stored = event(action, LogLevel::Info).new();
             assert_eq!(stored.action, action);
         }
     }
 
     #[test]
-    fn sanitize_untrusted_client_filters_info() {
+    fn new_filters_info() {
         let mut client = event("/files", LogLevel::Info);
         client.info.insert("bad key".to_string(), json!("no"));
         client.info.insert("k01".to_string(), json!("kept"));
@@ -325,7 +370,7 @@ mod tests {
             .insert("k07".to_string(), json!("x".repeat(250)));
         client.info.insert("k08".to_string(), json!("ninth"));
         client.info.insert("k09".to_string(), json!(true));
-        let stored = client.sanitize_untrusted_client();
+        let stored = client.new();
         assert_eq!(
             stored.info.keys().cloned().collect::<Vec<_>>(),
             vec![
@@ -349,7 +394,7 @@ mod tests {
         scalars.info.insert("flag".to_string(), json!(true));
         scalars.info.insert("off".to_string(), json!(false));
         scalars.info.insert("ratio".to_string(), json!(1.5));
-        let stored = scalars.sanitize_untrusted_client();
+        let stored = scalars.new();
         assert_eq!(stored.info.get("a/b"), None);
         assert_eq!(stored.info[&"a".repeat(65)], json!("long-key"));
         assert_eq!(stored.info["a_b-c.d"], json!("yes"));
@@ -364,7 +409,7 @@ mod tests {
         text.info.insert("ok!".to_string(), json!("no"));
         let long = "中".repeat(67);
         text.info.insert("text".to_string(), json!(long.clone()));
-        let stored = text.sanitize_untrusted_client();
+        let stored = text.new();
         assert_eq!(stored.info.get(""), None);
         assert_eq!(stored.info.get("café"), None);
         assert_eq!(stored.info.get("ok!"), None);
@@ -375,7 +420,7 @@ mod tests {
             later.info.insert(format!("bad {index}"), json!("no"));
         }
         later.info.insert("zzzz".to_string(), json!("yes"));
-        let stored = later.sanitize_untrusted_client();
+        let stored = later.new();
         assert_eq!(stored.info.len(), 1);
         assert_eq!(stored.info["zzzz"], json!("yes"));
     }

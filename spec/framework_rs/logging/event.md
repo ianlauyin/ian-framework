@@ -20,6 +20,13 @@ One event is one `LogEvent`. One event has these fields:
 - The event has no `app` field.
 - The event has no `project` field.
 
+### Access
+
+- The fields of `LogEvent` are not public. A caller outside the crate cannot make an event with a struct literal and cannot read a field directly.
+- A caller outside the crate gets an event from deserialize. An event from an untrusted client goes through `LogEvent::new`.
+- A caller outside the crate reads an event with `ts()`, `id()`, `action()`, `latency_ms()`, `level()`, `context()` and `info()`.
+- A caller outside the crate sets the event id with `set_id`. The log server sets the id of each event that it stores.
+
 ### Values
 
 - The type of a `context` value is `ian_framework::logging::LogValue`. It is a string, a number, or a `bool`.

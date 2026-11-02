@@ -8,14 +8,14 @@ pub struct LogBatch {
 }
 
 impl LogBatch {
-    pub fn sanitize_untrusted_client(&self) -> Option<Vec<LogEvent>> {
+    pub fn new(&self) -> Option<Vec<LogEvent>> {
         if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
             return None;
         }
         Some(
             self.events
                 .iter()
-                .map(LogEvent::sanitize_untrusted_client)
+                .map(LogEvent::new)
                 .collect(),
         )
     }
@@ -60,20 +60,20 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_untrusted_client_rejects_an_empty_batch() {
+    fn new_rejects_an_empty_batch() {
         let body = LogBatch { events: vec![] };
-        assert!(body.sanitize_untrusted_client().is_none());
+        assert!(body.new().is_none());
     }
 
     #[test]
-    fn sanitize_untrusted_client_returns_sanitized_events() {
+    fn new_returns_sanitized_events() {
         let body = LogBatch {
             events: vec![
                 event("/a?x=1", LogLevel::Info),
                 event("#frag", LogLevel::Error),
             ],
         };
-        let stored = body.sanitize_untrusted_client().unwrap();
+        let stored = body.new().unwrap();
         assert_eq!(stored.len(), 2);
         assert_eq!(stored[0].action, "/a?x=1");
         assert_eq!(stored[0].level, LogLevel::Info);
@@ -85,25 +85,25 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_untrusted_client_accepts_a_batch_at_the_ship_chunk() {
+    fn new_accepts_a_batch_at_the_ship_chunk() {
         let body = LogBatch {
             events: (0..SHIP_CHUNK)
                 .map(|_| event("/ok", LogLevel::Info))
                 .collect(),
         };
-        let stored = body.sanitize_untrusted_client().unwrap();
+        let stored = body.new().unwrap();
         assert_eq!(stored.len(), SHIP_CHUNK);
         assert_eq!(stored[0].id, "");
     }
 
     #[test]
-    fn sanitize_untrusted_client_rejects_a_batch_above_the_ship_chunk() {
+    fn new_rejects_a_batch_above_the_ship_chunk() {
         let body = LogBatch {
             events: (0..=SHIP_CHUNK)
                 .map(|_| event("/ok", LogLevel::Info))
                 .collect(),
         };
         assert_eq!(body.events.len(), SHIP_CHUNK + 1);
-        assert!(body.sanitize_untrusted_client().is_none());
+        assert!(body.new().is_none());
     }
 }
