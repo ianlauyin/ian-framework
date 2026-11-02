@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
 
 use crate::time::hkt_now;
+
+const CLIENT_TS_MAX_AGE_HOURS: i64 = 24;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -131,8 +133,9 @@ impl LogEvent {
     }
 
     pub fn new(&self) -> LogEvent {
+        let now = hkt_now();
         LogEvent {
-            ts: hkt_now(),
+            ts: client_ts(self.ts, now),
             id: String::new(),
             action: self.action.clone(),
             latency_ms: None,
@@ -141,6 +144,13 @@ impl LogEvent {
             info: client_info(&self.info),
         }
     }
+}
+
+fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<FixedOffset> {
+    if ts > now || now - ts > Duration::hours(CLIENT_TS_MAX_AGE_HOURS) {
+        return now;
+    }
+    ts.with_timezone(now.offset())
 }
 
 fn client_info(info: &Map<String, Value>) -> Map<String, Value> {
@@ -337,6 +347,25 @@ mod tests {
         assert_eq!(stored.action, "GET /download?sig=abc#top");
         assert_ne!(stored.ts, event.ts);
         assert!(stored.ts >= before && stored.ts <= after);
+    }
+
+    #[test]
+    fn new_keeps_a_recent_client_ts_in_hkt() {
+        let mut event = event("note", LogLevel::Info);
+        let ts = hkt_now() - Duration::minutes(5);
+        event.ts = ts.with_timezone(&FixedOffset::east_opt(0).unwrap());
+        let stored = event.new();
+        assert_eq!(stored.ts, ts);
+        assert_eq!(stored.ts.offset().local_minus_utc(), 8 * 3600);
+    }
+
+    #[test]
+    fn new_replaces_a_future_client_ts() {
+        let mut event = event("note", LogLevel::Info);
+        event.ts = hkt_now() + Duration::hours(1);
+        let before = hkt_now();
+        let stored = event.new();
+        assert!(stored.ts >= before && stored.ts <= hkt_now());
     }
 
     #[test]

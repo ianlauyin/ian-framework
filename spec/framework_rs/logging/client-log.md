@@ -20,7 +20,7 @@ The function sets the fields of the result as follows:
 | --- | --- |
 | `id` | Empty string. The client value is not kept. |
 | `latency_ms` | null. The client value is not kept. |
-| `ts` | The current HKT time, from `ian_framework::time::hkt_now()`. The client value is not kept. |
+| `ts` | The client value in HKT, when it is not later than `ian_framework::time::hkt_now()` and is not more than 24 hours before it. In all other cases, the current HKT time from `hkt_now()`. |
 | `level` | The client value. |
 | `action` | The client value. |
 | `context` | Empty object. The client value is not kept. |
