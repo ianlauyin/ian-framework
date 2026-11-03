@@ -36,6 +36,8 @@ The transfer time limit is 180 seconds. These items use it:
 
 The client uploads bytes with a resumable session. The client knows the object size before the upload starts.
 
+The session URL is the `Location` header of the start response. It must start with `https://storage.googleapis.com/`, because each chunk and probe request carries the access token. Another value is an `Api` error.
+
 Chunks:
 
 - A chunk that is not the last chunk is 8 MiB.

@@ -9,6 +9,7 @@ use crate::gcs::gcs_client::upload::upload_source::UploadSource;
 use crate::gcs::gcs_client::{GcsClient, ObjectMeta, TRANSFER_TIMEOUT};
 use crate::gcs::{GcsError, GcsErrorKind};
 
+const UPLOAD_HOST_ROOT: &str = "https://storage.googleapis.com/";
 const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
 const CHUNK_SIZE: usize = 8 * 1024 * 1024;
 const CHUNK_ALIGN: u64 = 256 * 1024;
@@ -76,10 +77,11 @@ impl<'a> ResumableUpload<'a> {
             })?
             .to_string();
         let _ = response.bytes().await;
-        if !location.starts_with("https://") {
+        // Every chunk request carries the access token, so the session URL must stay on the Google host.
+        if !is_google_location(&location) {
             return Err(GcsError::new(
                 GcsErrorKind::Api,
-                "resumable Location is not an https URL",
+                "resumable Location is not a storage.googleapis.com URL",
             ));
         }
         Ok(Self {
@@ -138,7 +140,15 @@ impl<'a> ResumableUpload<'a> {
             if attempt > 1 {
                 tokio::time::sleep(retry_delay(attempt - 1)).await;
             }
-            let piece = &chunk[(offset - start) as usize..];
+            let Some(piece) = usize::try_from(offset - start)
+                .ok()
+                .and_then(|from| chunk.get(from..))
+            else {
+                return Err(GcsError::new(
+                    GcsErrorKind::Api,
+                    "resumable offset is outside the chunk",
+                ));
+            };
             let sent = self.upload_chunk_once(piece, offset).await;
             match sent {
                 Ok(UploadStep::Done(meta)) => return Ok(UploadStep::Done(meta)),
@@ -293,6 +303,10 @@ impl UploadStep {
     }
 }
 
+fn is_google_location(location: &str) -> bool {
+    location.starts_with(UPLOAD_HOST_ROOT)
+}
+
 fn retry_delay(attempt: u32) -> Duration {
     CHUNK_BACKOFF.saturating_mul(u32::max(attempt, 1))
 }
@@ -389,6 +403,22 @@ fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_session_url_must_stay_on_the_google_host() {
+        use super::is_google_location;
+        assert!(is_google_location(
+            "https://storage.googleapis.com/upload/storage/v1/b/my-app/o?upload_id=x"
+        ));
+        assert!(!is_google_location("https://evil.example/upload"));
+        assert!(!is_google_location("http://storage.googleapis.com/upload"));
+        assert!(!is_google_location(
+            "https://storage.googleapis.com.evil.example/upload"
+        ));
+        assert!(!is_google_location(
+            "https://storage.googleapis.com@evil.example/"
+        ));
+    }
+
     use std::time::Instant;
 
     use crate::gcp::{CachedToken, UserCredentials};

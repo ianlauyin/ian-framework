@@ -57,8 +57,16 @@ impl<'a> UploadSource<'a> {
     ) -> Result<Cow<'a, [u8]>, GcsError> {
         match self {
             Self::Bytes(bytes) => {
-                let start = offset as usize;
-                Ok(Cow::Borrowed(&bytes[start..start + len]))
+                let range = usize::try_from(offset)
+                    .ok()
+                    .and_then(|start| Some(start..start.checked_add(len)?));
+                let chunk = range.and_then(|range| bytes.get(range)).ok_or_else(|| {
+                    GcsError::new(
+                        GcsErrorKind::Api,
+                        "upload range is past the end of the data",
+                    )
+                })?;
+                Ok(Cow::Borrowed(chunk))
             }
             Self::File { file, .. } => {
                 file.seek(std::io::SeekFrom::Start(offset))
