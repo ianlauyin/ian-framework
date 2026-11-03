@@ -8,7 +8,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/auth/conte
 - `verify_password` checks a password against a PHC string.
 - The two functions are `async`.
 - The two functions run Argon2 with `tokio::task::spawn_blocking`. Thus the hash does not block the async workers.
-- At most 8 Argon2 runs are active at one time. Other calls wait for a permit, so a flood of logins cannot fill the blocking pool.
+- The number of Argon2 runs at one time is not limited. The project can add a limit if it expects many logins.
 - The two functions need a Tokio runtime.
 
 `verify_password` returns `false` in these conditions:
