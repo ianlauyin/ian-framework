@@ -17,6 +17,6 @@ The parts that apply to all of this feature are in `spec/framework_rs/auth/conte
 - The blocking task fails.
 - The password is longer than 256 bytes.
 
-A password has a maximum of 256 bytes. `hash_password` returns an error for a longer password.
+A password has a maximum of 256 bytes. For a longer password, `hash_password` returns the exception of `validation_error!` with the message `password must not be longer than 256 bytes`. The cause is the client, thus the HTTP status is 400.
 
 The project owns the other password rules.

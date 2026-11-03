@@ -4,13 +4,16 @@ use argon2::Argon2;
 
 use crate::exception;
 use crate::exception::Exception;
+use crate::validation_error;
 
 const MAX_PASSWORD_BYTES: usize = 256;
 
 // Argon2 takes tens of milliseconds of CPU, so it runs on the blocking pool and does not stall the async workers.
 pub async fn hash_password(password: &str) -> Result<String, Exception> {
     if password.len() > MAX_PASSWORD_BYTES {
-        return Err(exception!("password is too long", code = "AUTH_PASSWORD"));
+        return Err(validation_error!(format!(
+            "password must not be longer than {MAX_PASSWORD_BYTES} bytes"
+        )));
     }
     let password = password.to_owned();
     tokio::task::spawn_blocking(move || hash(&password))
@@ -54,6 +57,7 @@ fn verify(password: &str, hash: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exception::error_code;
 
     #[tokio::test]
     async fn hash_round_trips_and_uses_a_new_salt() {
@@ -72,9 +76,11 @@ mod tests {
         let hash = hash_password(&limit).await.unwrap();
         assert!(verify_password(&limit, &hash).await);
         let long = "a".repeat(MAX_PASSWORD_BYTES + 1);
+        let error = hash_password(&long).await.unwrap_err();
+        assert_eq!(error.code(), Some(error_code::VALIDATION_ERROR));
         assert_eq!(
-            hash_password(&long).await.unwrap_err().code(),
-            Some("AUTH_PASSWORD")
+            error.message(),
+            "password must not be longer than 256 bytes"
         );
         assert!(!verify_password(&long, &hash).await);
     }

@@ -36,6 +36,21 @@ The display text is the error code, then `: `, then the message.
 - The error code does not change.
 - The message does not change.
 
+## From Exception
+
+`ApiError` implements `From<Exception>`. The impl is in this module. `Exception` is in `spec/framework_rs/exception.md`.
+
+| Code of the exception | Status | Error code | Message |
+| --- | --- | --- | --- |
+| `VALIDATION_ERROR` or `BAD_REQUEST` | 400 | The code of the exception | The message of the exception |
+| `FORBIDDEN` | 403 | The code of the exception | The message of the exception |
+| `NOT_FOUND` | 404 | The code of the exception | The message of the exception |
+| A different code, or no code | 500 | `INTERNAL_ERROR` | `internal error` |
+
+- Only the code of the top exception counts. The code of a source does not change the result. Thus a client error that a caller wraps in a different exception becomes status 500.
+- A response with status 500 never holds the internal message or the trace.
+- A handler that must give a different status or message returns an `ApiError` of its own.
+
 ## JSON response
 
 `IntoResponse` for `ApiError` builds the HTTP response.

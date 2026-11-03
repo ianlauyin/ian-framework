@@ -54,14 +54,16 @@ The session tests need a Redis server:
 
 The error of this module is `ian_framework::exception::Exception`. Its definition is in `spec/framework_rs/exception.md`.
 
-| Code | Cause | Status | Message for the client |
-| --- | --- | --- | --- |
-| `AUTH_CONFIG` | Bad Redis URL or bad `SessionConfig` | 500 | `session store is not available` |
-| `AUTH_STORE` | Redis connection failure or Redis command failure | 503 | `session store is not available` |
-| `AUTH_PASSWORD` | Password too long, hash failure, or blocking task failure | 500 | `password hash failed` |
-| `AUTH_RANDOM` | OS random source failure | 500 | `session token failed` |
+| Code | Cause |
+| --- | --- |
+| `AUTH_CONFIG` | Bad Redis URL or bad `SessionConfig` |
+| `AUTH_STORE` | Redis connection failure or Redis command failure |
+| `AUTH_PASSWORD` | Hash failure or blocking task failure |
+| `AUTH_RANDOM` | OS random source failure |
+| `VALIDATION_ERROR` | `hash_password` gets a password that is longer than 256 bytes |
 
-- The message for the client does not contain the internal detail.
+- The HTTP status of each `AUTH_*` code is 500 and the message for the client is `internal error`, as in `spec/framework_rs/http/api-error.md`.
+- The HTTP status of `VALIDATION_ERROR` is 400. The message for the client is `password must not be longer than 256 bytes`.
 
 ## Out of scope
 

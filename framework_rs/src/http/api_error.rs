@@ -2,6 +2,12 @@ use std::fmt;
 
 use axum::http::StatusCode;
 
+use crate::exception::error_code;
+use crate::exception::Exception;
+
+const INTERNAL_CODE: &str = "INTERNAL_ERROR";
+const INTERNAL_MESSAGE: &str = "internal error";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiError {
     pub status: StatusCode,
@@ -37,9 +43,35 @@ impl fmt::Display for ApiError {
     }
 }
 
+// Only the code of the top exception counts. A wrapped client error becomes an internal error.
+impl From<Exception> for ApiError {
+    fn from(exception: Exception) -> Self {
+        let Some(code) = exception.code() else {
+            return internal_error();
+        };
+        let status = match code {
+            error_code::VALIDATION_ERROR | error_code::BAD_REQUEST => StatusCode::BAD_REQUEST,
+            error_code::FORBIDDEN => StatusCode::FORBIDDEN,
+            error_code::NOT_FOUND => StatusCode::NOT_FOUND,
+            _ => return internal_error(),
+        };
+        ApiError::new(status, code, exception.message())
+    }
+}
+
+fn internal_error() -> ApiError {
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        INTERNAL_CODE,
+        INTERNAL_MESSAGE,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exception;
+    use crate::validation_error;
 
     #[test]
     fn new_keeps_status_code_and_message() {
@@ -80,5 +112,56 @@ mod tests {
             assert_eq!(error.code, "bad");
             assert_eq!(error.message, "nope");
         }
+    }
+
+    #[test]
+    fn a_well_known_code_gives_its_status_code_and_message() {
+        for (error, status) in [
+            (validation_error!("name is blank"), StatusCode::BAD_REQUEST),
+            (
+                exception!("bad query", code = error_code::BAD_REQUEST),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                exception!("access denied", code = error_code::FORBIDDEN),
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                exception!("job not found", code = error_code::NOT_FOUND),
+                StatusCode::NOT_FOUND,
+            ),
+        ] {
+            let code = error.code().unwrap();
+            let message = error.message().to_owned();
+            let api = ApiError::from(error);
+            assert_eq!(api.status, status);
+            assert_eq!(api.code, code);
+            assert_eq!(api.message, message);
+        }
+    }
+
+    #[test]
+    fn a_different_code_or_no_code_is_a_hidden_500() {
+        for error in [
+            exception!("db down", code = "MY_CODE"),
+            exception!("secret detail", code = "GCS_NOT_FOUND"),
+            exception!("no code"),
+        ] {
+            let api = ApiError::from(error);
+            assert_eq!(api.status, StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(api.code, "INTERNAL_ERROR");
+            assert_eq!(api.message, "internal error");
+        }
+    }
+
+    #[test]
+    fn only_the_code_of_the_top_exception_counts() {
+        let inner = validation_error!("name is blank");
+        let outer = exception!("secret message", code = "MY_CODE", source = inner);
+        let api = ApiError::from(outer);
+        assert_eq!(api.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(api.message, "internal error");
+        let wrapped = exception!("secret message", source = validation_error!("x"));
+        assert_eq!(ApiError::from(wrapped).code, "INTERNAL_ERROR");
     }
 }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::http::IntoApiError;
+pub mod error_code;
 
 #[macro_export]
 macro_rules! exception {
@@ -11,6 +11,18 @@ macro_rules! exception {
         $( let exception = exception.__with_source($source); )?
         exception
     }};
+}
+
+// The message goes to the client, so it must not hold an internal detail.
+#[macro_export]
+macro_rules! validation_error {
+    ($message:expr $(,)?) => {
+        $crate::exception!(
+            $message,
+            code = $crate::exception::error_code::VALIDATION_ERROR,
+            severity = $crate::exception::Severity::Warn,
+        )
+    };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -168,20 +180,6 @@ impl From<Exception> for String {
     }
 }
 
-impl IntoApiError for Exception {
-    fn status_code(&self) -> u16 {
-        500
-    }
-
-    fn error_code(&self) -> &str {
-        self.code.unwrap_or(INTERNAL_CODE)
-    }
-
-    fn message(&self) -> String {
-        INTERNAL_MESSAGE.to_string()
-    }
-}
-
 const EXTERNAL_MESSAGE: &str = "external error";
 
 fn external_message(error: &(dyn std::error::Error + 'static), type_name: Option<&str>) -> String {
@@ -195,9 +193,6 @@ fn external_message(error: &(dyn std::error::Error + 'static), type_name: Option
     }
 }
 
-const INTERNAL_CODE: &str = "INTERNAL_ERROR";
-const INTERNAL_MESSAGE: &str = "internal error";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
     file: &'static str,
@@ -206,8 +201,6 @@ struct Location {
 
 #[cfg(test)]
 mod tests {
-    use crate::http::ApiError;
-
     #[test]
     fn display_shows_the_current_message_only() {
         let root = exception!("port is not a number", code = "ENV_INVALID");
@@ -323,15 +316,13 @@ mod tests {
     }
 
     #[test]
-    fn every_exception_is_a_500_with_an_internal_message() {
-        use crate::http::IntoApiError;
-        for error in [
-            exception!("db down", code = "MY_CODE"),
-            exception!("secret detail", code = "GCS_NOT_FOUND"),
-        ] {
-            assert_eq!(error.status_code(), 500);
-            assert_eq!(IntoApiError::message(&error), "internal error");
-        }
+    fn validation_error_is_a_warn_with_the_validation_code() {
+        let error = validation_error!("name must not be blank");
+        let line = line!() - 1;
+        assert_eq!(error.code(), Some(super::error_code::VALIDATION_ERROR));
+        assert_eq!(error.severity(), super::Severity::Warn);
+        assert_eq!(error.message(), "name must not be blank");
+        assert_eq!(error.location(), Some((file!(), line)));
     }
 
     #[test]
@@ -411,16 +402,5 @@ mod tests {
         assert_eq!(warn.code(), None);
         assert_eq!(warn.severity(), super::Severity::Warn);
         assert!(String::from(&warn).starts_with("0: WARN slow at "));
-        assert_eq!(ApiError::from(warn).code, "INTERNAL_ERROR");
-    }
-
-    #[test]
-    fn api_error_hides_the_message_and_the_trace() {
-        let source = exception!("secret detail", code = "ENV_INVALID");
-        let error = exception!("secret message", code = "ENV_MISSING", source = source);
-        let api = ApiError::from(error);
-        assert_eq!(api.status.as_u16(), 500);
-        assert_eq!(api.code, "ENV_MISSING");
-        assert_eq!(api.message, "internal error");
     }
 }
