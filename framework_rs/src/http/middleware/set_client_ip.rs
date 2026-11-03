@@ -1,10 +1,13 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::extract::{ConnectInfo, Request, State};
 use axum::middleware::Next;
 use axum::response::Response;
 
 use crate::http::middleware::client_ip;
+
+static WARNED_PUBLIC_PEER: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientIp(pub String);
@@ -25,7 +28,10 @@ pub async fn set_client_ip(
     next: Next,
 ) -> Response {
     let ip = match source {
-        ClientIpSource::Headers => client_ip(&request),
+        ClientIpSource::Headers => {
+            warn_public_peer(&request);
+            client_ip(&request)
+        }
         ClientIpSource::Header(name) => {
             header_ip(&request, name).unwrap_or_else(|| socket_ip(&request))
         }
@@ -45,9 +51,29 @@ pub(crate) fn request_ip(request: &Request) -> String {
     }
 }
 
+// A peer on a public address did not come through a private proxy hop, so it can send any value in the headers.
+fn warn_public_peer(request: &Request) {
+    let Some(ConnectInfo(addr)) = request.extensions().get::<ConnectInfo<SocketAddr>>() else {
+        return;
+    };
+    if !is_public(addr.ip()) || WARNED_PUBLIC_PEER.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    tracing::warn!(
+        "ClientIpSource::Headers got a request from a public peer address, so a client can set the client ip"
+    );
+}
+
+fn is_public(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => !(v4.is_private() || v4.is_loopback() || v4.is_link_local()),
+        IpAddr::V6(v6) => !(v6.is_loopback() || v6.segments()[0] & 0xfe00 == 0xfc00),
+    }
+}
+
 fn header_ip(request: &Request, name: &str) -> Option<String> {
     let value = request.headers().get(name)?.to_str().ok()?.trim();
-    (!value.is_empty()).then(|| value.to_string())
+    valid_ip(value)
 }
 
 fn forwarded_ip(request: &Request, trusted_hops: usize) -> Option<String> {
@@ -63,7 +89,12 @@ fn forwarded_ip(request: &Request, trusted_hops: usize) -> Option<String> {
         .map(str::trim)
         .collect();
     let entry = entries.iter().rev().nth(trusted_hops - 1)?;
-    (!entry.is_empty()).then(|| entry.to_string())
+    valid_ip(entry)
+}
+
+// A value that is not an IP could be any text that a client chooses, so it must not become a rate limit key or a log value.
+fn valid_ip(value: &str) -> Option<String> {
+    value.parse::<IpAddr>().ok().map(|ip| ip.to_string())
 }
 
 fn socket_ip(request: &Request) -> String {
@@ -157,6 +188,42 @@ mod tests {
         let none = ClientIpSource::ForwardedFor { trusted_hops: 0 };
         assert_eq!(ip_for(none, &spoofed).await, "192.0.2.10");
         assert_eq!(ip_for(one, &[]).await, "192.0.2.10");
+    }
+
+    #[tokio::test]
+    async fn a_value_that_is_not_an_ip_gives_the_socket_host() {
+        let header = ClientIpSource::Header("cf-connecting-ip");
+        assert_eq!(
+            ip_for(header, &[("cf-connecting-ip", "not an ip")]).await,
+            "192.0.2.10"
+        );
+        let forwarded = ClientIpSource::ForwardedFor { trusted_hops: 1 };
+        assert_eq!(
+            ip_for(forwarded, &[("x-forwarded-for", "6.6.6.6, evil")]).await,
+            "192.0.2.10"
+        );
+        assert_eq!(
+            ip_for(header, &[("cf-connecting-ip", "2001:db8::1")]).await,
+            "2001:db8::1"
+        );
+    }
+
+    #[test]
+    fn private_and_loopback_peers_are_not_public() {
+        for ip in [
+            "10.1.2.3",
+            "172.16.0.1",
+            "192.168.1.1",
+            "127.0.0.1",
+            "169.254.1.1",
+            "::1",
+            "fd00::1",
+        ] {
+            assert!(!is_public(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in ["192.0.2.10", "203.0.113.9", "2001:db8::1"] {
+            assert!(is_public(ip.parse().unwrap()), "{ip}");
+        }
     }
 
     #[test]

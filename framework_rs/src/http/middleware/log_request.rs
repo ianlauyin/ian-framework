@@ -97,13 +97,13 @@ fn request_path(path: &str) -> String {
 }
 
 pub(crate) fn client_ip(request: &Request) -> String {
-    if let Some(ip) = header_text(request.headers(), "cf-connecting-ip") {
+    if let Some(ip) = header_text(request.headers(), "cf-connecting-ip").filter(|ip| is_ip(ip)) {
         return ip;
     }
     if let Some(ip) = first_forwarded_ip(request.headers()) {
         return ip;
     }
-    if let Some(ip) = header_text(request.headers(), "x-real-ip") {
+    if let Some(ip) = header_text(request.headers(), "x-real-ip").filter(|ip| is_ip(ip)) {
         return ip;
     }
     request
@@ -116,11 +116,12 @@ pub(crate) fn client_ip(request: &Request) -> String {
 fn first_forwarded_ip(headers: &HeaderMap) -> Option<String> {
     let value = header_text(headers, "x-forwarded-for")?;
     let first = value.split(',').next()?.trim();
-    if first.is_empty() {
-        None
-    } else {
-        Some(first.to_string())
-    }
+    is_ip(first).then(|| first.to_string())
+}
+
+// A header value that is not an IP could be any text that a client chooses, so the next source is used.
+fn is_ip(value: &str) -> bool {
+    value.parse::<std::net::IpAddr>().is_ok()
 }
 
 pub(crate) fn user_agent(headers: &HeaderMap) -> String {
@@ -162,6 +163,17 @@ mod tests {
     use axum::routing::{get, post};
     use axum::Router;
     use serde_json::json;
+
+    #[test]
+    fn a_header_that_is_not_an_ip_is_skipped() {
+        let request = Request::builder()
+            .header("cf-connecting-ip", "not an ip")
+            .header("x-forwarded-for", "also bad, 10.0.0.1")
+            .header("x-real-ip", "203.0.113.5")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(client_ip(&request), "203.0.113.5");
+    }
     use tower::ServiceExt;
 
     async fn status_from_path(Path(code): Path<u16>) -> StatusCode {

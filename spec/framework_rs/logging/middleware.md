@@ -46,6 +46,7 @@ The `ip` sources are in this order:
 Header rules:
 
 - The middleware removes spaces at the start and at the end of a header value.
+- A header value that is not an IP address is skipped, and the next source is used.
 - The host does not include the port.
 - A request with no source gets an empty `ip`.
 - The middleware skips a header value that is not text.

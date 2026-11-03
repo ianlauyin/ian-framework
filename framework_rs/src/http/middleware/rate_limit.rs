@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -92,7 +93,7 @@ pub async fn rate_limit(
     request: Request,
     next: Next,
 ) -> Response {
-    let key = request_ip(&request);
+    let key = limit_key(&request_ip(&request));
     match limiter.check(&key, Instant::now()) {
         Ok(()) => next.run(request).await,
         Err(wait) => {
@@ -108,6 +109,18 @@ pub async fn rate_limit(
             }
             response
         }
+    }
+}
+
+// One client can own a whole IPv6 /64 network, so all addresses of a /64 share one bucket.
+fn limit_key(ip: &str) -> String {
+    match ip.parse::<IpAddr>() {
+        Ok(IpAddr::V6(v6)) => {
+            let mut octets = v6.octets();
+            octets[8..].fill(0);
+            format!("{}/64", std::net::Ipv6Addr::from(octets))
+        }
+        _ => ip.to_string(),
     }
 }
 
@@ -127,6 +140,17 @@ mod tests {
 
     fn limiter(capacity: u32, refill_per_sec: f64) -> RateLimiter {
         RateLimiter::new(RateLimitConfig::new(capacity, refill_per_sec))
+    }
+
+    #[test]
+    fn an_ipv6_network_shares_one_key() {
+        assert_eq!(
+            limit_key("2001:db8:1:2:aaaa::1"),
+            limit_key("2001:db8:1:2:bbbb::2")
+        );
+        assert_ne!(limit_key("2001:db8:1:2::1"), limit_key("2001:db8:1:3::1"));
+        assert_eq!(limit_key("192.0.2.1"), "192.0.2.1");
+        assert_eq!(limit_key(""), "");
     }
 
     #[test]

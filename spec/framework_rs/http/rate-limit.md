@@ -17,6 +17,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 - The limiter is a token bucket for each key.
 - The key is the client IP. The middleware reads `ClientIp` from the request extensions. When there is no `ClientIp`, it uses the `Headers` rules of `spec/framework_rs/http/client-ip.md`.
+- When the client IP is an IPv6 address, the key is its first 64 bits (the /64 network), because one client can own a whole /64 network. An IPv4 address is the key as it is.
 - A request with an empty IP shares one bucket with all other requests that have an empty IP.
 - A new bucket is full. Its tokens are `capacity`.
 - Each request takes one token. The bucket gets `refill_per_sec` tokens each second, up to `capacity`.
