@@ -71,7 +71,7 @@ These methods are on `GcsClient`:
 | Method | Effect |
 | --- | --- |
 | `put` | Puts one `PutRequest`. |
-| `get_bytes` | Gets the object bytes. |
+| `get_bytes` | Gets the object bytes. An object larger than 256 MiB is a `Config` error. Use `open_object` and `byte_stream` for a large object. |
 | `get_bytes_opt` | Gets the object bytes or `None`. |
 | `open_object` | Opens the object data. |
 | `open_object_opt` | Opens the object data or returns `None`. |
