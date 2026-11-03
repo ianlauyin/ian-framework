@@ -11,6 +11,7 @@ This document describes these items in the framework:
 - The API key middleware.
 - The request timeout, catch panic and body limit middleware.
 - The process version route.
+- The health route.
 
 This feature is not product business logic.
 
@@ -27,6 +28,7 @@ This feature is not product business logic.
 | API key middleware | `spec/framework_rs/http/api-key-middleware.md` |
 | Request timeout, catch panic and body limit middleware | `spec/framework_rs/http/limits.md` |
 | Process version route | `spec/framework_rs/http/version-route.md` |
+| Health route | `spec/framework_rs/http/health-route.md` |
 
 ## Crate
 
@@ -42,6 +44,7 @@ This feature is not product business logic.
 - `ApiError`
 - `IntoApiError`
 - `version_router`
+- `health_router`
 - The module `headers`
 - The module `middleware`
 
