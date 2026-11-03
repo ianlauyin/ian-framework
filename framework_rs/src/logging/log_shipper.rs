@@ -41,7 +41,9 @@ impl LogShipper {
                     return None;
                 } else {
                     let parsed = reqwest::Url::parse(trimmed).ok()?;
-                    if (parsed.scheme() != "http" && parsed.scheme() != "https")
+                    let secure = parsed.scheme() == "https"
+                        || (parsed.scheme() == "http" && is_loopback_host(parsed.host_str()));
+                    if !secure
                         || parsed.host_str().is_none()
                         || !parsed.username().is_empty()
                         || parsed.password().is_some()
@@ -269,6 +271,11 @@ struct Inner {
     shipping: tokio::sync::Mutex<()>,
 }
 
+// The post API key is sent in each request, so a plain http endpoint is allowed only on this machine.
+fn is_loopback_host(host: Option<&str>) -> bool {
+    matches!(host, Some("localhost" | "127.0.0.1" | "[::1]"))
+}
+
 fn meets_capacity_warn(len: usize, capacity: usize) -> bool {
     (len as u128) * 5 >= (capacity as u128) * 4
 }
@@ -277,13 +284,22 @@ fn meets_capacity_warn(len: usize, capacity: usize) -> bool {
 struct Mask {
     plain: regex::Regex,
     pair: regex::Regex,
+    json_pair: regex::Regex,
 }
 
 impl Mask {
     fn new(pattern: &str) -> Option<Self> {
         let plain = regex::Regex::new(pattern).ok()?;
         let pair = regex::Regex::new(&format!(r"[\w.\-]*(?:{pattern})[\w.\-]*=[^&\s;]*")).ok()?;
-        Some(Self { plain, pair })
+        let json_pair = regex::Regex::new(&format!(
+            r#""[^"]*(?:{pattern})[^"]*"\s*:\s*(?:"(?:[^"\\]|\\.)*"|[\w.\-]+)"#
+        ))
+        .ok()?;
+        Some(Self {
+            plain,
+            pair,
+            json_pair,
+        })
     }
 }
 
@@ -325,6 +341,11 @@ fn mask_value(masks: &[Mask], value: &mut Value) {
 }
 
 fn mask_text(masks: &[Mask], text: &mut String) {
+    for mask in masks {
+        if let std::borrow::Cow::Owned(masked) = mask.json_pair.replace_all(text, MASK) {
+            *text = masked;
+        }
+    }
     for mask in masks {
         if let std::borrow::Cow::Owned(masked) = mask.pair.replace_all(text, MASK) {
             *text = masked;
@@ -380,7 +401,7 @@ mod tests {
     fn defaults() {
         let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
         assert_eq!(shipper.inner.app, "api");
-        assert_eq!(shipper.inner.masks.len(), 3);
+        assert_eq!(shipper.inner.masks.len(), 7);
         assert_eq!(SHIP_CHUNK, 1_000);
         assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
     }
@@ -409,32 +430,32 @@ mod tests {
 
     #[test]
     fn endpoint_is_normalized() {
-        let shipper = LogShipper::new(config("my-app", "http://logs.example/ingest/")).unwrap();
+        let shipper = LogShipper::new(config("my-app", "https://logs.example/ingest/")).unwrap();
         assert_eq!(
             shipper.inner.endpoint.as_deref(),
-            Some("http://logs.example/ingest")
+            Some("https://logs.example/ingest")
         );
     }
 
     #[test]
     fn invalid_config_is_rejected() {
         let cases = [
-            config("", "http://logs.example"),
-            config("a/b", "http://logs.example"),
+            config("", "https://logs.example"),
+            config("a/b", "https://logs.example"),
             {
-                let mut config = config("api", "http://logs.example");
+                let mut config = config("api", "https://logs.example");
                 config.capacity = 0;
                 config
             },
             {
-                let mut config = config("api", "http://logs.example");
+                let mut config = config("api", "https://logs.example");
                 config.ship_every = Duration::ZERO;
                 config
             },
             config("api", "ftp://logs.example"),
-            config("api", "http://logs.example/a b"),
+            config("api", "https://logs.example/a b"),
             {
-                let mut config = config("api", "http://logs.example");
+                let mut config = config("api", "https://logs.example");
                 config.mask_patterns = vec!["(".to_string()];
                 config
             },
@@ -442,6 +463,40 @@ mod tests {
         for config in cases {
             assert!(LogShipper::new(config).is_none());
         }
+    }
+
+    #[test]
+    fn a_plain_http_endpoint_is_allowed_only_on_this_machine() {
+        for endpoint in [
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://[::1]:8080",
+            "https://logs.example",
+        ] {
+            assert!(
+                LogShipper::new(config("api", endpoint)).is_some(),
+                "{endpoint}"
+            );
+        }
+        for endpoint in ["http://logs.example", "http://10.0.0.5:8080"] {
+            assert!(
+                LogShipper::new(config("api", endpoint)).is_none(),
+                "{endpoint}"
+            );
+        }
+    }
+
+    #[test]
+    fn default_patterns_mask_a_json_pair_in_a_string() {
+        let masks: Vec<Mask> = ShipperConfig::new("api")
+            .mask_patterns
+            .iter()
+            .filter_map(|pattern| Mask::new(pattern))
+            .collect();
+        let mut text = r#"[{"password":"hunter2","id":7},"Authorization: x"]"#.to_string();
+        mask_text(&masks, &mut text);
+        assert!(!text.contains("hunter2"), "{text}");
+        assert!(text.contains(r#""id":7"#));
     }
 
     #[test]
@@ -458,7 +513,7 @@ mod tests {
     #[test]
     fn invalid_post_api_key_is_rejected() {
         for post_api_key in ["log post key", "log\u{7f}key"] {
-            let mut config = config("api", "http://logs.example");
+            let mut config = config("api", "https://logs.example");
             config.post_api_key = Some(post_api_key.to_string());
             assert!(LogShipper::new(config).is_none());
         }
@@ -466,18 +521,18 @@ mod tests {
 
     #[test]
     fn debug_hides_the_post_api_key() {
-        let mut with_key = config("api", "http://logs.example");
+        let mut with_key = config("api", "https://logs.example");
         with_key.post_api_key = Some("log-post-key".to_string());
         let shipper = LogShipper::new(with_key).unwrap();
         let debug = format!("{shipper:?}");
         assert!(!debug.contains("log-post-key"));
         assert!(debug.contains("post_api_key: Some(\"***\")"));
-        let unset = LogShipper::new(config("api", "http://logs.example")).unwrap();
+        let unset = LogShipper::new(config("api", "https://logs.example")).unwrap();
         assert!(format!("{unset:?}").contains("post_api_key: None"));
     }
 
     fn buffered() -> LogShipper {
-        LogShipper::new(config("api", "http://logs.example")).unwrap()
+        LogShipper::new(config("api", "https://logs.example")).unwrap()
     }
 
     fn actions_of(events: &[LogEvent]) -> Vec<&str> {
@@ -519,7 +574,7 @@ mod tests {
 
     #[test]
     fn record_masks_every_pattern_match_in_context_and_info_values() {
-        let mut config = config("api", "http://logs.example");
+        let mut config = config("api", "https://logs.example");
         config.mask_patterns = vec![
             r"password=\S+".to_string(),
             r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
@@ -557,7 +612,7 @@ mod tests {
 
     #[test]
     fn default_patterns_mask_the_value_of_a_name_value_pair() {
-        let shipper = LogShipper::new(config("api", "http://logs.example")).unwrap();
+        let shipper = LogShipper::new(config("api", "https://logs.example")).unwrap();
         let mut event = event("GET /", LogLevel::Info);
         event.context.insert(
             "request_url".to_string(),
@@ -570,7 +625,7 @@ mod tests {
 
     #[test]
     fn record_masks_the_value_of_a_matching_info_key() {
-        let mut config = config("api", "http://logs.example");
+        let mut config = config("api", "https://logs.example");
         config.mask_patterns = vec![r"(?i)^(password|token)$".to_string()];
         let shipper = LogShipper::new(config).unwrap();
         let mut event = event("login", LogLevel::Info);
@@ -601,7 +656,7 @@ mod tests {
     #[test]
     fn record_without_mask_patterns_keeps_the_text() {
         let mut config = ShipperConfig::new("api");
-        config.endpoint = Some("http://logs.example".to_string());
+        config.endpoint = Some("https://logs.example".to_string());
         config.mask_patterns = Vec::new();
         let shipper = LogShipper::new(config).unwrap();
         let mut event = event("password=hunter2", LogLevel::Info);
@@ -623,7 +678,7 @@ mod tests {
 
     #[test]
     fn capacity_drops_the_oldest_event() {
-        let mut config = config("api", "http://logs.example");
+        let mut config = config("api", "https://logs.example");
         config.capacity = 2;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("a", LogLevel::Info));
@@ -659,7 +714,7 @@ mod tests {
 
     #[test]
     fn record_inserts_one_capacity_warning_at_80_percent() {
-        let mut config = config("api", "http://logs.example");
+        let mut config = config("api", "https://logs.example");
         config.capacity = 5;
         let shipper = LogShipper::new(config).unwrap();
         let mut oldest = event("first", LogLevel::Error);
@@ -722,7 +777,7 @@ mod tests {
 
     #[test]
     fn record_drops_the_oldest_event_to_store_the_capacity_warning() {
-        let mut config = config("api", "http://logs.example");
+        let mut config = config("api", "https://logs.example");
         config.capacity = 4;
         let shipper = LogShipper::new(config).unwrap();
         for action in ["a", "b", "c"] {
@@ -746,7 +801,7 @@ mod tests {
 
     #[test]
     fn record_at_capacity_one_stores_only_the_capacity_warning() {
-        let mut config = config("api", "http://logs.example");
+        let mut config = config("api", "https://logs.example");
         config.capacity = 1;
         let shipper = LogShipper::new(config).unwrap();
         shipper.record(event("GET /", LogLevel::Info));
@@ -771,10 +826,10 @@ mod tests {
 
     #[test]
     fn batch_url_uses_the_app_path() {
-        let shipper = LogShipper::new(config("my-app", "http://logs.example/ingest/")).unwrap();
+        let shipper = LogShipper::new(config("my-app", "https://logs.example/ingest/")).unwrap();
         assert_eq!(
             shipper.batch_url(shipper.inner.endpoint.as_deref().unwrap()),
-            "http://logs.example/ingest/log/my-app"
+            "https://logs.example/ingest/log/my-app"
         );
     }
 

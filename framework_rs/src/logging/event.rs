@@ -6,6 +6,9 @@ use serde_json::{Map, Number, Value};
 
 use crate::time::hkt_now;
 
+const CLIENT_ACTION_MAX_CHARS: usize = 128;
+const CLIENT_INFO_MAX_KEYS: usize = 32;
+const CLIENT_INFO_VALUE_MAX_BYTES: usize = 2048;
 const CLIENT_TS_MAX_AGE_HOURS: i64 = 24;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,7 +140,7 @@ impl LogEvent {
         LogEvent {
             ts: client_ts(self.ts, now),
             id: String::new(),
-            action: self.action.clone(),
+            action: client_action(&self.action),
             latency_ms: None,
             level: self.level,
             context: BTreeMap::new(),
@@ -153,9 +156,21 @@ fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<
     ts.with_timezone(now.offset())
 }
 
+// The action is shown in log lines, so a client cannot choose a line break or a long text.
+fn client_action(action: &str) -> String {
+    action
+        .chars()
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
+        .take(CLIENT_ACTION_MAX_CHARS)
+        .collect()
+}
+
 fn client_info(info: &Map<String, Value>) -> Map<String, Value> {
     let mut kept = Map::new();
     for (key, value) in info {
+        if kept.len() >= CLIENT_INFO_MAX_KEYS {
+            break;
+        }
         if !info_key_ok(key) {
             continue;
         }
@@ -181,7 +196,7 @@ fn info_value(value: &Value) -> Option<String> {
         Value::Bool(flag) => flag.to_string(),
         _ => return None,
     };
-    if text.contains('\r') || text.contains('\n') {
+    if text.len() > CLIENT_INFO_VALUE_MAX_BYTES || text.contains('\r') || text.contains('\n') {
         return None;
     }
     Some(text)
@@ -192,6 +207,22 @@ mod tests {
     use super::*;
     use crate::logging::event;
     use serde_json::json;
+
+    #[test]
+    fn client_action_and_info_are_bounded() {
+        let batch_event = |action: &str, info: Value| -> LogEvent {
+            let mut client = event(action, LogLevel::Info);
+            client.info = info.as_object().cloned().unwrap_or_default();
+            client.new()
+        };
+        let forged = batch_event("a\nINFO forged\r", json!({}));
+        assert!(!forged.action().contains(['\n', '\r']));
+        assert_eq!(batch_event(&"x".repeat(500), json!({})).action().len(), 128);
+        let long = "y".repeat(2049);
+        assert!(batch_event("a", json!({ "k": long })).info().is_empty());
+        let many: Map<String, Value> = (0..100).map(|n| (format!("k{n}"), json!("v"))).collect();
+        assert_eq!(batch_event("a", Value::Object(many)).info().len(), 32);
+    }
 
     #[test]
     fn level_text_matches_the_json_text_and_parses_back() {

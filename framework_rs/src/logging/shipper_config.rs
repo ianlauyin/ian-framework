@@ -4,7 +4,15 @@ use std::time::Duration;
 const DEFAULT_CAPACITY: usize = 10_000;
 const DEFAULT_SHIP_EVERY: Duration = Duration::from_secs(5);
 // log_request records the query and the JSON body, so a credential field must not reach a log.
-const DEFAULT_MASK_PATTERNS: [&str; 3] = [r"(?i)password", r"(?i)secret", r"(?i)token"];
+const DEFAULT_MASK_PATTERNS: [&str; 7] = [
+    r"(?i)password",
+    r"(?i)passwd",
+    r"(?i)secret",
+    r"(?i)token",
+    r"(?i)authorization",
+    r"(?i)api[_-]?key",
+    r"(?i)cookie",
+];
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct ShipperConfig {
@@ -59,7 +67,15 @@ mod tests {
         assert_eq!(DEFAULT_CAPACITY, 10_000);
         assert_eq!(
             config.mask_patterns,
-            [r"(?i)password", r"(?i)secret", r"(?i)token"]
+            [
+                r"(?i)password",
+                r"(?i)passwd",
+                r"(?i)secret",
+                r"(?i)token",
+                r"(?i)authorization",
+                r"(?i)api[_-]?key",
+                r"(?i)cookie"
+            ]
         );
         assert_eq!(config.ship_every, Duration::from_secs(5));
     }

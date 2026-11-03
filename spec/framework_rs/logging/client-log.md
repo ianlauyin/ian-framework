@@ -22,12 +22,14 @@ The function sets the fields of the result as follows:
 | `latency_ms` | null. The client value is not kept. |
 | `ts` | The client value in HKT, when it is not later than `ian_framework::time::hkt_now()` and is not more than 24 hours before it. In all other cases, the current HKT time from `hkt_now()`. |
 | `level` | The client value. |
-| `action` | The client value. |
+| `action` | The client value, with each control character changed to a space, and cut to 128 characters. |
 | `context` | Empty object. The client value is not kept. |
 | `info` | The client keys and values that obey the `info` rules below. |
 
 The function reads each `info` key:
 
+- The function stores at most 32 keys. It ignores the keys after the 32nd stored key.
+- The function does not store a value that is longer than 2048 bytes.
 - The function does not store an empty key.
 - The function stores a key only when each character is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.
 - The function stores a value only when it is a string, a number, or a `bool`.

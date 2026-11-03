@@ -182,7 +182,7 @@ mod tests {
 
     fn shipper() -> LogShipper {
         let mut config = ShipperConfig::new("api");
-        config.endpoint = Some("http://logs.example".to_string());
+        config.endpoint = Some("https://logs.example".to_string());
         LogShipper::new(config).unwrap()
     }
 
@@ -341,7 +341,7 @@ mod tests {
     #[tokio::test]
     async fn middleware_masks_request_url_and_body_fields() {
         let mut config = ShipperConfig::new("api");
-        config.endpoint = Some("http://logs.example".to_string());
+        config.endpoint = Some("https://logs.example".to_string());
         config.mask_patterns = vec![r"password".to_string(), r"token=[^&]+".to_string()];
         let shipper = LogShipper::new(config).unwrap();
         let body = json!({"user": "alice", "password": "hunter2"}).to_string();

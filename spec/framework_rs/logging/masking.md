@@ -8,7 +8,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 - The syntax is the `regex` crate syntax.
 - For a case-insensitive match, start the pattern with `(?i)`.
-- The default patterns are `(?i)password`, `(?i)secret`, and `(?i)token`.
+- The default patterns are `(?i)password`, `(?i)passwd`, `(?i)secret`, `(?i)token`, `(?i)authorization`, `(?i)api[_-]?key` and `(?i)cookie`.
 - The middleware logs the request URL with its query and the JSON body. The default patterns keep credential fields out of a log.
 - A project adds its own patterns to the list.
 - A project that sets a new list drops the default patterns.
@@ -31,6 +31,7 @@ Key rule:
 Value rule:
 
 - When the key does not match, the shipper first masks each `name=value` pair in a string value. The name of the pair has a match of a pattern. The shipper replaces the full pair with `***`. The value of the pair ends at `&`, `;` or whitespace.
+- The shipper also masks each JSON pair `"name": value` in a string value, where the name has a match of a pattern and the value is a string, a number or a word. The shipper replaces the full pair with `***`.
 - Then the shipper replaces each match of each pattern in the string value with `***`.
 - The patterns apply in list order.
 - The value rule also applies to a string in a nested array or a nested object of `info`.

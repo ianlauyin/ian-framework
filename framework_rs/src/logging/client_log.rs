@@ -59,7 +59,7 @@ mod tests {
 
     fn shipper() -> LogShipper {
         let mut config = ShipperConfig::new("web");
-        config.endpoint = Some("http://logs.example".to_string());
+        config.endpoint = Some("https://logs.example".to_string());
         LogShipper::new(config).unwrap()
     }
 
