@@ -11,10 +11,12 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 | Type | Meaning |
 | --- | --- |
 | `PathMatch` | How a rule matches the request path. |
-| `ApiKeyRule` | One path match, an optional list of methods, and one key. |
+| `ApiKeyRule` | One path match, an optional list of methods, and one key. A public rule has no key. |
 | `ApiKeyRules` | The ordered list of rules. `ApiKeyRules::new(rules)` makes it. A clone shares the rules. |
 
-`ApiKeyRule::new(path, key)` makes a rule that matches each method. `ApiKeyRule::methods(methods)` limits the rule to the given methods.
+`ApiKeyRule::new(path, key)` makes a rule that matches each method. `ApiKeyRule::methods(methods)` limits the rule to the given methods. `ApiKeyRule::public(path)` makes a rule that matches each method and needs no key.
+
+`ApiKeyRules::deny_unmatched()` makes the rules refuse a request that no rule matches. Without it, such a request passes.
 
 `PathMatch` has these variants:
 
@@ -28,7 +30,9 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 For each request, the middleware finds the first rule that matches the method and the path.
 
-- When no rule matches, the middleware passes the request to the next handler.
+- The match uses the path without one trailing `/`. Thus the path `/log/` matches the rules of the path `/log`. The path `/` is not changed.
+- When no rule matches, the middleware passes the request to the next handler. When the rules have `deny_unmatched`, the middleware sends the 401 response instead.
+- When a public rule matches, the middleware passes the request to the next handler with no key.
 - When a rule matches, the request needs the header `Authorization: Bearer <key>`. The check uses `bearer_token` and `key_matches`.
 - When the check passes, the middleware passes the request to the next handler.
 - When the check fails, the middleware does not call the next handler. The response is an `ApiError` with status 401, the error code `unauthorized`, and the message `unauthorized`.

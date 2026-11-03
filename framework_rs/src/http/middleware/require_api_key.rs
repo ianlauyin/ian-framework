@@ -20,18 +20,31 @@ pub enum PathMatch {
 pub struct ApiKeyRule {
     path: PathMatch,
     methods: Option<Vec<Method>>,
-    key: String,
+    // None is a public rule: it matches a request and needs no key.
+    key: Option<String>,
 }
 
 #[derive(Clone)]
-pub struct ApiKeyRules(Arc<Vec<ApiKeyRule>>);
+pub struct ApiKeyRules {
+    rules: Arc<Vec<ApiKeyRule>>,
+    deny_unmatched: bool,
+}
 
 impl ApiKeyRule {
     pub fn new(path: PathMatch, key: impl Into<String>) -> Self {
         Self {
             path,
             methods: None,
-            key: key.into(),
+            key: Some(key.into()),
+        }
+    }
+
+    // A rule that lets a matching request pass with no key. Use it for a public path when the rules deny unmatched requests.
+    pub fn public(path: PathMatch) -> Self {
+        Self {
+            path,
+            methods: None,
+            key: None,
         }
     }
 
@@ -41,6 +54,11 @@ impl ApiKeyRule {
     }
 
     fn applies(&self, method: &Method, path: &str) -> bool {
+        // A path with one trailing slash is the same as the path without it, so `/log/` cannot skip a rule for `/log`.
+        let path = match path.strip_suffix('/') {
+            Some(trimmed) if !trimmed.is_empty() => trimmed,
+            _ => path,
+        };
         if let Some(methods) = &self.methods {
             if !methods.contains(method) {
                 return false;
@@ -64,7 +82,16 @@ impl ApiKeyRule {
 
 impl ApiKeyRules {
     pub fn new(rules: Vec<ApiKeyRule>) -> Self {
-        Self(Arc::new(rules))
+        Self {
+            rules: Arc::new(rules),
+            deny_unmatched: false,
+        }
+    }
+
+    // A request that no rule matches gets the 401 response. Without this, it passes.
+    pub fn deny_unmatched(mut self) -> Self {
+        self.deny_unmatched = true;
+        self
     }
 }
 
@@ -80,7 +107,10 @@ impl fmt::Debug for ApiKeyRule {
 
 impl fmt::Debug for ApiKeyRules {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ApiKeyRules").field(&self.0).finish()
+        f.debug_struct("ApiKeyRules")
+            .field("rules", &self.rules)
+            .field("deny_unmatched", &self.deny_unmatched)
+            .finish()
     }
 }
 
@@ -91,11 +121,16 @@ pub async fn require_api_key(
 ) -> Response {
     let method = request.method();
     let path = request.uri().path();
-    let Some(rule) = rules.0.iter().find(|rule| rule.applies(method, path)) else {
-        return next.run(request).await;
+    let rule = rules.rules.iter().find(|rule| rule.applies(method, path));
+    let allowed = match rule {
+        None => !rules.deny_unmatched,
+        Some(rule) => match &rule.key {
+            None => true,
+            Some(key) => {
+                bearer_token(request.headers()).is_some_and(|token| key_matches(token, key))
+            }
+        },
     };
-    let allowed =
-        bearer_token(request.headers()).is_some_and(|token| key_matches(token, &rule.key));
     if !allowed {
         tracing::warn!(method = %method, "rejected request without a valid api key");
         return ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized")
@@ -205,8 +240,42 @@ mod tests {
             status(Method::GET, "/log/my-app/extra", None).await,
             no_content
         );
-        assert_eq!(status(Method::GET, "/log/", None).await, no_content);
         assert_eq!(status(Method::DELETE, "/log", None).await, no_content);
+    }
+
+    #[tokio::test]
+    async fn a_trailing_slash_does_not_skip_a_rule() {
+        let rejected = StatusCode::UNAUTHORIZED;
+        assert_eq!(status(Method::GET, "/log/", None).await, rejected);
+        assert_eq!(status(Method::POST, "/ops/", None).await, rejected);
+        assert_eq!(
+            status(Method::GET, "/log/", Some(READ_KEY)).await,
+            StatusCode::NO_CONTENT
+        );
+    }
+
+    #[tokio::test]
+    async fn deny_unmatched_refuses_a_path_without_a_rule_except_a_public_one() {
+        let rules = ApiKeyRules::new(vec![
+            ApiKeyRule::public(PathMatch::Exact("/health".into())),
+            ApiKeyRule::new(PathMatch::Tree("/ops".into()), OPS_KEY),
+        ])
+        .deny_unmatched();
+        let router = Router::new()
+            .fallback(any(|| async { StatusCode::NO_CONTENT }))
+            .layer(from_fn_with_state(rules, require_api_key));
+        let get = |path: &str| {
+            Request::builder()
+                .uri(path.to_string())
+                .body(Body::empty())
+                .unwrap()
+        };
+        let health = router.clone().oneshot(get("/health")).await.unwrap();
+        assert_eq!(health.status(), StatusCode::NO_CONTENT);
+        let other = router.clone().oneshot(get("/other")).await.unwrap();
+        assert_eq!(other.status(), StatusCode::UNAUTHORIZED);
+        let ops = router.oneshot(get("/ops/x")).await.unwrap();
+        assert_eq!(ops.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]
