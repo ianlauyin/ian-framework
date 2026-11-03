@@ -90,6 +90,18 @@ One `GcsClient` has one HTTP client. The storage calls, the resumable upload, th
 - The HTTP client uses the shared settings in `spec/framework_rs/gcp/context.md`. Thus the connect time limit is 10 seconds, and the client does not follow redirects.
 - The client uses a redirect response as the final response.
 - On Linux, the client also sets `TCP_USER_TIMEOUT`. The rule is in `spec/framework_rs/gcs/upload.md`.
+- On each platform, the client also sets a read time limit. The rule is in `spec/framework_rs/gcs/upload.md`.
+
+## Call retry
+
+`GcsClient` makes each storage call, token-bound call and `signBlob` call through one send function. The send function retries a failed call.
+
+- A call has at most 4 attempts.
+- The send function retries a transport failure and a response with status 408, 429, 500, 502, 503 or 504.
+- The wait before a retry is 250 milliseconds times the number of attempts made. The first wait is 250 milliseconds.
+- A retry writes the same operations log record as the first failure.
+- The resumable chunk request and the session probe make one attempt in the send function. They have their own retry loop in `spec/framework_rs/gcs/upload.md`.
+- The retry for a 401 response is separate. It does not count as an attempt.
 
 ## Error kind
 

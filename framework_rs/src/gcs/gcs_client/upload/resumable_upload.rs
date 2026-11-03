@@ -225,6 +225,7 @@ impl<'a> ResumableUpload<'a> {
                 bytes: Some(chunk.to_vec()),
                 extra_status: &[308],
                 timeout: Some(TRANSFER_TIMEOUT),
+                no_retry: true,
                 ..Default::default()
             })
             .await?;
@@ -247,6 +248,7 @@ impl<'a> ResumableUpload<'a> {
                 bytes: Some(Vec::new()),
                 extra_status: &[308],
                 timeout: Some(TRANSFER_TIMEOUT),
+                no_retry: true,
                 ..Default::default()
             })
             .await?;

@@ -26,6 +26,12 @@ pub use object::{ListPage, ListQuery, ObjectMeta, ObjectReader};
 pub use upload::{PutBody, PutOptions, PutRequest};
 
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
+const SEND_ATTEMPTS: u32 = 4;
+const SEND_BACKOFF: Duration = Duration::from_millis(250);
+// The most rewrite calls for one object. A rewrite that needs more is a fault.
+const MAX_REWRITE_STEPS: u32 = 10_000;
+// GCS refuses a longer object name.
+const MAX_OBJECT_NAME_BYTES: usize = 1024;
 
 #[derive(Clone)]
 pub struct GcsClient {
@@ -123,7 +129,7 @@ impl GcsClient {
         validate_object_name(from)?;
         validate_object_name(to)?;
         let mut token: Option<String> = None;
-        loop {
+        for _ in 0..MAX_REWRITE_STEPS {
             let response = self
                 .send(&Call {
                     method: reqwest::Method::POST,
@@ -151,6 +157,10 @@ impl GcsClient {
             }
             token = Some(next);
         }
+        Err(GcsError::new(
+            GcsErrorKind::Api,
+            "rewrite did not finish within the step limit",
+        ))
     }
 
     pub async fn patch_metadata(
@@ -283,6 +293,7 @@ impl GcsClient {
 
     async fn send(&self, call: &Call) -> Result<reqwest::Response, GcsError> {
         let mut retried = false;
+        let mut attempts = 0u32;
         loop {
             let token = self.access_token().await?;
             let mut request = self.inner.http.request(call.method.clone(), &call.url);
@@ -312,6 +323,11 @@ impl GcsClient {
                         latency_ms: Some(millis_since(started)),
                         extra: &[("error", &error_text)],
                     });
+                    if may_retry(call, attempts) {
+                        attempts += 1;
+                        tokio::time::sleep(SEND_BACKOFF * attempts).await;
+                        continue;
+                    }
                     return Err(GcsError::with_source(
                         GcsErrorKind::Transport,
                         "gcs request failed",
@@ -349,6 +365,12 @@ impl GcsClient {
             }
             if response.status().is_success() || call.extra_status.contains(&status) {
                 return Ok(response);
+            }
+            if is_retryable_status(status) && may_retry(call, attempts) {
+                attempts += 1;
+                let _ = response.bytes().await;
+                tokio::time::sleep(SEND_BACKOFF * attempts).await;
+                continue;
             }
             return Err(GcsError::from_response(response).await);
         }
@@ -418,11 +440,24 @@ fn lock_ops(
     slot.lock().unwrap_or_else(|err| err.into_inner())
 }
 
+fn may_retry(call: &Call, attempts: u32) -> bool {
+    !call.no_retry && attempts + 1 < SEND_ATTEMPTS
+}
+
+fn is_retryable_status(status: u16) -> bool {
+    matches!(status, 408 | 429 | 500 | 502 | 503 | 504)
+}
+
 fn validate_object_name(name: &str) -> Result<(), GcsError> {
-    if name.is_empty() || name.contains(['\r', '\n']) {
+    if name.is_empty()
+        || name.len() > MAX_OBJECT_NAME_BYTES
+        || name == "."
+        || name == ".."
+        || name.contains(['\r', '\n'])
+    {
         return Err(GcsError::new(
             GcsErrorKind::Config,
-            "object name is empty or contains a line break",
+            "object name is empty, too long, `.`, `..` or contains a line break",
         ));
     }
     Ok(())
@@ -462,7 +497,8 @@ fn validate_bucket(bucket_name: &str) -> Result<(), GcsError> {
 }
 
 fn http_client() -> Result<reqwest::Client, GcsError> {
-    let builder = http_client_builder();
+    // A stalled read ends the call on every platform, and a long download is not cut.
+    let builder = http_client_builder().read_timeout(TRANSFER_TIMEOUT);
     #[cfg(target_os = "linux")]
     let builder = builder.tcp_user_timeout(TRANSFER_TIMEOUT);
     builder.build().map_err(|err| {
@@ -491,6 +527,35 @@ mod tests {
 
     use super::*;
     use crate::logging::tests::buffered_events;
+
+    #[test]
+    fn object_names_are_checked() {
+        assert!(validate_object_name("a/b.txt").is_ok());
+        assert!(validate_object_name(&"a".repeat(MAX_OBJECT_NAME_BYTES)).is_ok());
+        for bad in ["", ".", "..", "a\nb"] {
+            assert!(validate_object_name(bad).is_err());
+        }
+        assert!(validate_object_name(&"a".repeat(MAX_OBJECT_NAME_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn send_retries_only_a_transient_status_and_stops_at_the_limit() {
+        for status in [408_u16, 429, 500, 502, 503, 504] {
+            assert!(is_retryable_status(status));
+        }
+        for status in [200_u16, 400, 401, 403, 404, 412] {
+            assert!(!is_retryable_status(status));
+        }
+        let call = Call::default();
+        assert!(may_retry(&call, 0));
+        assert!(may_retry(&call, SEND_ATTEMPTS - 2));
+        assert!(!may_retry(&call, SEND_ATTEMPTS - 1));
+        let own_loop = Call {
+            no_retry: true,
+            ..Call::default()
+        };
+        assert!(!may_retry(&own_loop, 0));
+    }
 
     #[test]
     fn object_url_encodes_slashes() {

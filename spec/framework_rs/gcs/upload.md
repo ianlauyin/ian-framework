@@ -28,6 +28,7 @@ The put options include a metadata map.
 The transfer time limit is 180 seconds. These items use it:
 
 - The Linux HTTP client sets `TCP_USER_TIMEOUT` to the transfer time limit.
+- The HTTP client on each platform sets the read time limit of a response to the transfer time limit. A stalled read ends the call. A long transfer that keeps data flowing does not end.
 - Each resumable chunk request.
 - Each session probe.
 

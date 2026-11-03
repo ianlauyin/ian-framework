@@ -9,4 +9,6 @@ pub(crate) struct Call {
     pub(crate) bytes: Option<Vec<u8>>,
     pub(crate) extra_status: &'static [u16],
     pub(crate) timeout: Option<Duration>,
+    // The caller has its own retry loop, so `send` makes one attempt.
+    pub(crate) no_retry: bool,
 }

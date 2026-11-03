@@ -38,6 +38,7 @@ A list page also has `prefixes` and `next_page_token`.
 
 - It sends `rewriteToken` again until `done` is true.
 - If `rewriteToken` does not change, it returns an error.
+- After 10 000 calls without `done`, it returns an `Api` error.
 
 `GcsClient::move_object` rewrites the source to the destination. Then it deletes the source.
 
@@ -51,6 +52,7 @@ A failed delete does not prove that the source still exists. If that delete fail
 
 - Each of these errors has the kind of the source delete error.
 - A source and a destination with the same name is a configuration error.
+- An object name that is empty, is longer than 1024 bytes, is `.` or `..`, or has a line break is a `Config` error. The check occurs before the request.
 
 ## Missing objects
 
