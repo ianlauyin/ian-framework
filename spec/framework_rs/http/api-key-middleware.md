@@ -36,6 +36,7 @@ For each request, the middleware finds the first rule that matches the method an
 - When a rule matches, the request needs the header `Authorization: Bearer <key>`. The check uses `bearer_token` and `key_matches`.
 - When the check passes, the middleware passes the request to the next handler.
 - When the check fails, the middleware does not call the next handler. The response is an `ApiError` with status 401, the error code `unauthorized`, and the message `unauthorized`.
+- Before the 401 response, the middleware calls `Logger::warn` with the action `HTTP/apiKeyRejected` and the context key `method`. The logger rules are in `spec/framework_rs/logging/logger.md`.
 
 The 401 response body is:
 

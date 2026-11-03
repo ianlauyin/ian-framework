@@ -36,7 +36,7 @@ The CPU monitor checks the CPU usage of a Linux host on an interval. When the us
 - The monitor takes the first sample when the task starts. It takes the next samples on each interval.
 - The usage is the part of the total CPU time that is not idle time between two samples. Idle time is `idle` plus `iowait`.
 - When the total time does not change, or a counter goes down, the monitor skips that interval.
-- When the first sample cannot be read, the monitor writes one `tracing` warn event and the task ends. This is the case on a host that is not Linux.
+- When the first sample cannot be read, the monitor calls `Logger::error` one time with the action `CPU/cannotReadStat` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`. This is the case on a host that is not Linux.
 - When a later sample cannot be read, the monitor skips that interval.
 
 ## Event

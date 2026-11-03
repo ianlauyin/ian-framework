@@ -37,7 +37,7 @@ The disk monitor checks the storage usage of one path on a Unix host on an inter
 - The usage is the same as `df`: used blocks divided by used blocks plus the blocks that a normal user can use.
 - The monitor reads the first sample when the task starts and checks it at once. It takes the next samples on each interval.
 - When the file system has no blocks, the monitor skips that interval.
-- When the first sample cannot be read, the monitor writes one `tracing` warn event and the task ends. This is the case on a host that is not Unix, or when `path` does not exist.
+- When the first sample cannot be read, the monitor calls `Logger::warn` one time with the action `DISK/cannotReadUsage` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`. This is the case on a host that is not Unix, or when `path` does not exist.
 - When a later sample cannot be read, the monitor skips that interval.
 
 ## Event

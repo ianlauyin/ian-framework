@@ -31,24 +31,21 @@ General rules:
 
 | Key | Value |
 | --- | --- |
-| `ip` | The first source that is not empty. The sources are below. |
+| `ip` | The header `cf-connecting-ip`, when it holds an IP address. The rules are below. |
 | `user_agent` | The header `user-agent`. A missing header gives an empty string. |
 | `request_url` | The request path with the query string, as the request line gives it. An empty path is `/`. |
 
-The `ip` sources are in this order:
+Cloudflare sets the header `cf-connecting-ip` to the real client IP. It is the only source of `ip`.
 
-0. The `ClientIp` in the request extensions, when `set_client_ip` put one there. The rules are in `spec/framework_rs/http/client-ip.md`. When `ClientIp` is there, the sources below are not used.
-1. The header `cf-connecting-ip`. Cloudflare sets it to the real client IP.
-2. The first item in the header `x-forwarded-for`.
-3. The header `x-real-ip`.
-4. The host of `ConnectInfo<SocketAddr>`.
+- The framework supports only one deployment: Cloudflare in front of a reverse proxy, and the reverse proxy in front of the process.
+- The middleware does not read `x-forwarded-for`, `x-real-ip` or the socket address.
+- The project must make the process reachable only through Cloudflare. A firewall that allows only the Cloudflare IP ranges does this. A client that reaches the process directly can send any `cf-connecting-ip`.
 
 Header rules:
 
 - The middleware removes spaces at the start and at the end of a header value.
-- A header value that is not an IP address is skipped, and the next source is used.
-- The host does not include the port.
-- A request with no source gets an empty `ip`.
+- A header value that is not an IP address gives an empty `ip`.
+- A request without the header gets an empty `ip`.
 - The middleware skips a header value that is not text.
 
 Level rules:

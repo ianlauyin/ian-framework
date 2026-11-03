@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 
 use crate::http::headers::{bearer_token, key_matches};
 use crate::http::ApiError;
+use crate::logging::{LogValue, Logger};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathMatch {
@@ -114,7 +116,10 @@ pub async fn require_api_key(
         },
     };
     if !allowed {
-        tracing::warn!(method = %method, "rejected request without a valid api key");
+        Logger::warn(
+            "HTTP/apiKeyRejected",
+            BTreeMap::from([("method".to_string(), LogValue::from(method.as_str()))]),
+        );
         return ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized")
             .into_response();
     }

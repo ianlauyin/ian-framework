@@ -5,7 +5,7 @@ use axum::middleware::from_fn;
 use axum::routing::post;
 use axum::Router;
 
-use crate::http::middleware::{request_ip, require_same_origin, user_agent};
+use crate::http::middleware::{client_ip, require_same_origin, user_agent};
 
 use super::{LogBatch, LogShipper};
 
@@ -22,7 +22,7 @@ pub fn client_log_router(shipper: LogShipper) -> Router {
 }
 
 async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusCode {
-    let ip = request_ip(&request);
+    let ip = client_ip(&request);
     let user_agent = user_agent(request.headers());
     let Ok(body) = to_bytes(request.into_body(), BODY_LIMIT).await else {
         return StatusCode::PAYLOAD_TOO_LARGE;
@@ -47,14 +47,11 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
 mod tests {
     use super::*;
     use crate::http::middleware::log_request;
-    use crate::http::middleware::{set_client_ip, ClientIpSource};
     use crate::logging::tests::buffered_events;
     use crate::logging::{LogLevel, ShipperConfig};
     use axum::body::Body;
-    use axum::extract::ConnectInfo;
     use axum::middleware::from_fn_with_state;
     use serde_json::json;
-    use std::net::SocketAddr;
     use tower::ServiceExt;
 
     fn shipper() -> LogShipper {
@@ -97,7 +94,7 @@ mod tests {
         let shipper = shipper();
         let headers = [
             ("sec-fetch-site", "same-origin"),
-            ("x-real-ip", "203.0.113.8"),
+            ("cf-connecting-ip", "203.0.113.8"),
             ("user-agent", "demo-agent"),
         ];
         let status = send(&shipper, &headers, batch_body(&["boom", "again"])).await;
@@ -115,21 +112,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn uses_the_ip_that_set_client_ip_gives() {
+    async fn ignores_every_ip_source_but_cloudflare() {
         let shipper = shipper();
-        let router = client_log_router(shipper.clone())
-            .layer(from_fn_with_state(ClientIpSource::Socket, set_client_ip));
-        let request = Request::builder()
-            .method("POST")
-            .uri("/log")
-            .header("sec-fetch-site", "same-origin")
-            .header("x-real-ip", "203.0.113.8")
-            .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
-            .body(batch_body(&["boom"]))
-            .unwrap();
-        let status = router.oneshot(request).await.unwrap().status();
+        let headers = [
+            ("sec-fetch-site", "same-origin"),
+            ("x-forwarded-for", "203.0.113.8"),
+            ("x-real-ip", "203.0.113.9"),
+        ];
+        let status = send(&shipper, &headers, batch_body(&["boom"])).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
-        assert_eq!(buffered_events(&shipper)[0].context["ip"], "192.0.2.10");
+        assert_eq!(buffered_events(&shipper)[0].context["ip"], "");
     }
 
     #[tokio::test]

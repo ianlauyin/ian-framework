@@ -8,7 +8,7 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
-use crate::http::middleware::set_client_ip::request_ip;
+use crate::http::middleware::client_ip;
 use crate::http::ApiError;
 
 const PRUNE_AT: usize = 10_000;
@@ -80,7 +80,7 @@ pub async fn rate_limit(
     request: Request,
     next: Next,
 ) -> Response {
-    let key = limit_key(&request_ip(&request));
+    let key = limit_key(&client_ip(&request));
     match limiter.check(&key, Instant::now()) {
         Ok(()) => next.run(request).await,
         Err(wait) => {
@@ -238,7 +238,7 @@ mod tests {
     async fn send(router: &Router, forwarded: &str) -> Response {
         let request = Request::builder()
             .uri("/")
-            .header("x-forwarded-for", forwarded)
+            .header("cf-connecting-ip", forwarded)
             .body(Body::empty())
             .unwrap();
         router.clone().oneshot(request).await.unwrap()

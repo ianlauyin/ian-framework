@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::pin::Pin;
@@ -10,6 +11,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::http::ApiError;
+use crate::logging::{LogValue, Logger};
 
 struct CatchUnwind<F>(Pin<Box<F>>);
 
@@ -19,7 +21,13 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
     match CatchUnwind(Box::pin(next.run(request))).await {
         Ok(response) => response,
         Err(_) => {
-            tracing::error!(method = %method, path = %path, "handler panicked");
+            Logger::error(
+                "HTTP/handlerPanicked",
+                BTreeMap::from([
+                    ("method".to_string(), LogValue::from(method.as_str())),
+                    ("path".to_string(), LogValue::from(path)),
+                ]),
+            );
             ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",

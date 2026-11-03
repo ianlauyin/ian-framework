@@ -1,6 +1,7 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
-use crate::logging::{event, LogEvent, LogLevel};
+use crate::logging::{event, LogEvent, LogLevel, LogValue, Logger};
 use crate::shutdown::ShutdownReceiver;
 
 const STAT_PATH: &str = "/proc/stat";
@@ -57,7 +58,10 @@ impl CpuMonitor {
         S: FnMut() -> Option<CpuSample>,
     {
         let Some(mut previous) = sample() else {
-            tracing::warn!("cpu monitor cannot read {STAT_PATH}, so it stops");
+            Logger::error(
+                "CPU/cannotReadStat",
+                BTreeMap::from([("path".to_string(), LogValue::from(STAT_PATH))]),
+            );
             return;
         };
         let mut ticker = tokio::time::interval(self.config.interval);

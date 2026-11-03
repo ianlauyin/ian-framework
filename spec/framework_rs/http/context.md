@@ -6,7 +6,7 @@ This document describes these items in the framework:
 - The bearer API key check.
 - The cookie header helpers.
 - The same-origin check and the same-origin middleware.
-- The client IP middleware and the rate limit middleware.
+- The rate limit middleware.
 - The security header middleware and the no-store middleware.
 - The API key middleware.
 - The request timeout, catch panic and body limit middleware.
@@ -22,7 +22,6 @@ This feature is not product business logic.
 | Bearer API key check | `spec/framework_rs/http/bearer-key.md` |
 | Cookie header helpers | `spec/framework_rs/http/cookie.md` |
 | Same-origin check and same-origin middleware | `spec/framework_rs/http/same-origin.md` |
-| Client IP middleware | `spec/framework_rs/http/client-ip.md` |
 | Rate limit middleware | `spec/framework_rs/http/rate-limit.md` |
 | Security header middleware and no-store middleware | `spec/framework_rs/http/response-headers.md` |
 | API key middleware | `spec/framework_rs/http/api-key-middleware.md` |
@@ -57,7 +56,6 @@ This feature is not product business logic.
 - `require_api_key`, `ApiKeyRule`, `ApiKeyRules` and `PathMatch`
 - `require_same_origin`
 - `security_headers`
-- `set_client_ip`, `ClientIp` and `ClientIpSource`
 - `slide_session`, only with the Cargo feature `auth`
 
 `ian_framework::http::headers` exports only these items:

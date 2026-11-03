@@ -16,7 +16,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 ## Algorithm
 
 - The limiter is a token bucket for each key.
-- The key is the client IP. The middleware reads `ClientIp` from the request extensions. When there is no `ClientIp`, it uses the `Headers` rules of `spec/framework_rs/http/client-ip.md`.
+- The key is the client IP. The middleware reads it with the `ip` rules of `spec/framework_rs/logging/middleware.md`. Only the header `cf-connecting-ip` gives the IP.
 - When the client IP is an IPv6 address, the key is its first 64 bits (the /64 network), because one client can own a whole /64 network. An IPv4 address is the key as it is.
 - A request with an empty IP shares one bucket with all other requests that have an empty IP.
 - A new bucket is full. Its tokens are `capacity`.
@@ -42,4 +42,3 @@ Usage rules:
 - The middleware counts every request, also a request that a later middleware rejects. Thus a request with a wrong password or a wrong API key uses a token.
 - To use a stricter limit on one route, add a second `RateLimiter` to that route only.
 - Put `rate_limit` outside `require_api_key`.
-- Put `rate_limit` inside `set_client_ip`.

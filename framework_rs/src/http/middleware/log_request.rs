@@ -1,14 +1,13 @@
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::time::Instant;
 
 use axum::body::{to_bytes, Body};
-use axum::extract::{ConnectInfo, Request, State};
+use axum::extract::{Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value};
 
-use crate::http::middleware::set_client_ip::request_ip;
 use crate::logging::{event, LogLevel, LogShipper};
 
 const BODY_LOG_LIMIT: usize = 64 * 1024;
@@ -20,7 +19,7 @@ pub async fn log_request(
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
-    let ip = request_ip(&request);
+    let ip = client_ip(&request);
     let user_agent = user_agent(request.headers());
     let request_url = request
         .uri()
@@ -97,31 +96,10 @@ fn request_path(path: &str) -> String {
 }
 
 pub(crate) fn client_ip(request: &Request) -> String {
-    if let Some(ip) = header_text(request.headers(), "cf-connecting-ip").filter(|ip| is_ip(ip)) {
-        return ip;
-    }
-    if let Some(ip) = first_forwarded_ip(request.headers()) {
-        return ip;
-    }
-    if let Some(ip) = header_text(request.headers(), "x-real-ip").filter(|ip| is_ip(ip)) {
-        return ip;
-    }
-    request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(addr)| addr.ip().to_string())
+    header_text(request.headers(), "cf-connecting-ip")
+        .and_then(|value| value.parse::<IpAddr>().ok())
+        .map(|ip| ip.to_string())
         .unwrap_or_default()
-}
-
-fn first_forwarded_ip(headers: &HeaderMap) -> Option<String> {
-    let value = header_text(headers, "x-forwarded-for")?;
-    let first = value.split(',').next()?.trim();
-    is_ip(first).then(|| first.to_string())
-}
-
-// A header value that is not an IP could be any text that a client chooses, so the next source is used.
-fn is_ip(value: &str) -> bool {
-    value.parse::<std::net::IpAddr>().is_ok()
 }
 
 pub(crate) fn user_agent(headers: &HeaderMap) -> String {
@@ -157,23 +135,25 @@ mod tests {
     use crate::logging::tests::buffered_events;
     use crate::logging::{LogShipper, ShipperConfig};
     use axum::body::Body;
-    use axum::extract::Path;
+    use axum::extract::{ConnectInfo, Path};
     use axum::http::{Request, StatusCode};
     use axum::middleware::from_fn_with_state;
     use axum::routing::{get, post};
     use axum::Router;
     use serde_json::json;
+    use std::net::SocketAddr;
 
     #[test]
-    fn a_header_that_is_not_an_ip_is_skipped() {
+    fn a_header_that_is_not_an_ip_gives_an_empty_ip() {
         let request = Request::builder()
             .header("cf-connecting-ip", "not an ip")
-            .header("x-forwarded-for", "also bad, 10.0.0.1")
+            .header("x-forwarded-for", "203.0.113.8")
             .header("x-real-ip", "203.0.113.5")
             .body(Body::empty())
             .unwrap();
-        assert_eq!(client_ip(&request), "203.0.113.5");
+        assert_eq!(client_ip(&request), "");
     }
+
     use tower::ServiceExt;
 
     async fn status_from_path(Path(code): Path<u16>) -> StatusCode {
@@ -394,42 +374,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn middleware_uses_the_first_forwarded_ip_without_cloudflare() {
+    async fn middleware_ignores_every_source_but_cloudflare() {
         let shipper = shipper();
         app(shipper.clone())
             .oneshot(
                 Request::builder()
                     .uri("/status/200")
-                    .header("x-forwarded-for", " 203.0.113.8, 10.0.0.1 ")
+                    .header("x-forwarded-for", "203.0.113.8, 10.0.0.1")
                     .header("x-real-ip", "198.51.100.4")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(buffered_events(&shipper)[0].context["ip"], "203.0.113.8");
-    }
-
-    #[tokio::test]
-    async fn middleware_uses_real_ip_then_the_socket_host() {
-        let shipper = shipper();
-        let router = app(shipper.clone());
-        router
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/status/200")
-                    .header("x-real-ip", "198.51.100.4")
-                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        router
-            .oneshot(
-                Request::builder()
-                    .uri("/status/201")
                     .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
                     .body(Body::empty())
                     .unwrap(),
@@ -437,9 +389,7 @@ mod tests {
             .await
             .unwrap();
         let events = buffered_events(&shipper);
-        assert_eq!(events[0].context["ip"], "198.51.100.4");
+        assert_eq!(events[0].context["ip"], "");
         assert_eq!(events[0].context["user_agent"], "");
-        assert_eq!(events[1].context["ip"], "192.0.2.10");
-        assert_eq!(events[1].action, "API/GET:/status/201");
     }
 }
