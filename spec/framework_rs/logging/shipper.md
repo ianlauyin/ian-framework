@@ -208,7 +208,7 @@ A missing log server does not cause a panic in the shipper.
 
 Endpoint rules:
 
-- An `https` endpoint sends batches. An `http` endpoint sends batches only when its host is `localhost`, `127.0.0.1` or `[::1]`, because each request carries the post API key.
+- An `https` endpoint sends batches. An `http` endpoint sends batches when its host is `localhost`, `127.0.0.1`, `[::1]`, or a private IPv4 address. A private IPv4 address is in `10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`. Each request carries the post API key. An `http` endpoint with a different host does not send batches.
 - The shipper removes a trailing slash from that URL.
 
 `LogShipper::new` returns no shipper for these endpoints:
@@ -220,4 +220,4 @@ Endpoint rules:
 - An endpoint that is not a valid URL.
 - An endpoint with no host.
 - An endpoint with a scheme other than `http` or `https`.
-- An `http` endpoint with a host that is not `localhost`, `127.0.0.1` or `[::1]`.
+- An `http` endpoint with a host that is not `localhost`, `127.0.0.1`, `[::1]`, or a private IPv4 address.

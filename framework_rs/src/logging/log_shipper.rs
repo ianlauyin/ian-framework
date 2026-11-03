@@ -207,7 +207,6 @@ struct Inner {
     shipping: tokio::sync::Mutex<()>,
 }
 
-// The post API key is sent in each request, so a plain http endpoint is allowed only on this machine.
 fn is_valid_app(config: &ShipperConfig) -> bool {
     let mut chars = config.app.chars();
     let starts_alphanumeric = chars.next().is_some_and(|ch| ch.is_ascii_alphanumeric());
@@ -236,9 +235,9 @@ fn normalized_endpoint(raw: Option<&str>) -> Option<Option<String>> {
 }
 
 fn is_plain_endpoint(url: &reqwest::Url) -> bool {
-    let secure =
-        url.scheme() == "https" || (url.scheme() == "http" && is_loopback_host(url.host_str()));
-    secure
+    let allowed =
+        url.scheme() == "https" || (url.scheme() == "http" && http_host_allowed(url.host_str()));
+    allowed
         && url.host_str().is_some()
         && url.username().is_empty()
         && url.password().is_none()
@@ -276,8 +275,17 @@ fn log_mode(app: &str, posts: bool) {
     }
 }
 
-fn is_loopback_host(host: Option<&str>) -> bool {
-    matches!(host, Some("localhost" | "127.0.0.1" | "[::1]"))
+// Each request carries the post API key. Plain http stays on this machine or on a
+// private IPv4 address, which is another machine on the private network.
+fn http_host_allowed(host: Option<&str>) -> bool {
+    let Some(host) = host else {
+        return false;
+    };
+    if matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
+        return true;
+    }
+    host.parse::<std::net::Ipv4Addr>()
+        .is_ok_and(|ip| ip.is_private())
 }
 
 fn meets_capacity_warn(len: usize, capacity: usize) -> bool {
@@ -474,11 +482,14 @@ mod tests {
     }
 
     #[test]
-    fn a_plain_http_endpoint_is_allowed_only_on_this_machine() {
+    fn a_plain_http_endpoint_reaches_this_machine_or_a_private_address() {
         for endpoint in [
             "http://localhost:8080",
             "http://127.0.0.1:8080",
             "http://[::1]:8080",
+            "http://10.0.0.5:8080",
+            "http://172.16.0.1:8080",
+            "http://192.168.1.1:8080",
             "https://logs.example",
         ] {
             assert!(
@@ -486,7 +497,13 @@ mod tests {
                 "{endpoint}"
             );
         }
-        for endpoint in ["http://logs.example", "http://10.0.0.5:8080"] {
+        for endpoint in [
+            "http://logs.example",
+            "http://8.8.8.8:8080",
+            "http://11.0.0.1:8080",
+            "http://172.15.0.1:8080",
+            "http://172.32.0.1:8080",
+        ] {
             assert!(
                 LogShipper::new(config("api", endpoint)).is_none(),
                 "{endpoint}"
