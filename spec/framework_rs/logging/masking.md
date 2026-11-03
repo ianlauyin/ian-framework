@@ -30,7 +30,8 @@ Key rule:
 
 Value rule:
 
-- When the key does not match, the shipper replaces each match of each pattern in a string value with `***`.
+- When the key does not match, the shipper first masks each `name=value` pair in a string value. The name of the pair has a match of a pattern. The shipper replaces the full pair with `***`. The value of the pair ends at `&`, `;` or whitespace.
+- Then the shipper replaces each match of each pattern in the string value with `***`.
 - The patterns apply in list order.
 - The value rule also applies to a string in a nested array or a nested object of `info`.
 - The value rule does not mask a number, a `bool`, or null.

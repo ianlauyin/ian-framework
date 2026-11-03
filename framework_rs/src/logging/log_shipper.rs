@@ -74,7 +74,7 @@ impl LogShipper {
         let masks = config
             .mask_patterns
             .iter()
-            .map(|pattern| regex::Regex::new(pattern).ok())
+            .map(|pattern| Mask::new(pattern))
             .collect::<Option<Vec<_>>>()?;
         let http = match &endpoint {
             Some(_) => Some(
@@ -263,7 +263,7 @@ struct Inner {
     post_api_key: Option<reqwest::header::HeaderValue>,
     capacity: usize,
     ship_every: Duration,
-    masks: Vec<regex::Regex>,
+    masks: Vec<Mask>,
     buffer: Mutex<Buffer>,
     http: Option<reqwest::Client>,
     shipping: tokio::sync::Mutex<()>,
@@ -273,12 +273,26 @@ fn meets_capacity_warn(len: usize, capacity: usize) -> bool {
     (len as u128) * 5 >= (capacity as u128) * 4
 }
 
-fn mask_event(masks: &[regex::Regex], event: &mut LogEvent) {
+// `pair` matches a `name=value` pair whose name holds a match of the pattern, so the value is masked too.
+struct Mask {
+    plain: regex::Regex,
+    pair: regex::Regex,
+}
+
+impl Mask {
+    fn new(pattern: &str) -> Option<Self> {
+        let plain = regex::Regex::new(pattern).ok()?;
+        let pair = regex::Regex::new(&format!(r"[\w.\-]*(?:{pattern})[\w.\-]*=[^&\s;]*")).ok()?;
+        Some(Self { plain, pair })
+    }
+}
+
+fn mask_event(masks: &[Mask], event: &mut LogEvent) {
     if masks.is_empty() {
         return;
     }
     for (key, value) in event.context.iter_mut() {
-        if masks.iter().any(|mask| mask.is_match(key)) {
+        if masks.iter().any(|mask| mask.plain.is_match(key)) {
             *value = LogValue::String(MASK.to_string());
         } else if let LogValue::String(text) = value {
             mask_text(masks, text);
@@ -289,15 +303,15 @@ fn mask_event(masks: &[regex::Regex], event: &mut LogEvent) {
     }
 }
 
-fn mask_entry(masks: &[regex::Regex], key: &str, value: &mut Value) {
-    if masks.iter().any(|mask| mask.is_match(key)) {
+fn mask_entry(masks: &[Mask], key: &str, value: &mut Value) {
+    if masks.iter().any(|mask| mask.plain.is_match(key)) {
         *value = Value::String(MASK.to_string());
     } else {
         mask_value(masks, value);
     }
 }
 
-fn mask_value(masks: &[regex::Regex], value: &mut Value) {
+fn mask_value(masks: &[Mask], value: &mut Value) {
     match value {
         Value::String(text) => mask_text(masks, text),
         Value::Array(items) => items.iter_mut().for_each(|item| mask_value(masks, item)),
@@ -310,9 +324,14 @@ fn mask_value(masks: &[regex::Regex], value: &mut Value) {
     }
 }
 
-fn mask_text(masks: &[regex::Regex], text: &mut String) {
+fn mask_text(masks: &[Mask], text: &mut String) {
     for mask in masks {
-        if let std::borrow::Cow::Owned(masked) = mask.replace_all(text, MASK) {
+        if let std::borrow::Cow::Owned(masked) = mask.pair.replace_all(text, MASK) {
+            *text = masked;
+        }
+    }
+    for mask in masks {
+        if let std::borrow::Cow::Owned(masked) = mask.plain.replace_all(text, MASK) {
             *text = masked;
         }
     }
@@ -534,6 +553,19 @@ mod tests {
             stored.info["nested"],
             serde_json::json!({"list": ["***", 7], "keep": "plain"})
         );
+    }
+
+    #[test]
+    fn default_patterns_mask_the_value_of_a_name_value_pair() {
+        let shipper = LogShipper::new(config("api", "http://logs.example")).unwrap();
+        let mut event = event("GET /", LogLevel::Info);
+        event.context.insert(
+            "request_url".to_string(),
+            LogValue::from("/x?a=1&access_token=abc123&page=2&Password=hunter2"),
+        );
+        shipper.record(event);
+        let stored = buffered_events(&shipper).remove(0);
+        assert_eq!(stored.context["request_url"], "/x?a=1&***&page=2&***");
     }
 
     #[test]

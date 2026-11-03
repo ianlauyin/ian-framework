@@ -244,7 +244,7 @@ mod tests {
         assert_eq!(event.action, "API/GET:/status/204");
         assert_eq!(event.context["ip"], "");
         assert_eq!(event.context["user_agent"], "");
-        assert_eq!(event.context["request_url"], "/status/204?***=***");
+        assert_eq!(event.context["request_url"], "/status/204?***");
         assert!(event.latency_ms.is_some());
         assert_eq!(event.level, LogLevel::Info);
         let json = serde_json::to_string(event).unwrap();
@@ -256,7 +256,7 @@ mod tests {
         assert!(!json.contains("req-1"));
         assert!(value.get("request").is_none());
         assert_eq!(value["info"], json!({}));
-        assert_eq!(value["context"]["request_url"], "/status/204?***=***");
+        assert_eq!(value["context"]["request_url"], "/status/204?***");
     }
 
     #[tokio::test]
