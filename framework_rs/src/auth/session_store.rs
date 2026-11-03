@@ -14,6 +14,9 @@ use super::{AuthError, AuthErrorKind, SessionConfig};
 // Browsers cap a cookie lifetime at 400 days.
 const MAX_AGE_LIMIT_SECS: u64 = 400 * 24 * 60 * 60;
 
+// A subject that logs in again and again must not make the Redis set grow without a bound.
+const MAX_SESSIONS_PER_SUBJECT: usize = 100;
+
 // Sets the expiry to the smaller of the ttl and the time to the deadline in one step.
 const TOUCH_SCRIPT: &str = r#"
 local value = redis.call('GET', KEYS[1])
@@ -80,6 +83,7 @@ impl SessionStore {
             .query_async::<()>(&mut self.conn())
             .await
             .map_err(store_err)?;
+        self.trim_subject(&subject_key, &key).await?;
         Ok(token)
     }
 
@@ -170,6 +174,55 @@ impl SessionStore {
     fn subject_key(&self, subject: &str) -> String {
         let hash = hex::encode(Sha256::digest(subject.as_bytes()));
         format!("{}subject:{hash}", self.inner.config.prefix)
+    }
+
+    // The set also holds the keys of expired sessions. Those go first, and then the sessions that remain over the limit, but never `keep_key`.
+    async fn trim_subject(&self, subject_key: &str, keep_key: &str) -> Result<(), AuthError> {
+        let mut conn = self.conn();
+        let size: usize = redis::cmd("SCARD")
+            .arg(subject_key)
+            .query_async(&mut conn)
+            .await
+            .map_err(store_err)?;
+        if size <= MAX_SESSIONS_PER_SUBJECT {
+            return Ok(());
+        }
+        let members: Vec<String> = redis::cmd("SMEMBERS")
+            .arg(subject_key)
+            .query_async(&mut conn)
+            .await
+            .map_err(store_err)?;
+        let mut live = Vec::new();
+        let mut gone = Vec::new();
+        for member in members {
+            let exists: bool = redis::cmd("EXISTS")
+                .arg(&member)
+                .query_async(&mut conn)
+                .await
+                .map_err(store_err)?;
+            if exists {
+                live.push(member);
+            } else {
+                gone.push(member);
+            }
+        }
+        let excess = live.len().saturating_sub(MAX_SESSIONS_PER_SUBJECT);
+        let dropped: Vec<String> = live
+            .into_iter()
+            .filter(|member| member != keep_key)
+            .take(excess)
+            .collect();
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+        for member in &dropped {
+            pipe.cmd("DEL").arg(member).ignore();
+        }
+        gone.extend(dropped);
+        if gone.is_empty() {
+            return Ok(());
+        }
+        pipe.cmd("SREM").arg(subject_key).arg(&gone).ignore();
+        pipe.query_async::<()>(&mut conn).await.map_err(store_err)
     }
 
     async fn remove_subject_keys(
@@ -459,6 +512,27 @@ mod tests {
         assert_eq!(store.subject(&token).await.unwrap(), None);
         assert!(!store.touch(&token).await.unwrap());
         store.remove(&token).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_subject_keeps_at_most_the_session_limit() {
+        let Some(store) = store_or_skip().await else {
+            return;
+        };
+        let mut tokens = Vec::new();
+        for _ in 0..MAX_SESSIONS_PER_SUBJECT + 5 {
+            tokens.push(store.create("7").await.unwrap());
+        }
+        let mut conn = store.conn();
+        let size: usize = redis::cmd("SCARD")
+            .arg(store.subject_key("7"))
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(size, MAX_SESSIONS_PER_SUBJECT);
+        let last = tokens.last().unwrap();
+        assert_eq!(store.subject(last).await.unwrap().as_deref(), Some("7"));
+        store.remove_subject("7").await.unwrap();
     }
 
     #[test]

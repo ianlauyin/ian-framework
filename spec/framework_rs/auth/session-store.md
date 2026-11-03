@@ -62,6 +62,7 @@ The connection manager stops early when Redis is down. It uses these settings:
 - The set holds the Redis keys of the sessions of that subject.
 - `create` stores the session and adds its key to the set in one transaction. It sets the expiry of the set to `max_age_secs`.
 - `remove` deletes the key and takes it out of the set in one transaction.
+- The set holds at most 100 sessions. When `create` makes it larger, `create` first removes the keys of expired sessions from the set. If it is still over 100, `create` deletes other live sessions of the subject, never the new one, until 100 remain.
 - A session that expires on its own stays in the set until the set expires or `remove_subject` runs. Deleting a key that does not exist has no effect.
 - A session that was created before the set existed is not in a set. `remove_subject` does not end it. It ends when it expires.
 

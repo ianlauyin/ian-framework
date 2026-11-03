@@ -1,10 +1,15 @@
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::Argon2;
+use tokio::sync::Semaphore;
 
 use super::{AuthError, AuthErrorKind};
 
 const MAX_PASSWORD_BYTES: usize = 256;
+const MAX_CONCURRENT_HASHES: usize = 8;
+
+// Each Argon2 run uses much memory and CPU, so a flood of logins must wait here and not fill the blocking pool.
+static HASH_PERMITS: Semaphore = Semaphore::const_new(MAX_CONCURRENT_HASHES);
 
 // Argon2 takes tens of milliseconds of CPU, so it runs on the blocking pool and does not stall the async workers.
 pub async fn hash_password(password: &str) -> Result<String, AuthError> {
@@ -15,6 +20,13 @@ pub async fn hash_password(password: &str) -> Result<String, AuthError> {
         ));
     }
     let password = password.to_owned();
+    let _permit = HASH_PERMITS.acquire().await.map_err(|err| {
+        AuthError::with_source(
+            AuthErrorKind::Password,
+            "password hash is not available",
+            err,
+        )
+    })?;
     tokio::task::spawn_blocking(move || hash(&password))
         .await
         .map_err(|err| {
@@ -28,6 +40,9 @@ pub async fn verify_password(password: &str, hash: &str) -> bool {
     }
     let password = password.to_owned();
     let hash = hash.to_owned();
+    let Ok(_permit) = HASH_PERMITS.acquire().await else {
+        return false;
+    };
     tokio::task::spawn_blocking(move || verify(&password, &hash))
         .await
         .unwrap_or(false)
