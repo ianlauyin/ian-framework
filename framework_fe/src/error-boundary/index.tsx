@@ -46,13 +46,17 @@ function ErrorFallback(props: FallbackProps) {
 }
 
 // The log route drops an info value that contains a line break.
+function oneLine(text: string | undefined) {
+  const value = text ?? "";
+  return value.replace(/\r?\n\s*/g, " | ");
+}
+
 function logError(error: unknown) {
-  const oneLine = (text: string) => text.replace(/\r?\n\s*/g, " | ");
   if (error instanceof Error) {
     Logger.error("ERROR-BOUNDARY/caughtError", {
       error_name: error.name,
       error_message: oneLine(error.message),
-      error_stack: oneLine(error.stack ?? ""),
+      error_stack: oneLine(error.stack),
     });
     return;
   }

@@ -391,6 +391,88 @@ mod tests {
         assert_eq!(user.validate().unwrap_err().kind(), GcpErrorKind::Config);
     }
 
+    fn response_with(status: u16, body: &str) -> reqwest::Response {
+        reqwest::Response::from(
+            axum::http::Response::builder()
+                .status(status)
+                .body(body.to_string())
+                .unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn token_response_reads_the_access_token() {
+        let Ok(token) = token_from_response(response_with(
+            200,
+            r#"{"access_token":"tok","expires_in":3600}"#,
+        ))
+        .await
+        else {
+            panic!("expected a token");
+        };
+        assert_eq!(token.value, "tok");
+    }
+
+    #[tokio::test]
+    async fn token_response_rejects_an_error_status_and_an_empty_token() {
+        let err = token_err(400, r#"{"error":{"message":"bad"}}"#).await;
+        assert_eq!(err.kind(), GcpErrorKind::Auth);
+        let err = token_err(200, r#"{"access_token":""}"#).await;
+        assert_eq!(err.kind(), GcpErrorKind::Auth);
+        let err = token_err(200, "not-json").await;
+        assert_eq!(err.kind(), GcpErrorKind::Auth);
+    }
+
+    async fn token_err(status: u16, body: &str) -> GcpError {
+        let Err(err) = token_from_response(response_with(status, body)).await else {
+            panic!("expected an error");
+        };
+        err
+    }
+
+    #[test]
+    fn from_adc_reads_the_env_file() {
+        let path = std::env::temp_dir().join(format!("adc-user-{}.json", std::process::id()));
+        std::fs::write(&path, USER_JSON).unwrap();
+        let creds = crate::env::tests::with_vars(
+            &[("GOOGLE_APPLICATION_CREDENTIALS", Some(path.as_os_str()))],
+            || crate::env::tests::block_on(Credentials::from_adc()),
+        );
+        let _ = std::fs::remove_file(&path);
+        let Ok(creds) = creds else {
+            panic!("expected credentials");
+        };
+        assert!(matches!(creds, Credentials::User(_)));
+    }
+
+    #[tokio::test]
+    async fn read_adc_at_rejects_a_missing_file() {
+        let path = std::env::temp_dir().join(format!("adc-missing-{}.json", std::process::id()));
+        let err = read_adc_at(&path).await.unwrap_err();
+        assert_eq!(err.kind(), GcpErrorKind::Config);
+    }
+
+    #[test]
+    fn well_known_adc_uses_the_home_file() {
+        let home = std::env::temp_dir().join(format!("adc-home-{}", std::process::id()));
+        let dir = home.join(".config/gcloud");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("application_default_credentials.json");
+        std::fs::write(&file, "{}").unwrap();
+        let found = crate::env::tests::with_vars(
+            &[("HOME", Some(home.as_os_str())), ("APPDATA", None)],
+            well_known_adc,
+        );
+        assert_eq!(found.as_deref(), Some(file.as_path()));
+        std::fs::remove_file(&file).unwrap();
+        let missing = crate::env::tests::with_vars(
+            &[("HOME", Some(home.as_os_str())), ("APPDATA", None)],
+            well_known_adc,
+        );
+        assert!(missing.is_none());
+        let _ = std::fs::remove_dir_all(home);
+    }
+
     #[test]
     fn debug_does_not_print_the_secrets() {
         let credentials = credentials_from_json(USER_JSON).unwrap();

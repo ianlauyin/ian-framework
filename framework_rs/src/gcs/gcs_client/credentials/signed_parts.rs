@@ -77,31 +77,49 @@ impl SignedParts {
 }
 
 async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
+    let response = client.send(&sign_call(client, payload)).await?;
+    signature_from_response(response).await
+}
+
+fn sign_call(client: &GcsClient, payload: &[u8]) -> Call {
     let url = format!(
         "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",
         encode_seg(client.signer_email()),
     );
     let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
-    let response = client
-        .send(&Call {
-            method: reqwest::Method::POST,
-            url,
-            json: Some(serde_json::json!({ "payload": encoded })),
-            ..Default::default()
-        })
-        .await?;
-    let bytes = response.bytes().await.map_err(|err| {
-        GcsError::with_source(
+    Call {
+        method: reqwest::Method::POST,
+        url,
+        json: Some(serde_json::json!({ "payload": encoded })),
+        ..Default::default()
+    }
+}
+
+async fn signature_from_response(response: reqwest::Response) -> Result<Vec<u8>, GcsError> {
+    let bytes = sign_bytes(response).await?;
+    signature_from_bytes(&bytes)
+}
+
+async fn sign_bytes(response: reqwest::Response) -> Result<Vec<u8>, GcsError> {
+    match response.bytes().await {
+        Ok(bytes) => Ok(bytes.to_vec()),
+        Err(err) => Err(GcsError::with_source(
             GcsErrorKind::Transport,
             "signBlob response is not bytes",
             err.without_url(),
-        )
-    })?;
-    let parsed: SignBlobResponse = serde_json::from_slice(&bytes).map_err(|err| {
+        )),
+    }
+}
+
+fn signature_from_bytes(bytes: &[u8]) -> Result<Vec<u8>, GcsError> {
+    let parsed: SignBlobResponse = serde_json::from_slice(bytes).map_err(|err| {
         GcsError::with_source(GcsErrorKind::Api, "signBlob response is not JSON", err)
     })?;
-    let cleaned: String = parsed
-        .signed_blob
+    decode_signature(&parsed.signed_blob)
+}
+
+fn decode_signature(signed_blob: &str) -> Result<Vec<u8>, GcsError> {
+    let cleaned: String = signed_blob
         .chars()
         .filter(|ch| !ch.is_whitespace())
         .collect();
@@ -110,6 +128,10 @@ async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, GcsErr
         .map_err(|err| {
             GcsError::with_source(GcsErrorKind::Api, "signBlob signature is not base64", err)
         })?;
+    nonempty_signature(signature)
+}
+
+fn nonempty_signature(signature: Vec<u8>) -> Result<Vec<u8>, GcsError> {
     if signature.is_empty() {
         return Err(GcsError::new(
             GcsErrorKind::Api,

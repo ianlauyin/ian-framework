@@ -79,3 +79,42 @@ impl<'a> UploadSource<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn bytes_are_read_from_the_offset() {
+        let body = PutBody::Bytes(b"abcdef".to_vec());
+        let mut source = UploadSource::open(&body).await.unwrap();
+        assert_eq!(source.len(), 6);
+        let chunk = source.read_chunk(2, 3).await.unwrap();
+        assert_eq!(&chunk[..], b"cde");
+    }
+
+    #[tokio::test]
+    async fn a_file_is_read_in_a_chunk() {
+        let path = std::env::temp_dir().join(format!("upload-src-{}.bin", std::process::id()));
+        std::fs::write(&path, b"hello").unwrap();
+        let body = PutBody::File(path.clone());
+        let mut source = UploadSource::open(&body).await.unwrap();
+        assert_eq!(source.len(), 5);
+        let chunk = source.read_chunk(1, 3).await.unwrap();
+        assert_eq!(&chunk[..], b"ell");
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_missing_path_and_a_directory_are_rejected() {
+        let missing = std::env::temp_dir().join(format!("upload-missing-{}", std::process::id()));
+        let Err(err) = UploadSource::open(&PutBody::File(missing)).await else {
+            panic!("expected an error");
+        };
+        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        let Err(err) = UploadSource::open(&PutBody::File(std::env::temp_dir())).await else {
+            panic!("expected an error");
+        };
+        assert_eq!(err.kind(), GcsErrorKind::Config);
+    }
+}

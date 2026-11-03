@@ -1,5 +1,5 @@
 use crate::gcp::{
-    metadata_get, metadata_token, truncate, CachedToken, Credentials, UserCredentials,
+    metadata_get, metadata_token, truncate, CachedToken, Credentials, GcpError, UserCredentials,
 };
 use crate::gcs::{GcsError, GcsErrorKind};
 
@@ -45,11 +45,10 @@ impl Auth {
         &self,
         http: &reqwest::Client,
     ) -> Result<CachedToken, GcsError> {
-        let token = match self {
-            Auth::Metadata => metadata_token(http).await?,
-            Auth::User { credentials, .. } => credentials.fetch_token(http).await?,
-        };
-        Ok(token)
+        match self {
+            Auth::Metadata => gcs_token(metadata_token(http).await),
+            Auth::User { credentials, .. } => gcs_token(credentials.fetch_token(http).await),
+        }
     }
 }
 
@@ -65,26 +64,46 @@ impl std::fmt::Debug for Auth {
     }
 }
 
+fn gcs_token(token: Result<CachedToken, GcpError>) -> Result<CachedToken, GcsError> {
+    token.map_err(GcsError::from)
+}
+
 async fn metadata_email(http: &reqwest::Client) -> Result<String, GcsError> {
     let response = metadata_get(http, METADATA_EMAIL_URL).await?;
+    email_from_response(response).await
+}
+
+async fn email_from_response(response: reqwest::Response) -> Result<String, GcsError> {
     let status = response.status();
-    let body = response.text().await.map_err(|err| {
+    let body = email_body(response).await?;
+    email_from_body(status, &body)
+}
+
+async fn email_body(response: reqwest::Response) -> Result<String, GcsError> {
+    response.text().await.map_err(|err| {
         GcsError::with_source(
             GcsErrorKind::Auth,
             "metadata server email response is not text",
             err.without_url(),
         )
-    })?;
+    })
+}
+
+fn email_from_body(status: reqwest::StatusCode, body: &str) -> Result<String, GcsError> {
     if !status.is_success() {
         return Err(GcsError::new(
             GcsErrorKind::Auth,
             format!(
                 "metadata server email status {}: {}",
                 status.as_u16(),
-                truncate(&body, 300)
+                truncate(body, 300)
             ),
         ));
     }
+    accept_email(body)
+}
+
+fn accept_email(body: &str) -> Result<String, GcsError> {
     let email = body.trim().to_string();
     validate_signer_email(&email)?;
     Ok(email)

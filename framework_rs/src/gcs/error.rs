@@ -205,4 +205,24 @@ mod tests {
         assert_eq!(error.status, StatusCode::BAD_GATEWAY);
         assert_eq!(error.message, "storage request failed");
     }
+
+    fn response_with(status: u16, body: &str) -> reqwest::Response {
+        reqwest::Response::from(
+            axum::http::Response::builder()
+                .status(status)
+                .body(body.to_string())
+                .unwrap(),
+        )
+    }
+
+    #[tokio::test]
+    async fn from_response_maps_the_status() {
+        let missing = GcsError::from_response(response_with(404, "gone")).await;
+        assert_eq!(missing.kind(), GcsErrorKind::NotFound);
+        assert!(missing.to_string().contains("404"));
+        let auth = GcsError::from_response(response_with(401, "no")).await;
+        assert_eq!(auth.kind(), GcsErrorKind::Auth);
+        let api = GcsError::from_response(response_with(500, "down")).await;
+        assert_eq!(api.kind(), GcsErrorKind::Api);
+    }
 }

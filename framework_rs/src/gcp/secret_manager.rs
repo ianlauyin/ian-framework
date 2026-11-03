@@ -53,15 +53,38 @@ impl SecretManager {
 
     async fn from_adc() -> Result<Option<Self>, GcpError> {
         let credentials = Credentials::from_adc().await?;
-        credentials.validate()?;
-        let http = http_client()?;
-        let project = match &credentials {
-            Credentials::Metadata => metadata_project(&http, METADATA_PROJECT_URL).await?,
-            Credentials::User(_) => user_project(&credentials)?,
-        };
+        Self::from_credentials(credentials).await
+    }
+
+    async fn from_credentials(credentials: Credentials) -> Result<Option<Self>, GcpError> {
+        let http = checked_http(&credentials)?;
+        Self::with_http(credentials, http).await
+    }
+
+    async fn with_http(
+        credentials: Credentials,
+        http: reqwest::Client,
+    ) -> Result<Option<Self>, GcpError> {
+        let project = project_for(&credentials, &http).await?;
+        Self::with_project(credentials, http, project).await
+    }
+
+    async fn with_project(
+        credentials: Credentials,
+        http: reqwest::Client,
+        project: Option<String>,
+    ) -> Result<Option<Self>, GcpError> {
         let Some(project) = project else {
             return Ok(None);
         };
+        Self::with_token(credentials, http, project).await
+    }
+
+    async fn with_token(
+        credentials: Credentials,
+        http: reqwest::Client,
+        project: String,
+    ) -> Result<Option<Self>, GcpError> {
         let token = credentials.fetch_token(&http).await?;
         Ok(Some(Self {
             http,
@@ -79,6 +102,21 @@ impl SecretManager {
             *token = self.credentials.fetch_token(&self.http).await?;
         }
         Ok(token.value.clone())
+    }
+}
+
+fn checked_http(credentials: &Credentials) -> Result<reqwest::Client, GcpError> {
+    credentials.validate()?;
+    http_client()
+}
+
+async fn project_for(
+    credentials: &Credentials,
+    http: &reqwest::Client,
+) -> Result<Option<String>, GcpError> {
+    match credentials {
+        Credentials::Metadata => metadata_project(http, METADATA_PROJECT_URL).await,
+        Credentials::User(_) => user_project(credentials),
     }
 }
 

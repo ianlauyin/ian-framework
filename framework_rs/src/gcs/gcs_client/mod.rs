@@ -57,15 +57,22 @@ impl GcsClient {
     }
 
     pub async fn open_object(&self, name: &str) -> Result<ObjectReader, GcsError> {
-        validate_object_name(name)?;
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::GET,
-                url: format!("{}?alt=media", object_url(self.bucket(), name)),
-                ..Default::default()
-            })
-            .await?;
+        let response = self.open_response(name).await?;
         Ok(ObjectReader { response })
+    }
+
+    async fn open_response(&self, name: &str) -> Result<reqwest::Response, GcsError> {
+        validate_object_name(name)?;
+        self.media_response(name).await
+    }
+
+    async fn media_response(&self, name: &str) -> Result<reqwest::Response, GcsError> {
+        self.send(&Call {
+            method: reqwest::Method::GET,
+            url: format!("{}?alt=media", object_url(self.bucket(), name)),
+            ..Default::default()
+        })
+        .await
     }
 
     pub async fn open_object_opt(&self, name: &str) -> Result<Option<ObjectReader>, GcsError> {
@@ -73,15 +80,22 @@ impl GcsClient {
     }
 
     pub async fn stat(&self, name: &str) -> Result<ObjectMeta, GcsError> {
-        validate_object_name(name)?;
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::GET,
-                url: object_url(self.bucket(), name),
-                ..Default::default()
-            })
-            .await?;
+        let response = self.stat_response(name).await?;
         ObjectMeta::from_response(response).await
+    }
+
+    async fn stat_response(&self, name: &str) -> Result<reqwest::Response, GcsError> {
+        validate_object_name(name)?;
+        self.object_response(name).await
+    }
+
+    async fn object_response(&self, name: &str) -> Result<reqwest::Response, GcsError> {
+        self.send(&Call {
+            method: reqwest::Method::GET,
+            url: object_url(self.bucket(), name),
+            ..Default::default()
+        })
+        .await
     }
 
     pub async fn stat_opt(&self, name: &str) -> Result<Option<ObjectMeta>, GcsError> {
@@ -89,68 +103,110 @@ impl GcsClient {
     }
 
     pub async fn list(&self, query: &ListQuery) -> Result<ListPage, GcsError> {
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::GET,
-                url: query.url(self.bucket()),
-                ..Default::default()
-            })
-            .await?;
-        let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
-                "list response is not bytes",
-                err.without_url(),
-            )
-        })?;
-        ListPage::from_slice(&bytes)
+        let response = self.list_response(query).await?;
+        list_page(response).await
+    }
+
+    async fn list_response(&self, query: &ListQuery) -> Result<reqwest::Response, GcsError> {
+        self.send(&Call {
+            method: reqwest::Method::GET,
+            url: query.url(self.bucket()),
+            ..Default::default()
+        })
+        .await
     }
 
     pub async fn put(&self, request: &PutRequest) -> Result<ObjectMeta, GcsError> {
-        let name = request.name.as_str();
-        let options = &request.options;
-        validate_object_name(name)?;
-        let content_type = options.content_type()?;
-        validate_metadata(&options.metadata)?;
+        let content_type = checked_put(request)?;
+        self.put_checked(request, content_type).await
+    }
+
+    async fn put_checked(
+        &self,
+        request: &PutRequest,
+        content_type: String,
+    ) -> Result<ObjectMeta, GcsError> {
         let mut source = UploadSource::open(&request.body).await?;
-        let upload =
-            ResumableUpload::start(self, name, &content_type, &options.metadata, source.len())
-                .await?;
-        upload.run(&mut source).await
+        self.upload_prepared(request, &content_type, &mut source)
+            .await
+    }
+
+    async fn upload_prepared(
+        &self,
+        request: &PutRequest,
+        content_type: &str,
+        source: &mut UploadSource<'_>,
+    ) -> Result<ObjectMeta, GcsError> {
+        let upload = self
+            .start_upload(request, content_type, source.len())
+            .await?;
+        upload.run(source).await
+    }
+
+    async fn start_upload<'a>(
+        &'a self,
+        request: &PutRequest,
+        content_type: &'a str,
+        total: u64,
+    ) -> Result<ResumableUpload<'a>, GcsError> {
+        ResumableUpload::start(
+            self,
+            request.name.as_str(),
+            content_type,
+            &request.options.metadata,
+            total,
+        )
+        .await
     }
 
     pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
-        validate_object_name(from)?;
-        validate_object_name(to)?;
-        let mut token: Option<String> = None;
+        check_rewrite_names(from, to)?;
+        self.rewrite_checked(from, to).await
+    }
+
+    async fn rewrite_checked(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
+        let mut token = None;
         loop {
-            let response = self
-                .send(&Call {
-                    method: reqwest::Method::POST,
-                    url: RewriteStep::url(self.bucket(), from, to, token.as_deref()),
-                    json: Some(serde_json::json!({})),
-                    ..Default::default()
-                })
-                .await?;
-            let bytes = response.bytes().await.map_err(|err| {
-                GcsError::with_source(
-                    GcsErrorKind::Transport,
-                    "rewrite response is not bytes",
-                    err.without_url(),
-                )
-            })?;
-            let next = match RewriteStep::from_slice(&bytes)? {
-                RewriteStep::Done(meta) => return Ok(meta),
-                RewriteStep::Next(next) => next,
-            };
-            if token.as_deref() == Some(next.as_str()) {
-                return Err(GcsError::new(
-                    GcsErrorKind::Api,
-                    "rewrite token did not change",
-                ));
+            match self.step_rewrite(from, to, token).await {
+                Ok(RewriteProgress::Next(next)) => token = next,
+                other => return finish_rewrite(other),
             }
-            token = Some(next);
         }
+    }
+
+    async fn step_rewrite(
+        &self,
+        from: &str,
+        to: &str,
+        token: Option<String>,
+    ) -> Result<RewriteProgress, GcsError> {
+        let bytes = self.rewrite_bytes(from, to, token.as_deref()).await?;
+        step_from_bytes(&bytes, token.as_deref())
+    }
+
+    async fn rewrite_bytes(
+        &self,
+        from: &str,
+        to: &str,
+        token: Option<&str>,
+    ) -> Result<Vec<u8>, GcsError> {
+        let response = self.rewrite_response(from, to, token).await?;
+        response_bytes(response, "rewrite response is not bytes").await
+    }
+
+    async fn rewrite_response(
+        &self,
+        from: &str,
+        to: &str,
+        token: Option<&str>,
+    ) -> Result<reqwest::Response, GcsError> {
+        self.send(&Call {
+            method: reqwest::Method::POST,
+            url: RewriteStep::url(self.bucket(), from, to, token),
+            json: Some(serde_json::json!({})),
+            ..Default::default()
+        })
+        .await
     }
 
     pub async fn patch_metadata(
@@ -158,35 +214,47 @@ impl GcsClient {
         name: &str,
         metadata: &BTreeMap<String, String>,
     ) -> Result<ObjectMeta, GcsError> {
-        validate_object_name(name)?;
-        validate_metadata(metadata)?;
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::PATCH,
-                url: object_url(self.bucket(), name),
-                json: Some(serde_json::json!({ "metadata": metadata })),
-                ..Default::default()
-            })
-            .await?;
+        checked_patch(name, metadata)?;
+        self.patch_checked(name, metadata).await
+    }
+
+    async fn patch_checked(
+        &self,
+        name: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> Result<ObjectMeta, GcsError> {
+        let response = self.patch_response(name, metadata).await?;
         ObjectMeta::from_response(response).await
+    }
+
+    async fn patch_response(
+        &self,
+        name: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> Result<reqwest::Response, GcsError> {
+        self.send(&Call {
+            method: reqwest::Method::PATCH,
+            url: object_url(self.bucket(), name),
+            json: Some(serde_json::json!({ "metadata": metadata })),
+            ..Default::default()
+        })
+        .await
     }
 
     pub async fn delete_object(&self, name: &str) -> Result<(), GcsError> {
         validate_object_name(name)?;
+        self.delete_url(&object_url(self.bucket(), name)).await
+    }
+
+    async fn delete_url(&self, url: &str) -> Result<(), GcsError> {
         let result = self
             .send(&Call {
                 method: reqwest::Method::DELETE,
-                url: object_url(self.bucket(), name),
+                url: url.to_string(),
                 ..Default::default()
             })
             .await;
-        let response = match result {
-            Ok(response) => response,
-            Err(err) if err.kind() == GcsErrorKind::NotFound => return Ok(()),
-            Err(err) => return Err(err),
-        };
-        let _ = response.bytes().await;
-        Ok(())
+        delete_result(result).await
     }
 
     pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
@@ -196,42 +264,57 @@ impl GcsClient {
                 "move source and destination are the same object",
             ));
         }
+        self.move_different(from, to).await
+    }
+
+    async fn move_different(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
         let meta = self.rewrite_object(from, to).await?;
-        let Err(delete_err) = self.delete_object(from).await else {
-            return Ok(meta);
-        };
-        // A failed delete does not prove that the source still exists. Delete the copy only
-        // when the source is confirmed, else the copy can be the only one.
-        let err = match self.stat_opt(from).await {
-            Ok(Some(_)) => match self.delete_object(to).await {
-                Ok(()) => delete_err,
-                Err(cleanup_err) => GcsError::with_source(
-                    delete_err.kind(),
-                    format!(
-                        "move could not delete the source ({delete_err}) and could not delete \
-                         the destination ({cleanup_err}); the object exists at both names"
-                    ),
-                    delete_err,
-                ),
-            },
-            Ok(None) => GcsError::with_source(
-                delete_err.kind(),
-                format!(
-                    "move could not delete the source ({delete_err}) but the source is gone; \
-                     the object exists only at the destination"
-                ),
-                delete_err,
-            ),
-            Err(check_err) => GcsError::with_source(
-                delete_err.kind(),
-                format!(
-                    "move could not delete the source ({delete_err}) and could not check \
-                     the source ({check_err}); the object may exist at both names"
-                ),
-                delete_err,
-            ),
-        };
-        Err(err)
+        self.delete_moved(from, to, meta).await
+    }
+
+    async fn delete_moved(
+        &self,
+        from: &str,
+        to: &str,
+        meta: ObjectMeta,
+    ) -> Result<ObjectMeta, GcsError> {
+        match self.delete_object(from).await {
+            Ok(()) => Ok(meta),
+            Err(delete_err) => self.undo_move(from, to, delete_err).await,
+        }
+    }
+
+    // A failed delete does not prove that the source still exists. Delete the copy only
+    // when the source is confirmed, else the copy can be the only one.
+    async fn undo_move(
+        &self,
+        from: &str,
+        to: &str,
+        delete_err: GcsError,
+    ) -> Result<ObjectMeta, GcsError> {
+        match self.stat_opt(from).await {
+            Ok(found) => self.undo_known(to, delete_err, found).await,
+            Err(check_err) => Err(source_unchecked(delete_err, check_err)),
+        }
+    }
+
+    async fn undo_known(
+        &self,
+        to: &str,
+        delete_err: GcsError,
+        found: Option<ObjectMeta>,
+    ) -> Result<ObjectMeta, GcsError> {
+        match found {
+            Some(_) => self.undo_present(to, delete_err).await,
+            None => Err(source_gone(delete_err)),
+        }
+    }
+
+    async fn undo_present(&self, to: &str, delete_err: GcsError) -> Result<ObjectMeta, GcsError> {
+        match self.delete_object(to).await {
+            Ok(()) => Err(delete_err),
+            Err(cleanup_err) => Err(both_names_remain(delete_err, cleanup_err)),
+        }
     }
 
     pub async fn signed_get_url(
@@ -284,85 +367,142 @@ impl GcsClient {
     async fn send(&self, call: &Call) -> Result<reqwest::Response, GcsError> {
         let mut retried = false;
         loop {
-            let token = self.access_token().await?;
-            let mut request = self.inner.http.request(call.method.clone(), &call.url);
-            request = request.bearer_auth(&token);
-            for (name, value) in &call.headers {
-                request = request.header(name, value);
+            match self.send_once(call, retried).await? {
+                SendStep::Retry => retried = true,
+                SendStep::Done(response) => return Ok(response),
             }
-            if let Some(timeout) = call.timeout {
-                request = request.timeout(timeout);
-            }
-            if let Some(json) = &call.json {
-                request = request.json(json);
-            } else if let Some(bytes) = &call.bytes {
-                request = request.body(bytes.clone());
-            }
-            let started = Instant::now();
-            let response = match request.send().await {
-                Ok(response) => response,
-                Err(err) => {
-                    let error_text = logged_error(&err);
-                    self.record_op(OpsRecord {
-                        level: LogLevel::Warn,
-                        message: "gcs request failed",
-                        method: call.method.as_str(),
-                        url: &call.url,
-                        status: None,
-                        latency_ms: Some(millis_since(started)),
-                        extra: &[("error", &error_text)],
-                    });
-                    return Err(GcsError::with_source(
-                        GcsErrorKind::Transport,
-                        "gcs request failed",
-                        err.without_url(),
-                    ));
-                }
-            };
-            let status = response.status().as_u16();
-            let latency_ms = millis_since(started);
-            if status == 401 && !retried {
-                retried = true;
-                let _ = response.bytes().await;
-                self.invalidate_token().await;
-                self.record_op(OpsRecord {
-                    level: LogLevel::Warn,
-                    message: "gcs access token rejected",
-                    method: call.method.as_str(),
-                    url: &call.url,
-                    status: Some(status),
-                    latency_ms: Some(latency_ms),
-                    extra: &[],
-                });
-                continue;
-            }
-            if let Some(level) = level_for_status(status) {
-                self.record_op(OpsRecord {
-                    level,
-                    message: "gcs response",
-                    method: call.method.as_str(),
-                    url: &call.url,
-                    status: Some(status),
-                    latency_ms: Some(latency_ms),
-                    extra: &[],
-                });
-            }
-            if response.status().is_success() || call.extra_status.contains(&status) {
-                return Ok(response);
-            }
-            return Err(GcsError::from_response(response).await);
+        }
+    }
+
+    async fn send_once(&self, call: &Call, retried: bool) -> Result<SendStep, GcsError> {
+        let token = self.access_token().await?;
+        let started = Instant::now();
+        let response = match self.dispatch(call, &token).await {
+            Ok(response) => response,
+            Err(err) => return self.transport_failed(call, started, err),
+        };
+        self.classify(call, response, retried, started).await
+    }
+
+    async fn dispatch(
+        &self,
+        call: &Call,
+        token: &str,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        let request = self.inner.http.request(call.method.clone(), &call.url);
+        let request = request.bearer_auth(token);
+        let request = apply_headers(request, &call.headers);
+        let request = apply_timeout(request, call.timeout);
+        apply_body(request, call).send().await
+    }
+
+    fn transport_failed(
+        &self,
+        call: &Call,
+        started: Instant,
+        err: reqwest::Error,
+    ) -> Result<SendStep, GcsError> {
+        let error_text = logged_error(&err);
+        self.record_op(OpsRecord {
+            level: LogLevel::Warn,
+            message: "gcs request failed",
+            method: call.method.as_str(),
+            url: &call.url,
+            status: None,
+            latency_ms: Some(millis_since(started)),
+            extra: &[("error", &error_text)],
+        });
+        Err(GcsError::with_source(
+            GcsErrorKind::Transport,
+            "gcs request failed",
+            err.without_url(),
+        ))
+    }
+
+    async fn classify(
+        &self,
+        call: &Call,
+        response: reqwest::Response,
+        retried: bool,
+        started: Instant,
+    ) -> Result<SendStep, GcsError> {
+        let status = response.status().as_u16();
+        let latency_ms = millis_since(started);
+        if unauthorized_retry(status, retried) {
+            self.reject_token(call, response, status, latency_ms).await;
+            return Ok(SendStep::Retry);
+        }
+        self.finish_response(call, response, status, latency_ms)
+            .await
+    }
+
+    async fn reject_token(
+        &self,
+        call: &Call,
+        response: reqwest::Response,
+        status: u16,
+        latency_ms: u64,
+    ) {
+        let _ = response.bytes().await;
+        self.invalidate_token().await;
+        self.record_op(OpsRecord {
+            level: LogLevel::Warn,
+            message: "gcs access token rejected",
+            method: call.method.as_str(),
+            url: &call.url,
+            status: Some(status),
+            latency_ms: Some(latency_ms),
+            extra: &[],
+        });
+    }
+
+    async fn finish_response(
+        &self,
+        call: &Call,
+        response: reqwest::Response,
+        status: u16,
+        latency_ms: u64,
+    ) -> Result<SendStep, GcsError> {
+        self.note_status(call, status, latency_ms);
+        if accepted_status(response.status(), status, call.extra_status) {
+            return Ok(SendStep::Done(response));
+        }
+        Err(GcsError::from_response(response).await)
+    }
+
+    fn note_status(&self, call: &Call, status: u16, latency_ms: u64) {
+        if let Some(level) = level_for_status(status) {
+            self.record_op(OpsRecord {
+                level,
+                message: "gcs response",
+                method: call.method.as_str(),
+                url: &call.url,
+                status: Some(status),
+                latency_ms: Some(latency_ms),
+                extra: &[],
+            });
         }
     }
 
     async fn access_token(&self) -> Result<String, GcsError> {
         let mut guard = self.inner.token.lock().await;
-        if let Some(cached) = guard.as_ref() {
-            if Instant::now() < cached.expires_at {
-                return Ok(cached.value.clone());
-            }
+        if let Some(token) = fresh_token(guard.as_ref()) {
+            return Ok(token);
         }
+        self.store_fetched(&mut guard).await
+    }
+
+    async fn store_fetched(&self, guard: &mut Option<CachedToken>) -> Result<String, GcsError> {
         let fetched = self.inner.auth.fetch_token(&self.inner.http).await;
-        if let Err(err) = &fetched {
+        self.warn_token_error(&fetched);
+        let token = fetched?;
+        let value = token.value.clone();
+        *guard = Some(token);
+        Ok(value)
+    }
+
+    fn warn_token_error(&self, fetched: &Result<CachedToken, GcsError>) {
+        if let Err(err) = fetched {
             let error_text = logged_error(err);
             self.record_op(OpsRecord {
                 level: LogLevel::Warn,
@@ -374,10 +514,6 @@ impl GcsClient {
                 extra: &[("error", &error_text)],
             });
         }
-        let token = fetched?;
-        let value = token.value.clone();
-        *guard = Some(token);
-        Ok(value)
     }
 
     async fn invalidate_token(&self) {
@@ -402,6 +538,213 @@ struct Inner {
     http: reqwest::Client,
     token: tokio::sync::Mutex<Option<CachedToken>>,
     ops_log: std::sync::Mutex<Option<LogShipper>>,
+}
+
+enum SendStep {
+    Retry,
+    Done(reqwest::Response),
+}
+
+enum RewriteProgress {
+    Done(ObjectMeta),
+    Next(Option<String>),
+}
+
+fn fresh_token(cached: Option<&CachedToken>) -> Option<String> {
+    let cached = cached?;
+    if Instant::now() < cached.expires_at {
+        Some(cached.value.clone())
+    } else {
+        None
+    }
+}
+
+fn unauthorized_retry(status: u16, retried: bool) -> bool {
+    status == 401 && !retried
+}
+
+fn accepted_status(status: reqwest::StatusCode, code: u16, extra: &[u16]) -> bool {
+    status.is_success() || extra.contains(&code)
+}
+
+fn apply_headers(
+    mut request: reqwest::RequestBuilder,
+    headers: &[(reqwest::header::HeaderName, String)],
+) -> reqwest::RequestBuilder {
+    for (name, value) in headers {
+        request = request.header(name, value);
+    }
+    request
+}
+
+fn apply_timeout(
+    request: reqwest::RequestBuilder,
+    timeout: Option<Duration>,
+) -> reqwest::RequestBuilder {
+    if let Some(timeout) = timeout {
+        request.timeout(timeout)
+    } else {
+        request
+    }
+}
+
+fn apply_body(request: reqwest::RequestBuilder, call: &Call) -> reqwest::RequestBuilder {
+    if let Some(json) = &call.json {
+        request.json(json)
+    } else {
+        apply_bytes(request, call.bytes.as_ref())
+    }
+}
+
+fn apply_bytes(
+    request: reqwest::RequestBuilder,
+    bytes: Option<&Vec<u8>>,
+) -> reqwest::RequestBuilder {
+    if let Some(bytes) = bytes {
+        request.body(bytes.clone())
+    } else {
+        request
+    }
+}
+
+async fn list_page(response: reqwest::Response) -> Result<ListPage, GcsError> {
+    let bytes = response_bytes(response, "list response is not bytes").await?;
+    ListPage::from_slice(&bytes)
+}
+
+async fn response_bytes(
+    response: reqwest::Response,
+    message: &'static str,
+) -> Result<Vec<u8>, GcsError> {
+    match response.bytes().await {
+        Ok(bytes) => Ok(bytes.to_vec()),
+        Err(err) => Err(GcsError::with_source(
+            GcsErrorKind::Transport,
+            message,
+            err.without_url(),
+        )),
+    }
+}
+
+fn checked_put(request: &PutRequest) -> Result<String, GcsError> {
+    validate_object_name(request.name.as_str())?;
+    put_content_type(request)
+}
+
+fn put_content_type(request: &PutRequest) -> Result<String, GcsError> {
+    let content_type = request.options.content_type()?;
+    accept_metadata(&request.options.metadata, content_type)
+}
+
+fn accept_metadata(
+    metadata: &BTreeMap<String, String>,
+    content_type: String,
+) -> Result<String, GcsError> {
+    validate_metadata(metadata)?;
+    Ok(content_type)
+}
+
+fn check_rewrite_names(from: &str, to: &str) -> Result<(), GcsError> {
+    validate_object_name(from)?;
+    validate_object_name(to)
+}
+
+fn step_from_bytes(bytes: &[u8], token: Option<&str>) -> Result<RewriteProgress, GcsError> {
+    let parsed = RewriteStep::from_slice(bytes)?;
+    step_from_parsed(token, parsed)
+}
+
+fn step_from_parsed(token: Option<&str>, parsed: RewriteStep) -> Result<RewriteProgress, GcsError> {
+    match parsed {
+        RewriteStep::Done(meta) => Ok(RewriteProgress::Done(meta)),
+        RewriteStep::Next(next) => changed_token(token, next),
+    }
+}
+
+fn changed_token(previous: Option<&str>, next: String) -> Result<RewriteProgress, GcsError> {
+    if previous == Some(next.as_str()) {
+        Err(GcsError::new(
+            GcsErrorKind::Api,
+            "rewrite token did not change",
+        ))
+    } else {
+        Ok(RewriteProgress::Next(Some(next)))
+    }
+}
+
+fn finish_rewrite(step: Result<RewriteProgress, GcsError>) -> Result<ObjectMeta, GcsError> {
+    match step {
+        Ok(RewriteProgress::Done(meta)) => Ok(meta),
+        other => rewrite_failed(other),
+    }
+}
+
+fn rewrite_failed(step: Result<RewriteProgress, GcsError>) -> Result<ObjectMeta, GcsError> {
+    match step {
+        Err(err) => Err(err),
+        Ok(_) => Err(GcsError::new(
+            GcsErrorKind::Api,
+            "rewrite token did not change",
+        )),
+    }
+}
+
+fn checked_patch(name: &str, metadata: &BTreeMap<String, String>) -> Result<(), GcsError> {
+    validate_object_name(name)?;
+    validate_metadata(metadata)
+}
+
+async fn delete_result(result: Result<reqwest::Response, GcsError>) -> Result<(), GcsError> {
+    match result {
+        Ok(response) => finish_delete(response).await,
+        Err(err) => missing_or_err(err),
+    }
+}
+
+async fn finish_delete(response: reqwest::Response) -> Result<(), GcsError> {
+    let _ = response.bytes().await;
+    Ok(())
+}
+
+fn missing_or_err(err: GcsError) -> Result<(), GcsError> {
+    if err.kind() == GcsErrorKind::NotFound {
+        Ok(())
+    } else {
+        Err(err)
+    }
+}
+
+fn both_names_remain(delete_err: GcsError, cleanup_err: GcsError) -> GcsError {
+    GcsError::with_source(
+        delete_err.kind(),
+        format!(
+            "move could not delete the source ({delete_err}) and could not delete \
+             the destination ({cleanup_err}); the object exists at both names"
+        ),
+        delete_err,
+    )
+}
+
+fn source_gone(delete_err: GcsError) -> GcsError {
+    GcsError::with_source(
+        delete_err.kind(),
+        format!(
+            "move could not delete the source ({delete_err}) but the source is gone; \
+             the object exists only at the destination"
+        ),
+        delete_err,
+    )
+}
+
+fn source_unchecked(delete_err: GcsError, check_err: GcsError) -> GcsError {
+    GcsError::with_source(
+        delete_err.kind(),
+        format!(
+            "move could not delete the source ({delete_err}) and could not check \
+             the source ({check_err}); the object may exist at both names"
+        ),
+        delete_err,
+    )
 }
 
 fn not_found_as_none<T>(result: Result<T, GcsError>) -> Result<Option<T>, GcsError> {
@@ -491,6 +834,25 @@ mod tests {
 
     use super::*;
     use crate::logging::tests::buffered_events;
+
+    #[test]
+    fn metadata_rejects_an_empty_key_or_a_line_break() {
+        let mut metadata = BTreeMap::new();
+        assert!(validate_metadata(&metadata).is_ok());
+        metadata.insert("owner".to_string(), "app".to_string());
+        assert!(validate_metadata(&metadata).is_ok());
+        metadata.insert(String::new(), "app".to_string());
+        assert_eq!(
+            validate_metadata(&metadata).unwrap_err().kind(),
+            GcsErrorKind::Config
+        );
+        metadata.clear();
+        metadata.insert("owner".to_string(), "a\nb".to_string());
+        assert!(validate_metadata(&metadata).is_err());
+        metadata.clear();
+        metadata.insert("a\nb".to_string(), "app".to_string());
+        assert!(validate_metadata(&metadata).is_err());
+    }
 
     #[test]
     fn object_url_encodes_slashes() {
