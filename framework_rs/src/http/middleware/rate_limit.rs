@@ -11,6 +11,8 @@ use crate::http::middleware::set_client_ip::request_ip;
 use crate::http::ApiError;
 
 const PRUNE_AT: usize = 10_000;
+// A full map drops this many of the least recently used buckets at once, so the scan is rare.
+const EVICT_COUNT: usize = PRUNE_AT / 10;
 const UNKNOWN_WAIT: Duration = Duration::from_secs(3600);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -58,11 +60,13 @@ impl RateLimiter {
             buckets.retain(|_, bucket| refilled(bucket, now, refill, capacity) < capacity);
         }
         if buckets.len() >= PRUNE_AT && !buckets.contains_key(key) {
-            let oldest = buckets
+            let mut used: Vec<(Instant, String)> = buckets
                 .iter()
-                .min_by_key(|(_, bucket)| bucket.updated)
-                .map(|(name, _)| name.clone());
-            if let Some(name) = oldest {
+                .map(|(name, bucket)| (bucket.updated, name.clone()))
+                .collect();
+            let count = EVICT_COUNT.min(used.len());
+            used.select_nth_unstable_by_key(count - 1, |(updated, _)| *updated);
+            for (_, name) in used.into_iter().take(count) {
                 buckets.remove(&name);
             }
         }
@@ -178,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn evicts_the_oldest_bucket_when_no_bucket_is_full() {
+    fn evicts_the_oldest_buckets_when_no_bucket_is_full() {
         let limiter = limiter(2, 0.001);
         let now = Instant::now();
         for index in 0..PRUNE_AT {
@@ -188,9 +192,10 @@ mod tests {
         let at = now + Duration::from_millis(PRUNE_AT as u64);
         assert!(limiter.check("new", at).is_ok());
         let buckets = limiter.buckets.lock().unwrap();
-        assert_eq!(buckets.len(), PRUNE_AT);
+        assert_eq!(buckets.len(), PRUNE_AT - EVICT_COUNT + 1);
         assert!(!buckets.contains_key("0"));
-        assert!(buckets.contains_key("1"));
+        assert!(!buckets.contains_key(&(EVICT_COUNT - 1).to_string()));
+        assert!(buckets.contains_key(&EVICT_COUNT.to_string()));
         assert!(buckets.contains_key("new"));
     }
 
