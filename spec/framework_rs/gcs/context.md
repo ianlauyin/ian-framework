@@ -96,7 +96,7 @@ One `GcsClient` has one HTTP client. The storage calls, the resumable upload, th
 `GcsClient` makes each storage call, token-bound call and `signBlob` call through one send function. The send function retries a failed call.
 
 - A call has at most 4 attempts.
-- The send function retries a transport failure and a response with status 408, 429, 500, 502, 503 or 504.
+- The send function retries a transport failure and a response with status 408, 429, 500, 502, 503 or 504. `is_retryable` is true for the codes `GCS_TRANSPORT` and `GCS_UNAVAILABLE`.
 - The wait before a retry is 250 milliseconds times the number of attempts made. The first wait is 250 milliseconds.
 - A retry writes the same operations log record as the first failure.
 - The resumable chunk request and the session probe make one attempt in the send function. They have their own retry loop in `spec/framework_rs/gcs/upload.md`.
@@ -108,29 +108,29 @@ The client gives the exception code from the GCS response status:
 
 | GCS response status | Code |
 | --- | --- |
-| 401, 403 | `gcs_auth` |
-| 404 | `gcs_not_found` |
-| A different status that is not 2xx | `gcs_api` |
+| 401, 403 | `GCS_AUTH` |
+| 404 | `GCS_NOT_FOUND` |
+| 408, 429, 500, 502, 503, 504 | `GCS_UNAVAILABLE` |
+| A different status that is not 2xx | `GCS_API` |
 
 - This table applies to the storage calls and to the IAM `signBlob` call.
-- A transport failure is `gcs_transport`. This includes only a failure of the network call or of the response body.
-- A failure on the local host is `gcs_local`. This includes a failure to read the upload file and a failure to build the HTTP client. The client does not retry it. An upstream session failure is not a local failure. It has a `gcs_api` code and a retryable status.
+- A transport failure is `GCS_TRANSPORT`. This includes only a failure of the network call or of the response body.
+- A failure on the local host is `GCS_LOCAL`. This includes a failure to read the upload file and a failure to build the HTTP client. The client does not retry it. An upstream session failure is not a local failure. It has the code `GCS_UNAVAILABLE`.
 - The message of a response error has the detail of the response body. The detail has no query string, no control character and at most 200 bytes. The client splits the text into tokens. A token ends at whitespace or at one of `"`, `'`, `<`, `>`, `)`, `\`, `,`, `;`, `]` and `}`. The client changes the tokens as follows:
 
   - A token with a `?` and a `/` before the first `?` (an absolute URL, a scheme-less URL or a path) loses the `?` and the text after it.
   - The value of a `key=value` pair becomes `***` when the key is `upload_id`, `access_token`, `refresh_token`, `id_token`, `token`, `signature`, `sig`, `client_secret`, `password`, `secret` or `authorization`, or starts with `X-Goog-`. The client does this also for a pair with no `?`. The comparison ignores the letter case.
   - The token after `Authorization:`, `Bearer` or `Basic` becomes `***`.
   - Other text, such as a `?` in a plain sentence, stays.
-- A token request with a status that is not 2xx is `gcs_auth`. This includes the metadata server.
+- A token request with a status that is not 2xx is `GCS_AUTH`. This includes the metadata server.
 - A resumable chunk response or a probe response with status 308 gives the next offset. It does not give an error code.
 
 ## HTTP error
 
 `Exception` implements `ian_framework::http::IntoApiError`. The table is in `spec/framework_rs/exception.md`. A handler that returns `Result<T, ApiError>` can use `?` on an `Exception` from this client.
 
-- The status depends only on the code.
-- The GCS response status does not change the HTTP status. The stored status of a `gcs` exception is the status of the upstream call.
-- The message is fixed for each code.
+- The status is 500 and the message is `internal error`, as in `spec/framework_rs/exception.md`.
+- The GCS response status does not change the HTTP status.
 - The message does not contain the internal message or the trace.
 
 ## Out of scope

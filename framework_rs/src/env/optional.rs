@@ -44,7 +44,6 @@ mod tests {
     use super::*;
     use crate::env::tests::{block_on, not_unicode as not_unicode_value, with_var};
     #[cfg(feature = "gcp")]
-    use crate::exception::code;
     #[cfg(feature = "gcp")]
     use crate::gcp::tests::{fake_secret_manager, ok_body, serve};
 
@@ -118,14 +117,14 @@ mod tests {
     fn a_403_is_an_error_without_fallback() {
         let body = br#"{"error":{"code":403,"message":"Permission denied"}}"#;
         let error = secret_with(403, body).unwrap_err();
-        assert_eq!(error.code(), code::ENV_SECRET);
+        assert_eq!(error.code(), Some("ENV_SECRET"));
         assert_eq!(
             error.to_string(),
-            "env_secret: IAN_FRAMEWORK_TEST_SECRET cannot be read from Secret Manager"
+            "IAN_FRAMEWORK_TEST_SECRET cannot be read from Secret Manager"
         );
         assert_eq!(
             error.source_exception().unwrap().to_string(),
-            "gcp_auth: secret manager status 403: Permission denied"
+            "secret manager status 403: Permission denied"
         );
     }
 
@@ -134,7 +133,7 @@ mod tests {
     fn a_bad_secret_value_is_an_error_without_fallback() {
         for body in [ok_body(b" "), ok_body(&[0x66, 0x80]), b"{}".to_vec()] {
             let error = secret_with(200, &body).unwrap_err();
-            assert_eq!(error.code(), code::ENV_SECRET);
+            assert_eq!(error.code(), Some("ENV_SECRET"));
         }
     }
 

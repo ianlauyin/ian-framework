@@ -11,7 +11,6 @@ use crate::http::headers::read_cookie;
 
 use super::SessionConfig;
 use crate::exception;
-use crate::exception::code;
 use crate::exception::Exception;
 
 // Browsers cap a cookie lifetime at 400 days.
@@ -43,8 +42,9 @@ impl SessionStore {
 
     pub async fn connect(url: &str, config: SessionConfig) -> Result<Self, Exception> {
         check_config(&config)?;
-        let client = redis::Client::open(url)
-            .map_err(|err| exception!(code::AUTH_CONFIG, "redis url is not valid", source = err))?;
+        let client = redis::Client::open(url).map_err(|err| {
+            exception!("redis url is not valid", code = "AUTH_CONFIG", source = err)
+        })?;
         let mut conn = ConnectionManager::new_with_config(client, manager_config())
             .await
             .map_err(unreachable)?;
@@ -53,7 +53,7 @@ impl SessionStore {
             .await
             .map_err(unreachable)?;
         if pong != "PONG" {
-            return Err(exception!(code::AUTH_STORE, "cannot reach redis"));
+            return Err(exception!("cannot reach redis", code = "AUTH_STORE"));
         }
         Ok(Self {
             inner: Arc::new(Inner { conn, config }),
@@ -273,8 +273,8 @@ struct Inner {
 
 fn store_err(err: redis::RedisError) -> Exception {
     exception!(
-        code::AUTH_STORE,
         "session store command failed",
+        code = "AUTH_STORE",
         source = err
     )
 }
@@ -315,7 +315,7 @@ fn check_config(config: &SessionConfig) -> Result<(), Exception> {
     } else {
         return Ok(());
     };
-    Err(exception!(code::AUTH_CONFIG, problem))
+    Err(exception!(problem, code = "AUTH_CONFIG"))
 }
 
 // RFC 6265 cookie-name: one or more visible ASCII characters with no separator.
@@ -327,13 +327,17 @@ fn is_cookie_name(name: &str) -> bool {
 }
 
 fn unreachable(err: redis::RedisError) -> Exception {
-    exception!(code::AUTH_STORE, "cannot reach redis", source = err)
+    exception!("cannot reach redis", code = "AUTH_STORE", source = err)
 }
 
 fn random_token() -> Result<String, Exception> {
     let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes)
-        .map_err(|err| exception!(code::AUTH_RANDOM, format!("os random source failed: {err}")))?;
+    getrandom::fill(&mut bytes).map_err(|err| {
+        exception!(
+            format!("os random source failed: {err}"),
+            code = "AUTH_RANDOM"
+        )
+    })?;
     Ok(hex::encode(bytes))
 }
 
@@ -559,7 +563,7 @@ mod tests {
         ];
         for config in bad {
             let err = check_config(&config).unwrap_err();
-            assert_eq!(err.code(), code::AUTH_CONFIG);
+            assert_eq!(err.code(), Some("AUTH_CONFIG"));
         }
         let edge = config_with(|config| {
             config.max_age_secs = MAX_AGE_LIMIT_SECS;
@@ -579,7 +583,7 @@ mod tests {
         let err = SessionStore::connect("not a redis url", SessionConfig::default())
             .await
             .unwrap_err();
-        assert_eq!(err.code(), code::AUTH_CONFIG);
+        assert_eq!(err.code(), Some("AUTH_CONFIG"));
         assert!(!err.to_string().contains("not a redis url"));
 
         let config = SessionConfig {
@@ -589,7 +593,7 @@ mod tests {
         let err = SessionStore::connect("redis://127.0.0.1:6379", config)
             .await
             .unwrap_err();
-        assert_eq!(err.code(), code::AUTH_CONFIG);
+        assert_eq!(err.code(), Some("AUTH_CONFIG"));
 
         let config = SessionConfig {
             max_age_secs: 0,
@@ -598,7 +602,7 @@ mod tests {
         let err = SessionStore::connect("redis://127.0.0.1:6379", config)
             .await
             .unwrap_err();
-        assert_eq!(err.code(), code::AUTH_CONFIG);
+        assert_eq!(err.code(), Some("AUTH_CONFIG"));
     }
 
     #[test]

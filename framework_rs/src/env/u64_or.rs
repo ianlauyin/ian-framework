@@ -15,7 +15,6 @@ pub fn u64_or(name: &str, default: u64) -> Result<u64, Exception> {
 mod tests {
     use super::*;
     use crate::env::tests::{not_unicode as not_unicode_value, with_var};
-    use crate::exception::code;
     use std::ffi::OsStr;
 
     const NAME: &str = "IAN_FRAMEWORK_TEST_U64_OR";
@@ -53,6 +52,6 @@ mod tests {
     #[test]
     fn rejects_a_value_that_is_not_unicode() {
         let error = with_var(NAME, Some(not_unicode_value()), || u64_or(NAME, 7)).unwrap_err();
-        assert_eq!(error.code(), code::ENV_NOT_UNICODE);
+        assert_eq!(error.code(), Some("ENV_NOT_UNICODE"));
     }
 }

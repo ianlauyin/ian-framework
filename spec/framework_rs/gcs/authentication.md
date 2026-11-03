@@ -13,7 +13,7 @@ The client accepts only Application Default Credentials. The shared credentials 
 - The client does not send the quota project of user credentials.
 - The signer email is the service account email that signs URLs. The project reads it from its own env variable and gives it to `GcsClient::from_adc`. The library does not read an env variable for the signer email.
 - Metadata auth does not use the signer email from the caller. It reads the email from the metadata server.
-- A failure of the metadata email request has a `gcs` code. The request failure is `gcs_auth`, like the other `gcp` codes that the client maps with the same meaning.
+- A failure of the metadata email request has a `gcs` code. The request failure is `GCS_AUTH`, like the other `gcp` codes that the client maps with the same meaning.
 
 Scopes:
 

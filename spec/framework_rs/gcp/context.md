@@ -58,10 +58,10 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 
 | Code | Condition |
 | --- | --- |
-| `gcp_auth` | A token request fails, the metadata server gives a project status that is not 2xx, or Secret Manager gives status 401 or 403. |
-| `gcp_config` | The credentials, the project id or the secret id are not valid, or the secret value is empty or not UTF-8. |
-| `gcp_api` | Secret Manager gives a different status that is not 2xx and not 404, or the response body is not valid. |
-| `gcp_transport` | The HTTP request fails. |
+| `GCP_AUTH` | A token request fails, the metadata server gives a project status that is not 2xx, or Secret Manager gives status 401 or 403. |
+| `GCP_CONFIG` | The credentials, the project id or the secret id are not valid, or the secret value is empty or not UTF-8. |
+| `GCP_API` | Secret Manager gives a different status that is not 2xx and not 404, or the response body is not valid. |
+| `GCP_TRANSPORT` | The HTTP request fails. |
 
 - The `gcs` module changes the code `gcp_x` to the code `gcs_x`. The message and the source stay.
 

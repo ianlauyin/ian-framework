@@ -1,5 +1,4 @@
 use crate::exception;
-use crate::exception::code;
 use crate::exception::Exception;
 use crate::gcp::{
     metadata_get, metadata_token, truncate, CachedToken, Credentials, UserCredentials,
@@ -75,19 +74,19 @@ async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<String, Exc
     let status = response.status();
     let body = response.text().await.map_err(|err| {
         exception!(
-            code::GCS_AUTH,
             "metadata server email response is not text",
+            code = "GCS_AUTH",
             source = err.without_url()
         )
     })?;
     if !status.is_success() {
         return Err(exception!(
-            code::GCS_AUTH,
             format!(
                 "metadata server email status {}: {}",
                 status.as_u16(),
                 truncate(&body, 300)
-            )
+            ),
+            code = "GCS_AUTH"
         ));
     }
     let email = body.trim().to_string();
@@ -98,8 +97,8 @@ async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<String, Exc
 fn validate_signer_email(email: &str) -> Result<(), Exception> {
     if !email.contains('@') || email.contains(char::is_whitespace) {
         return Err(exception!(
-            code::GCS_CONFIG,
-            "signer email is not a service account email"
+            "signer email is not a service account email",
+            code = "GCS_CONFIG"
         ));
     }
     Ok(())
@@ -114,8 +113,8 @@ fn auth_from_credentials(
         Credentials::User(credentials) => {
             let signer_email = signer_email.ok_or_else(|| {
                 exception!(
-                    code::GCS_CONFIG,
-                    "user application default credentials require a signer email"
+                    "user application default credentials require a signer email",
+                    code = "GCS_CONFIG"
                 )
             })?;
             // GcsClient::new checks that the fields are not empty and the signer email is valid.
@@ -151,7 +150,7 @@ mod tests {
     #[test]
     fn user_adc_requires_a_signer_email() {
         let err = auth_from_credentials(user_credentials(), None).unwrap_err();
-        assert_eq!(err.code(), code::GCS_CONFIG);
+        assert_eq!(err.code(), Some("GCS_CONFIG"));
         assert!(err
             .to_string()
             .contains("user application default credentials require a signer email"));
@@ -211,17 +210,17 @@ mod tests {
         let (addr, _server) = serve_script(replies).await;
         let url = format!("http://{addr}/email");
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.code(), code::GCS_AUTH);
+        assert_eq!(err.code(), Some("GCS_AUTH"));
         assert!(err.to_string().contains("status 500: boom"), "{err}");
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.code(), code::GCS_CONFIG);
+        assert_eq!(err.code(), Some("GCS_CONFIG"));
     }
 
     #[tokio::test]
     async fn metadata_email_reports_an_unreachable_server() {
         let url = format!("http://{}/email", closed_addr());
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.code(), code::GCS_AUTH);
+        assert_eq!(err.code(), Some("GCS_AUTH"));
     }
 
     #[tokio::test]

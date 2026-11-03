@@ -4,7 +4,6 @@ use std::time::Duration;
 use crate::logging::LogLevel;
 
 use crate::exception;
-use crate::exception::code;
 use crate::exception::Exception;
 use crate::gcs::encode::encode_seg;
 use crate::gcs::gcs_client::request::{logged_error, Call, OpsRecord};
@@ -66,17 +65,19 @@ impl<'a> ResumableUpload<'a> {
         let location = response
             .headers()
             .get(reqwest::header::LOCATION)
-            .ok_or_else(|| exception!(code::GCS_API, "resumable upload did not return Location"))?;
+            .ok_or_else(|| {
+                exception!("resumable upload did not return Location", code = "GCS_API")
+            })?;
         let location = location
             .to_str()
-            .map_err(|_| exception!(code::GCS_API, "resumable Location header is not UTF-8"))?
+            .map_err(|_| exception!("resumable Location header is not UTF-8", code = "GCS_API"))?
             .to_string();
         let _ = response.bytes().await;
         // Every chunk request carries the access token, so the session URL must stay on the Google host.
         if !location.starts_with(&client.inner.endpoints.upload_location_prefix) {
             return Err(exception!(
-                code::GCS_API,
-                "resumable Location is not a storage.googleapis.com URL"
+                "resumable Location is not a storage.googleapis.com URL",
+                code = "GCS_API"
             ));
         }
         Ok(Self {
@@ -107,8 +108,8 @@ impl<'a> ResumableUpload<'a> {
             }
         }
         Err(exception!(
-            code::GCS_API,
-            "finished upload did not return object metadata"
+            "finished upload did not return object metadata",
+            code = "GCS_API"
         ))
     }
 
@@ -128,8 +129,8 @@ impl<'a> ResumableUpload<'a> {
             attempt += 1;
             if attempt > CHUNK_ATTEMPTS {
                 return Err(exception!(
-                    code::GCS_TRANSPORT,
-                    "resumable chunk failed after retries"
+                    "resumable chunk failed after retries",
+                    code = "GCS_TRANSPORT"
                 ));
             }
             if attempt > 1 {
@@ -212,13 +213,13 @@ impl<'a> ResumableUpload<'a> {
         }
         let attempt_text = attempt.to_string();
         let offset_text = offset.to_string();
-        let error_text = logged_error(&err);
+        let error_text = logged_error(&String::from(&err));
         self.client.record_op(OpsRecord {
             level: LogLevel::Warn,
             message,
             method: "PUT",
             url: &self.location,
-            status: err.status(),
+            status: None,
             latency_ms: None,
             extra: &[
                 ("attempt", &attempt_text),
@@ -312,8 +313,8 @@ impl UploadStep {
         match self {
             Self::Done(meta) => Ok(meta),
             Self::Continue { .. } => Err(exception!(
-                code::GCS_API,
-                "finished upload did not return object metadata"
+                "finished upload did not return object metadata",
+                code = "GCS_API"
             )),
         }
     }
@@ -323,7 +324,7 @@ fn chunk_piece(chunk: &[u8], start: u64, offset: u64) -> Result<&[u8], Exception
     usize::try_from(offset - start)
         .ok()
         .and_then(|from| chunk.get(from..))
-        .ok_or_else(|| exception!(code::GCS_API, "resumable offset is outside the chunk"))
+        .ok_or_else(|| exception!("resumable offset is outside the chunk", code = "GCS_API"))
 }
 
 fn after_probe(next: u64, start: u64, end: u64, offset: u64) -> Move {
@@ -349,8 +350,8 @@ fn advance_offset(
 ) -> Result<(), Exception> {
     if next > total {
         return Err(exception!(
-            code::GCS_API,
-            "resumable offset is past the end of the object"
+            "resumable offset is past the end of the object",
+            code = "GCS_API"
         ));
     }
     if next > *offset {
@@ -362,17 +363,16 @@ fn advance_offset(
         *rewinds += 1;
         if *rewinds > CHUNK_ATTEMPTS {
             return Err(exception!(
-                code::GCS_API,
                 "resumable session did not keep uploaded bytes",
-                status = 503
+                code = "GCS_UNAVAILABLE"
             ));
         }
         *offset = next;
         return Ok(());
     }
     Err(exception!(
-        code::GCS_API,
-        "resumable upload did not advance"
+        "resumable upload did not advance",
+        code = "GCS_API"
     ))
 }
 
@@ -406,7 +406,8 @@ fn probe_content_range(total: u64) -> String {
 }
 
 fn next_offset_from_range(header: &str) -> Result<u64, Exception> {
-    range_end(header).ok_or_else(|| exception!(code::GCS_API, "resumable Range header is invalid"))
+    range_end(header)
+        .ok_or_else(|| exception!("resumable Range header is invalid", code = "GCS_API"))
 }
 
 fn range_end(header: &str) -> Option<u64> {
@@ -473,12 +474,12 @@ mod tests {
         assert_eq!(offset, 4);
         assert_eq!(rewinds, 1);
         let stalled = advance_offset(&mut offset, &mut rewinds, 4, 100).unwrap_err();
-        assert_eq!(stalled.code(), code::GCS_API);
+        assert_eq!(stalled.code(), Some("GCS_API"));
         advance_offset(&mut offset, &mut rewinds, 20, 100).unwrap();
         assert_eq!(offset, 20);
         assert_eq!(rewinds, 0);
         let past = advance_offset(&mut offset, &mut rewinds, 101, 100).unwrap_err();
-        assert_eq!(past.code(), code::GCS_API);
+        assert_eq!(past.code(), Some("GCS_API"));
     }
 
     #[test]
@@ -490,8 +491,7 @@ mod tests {
             offset = 8;
         }
         let err = advance_offset(&mut offset, &mut rewinds, 0, 100).unwrap_err();
-        assert_eq!(err.code(), code::GCS_API);
-        assert_eq!(err.status(), Some(503));
+        assert_eq!(err.code(), Some("GCS_UNAVAILABLE"));
         assert!(is_retryable(&err));
     }
 
@@ -730,7 +730,7 @@ mod tests {
         assert!(is_done(put_chunk(replies, 0).await));
         let replies = vec![Reply::new(500, "{}"), Reply::new(403, "{}")];
         let err = put_chunk(replies, 0).await.map(|_| ()).unwrap_err();
-        assert_eq!(err.code(), code::GCS_AUTH);
+        assert_eq!(err.code(), Some("GCS_AUTH"));
     }
 
     #[tokio::test]
@@ -739,7 +739,7 @@ mod tests {
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.code(), code::GCS_AUTH);
+        assert_eq!(err.code(), Some("GCS_AUTH"));
     }
 
     #[tokio::test]
@@ -762,7 +762,7 @@ mod tests {
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.code(), code::GCS_API);
+        assert_eq!(err.code(), Some("GCS_API"));
     }
 
     #[test]

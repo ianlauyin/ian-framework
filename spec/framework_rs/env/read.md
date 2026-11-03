@@ -20,17 +20,17 @@ The error of this feature is `ian_framework::exception::Exception`. Its definiti
 
 | Code | Condition | Message |
 | --- | --- | --- |
-| `env_missing` | The variable is absent or blank. | `{name} is required` |
-| `env_not_unicode` | The value of the variable is not valid unicode. | `{name} is not valid unicode` |
-| `env_invalid` | The value of the variable is not valid for the read. | `{name} is not valid` |
-| `env_secret` | The Secret Manager read for the variable fails. | `{name} cannot be read from Secret Manager` |
+| `ENV_MISSING` | The variable is absent or blank. | `{name} is required` |
+| `ENV_NOT_UNICODE` | The value of the variable is not valid unicode. | `{name} is not valid unicode` |
+| `ENV_INVALID` | The value of the variable is not valid for the read. | `{name} is not valid` |
+| `ENV_SECRET` | The Secret Manager read for the variable fails. | `{name} cannot be read from Secret Manager` |
 
-Only the `gcp` feature gives `env_secret`. Its source is the Secret Manager exception, so the trace shows the cause.
+Only the `gcp` feature gives `ENV_SECRET`. Its source is the Secret Manager exception, so the trace shows the cause.
 
 | Function | Signature | Effect |
 | --- | --- | --- |
-| `missing` | `fn missing(name: &str) -> Exception` | Makes the exception with the code `env_missing`. |
-| `invalid` | `fn invalid(name: &str) -> Exception` | Makes the exception with the code `env_invalid`. |
+| `missing` | `fn missing(name: &str) -> Exception` | Makes the exception with the code `ENV_MISSING`. |
+| `invalid` | `fn invalid(name: &str) -> Exception` | Makes the exception with the code `ENV_INVALID`. |
 
 - A project uses `missing` when it reads a value with `std::env::var` and the value is not set.
 - A project uses `invalid` when its own check of a value fails.
@@ -45,7 +45,7 @@ Only the `gcp` feature gives `env_secret`. Its source is the Secret Manager exce
 
 - The signatures are the same with and without the `gcp` feature.
 - The returned futures are `Send`.
-- `required` uses the same lookup as `optional`. When `optional` gives `None`, `required` gives the code `env_missing`.
+- `required` uses the same lookup as `optional`. When `optional` gives `None`, `required` gives the code `ENV_MISSING`.
 
 ### Lookup
 
@@ -65,7 +65,7 @@ Without the `gcp` feature, the lookup does only step 4.
 | `User` credentials and no project | The environment variable |
 | Secret Manager status 404 | The environment variable |
 | Secret Manager gives the secret | The secret value. The lookup does not read the environment variable. |
-| A different failure: credentials file not valid, token failure, metadata server status that is not 2xx, status 401, 403 or a different status, network error, bad payload, empty or non-UTF-8 value, secret id with a character that is not valid | Exception with the code `env_secret` for the name `name`. The lookup does not read the environment variable. |
+| A different failure: credentials file not valid, token failure, metadata server status that is not 2xx, status 401, 403 or a different status, network error, bad payload, empty or non-UTF-8 value, secret id with a character that is not valid | Exception with the code `ENV_SECRET` for the name `name`. The lookup does not read the environment variable. |
 
 - The error detail is the Secret Manager error message and its source.
 - The lookup does not write a log line.
@@ -75,7 +75,7 @@ Without the `gcp` feature, the lookup does only step 4.
 
 - The read removes the whitespace at the start and at the end of the value.
 - An absent variable, an empty value or a value with only whitespace gives `None`.
-- When the value is not valid unicode, the read gives the code `env_not_unicode`.
+- When the value is not valid unicode, the read gives the code `ENV_NOT_UNICODE`.
 
 ## u64_or
 
@@ -85,5 +85,5 @@ Without the `gcp` feature, the lookup does only step 4.
 
 - When the variable is absent, `u64_or` gives `default`.
 - `u64_or` parses the value with `str::parse::<u64>`. It does not remove whitespace.
-- When the parse fails, `u64_or` gives the code `env_invalid`. Thus an empty value, a value with whitespace, a negative value and a value larger than `u64::MAX` give `env_invalid`.
-- When the value is not valid unicode, `u64_or` gives the code `env_not_unicode`.
+- When the parse fails, `u64_or` gives the code `ENV_INVALID`. Thus an empty value, a value with whitespace, a negative value and a value larger than `u64::MAX` give `ENV_INVALID`.
+- When the value is not valid unicode, `u64_or` gives the code `ENV_NOT_UNICODE`.

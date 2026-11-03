@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use crate::exception::{Exception, Severity};
+
 use super::{LogEvent, LogLevel, LogShipper, LogValue};
 
 static LOGGER: OnceLock<LogShipper> = OnceLock::new();
@@ -38,6 +40,18 @@ impl Logger {
         context: BTreeMap<String, LogValue>,
     ) {
         Self::log(LogEvent::error(action, error_message), context);
+    }
+
+    pub fn exception(
+        action: impl Into<String>,
+        exception: &Exception,
+        context: BTreeMap<String, LogValue>,
+    ) {
+        let error_message = String::from(exception);
+        match exception.severity() {
+            Severity::Warn => Self::warn_with(action, error_message, context),
+            Severity::Error => Self::error(action, error_message, context),
+        }
     }
 
     fn log(mut log_event: LogEvent, context: BTreeMap<String, LogValue>) {
@@ -81,5 +95,10 @@ mod tests {
         assert!(Logger::init(second).is_err());
         Logger::warn("TEST/warn", BTreeMap::new());
         Logger::warn_with("TEST/warn", "slow", BTreeMap::new());
+        Logger::exception(
+            "TEST/exception",
+            &crate::exception!("failed"),
+            BTreeMap::new(),
+        );
     }
 }

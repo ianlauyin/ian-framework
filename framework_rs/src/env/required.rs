@@ -11,7 +11,6 @@ mod tests {
 
     use super::*;
     use crate::env::tests::{block_on, not_unicode, with_var};
-    use crate::exception::code;
 
     const NAME: &str = "IAN_FRAMEWORK_TEST_REQUIRED";
 
@@ -36,7 +35,7 @@ mod tests {
     #[test]
     fn rejects_a_value_that_is_not_unicode() {
         let error = with_var(NAME, Some(not_unicode()), || block_on(required(NAME))).unwrap_err();
-        assert_eq!(error.code(), code::ENV_NOT_UNICODE);
+        assert_eq!(error.code(), Some("ENV_NOT_UNICODE"));
         assert!(error.message().contains(NAME));
     }
 

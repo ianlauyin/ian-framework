@@ -1,5 +1,4 @@
 use crate::exception;
-use crate::exception::code;
 use crate::exception::Exception;
 use crate::gcp::{api_detail, truncate};
 
@@ -21,10 +20,7 @@ const SECRET_KEYS: [&str; 11] = [
 ];
 
 pub(crate) fn is_retryable(err: &Exception) -> bool {
-    if err.code() == code::GCS_TRANSPORT {
-        return true;
-    }
-    err.status().is_some_and(is_retryable_status)
+    matches!(err.code(), Some("GCS_TRANSPORT" | "GCS_UNAVAILABLE"))
 }
 
 pub(crate) fn is_retryable_status(status: u16) -> bool {
@@ -110,10 +106,10 @@ fn is_token_end(ch: char) -> bool {
 // The gcp code and the gcs code have the same meaning. The message and the source stay.
 pub(crate) fn from_gcp(err: Exception) -> Exception {
     let code = match err.code() {
-        code::GCP_AUTH => code::GCS_AUTH,
-        code::GCP_CONFIG => code::GCS_CONFIG,
-        code::GCP_API => code::GCS_API,
-        code::GCP_TRANSPORT => code::GCS_TRANSPORT,
+        Some("GCP_AUTH") => "GCS_AUTH",
+        Some("GCP_CONFIG") => "GCS_CONFIG",
+        Some("GCP_API") => "GCS_API",
+        Some("GCP_TRANSPORT") => "GCS_TRANSPORT",
         _ => return err,
     };
     err.with_code(code)
@@ -124,11 +120,12 @@ pub(crate) async fn gcs_response_exception(response: reqwest::Response) -> Excep
     let text = response.text().await.unwrap_or_default();
     let detail = response_detail(&text);
     let code = match status {
-        401 | 403 => code::GCS_AUTH,
-        404 => code::GCS_NOT_FOUND,
-        _ => code::GCS_API,
+        401 | 403 => "GCS_AUTH",
+        404 => "GCS_NOT_FOUND",
+        _ if is_retryable_status(status) => "GCS_UNAVAILABLE",
+        _ => "GCS_API",
     };
-    exception!(code, format!("status {status}: {detail}"), status = status)
+    exception!(format!("status {status}: {detail}"), code = code)
 }
 
 // The upstream body can hold a signed URL, so the detail has no URL query and no control character.
@@ -148,23 +145,23 @@ mod tests {
 
     #[test]
     fn from_gcp_keeps_the_meaning_message_and_source() {
-        let source = exception!(code::GCP_API, "inner");
-        let err = exception!(code::GCP_TRANSPORT, "outer", caused_by = source.clone());
+        let source = exception!("inner", code = "GCP_API");
+        let err = exception!("outer", code = "GCP_TRANSPORT", source = source.clone());
         let err = from_gcp(err);
-        assert_eq!(err.code(), code::GCS_TRANSPORT);
+        assert_eq!(err.code(), Some("GCS_TRANSPORT"));
         assert_eq!(err.message(), "outer");
         assert_eq!(err.source_exception(), Some(&source));
         assert_eq!(
-            from_gcp(exception!(code::GCP_AUTH, "x")).code(),
-            code::GCS_AUTH
+            from_gcp(exception!("x", code = "GCP_AUTH")).code(),
+            Some("GCS_AUTH")
         );
         assert_eq!(
-            from_gcp(exception!(code::GCP_CONFIG, "x")).code(),
-            code::GCS_CONFIG
+            from_gcp(exception!("x", code = "GCP_CONFIG")).code(),
+            Some("GCS_CONFIG")
         );
         assert_eq!(
-            from_gcp(exception!(code::GCP_API, "x")).code(),
-            code::GCS_API
+            from_gcp(exception!("x", code = "GCP_API")).code(),
+            Some("GCS_API")
         );
     }
 
@@ -268,26 +265,11 @@ mod tests {
     }
 
     #[test]
-    fn retryable_status_codes_match_the_upload_policy() {
-        assert!(is_retryable(&exception!(code::GCS_TRANSPORT, "reset")));
-        assert!(!is_retryable(&exception!(code::GCS_LOCAL, "read failed")));
-        for status in [408_u16, 429, 500, 502, 503, 504] {
-            assert!(is_retryable(&exception!(
-                code::GCS_API,
-                "retry",
-                status = status
-            )));
+    fn retryable_codes_match_the_upload_policy() {
+        assert!(is_retryable(&exception!("reset", code = "GCS_TRANSPORT")));
+        assert!(is_retryable(&exception!("busy", code = "GCS_UNAVAILABLE")));
+        for code in ["GCS_LOCAL", "GCS_NOT_FOUND", "GCS_API", "GCS_CONFIG"] {
+            assert!(!is_retryable(&exception!("x", code = code)), "{code}");
         }
-        assert!(!is_retryable(&exception!(
-            code::GCS_NOT_FOUND,
-            "missing",
-            status = 404
-        )));
-        assert!(!is_retryable(&exception!(
-            code::GCS_API,
-            "bad",
-            status = 400
-        )));
-        assert!(!is_retryable(&exception!(code::GCS_CONFIG, "config")));
     }
 }

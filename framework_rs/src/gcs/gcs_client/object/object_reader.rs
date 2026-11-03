@@ -3,7 +3,6 @@ use std::pin::Pin;
 use futures_util::{Stream, StreamExt};
 
 use crate::exception;
-use crate::exception::code;
 use crate::exception::Exception;
 
 const READ_TO_VEC_LIMIT: u64 = 256 * 1024 * 1024;
@@ -26,8 +25,8 @@ impl ObjectReader {
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|err| {
                 exception!(
-                    code::GCS_TRANSPORT,
                     "read object body failed",
+                    code = "GCS_TRANSPORT",
                     source = err.without_url()
                 )
             })?;
@@ -43,8 +42,8 @@ impl ObjectReader {
         Box::pin(self.response.bytes_stream().map(|item| {
             item.map(|chunk| chunk.to_vec()).map_err(|err| {
                 exception!(
-                    code::GCS_TRANSPORT,
                     "read object body failed",
+                    code = "GCS_TRANSPORT",
                     source = err.without_url()
                 )
             })
@@ -54,8 +53,8 @@ impl ObjectReader {
 
 fn too_large() -> Exception {
     exception!(
-        code::GCS_CONFIG,
-        "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream"
+        "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream",
+        code = "GCS_CONFIG"
     )
 }
 
@@ -78,7 +77,7 @@ mod tests {
             serve_script(vec![Reply::new(200, "").declared_length(declared)]).await;
         let reader = fake_client(addr).open_object("a").await.unwrap();
         let err = reader.read_to_vec().await.unwrap_err();
-        assert_eq!(err.code(), code::GCS_CONFIG);
+        assert_eq!(err.code(), Some("GCS_CONFIG"));
     }
 
     #[tokio::test]
@@ -86,7 +85,7 @@ mod tests {
         let (addr, _server) = serve_script(vec![Reply::new(200, "abc").declared_length(10)]).await;
         let reader = fake_client(addr).open_object("a").await.unwrap();
         let err = reader.read_to_vec().await.unwrap_err();
-        assert_eq!(err.code(), code::GCS_TRANSPORT);
+        assert_eq!(err.code(), Some("GCS_TRANSPORT"));
     }
 
     #[tokio::test]
@@ -96,6 +95,6 @@ mod tests {
         let items: Vec<_> = reader.byte_stream().collect().await;
         assert_eq!(items[0].as_ref().unwrap(), b"abc");
         let err = items.last().unwrap().as_ref().unwrap_err();
-        assert_eq!(err.code(), code::GCS_TRANSPORT);
+        assert_eq!(err.code(), Some("GCS_TRANSPORT"));
     }
 }

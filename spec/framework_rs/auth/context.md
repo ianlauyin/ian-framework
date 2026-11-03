@@ -56,10 +56,10 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 
 | Code | Cause | Status | Message for the client |
 | --- | --- | --- | --- |
-| `auth_config` | Bad Redis URL or bad `SessionConfig` | 500 | `session store is not available` |
-| `auth_store` | Redis connection failure or Redis command failure | 503 | `session store is not available` |
-| `auth_password` | Password too long, hash failure, or blocking task failure | 500 | `password hash failed` |
-| `auth_random` | OS random source failure | 500 | `session token failed` |
+| `AUTH_CONFIG` | Bad Redis URL or bad `SessionConfig` | 500 | `session store is not available` |
+| `AUTH_STORE` | Redis connection failure or Redis command failure | 503 | `session store is not available` |
+| `AUTH_PASSWORD` | Password too long, hash failure, or blocking task failure | 500 | `password hash failed` |
+| `AUTH_RANDOM` | OS random source failure | 500 | `session token failed` |
 
 - The message for the client does not contain the internal detail.
 

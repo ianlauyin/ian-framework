@@ -1,7 +1,6 @@
 use serde::Deserialize;
 
 use crate::exception;
-use crate::exception::code;
 use crate::exception::Exception;
 use crate::gcs::encode::{encode_object_id, encode_seg};
 use crate::gcs::gcs_client::object::RawObject;
@@ -35,16 +34,19 @@ impl RewriteStep {
 
     pub(super) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
         let raw: RawRewrite = serde_json::from_slice(bytes)
-            .map_err(|err| exception!(code::GCS_API, "rewrite JSON is invalid", source = err))?;
+            .map_err(|err| exception!("rewrite JSON is invalid", code = "GCS_API", source = err))?;
         if raw.done {
             let resource = raw.resource.ok_or_else(|| {
-                exception!(code::GCS_API, "rewrite did not return object metadata")
+                exception!("rewrite did not return object metadata", code = "GCS_API")
             })?;
             return Ok(Self::Done(resource.into_meta()?));
         }
         match raw.rewrite_token {
             Some(token) if !token.is_empty() => Ok(Self::Next(token)),
-            _ => Err(exception!(code::GCS_API, "rewrite did not return a token")),
+            _ => Err(exception!(
+                "rewrite did not return a token",
+                code = "GCS_API"
+            )),
         }
     }
 }

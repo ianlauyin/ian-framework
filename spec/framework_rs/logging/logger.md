@@ -16,6 +16,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 | `Logger::warn(action, context)` | Records one event with the level `warn`, with no `error_message`. |
 | `Logger::warn_with(action, error_message, context)` | Records one event with the level `warn`. `error_message` is `impl Into<String>`. |
 | `Logger::error(action, error_message, context)` | Records one event with the level `error`. `error_message` is `impl Into<String>`, so the caller must give it. |
+| `Logger::exception(action, &exception, context)` | Records one event. The level is `warn` when the severity of the exception is `Warn`, else `error`. `error_message` is `String::from(exception)`, the trace text in `spec/framework_rs/exception.md`. |
 
 - `action` is `impl Into<String>`.
 - `context` is `BTreeMap<String, LogValue>`.

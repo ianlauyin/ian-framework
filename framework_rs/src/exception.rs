@@ -2,67 +2,27 @@ use std::fmt;
 
 use crate::http::IntoApiError;
 
-macro_rules! library_codes {
-    ($($name:ident = $text:literal, $status:literal, $message:literal;)*) => {
-        pub mod code {
-            $(pub const $name: &str = $text;)*
-        }
-
-        // Each library code gives its HTTP status and its client message. A new code needs both.
-        const LIBRARY_CODES: &[(&str, u16, &str)] = &[$(($text, $status, $message)),*];
-    };
-}
-
-library_codes! {
-    EXTERNAL = "external", 500, "internal error";
-    ENV_MISSING = "env_missing", 500, "internal error";
-    ENV_INVALID = "env_invalid", 500, "internal error";
-    ENV_NOT_UNICODE = "env_not_unicode", 500, "internal error";
-    ENV_SECRET = "env_secret", 500, "internal error";
-    AUTH_CONFIG = "auth_config", 500, "session store is not available";
-    AUTH_STORE = "auth_store", 503, "session store is not available";
-    AUTH_PASSWORD = "auth_password", 500, "password hash failed";
-    AUTH_RANDOM = "auth_random", 500, "session token failed";
-    GCP_AUTH = "gcp_auth", 500, "internal error";
-    GCP_CONFIG = "gcp_config", 500, "internal error";
-    GCP_API = "gcp_api", 500, "internal error";
-    GCP_TRANSPORT = "gcp_transport", 500, "internal error";
-    GCS_AUTH = "gcs_auth", 500, "storage is not available";
-    GCS_CONFIG = "gcs_config", 500, "storage is not available";
-    GCS_API = "gcs_api", 502, "storage request failed";
-    GCS_TRANSPORT = "gcs_transport", 502, "storage request failed";
-    GCS_LOCAL = "gcs_local", 500, "storage request failed";
-    GCS_NOT_FOUND = "gcs_not_found", 404, "storage object not found";
-}
-
-// A string literal as the code is a project code. A project code must not be a code of the library.
 #[macro_export]
 macro_rules! exception {
-    (@build $code:expr, $message:expr $(,)?) => {
-        $crate::exception::Exception::__new($code, $message, file!(), line!())
-    };
-    (@build $code:expr, $message:expr, status = $status:expr $(,)?) => {
-        $crate::exception::Exception::__with_status($code, $status, $message, file!(), line!())
-    };
-    (@build $code:expr, $message:expr, caused_by = $source:expr $(,)?) => {
-        $crate::exception::Exception::__caused_by($code, $message, $source, file!(), line!())
-    };
-    (@build $code:expr, $message:expr, source = $source:expr $(,)?) => {
-        $crate::exception::Exception::__with_source($code, $message, $source, file!(), line!())
-    };
-    ($code:literal, $($rest:tt)*) => {{
-        $crate::exception::Exception::__assert_project_code($code);
-        $crate::exception!(@build $code, $($rest)*)
+    ($message:expr $(, code = $code:expr)? $(, severity = $severity:expr)? $(, source = $source:expr)? $(,)?) => {{
+        let exception = $crate::exception::Exception::__new($message, file!(), line!());
+        $( let exception = exception.with_code($code); )?
+        $( let exception = exception.with_severity($severity); )?
+        $( let exception = exception.__with_source($source); )?
+        exception
     }};
-    ($code:expr, $($rest:tt)*) => {
-        $crate::exception!(@build $code, $($rest)*)
-    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    Warn,
+    Error,
 }
 
 #[derive(Clone)]
 pub struct Exception {
-    code: &'static str,
-    status: Option<u16>,
+    severity: Severity,
+    code: Option<&'static str>,
     message: String,
     location: Option<Location>,
     source: Option<Box<Exception>>,
@@ -70,23 +30,10 @@ pub struct Exception {
 
 impl Exception {
     #[doc(hidden)]
-    pub fn __assert_project_code(code: &str) {
-        debug_assert!(
-            library_entry(code).is_none(),
-            "the code {code} belongs to the library"
-        );
-    }
-
-    #[doc(hidden)]
-    pub fn __new(
-        code: &'static str,
-        message: impl Into<String>,
-        file: &'static str,
-        line: u32,
-    ) -> Self {
+    pub fn __new(message: impl Into<String>, file: &'static str, line: u32) -> Self {
         Self {
-            code,
-            status: None,
+            severity: Severity::Error,
+            code: None,
             message: message.into(),
             location: Some(Location { file, line }),
             source: None,
@@ -94,62 +41,31 @@ impl Exception {
     }
 
     #[doc(hidden)]
-    pub fn __with_status(
-        code: &'static str,
-        status: u16,
-        message: impl Into<String>,
-        file: &'static str,
-        line: u32,
-    ) -> Self {
-        Self {
-            status: Some(status),
-            ..Self::__new(code, message, file, line)
-        }
-    }
-
-    #[doc(hidden)]
-    pub fn __caused_by(
-        code: &'static str,
-        message: impl Into<String>,
-        source: Exception,
-        file: &'static str,
-        line: u32,
-    ) -> Self {
-        Self {
-            source: Some(Box::new(source)),
-            ..Self::__new(code, message, file, line)
-        }
-    }
-
-    #[doc(hidden)]
-    pub fn __with_source<E: std::error::Error + 'static>(
-        code: &'static str,
-        message: impl Into<String>,
-        source: E,
-        file: &'static str,
-        line: u32,
-    ) -> Self {
+    pub fn __with_source<E: std::error::Error + 'static>(self, source: E) -> Self {
         let source: &(dyn std::error::Error + 'static) = &source;
         let cause = match source.downcast_ref::<Exception>() {
             Some(exception) => exception.clone(),
             None => Self::from_error(source, Some(std::any::type_name::<E>())),
         };
-        Self::__caused_by(code, message, cause, file, line)
+        Self {
+            source: Some(Box::new(cause)),
+            ..self
+        }
     }
 
-    pub fn code(&self) -> &'static str {
+    pub fn severity(&self) -> Severity {
+        self.severity
+    }
+
+    pub fn code(&self) -> Option<&'static str> {
         self.code
-    }
-
-    pub fn status(&self) -> Option<u16> {
-        self.status
     }
 
     pub fn message(&self) -> &str {
         &self.message
     }
 
-    // The file and the line of the `exception!` call. An `external` exception has none.
+    // The file and the line of the `exception!` call. An external exception has none.
     pub fn location(&self) -> Option<(&'static str, u32)> {
         self.location.map(|location| (location.file, location.line))
     }
@@ -159,11 +75,14 @@ impl Exception {
     }
 
     pub fn with_code(self, code: &'static str) -> Self {
-        Self { code, ..self }
+        Self {
+            code: Some(code),
+            ..self
+        }
     }
 
-    pub fn with_status(self, status: Option<u16>) -> Self {
-        Self { status, ..self }
+    pub fn with_severity(self, severity: Severity) -> Self {
+        Self { severity, ..self }
     }
 
     // The trace starts at this exception and ends at the root source.
@@ -174,8 +93,8 @@ impl Exception {
     // The message has only a type name and an `io::ErrorKind`, never the text of the source.
     fn from_error(error: &(dyn std::error::Error + 'static), type_name: Option<&str>) -> Self {
         Self {
-            code: code::EXTERNAL,
-            status: None,
+            severity: Severity::Error,
+            code: None,
             message: external_message(error, type_name),
             location: None,
             source: error
@@ -185,12 +104,21 @@ impl Exception {
     }
 }
 
+impl Severity {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Severity::Warn => "WARN",
+            Severity::Error => "ERROR",
+        }
+    }
+}
+
 impl fmt::Debug for Exception {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Exception")
+            .field("severity", &self.severity)
             .field("code", &self.code)
             .field("message", &self.message)
-            .field("status", &self.status)
             .field("location", &self.location())
             .finish_non_exhaustive()
     }
@@ -198,13 +126,13 @@ impl fmt::Debug for Exception {
 
 impl fmt::Display for Exception {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.code, self.message)
+        f.write_str(&self.message)
     }
 }
 
 impl PartialEq for Exception {
     fn eq(&self, other: &Self) -> bool {
-        self.code == other.code && self.message == other.message && self.status == other.status
+        self.code == other.code && self.message == other.message
     }
 }
 
@@ -216,30 +144,41 @@ impl std::error::Error for Exception {
     }
 }
 
-impl IntoApiError for Exception {
-    // A code of the library has a fixed status, because the stored status of a gcs exception is the status of the upstream call.
-    fn status_code(&self) -> u16 {
-        match library_entry(self.code) {
-            Some((status, _)) => status,
-            None => self
-                .status
-                .filter(|status| (400..=599).contains(status))
-                .unwrap_or(500),
+impl From<&Exception> for String {
+    fn from(exception: &Exception) -> Self {
+        let mut lines = Vec::new();
+        for (index, node) in exception.trace().enumerate() {
+            let mut line = format!("{index}: {} ", node.severity.as_str());
+            if let Some(code) = node.code {
+                line.push_str(&format!("[{code}] "));
+            }
+            line.push_str(&node.message);
+            if let Some(location) = node.location {
+                line.push_str(&format!(" at {}:{}", location.file, location.line));
+            }
+            lines.push(line);
         }
+        lines.join("\n")
+    }
+}
+
+impl From<Exception> for String {
+    fn from(exception: Exception) -> Self {
+        Self::from(&exception)
+    }
+}
+
+impl IntoApiError for Exception {
+    fn status_code(&self) -> u16 {
+        500
     }
 
     fn error_code(&self) -> &str {
-        self.code
+        self.code.unwrap_or(INTERNAL_CODE)
     }
 
     fn message(&self) -> String {
-        if let Some((_, message)) = library_entry(self.code) {
-            return message.to_string();
-        }
-        match self.status {
-            Some(400..=499) => self.message.clone(),
-            _ => PROJECT_MESSAGE.to_string(),
-        }
+        INTERNAL_MESSAGE.to_string()
     }
 }
 
@@ -255,14 +194,9 @@ fn external_message(error: &(dyn std::error::Error + 'static), type_name: Option
         None => EXTERNAL_MESSAGE.to_string(),
     }
 }
-const PROJECT_MESSAGE: &str = "internal error";
 
-fn library_entry(code: &str) -> Option<(u16, &'static str)> {
-    LIBRARY_CODES
-        .iter()
-        .find(|(text, _, _)| *text == code)
-        .map(|(_, status, message)| (*status, *message))
-}
+const INTERNAL_CODE: &str = "INTERNAL_ERROR";
+const INTERNAL_MESSAGE: &str = "internal error";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Location {
@@ -272,29 +206,31 @@ struct Location {
 
 #[cfg(test)]
 mod tests {
-    use super::code;
     use crate::http::ApiError;
 
     #[test]
-    fn display_shows_the_code_and_the_message_only() {
-        let root = exception!(code::ENV_INVALID, "port is not a number");
-        let middle = exception!(code::ENV_SECRET, "cannot read the secret", caused_by = root);
-        let top = exception!(code::ENV_MISSING, "app cannot start", caused_by = middle);
-        assert_eq!(top.to_string(), "env_missing: app cannot start");
+    fn display_shows_the_current_message_only() {
+        let root = exception!("port is not a number", code = "ENV_INVALID");
+        let middle = exception!("cannot read the secret", code = "ENV_SECRET", source = root);
+        let top = exception!("app cannot start", code = "ENV_MISSING", source = middle);
+        assert_eq!(top.to_string(), "app cannot start");
         let causes: Vec<_> = top.trace().map(|e| e.code()).collect();
-        assert_eq!(causes, ["env_missing", "env_secret", "env_invalid"]);
+        assert_eq!(
+            causes,
+            [Some("ENV_MISSING"), Some("ENV_SECRET"), Some("ENV_INVALID")]
+        );
     }
 
     #[test]
     fn display_and_debug_do_not_show_the_source_text() {
         let leak = "https://host/o?token=ya29.fake-token&sig=abc";
         let external = exception!(
-            code::ENV_SECRET,
             "cannot connect",
+            code = "ENV_SECRET",
             source = std::io::Error::other(leak)
         );
-        let cause = exception!(code::ENV_INVALID, "inner", caused_by = external.clone());
-        let top = exception!(code::ENV_MISSING, "outer", caused_by = cause);
+        let cause = exception!("inner", code = "ENV_INVALID", source = external.clone());
+        let top = exception!("outer", code = "ENV_MISSING", source = cause);
         for error in [&external, &top] {
             for text in [
                 error.to_string(),
@@ -310,43 +246,42 @@ mod tests {
             assert!(!node.message().contains("fake-token"), "{}", node.message());
         }
         let root = top.trace().last().unwrap();
-        assert_eq!(root.code(), code::EXTERNAL);
+        assert_eq!(root.code(), None);
         assert_eq!(
             root.message(),
             "external error: std::io::error::Error (Other)"
         );
         let debug = format!("{top:?}");
         assert!(
-            debug.contains("env_missing") && debug.contains("outer"),
+            debug.contains("ENV_MISSING") && debug.contains("outer"),
             "{debug}"
         );
     }
 
     #[test]
-    fn equality_compares_code_message_and_status_only() {
-        let first = exception!(code::ENV_MISSING, "x");
-        let second = exception!(code::ENV_MISSING, "x");
+    fn equality_compares_code_and_message_only() {
+        let first = exception!("x", code = "ENV_MISSING");
+        let second = exception!("x", code = "ENV_MISSING");
         assert_ne!(first.location(), second.location());
         assert_eq!(first, second);
         let caused = exception!(
-            code::ENV_MISSING,
             "x",
-            caused_by = exception!(code::ENV_INVALID, "y")
+            code = "ENV_MISSING",
+            source = exception!("y", code = "ENV_INVALID")
         );
         assert_eq!(first, caused);
-        assert_ne!(first, exception!(code::ENV_MISSING, "z"));
-        assert_ne!(first, exception!(code::ENV_INVALID, "x"));
-        assert_ne!(first, exception!(code::ENV_MISSING, "x", status = 404));
+        assert_ne!(first, exception!("z", code = "ENV_MISSING"));
+        assert_ne!(first, exception!("x", code = "ENV_INVALID"));
     }
 
     #[test]
     fn exception_records_the_file_and_the_line_of_the_call() {
-        let error = exception!(code::ENV_MISSING, "APP_KEY is required");
+        let error = exception!("APP_KEY is required", code = "ENV_MISSING");
         let line = line!() - 1;
         assert_eq!(error.location(), Some((file!(), line)));
         let external = exception!(
-            code::ENV_SECRET,
             "x",
+            code = "ENV_SECRET",
             source = std::io::Error::other("refused")
         );
         assert_eq!(external.source_exception().unwrap().location(), None);
@@ -354,86 +289,58 @@ mod tests {
 
     #[test]
     fn display_of_one_exception_has_no_trace() {
-        let error = exception!(code::ENV_MISSING, "APP_KEY is required");
-        assert_eq!(error.to_string(), "env_missing: APP_KEY is required");
+        let error = exception!("APP_KEY is required", code = "ENV_MISSING");
+        assert_eq!(error.to_string(), "APP_KEY is required");
         assert!(std::error::Error::source(&error).is_none());
     }
 
     #[test]
     fn with_source_keeps_the_chain_of_an_external_error() {
         let inner = std::io::Error::other("refused");
-        let error = exception!(code::ENV_SECRET, "cannot connect", source = inner);
+        let error = exception!("cannot connect", code = "ENV_SECRET", source = inner);
         let causes: Vec<_> = error.trace().map(|e| (e.code(), e.message())).collect();
         assert_eq!(
             causes,
             [
-                ("env_secret", "cannot connect"),
-                ("external", "external error: std::io::error::Error (Other)")
+                (Some("ENV_SECRET"), "cannot connect"),
+                (None, "external error: std::io::error::Error (Other)")
             ]
         );
         assert_eq!(
             std::error::Error::source(&error).unwrap().to_string(),
-            "external: external error: std::io::error::Error (Other)"
+            "external error: std::io::error::Error (Other)"
         );
     }
 
     #[test]
-    fn with_code_keeps_the_message_status_and_source() {
-        let source = exception!(code::ENV_INVALID, "bad");
-        let error = exception!(code::ENV_MISSING, "outer", caused_by = source.clone());
-        let error = error.with_code("env_secret");
-        assert_eq!(error.code(), "env_secret");
+    fn with_code_keeps_the_message_and_source() {
+        let source = exception!("bad", code = "ENV_INVALID");
+        let error = exception!("outer", code = "ENV_MISSING", source = source.clone());
+        let error = error.with_code("ENV_SECRET");
+        assert_eq!(error.code(), Some("ENV_SECRET"));
         assert_eq!(error.message(), "outer");
         assert_eq!(error.source_exception(), Some(&source));
-        assert_eq!(
-            exception!(code::ENV_MISSING, "x", status = 404).status(),
-            Some(404)
-        );
     }
 
     #[test]
-    fn a_custom_code_uses_the_stored_client_or_server_status() {
+    fn every_exception_is_a_500_with_an_internal_message() {
         use crate::http::IntoApiError;
-        assert_eq!(exception!("my_code", "x", status = 404).status_code(), 404);
-        assert_eq!(exception!("my_code", "x", status = 503).status_code(), 503);
-        for status in [200_u16, 302, 399, 600] {
-            assert_eq!(
-                exception!("my_code", "x", status = status).status_code(),
-                500
-            );
+        for error in [
+            exception!("db down", code = "MY_CODE"),
+            exception!("secret detail", code = "GCS_NOT_FOUND"),
+        ] {
+            assert_eq!(error.status_code(), 500);
+            assert_eq!(IntoApiError::message(&error), "internal error");
         }
-        assert_eq!(exception!("my_code", "x").status_code(), 500);
     }
 
     #[test]
-    fn a_library_code_keeps_its_status_over_the_stored_one() {
-        use crate::http::IntoApiError;
-        let upstream = |code, status| exception!(code, "x", status = status).status_code();
-        assert_eq!(upstream(code::GCS_NOT_FOUND, 410), 404);
-        assert_eq!(upstream(code::GCS_API, 400), 502);
-        assert_eq!(upstream(code::GCS_TRANSPORT, 400), 502);
-        assert_eq!(upstream(code::GCS_AUTH, 403), 500);
-        assert_eq!(upstream(code::GCS_CONFIG, 400), 500);
-        assert_eq!(upstream(code::GCS_LOCAL, 404), 500);
-        assert_eq!(upstream(code::AUTH_STORE, 400), 503);
-        assert_eq!(upstream(code::ENV_MISSING, 404), 500);
-    }
-
-    #[test]
-    fn an_exception_given_as_source_keeps_its_code_and_status() {
-        let inner = exception!(code::ENV_INVALID, "inner", status = 404);
-        let outer = exception!(code::ENV_SECRET, "outer", source = inner.clone());
+    fn an_exception_given_as_source_keeps_its_code() {
+        let inner = exception!("inner", code = "ENV_INVALID");
+        let outer = exception!("outer", code = "ENV_SECRET", source = inner.clone());
         let cause = outer.source_exception().unwrap();
-        assert_eq!(cause.code(), "env_invalid");
-        assert_eq!(cause.status(), Some(404));
+        assert_eq!(cause.code(), Some("ENV_INVALID"));
         assert_eq!(cause.location(), inner.location());
-    }
-
-    #[test]
-    fn with_status_replaces_the_status() {
-        let error = exception!(code::ENV_MISSING, "x", status = 404);
-        assert_eq!(error.clone().with_status(None).status(), None);
-        assert_eq!(error.with_status(Some(503)).status(), Some(503));
     }
 
     #[derive(Debug)]
@@ -455,7 +362,7 @@ mod tests {
     fn external_nodes_have_a_type_name_and_an_io_kind_but_no_source_text() {
         let leak =
             std::io::Error::new(std::io::ErrorKind::NotFound, "https://h/o?token=fake-token");
-        let error = exception!(code::ENV_SECRET, "x", source = Outer(leak));
+        let error = exception!("x", code = "ENV_SECRET", source = Outer(leak));
         let messages: Vec<_> = error
             .trace()
             .skip(1)
@@ -476,48 +383,44 @@ mod tests {
     }
 
     #[test]
-    fn a_project_code_with_a_client_status_shows_its_message() {
-        use crate::http::IntoApiError;
-        let client = exception!("my_code", "name is taken", status = 409);
-        assert_eq!(IntoApiError::message(&client), "name is taken");
-        for hidden in [
-            exception!("my_code", "db down", status = 503),
-            exception!("my_code", "db down"),
-            exception!("my_code", "db down", status = 302),
-        ] {
-            assert_eq!(IntoApiError::message(&hidden), "internal error");
-        }
-        let library = exception!(code::GCS_NOT_FOUND, "secret detail", status = 404);
-        assert_eq!(IntoApiError::message(&library), "storage object not found");
+    fn log_text_has_every_message_with_its_code_and_location() {
+        let root = exception!("port is not a number", code = "ENV_INVALID");
+        let line = line!() - 1;
+        let top = exception!("app cannot start", code = "ENV_MISSING", source = root);
+        let top_line = line!() - 1;
+        let external = exception!(
+            "cannot connect",
+            code = "ENV_SECRET",
+            source = std::io::Error::other("refused")
+        );
+        let file = file!();
+        assert_eq!(
+            String::from(&top),
+            format!(
+                "0: ERROR [ENV_MISSING] app cannot start at {file}:{top_line}\n1: ERROR [ENV_INVALID] port is not a number at {file}:{line}"
+            )
+        );
+        assert!(String::from(&external)
+            .ends_with("1: ERROR external error: std::io::error::Error (Other)"));
+        assert!(!String::from(external).contains("refused"));
     }
 
-    #[cfg(debug_assertions)]
     #[test]
-    #[should_panic(expected = "belongs to the library")]
-    fn a_project_literal_code_cannot_be_a_library_code() {
-        let _ = exception!("gcs_api", "x");
-    }
-
-    #[test]
-    fn every_library_code_has_a_status_and_a_message() {
-        use crate::http::IntoApiError;
-        let mut seen = std::collections::HashSet::new();
-        for (text, status, message) in super::LIBRARY_CODES {
-            assert!(seen.insert(*text), "{text}");
-            let error = super::Exception::__new(text, "x", "f", 1).with_status(Some(418));
-            assert_eq!(error.status_code(), *status, "{text}");
-            assert_eq!(IntoApiError::message(&error), *message, "{text}");
-        }
-        assert!(seen.contains(code::GCS_LOCAL) && seen.contains(code::EXTERNAL));
+    fn a_warn_exception_without_a_code_shows_its_severity_only() {
+        let warn = exception!("slow", severity = super::Severity::Warn);
+        assert_eq!(warn.code(), None);
+        assert_eq!(warn.severity(), super::Severity::Warn);
+        assert!(String::from(&warn).starts_with("0: WARN slow at "));
+        assert_eq!(ApiError::from(warn).code, "INTERNAL_ERROR");
     }
 
     #[test]
     fn api_error_hides_the_message_and_the_trace() {
-        let source = exception!(code::ENV_INVALID, "secret detail");
-        let error = exception!(code::ENV_MISSING, "secret message", caused_by = source);
+        let source = exception!("secret detail", code = "ENV_INVALID");
+        let error = exception!("secret message", code = "ENV_MISSING", source = source);
         let api = ApiError::from(error);
         assert_eq!(api.status.as_u16(), 500);
-        assert_eq!(api.code, "env_missing");
+        assert_eq!(api.code, "ENV_MISSING");
         assert_eq!(api.message, "internal error");
     }
 }

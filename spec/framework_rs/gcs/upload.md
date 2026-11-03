@@ -47,10 +47,10 @@ Chunks:
 
 The client retries a chunk in these conditions:
 
-- The transport fails (the code `gcs_transport`).
+- The transport fails (the code `GCS_TRANSPORT`).
 - The HTTP status is 408, 429, 500, 502, 503, or 504. The list is the same list that the send function uses.
 
-A failure to open, to read or to seek the upload file has the code `gcs_local`. The client does not retry it, because the file is on the local disk and the same read fails again.
+A failure to open, to read or to seek the upload file has the code `GCS_LOCAL`. The client does not retry it, because the file is on the local disk and the same read fails again.
 
 After one of those failures, the client probes the session:
 
@@ -69,6 +69,6 @@ Rewinds:
 - A rewind occurs when a chunk step ends with a next offset that is lower than the start offset of that chunk. Then the client reads the data again from the lower offset and sends it again.
 - The client accepts a maximum of 5 rewinds.
 - The client resets the rewind count when a chunk step ends with a higher offset.
-- The sixth rewind before a higher offset stops the upload with an `Api` error that has the stored status 503. The session is an upstream failure, so `is_retryable` is true for this error. The error does not pass through the chunk retry loop, because the loop ends before it. A caller that retries the whole upload can use `is_retryable`.
+- The sixth rewind before a higher offset stops the upload with an error that has the code `GCS_UNAVAILABLE`. The session is an upstream failure, so `is_retryable` is true for this error. The error does not pass through the chunk retry loop, because the loop ends before it. A caller that retries the whole upload can use `is_retryable`.
 - A chunk step that ends with a next offset equal to the start offset of that chunk stops the upload with an `Api` error.
 - A next offset that is larger than the object size stops the upload with an `Api` error.

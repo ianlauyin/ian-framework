@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use crate::exception;
-use crate::exception::code;
 use crate::exception::Exception;
 
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
@@ -32,8 +31,8 @@ impl PutOptions {
             Some(value) => {
                 if value.is_empty() || !value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
                     return Err(exception!(
-                        code::GCS_CONFIG,
-                        "content type is empty or is not printable ASCII"
+                        "content type is empty or is not printable ASCII",
+                        code = "GCS_CONFIG"
                     ));
                 }
                 Ok(value.clone())
