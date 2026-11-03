@@ -1,5 +1,6 @@
 mod password;
 mod session_config;
+mod session_cookie;
 mod session_store;
 
 pub use password::{hash_password, verify_password};

@@ -3,18 +3,15 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::http::HeaderMap;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use sha2::{Digest, Sha256};
 
-use crate::http::headers::read_cookie;
-
-use super::SessionConfig;
+use crate::auth::session_cookie;
+use crate::auth::SessionConfig;
 use crate::exception;
 use crate::exception::Exception;
-
-// Browsers cap a cookie lifetime at 400 days.
-const MAX_AGE_LIMIT_SECS: u64 = 400 * 24 * 60 * 60;
+use crate::http::headers::read_cookie;
 
 // A subject that logs in again and again must not make the Redis set grow without a bound.
 const MAX_SESSIONS_PER_SUBJECT: usize = 100;
@@ -41,7 +38,7 @@ impl SessionStore {
     }
 
     pub async fn connect(url: &str, config: SessionConfig) -> Result<Self, Exception> {
-        check_config(&config)?;
+        config.check()?;
         let client = redis::Client::open(url).map_err(|err| {
             exception!("redis url is not valid", code = "AUTH_CONFIG", source = err)
         })?;
@@ -61,7 +58,7 @@ impl SessionStore {
     }
 
     pub async fn create(&self, subject: &str) -> Result<String, Exception> {
-        let token = random_token()?;
+        let token = session_cookie::random_token()?;
         let max_age = self.inner.config.max_age_secs;
         let deadline = now_secs().saturating_add(max_age);
         let key = self.key(&token);
@@ -147,15 +144,16 @@ impl SessionStore {
     }
 
     pub fn token<'a>(&self, headers: &'a HeaderMap) -> Option<&'a str> {
-        read_cookie(headers, &self.inner.config.cookie_name).filter(|value| is_token(value))
+        read_cookie(headers, &self.inner.config.cookie_name)
+            .filter(|value| session_cookie::is_token(value))
     }
 
     pub fn cookie(&self, token: &str) -> String {
-        cookie_value(&self.inner.config, token, Utc::now())
+        session_cookie::cookie_value(&self.inner.config, token, Utc::now())
     }
 
     pub fn clear_cookie(&self) -> String {
-        clear_value(&self.inner.config.cookie_name)
+        session_cookie::clear_value(&self.inner.config.cookie_name)
     }
 
     pub(crate) fn cookie_name(&self) -> &str {
@@ -301,68 +299,8 @@ fn manager_config() -> ConnectionManagerConfig {
         .set_max_delay(Duration::from_millis(500))
 }
 
-fn check_config(config: &SessionConfig) -> Result<(), Exception> {
-    let problem = if config.ttl_secs == 0 {
-        "session ttl is zero"
-    } else if config.max_age_secs == 0 {
-        "session max age is zero"
-    } else if config.max_age_secs > MAX_AGE_LIMIT_SECS {
-        "session max age is more than 400 days"
-    } else if config.ttl_secs > config.max_age_secs {
-        "session ttl is more than the max age"
-    } else if !is_cookie_name(&config.cookie_name) {
-        "session cookie name is not valid"
-    } else {
-        return Ok(());
-    };
-    Err(exception!(problem, code = "AUTH_CONFIG"))
-}
-
-// RFC 6265 cookie-name: one or more visible ASCII characters with no separator.
-fn is_cookie_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .bytes()
-            .all(|byte| byte.is_ascii_graphic() && !b"()<>@,;:\\\"/[]?={}".contains(&byte))
-}
-
 fn unreachable(err: redis::RedisError) -> Exception {
     exception!("cannot reach redis", code = "AUTH_STORE", source = err)
-}
-
-fn random_token() -> Result<String, Exception> {
-    let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).map_err(|err| {
-        exception!(
-            format!("os random source failed: {err}"),
-            code = "AUTH_RANDOM"
-        )
-    })?;
-    Ok(hex::encode(bytes))
-}
-
-// A token from `create` is 64 lowercase hex characters. Other values skip the Redis call.
-fn is_token(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-fn cookie_value(config: &SessionConfig, token: &str, now: DateTime<Utc>) -> String {
-    let ttl = config.ttl_secs;
-    let expires = now + chrono::Duration::seconds(i64::try_from(ttl).unwrap_or(i64::MAX / 1000));
-    let stamp = expires.format("%a, %d %b %Y %H:%M:%S GMT");
-    format!(
-        "{}={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={ttl}; Expires={stamp}",
-        config.cookie_name
-    )
-}
-
-fn clear_value(cookie_name: &str) -> String {
-    format!(
-        "{cookie_name}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
-    )
 }
 
 #[cfg(test)]
@@ -540,39 +478,6 @@ mod tests {
         assert!(!text.contains("redis://"));
     }
 
-    fn config_with(change: impl FnOnce(&mut SessionConfig)) -> SessionConfig {
-        let mut config = SessionConfig::default();
-        change(&mut config);
-        config
-    }
-
-    #[test]
-    fn checks_the_config() {
-        assert!(check_config(&SessionConfig::default()).is_ok());
-        let bad = [
-            config_with(|config| config.ttl_secs = 0),
-            config_with(|config| config.max_age_secs = 0),
-            config_with(|config| config.max_age_secs = MAX_AGE_LIMIT_SECS + 1),
-            config_with(|config| config.ttl_secs = config.max_age_secs + 1),
-            config_with(|config| config.ttl_secs = u64::MAX),
-            config_with(|config| config.cookie_name = String::new()),
-            config_with(|config| config.cookie_name = "a b".to_string()),
-            config_with(|config| config.cookie_name = "a;b".to_string()),
-            config_with(|config| config.cookie_name = "a=b".to_string()),
-            config_with(|config| config.cookie_name = "séance".to_string()),
-        ];
-        for config in bad {
-            let err = check_config(&config).unwrap_err();
-            assert_eq!(err.code(), Some("AUTH_CONFIG"));
-        }
-        let edge = config_with(|config| {
-            config.max_age_secs = MAX_AGE_LIMIT_SECS;
-            config.ttl_secs = MAX_AGE_LIMIT_SECS;
-            config.cookie_name = "__Host-sid".to_string();
-        });
-        assert!(check_config(&edge).is_ok());
-    }
-
     #[test]
     fn tls_url_is_accepted() {
         assert!(redis::Client::open("rediss://default:secret@example.upstash.io:6379").is_ok());
@@ -603,49 +508,5 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code(), Some("AUTH_CONFIG"));
-    }
-
-    #[test]
-    fn token_is_64_lowercase_hex_characters() {
-        let token = random_token().unwrap();
-        assert_eq!(token.len(), 64);
-        assert!(token
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
-        assert_ne!(token, random_token().unwrap());
-    }
-
-    #[test]
-    fn accepts_only_the_token_shape() {
-        assert!(is_token(&"a1".repeat(32)));
-        assert!(!is_token(&"a1".repeat(31)));
-        assert!(!is_token(&"A1".repeat(32)));
-        assert!(!is_token(&"g1".repeat(32)));
-        assert!(!is_token(""));
-    }
-
-    #[test]
-    fn cookie_carries_max_age_and_expires() {
-        let config = SessionConfig {
-            prefix: "p:".to_string(),
-            cookie_name: "sid".to_string(),
-            ttl_secs: 3600,
-            max_age_secs: 7200,
-        };
-        let now = DateTime::parse_from_rfc3339("2026-10-24T10:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        assert_eq!(
-            cookie_value(&config, "abc", now),
-            "sid=abc; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600; Expires=Sat, 24 Oct 2026 11:00:00 GMT"
-        );
-    }
-
-    #[test]
-    fn clear_cookie_expires_at_once() {
-        assert_eq!(
-            clear_value("my_session"),
-            "my_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
-        );
     }
 }
