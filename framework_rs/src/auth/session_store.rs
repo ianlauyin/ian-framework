@@ -7,7 +7,6 @@ use chrono::Utc;
 use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use sha2::{Digest, Sha256};
 
-use crate::auth::session_cookie;
 use crate::auth::SessionConfig;
 use crate::exception;
 use crate::exception::Exception;
@@ -58,7 +57,7 @@ impl SessionStore {
     }
 
     pub async fn create(&self, subject: &str) -> Result<String, Exception> {
-        let token = session_cookie::random_token()?;
+        let token = random_token()?;
         let max_age = self.inner.config.max_age_secs;
         let deadline = now_secs().saturating_add(max_age);
         let key = self.key(&token);
@@ -144,16 +143,15 @@ impl SessionStore {
     }
 
     pub fn token<'a>(&self, headers: &'a HeaderMap) -> Option<&'a str> {
-        read_cookie(headers, &self.inner.config.cookie_name)
-            .filter(|value| session_cookie::is_token(value))
+        read_cookie(headers, &self.inner.config.cookie_name).filter(|value| is_token(value))
     }
 
     pub fn cookie(&self, token: &str) -> String {
-        session_cookie::cookie_value(&self.inner.config, token, Utc::now())
+        self.inner.config.cookie(token, Utc::now())
     }
 
     pub fn clear_cookie(&self) -> String {
-        session_cookie::clear_value(&self.inner.config.cookie_name)
+        self.inner.config.clear_cookie()
     }
 
     pub(crate) fn cookie_name(&self) -> &str {
@@ -301,6 +299,25 @@ fn manager_config() -> ConnectionManagerConfig {
 
 fn unreachable(err: redis::RedisError) -> Exception {
     exception!("cannot reach redis", code = "AUTH_STORE", source = err)
+}
+
+fn random_token() -> Result<String, Exception> {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).map_err(|err| {
+        exception!(
+            format!("os random source failed: {err}"),
+            code = "AUTH_RANDOM"
+        )
+    })?;
+    Ok(hex::encode(bytes))
+}
+
+// A token from `create` is 64 lowercase hex characters. Other values skip the Redis call.
+fn is_token(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 #[cfg(test)]
@@ -508,5 +525,24 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code(), Some("AUTH_CONFIG"));
+    }
+
+    #[test]
+    fn token_is_64_lowercase_hex_characters() {
+        let token = random_token().unwrap();
+        assert_eq!(token.len(), 64);
+        assert!(token
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        assert_ne!(token, random_token().unwrap());
+    }
+
+    #[test]
+    fn accepts_only_the_token_shape() {
+        assert!(is_token(&"a1".repeat(32)));
+        assert!(!is_token(&"a1".repeat(31)));
+        assert!(!is_token(&"A1".repeat(32)));
+        assert!(!is_token(&"g1".repeat(32)));
+        assert!(!is_token(""));
     }
 }
