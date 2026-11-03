@@ -1,9 +1,11 @@
 use serde::Deserialize;
 
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use crate::gcs::encode::{encode_object_id, encode_seg};
 use crate::gcs::gcs_client::object::RawObject;
 use crate::gcs::gcs_client::{object_url, ObjectMeta};
-use crate::gcs::{GcsError, GcsErrorKind};
 
 pub(super) enum RewriteStep {
     Done(ObjectMeta),
@@ -31,22 +33,18 @@ impl RewriteStep {
         url
     }
 
-    pub(super) fn from_slice(bytes: &[u8]) -> Result<Self, GcsError> {
-        let raw: RawRewrite = serde_json::from_slice(bytes).map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Api, "rewrite JSON is invalid", err)
-        })?;
+    pub(super) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
+        let raw: RawRewrite = serde_json::from_slice(bytes)
+            .map_err(|err| exception!(code::GCS_API, "rewrite JSON is invalid", source = err))?;
         if raw.done {
             let resource = raw.resource.ok_or_else(|| {
-                GcsError::new(GcsErrorKind::Api, "rewrite did not return object metadata")
+                exception!(code::GCS_API, "rewrite did not return object metadata")
             })?;
             return Ok(Self::Done(resource.into_meta()?));
         }
         match raw.rewrite_token {
             Some(token) if !token.is_empty() => Ok(Self::Next(token)),
-            _ => Err(GcsError::new(
-                GcsErrorKind::Api,
-                "rewrite did not return a token",
-            )),
+            _ => Err(exception!(code::GCS_API, "rewrite did not return a token")),
         }
     }
 }

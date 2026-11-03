@@ -1,8 +1,10 @@
 use serde::Deserialize;
 
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use crate::gcs::gcs_client::object::RawObject;
 use crate::gcs::gcs_client::ObjectMeta;
-use crate::gcs::{GcsError, GcsErrorKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListPage {
@@ -12,9 +14,9 @@ pub struct ListPage {
 }
 
 impl ListPage {
-    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, GcsError> {
+    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
         let raw: RawList = serde_json::from_slice(bytes)
-            .map_err(|err| GcsError::with_source(GcsErrorKind::Api, "list JSON is invalid", err))?;
+            .map_err(|err| exception!(code::GCS_API, "list JSON is invalid", source = err))?;
         Ok(Self {
             objects: raw
                 .items

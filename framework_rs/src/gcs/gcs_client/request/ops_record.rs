@@ -4,6 +4,7 @@ use crate::logging::{LogEvent, LogLevel};
 use crate::time::hkt_now;
 
 use crate::gcp::truncate;
+use crate::gcs::redact_query;
 
 pub(crate) struct OpsRecord<'a> {
     pub(crate) level: LogLevel,
@@ -23,6 +24,10 @@ impl OpsRecord<'_> {
             action: action(self.method, self.url),
             latency_ms: self.latency_ms,
             level: self.level,
+            error_message: (self.level == LogLevel::Error).then(|| match self.status {
+                Some(status) => format!("{} (status {status})", self.message),
+                None => self.message.to_string(),
+            }),
             context: BTreeMap::new(),
             info: serde_json::Map::new(),
         };
@@ -49,26 +54,6 @@ impl OpsRecord<'_> {
 pub(crate) fn logged_error(err: &impl std::fmt::Display) -> String {
     let redacted = redact_query(&err.to_string());
     truncate(&redacted, 300).to_string()
-}
-
-fn redact_query(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut skip = false;
-    for ch in text.chars() {
-        if skip {
-            if ch.is_whitespace() {
-                skip = false;
-                out.push(ch);
-            }
-            continue;
-        }
-        if ch == '?' {
-            skip = true;
-            continue;
-        }
-        out.push(ch);
-    }
-    out
 }
 
 fn action(method: &str, url: &str) -> String {

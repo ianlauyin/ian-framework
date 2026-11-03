@@ -1,154 +1,145 @@
-use std::fmt;
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
+use crate::gcp::{api_detail, truncate};
 
-use crate::gcp::{api_detail, truncate, GcpError, GcpErrorKind};
+const RESPONSE_DETAIL_MAX_BYTES: usize = 200;
+const SIGNED_PARAM_PREFIX: &str = "x-goog-";
+const REDACTED: &str = "***";
+const SECRET_KEYS: [&str; 11] = [
+    "upload_id",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "token",
+    "signature",
+    "sig",
+    "client_secret",
+    "password",
+    "secret",
+    "authorization",
+];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GcsErrorKind {
-    Auth,
-    Config,
-    NotFound,
-    Api,
-    Transport,
+pub(crate) fn is_retryable(err: &Exception) -> bool {
+    if err.code() == code::GCS_TRANSPORT {
+        return true;
+    }
+    err.status().is_some_and(is_retryable_status)
 }
 
-pub struct GcsError {
-    kind: GcsErrorKind,
-    status: Option<u16>,
-    message: String,
-    source: Option<Box<dyn std::error::Error + Send + Sync>>,
+pub(crate) fn is_retryable_status(status: u16) -> bool {
+    matches!(status, 408 | 429 | 500 | 502 | 503 | 504)
 }
 
-impl GcsError {
-    pub fn kind(&self) -> GcsErrorKind {
-        self.kind
-    }
-
-    pub(crate) fn status(&self) -> Option<u16> {
-        self.status
-    }
-
-    pub(crate) fn is_retryable(&self) -> bool {
-        if self.kind == GcsErrorKind::Transport {
-            return true;
+// A URL or a path keeps its path and loses its query. A value of a known secret key is replaced. Other text stays.
+pub(crate) fn redact_query(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut redact_next = false;
+    for (is_token, part) in split_tokens(text) {
+        if !is_token {
+            out.push_str(part);
+            continue;
         }
-        matches!(self.status, Some(408 | 429 | 500 | 502 | 503 | 504))
-    }
-
-    pub(crate) fn new(kind: GcsErrorKind, message: impl Into<String>) -> Self {
-        Self {
-            kind,
-            status: None,
-            message: message.into(),
-            source: None,
+        let lower = part.to_ascii_lowercase();
+        if redact_next && !matches!(lower.as_str(), "bearer" | "basic") {
+            out.push_str(REDACTED);
+            redact_next = false;
+            continue;
         }
+        redact_next = matches!(
+            lower.trim_end_matches([':', '=']),
+            "authorization" | "bearer" | "basic"
+        );
+        out.push_str(&redact_token(part));
     }
-
-    pub(crate) fn with_status(kind: GcsErrorKind, status: u16, message: impl Into<String>) -> Self {
-        Self {
-            kind,
-            status: Some(status),
-            message: message.into(),
-            source: None,
-        }
-    }
-
-    pub(crate) fn with_source(
-        kind: GcsErrorKind,
-        message: impl Into<String>,
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
-        Self {
-            kind,
-            status: None,
-            message: message.into(),
-            source: Some(Box::new(source)),
-        }
-    }
-
-    pub(crate) async fn from_response(response: reqwest::Response) -> Self {
-        let status = response.status().as_u16();
-        let text = response.text().await.unwrap_or_default();
-        let detail = api_detail(&text).unwrap_or(text);
-        let detail = truncate(&detail, 500);
-        let kind = match status {
-            401 | 403 => GcsErrorKind::Auth,
-            404 => GcsErrorKind::NotFound,
-            _ => GcsErrorKind::Api,
-        };
-        Self::with_status(kind, status, format!("status {status}: {detail}"))
-    }
+    out
 }
 
-impl fmt::Debug for GcsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GcsError")
-            .field("kind", &self.kind)
-            .field("status", &self.status)
-            .field("message", &self.message)
-            .finish_non_exhaustive()
-    }
-}
-
-impl fmt::Display for GcsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {}", self.kind, self.message)
-    }
-}
-
-impl std::error::Error for GcsError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self.source {
-            Some(source) => Some(source.as_ref()),
-            None => None,
+fn split_tokens(text: &str) -> Vec<(bool, &str)> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut in_token = false;
+    for (index, ch) in text.char_indices() {
+        let separator = is_token_end(ch);
+        if separator == in_token {
+            if let Some(part) = text.get(start..index) {
+                if !part.is_empty() {
+                    parts.push((in_token, part));
+                }
+            }
+            start = index;
+            in_token = !separator;
         }
     }
+    if let Some(part) = text.get(start..) {
+        if !part.is_empty() {
+            parts.push((in_token, part));
+        }
+    }
+    parts
 }
 
-impl From<GcpError> for GcsError {
-    fn from(err: GcpError) -> Self {
-        let kind = match err.kind() {
-            GcpErrorKind::Auth => GcsErrorKind::Auth,
-            GcpErrorKind::Config => GcsErrorKind::Config,
-            GcpErrorKind::Api => GcsErrorKind::Api,
-            GcpErrorKind::Transport => GcsErrorKind::Transport,
-        };
-        let (message, source) = err.into_parts();
-        Self {
-            kind,
-            status: None,
-            message,
-            source,
-        }
-    }
+fn redact_token(token: &str) -> String {
+    let token = match token.split_once('?') {
+        Some((path, _)) if path.contains('/') => path,
+        _ => token,
+    };
+    token
+        .split('&')
+        .map(|pair| match pair.split_once('=') {
+            Some((key, _)) if is_secret_key(key) => format!("{key}={REDACTED}"),
+            _ => pair.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
-impl crate::http::IntoApiError for GcsError {
-    fn status_code(&self) -> u16 {
-        match self.kind {
-            GcsErrorKind::NotFound => 404,
-            GcsErrorKind::Auth | GcsErrorKind::Config => 500,
-            GcsErrorKind::Api | GcsErrorKind::Transport => 502,
-        }
-    }
+fn is_secret_key(key: &str) -> bool {
+    let key = key.trim_start_matches('?').to_ascii_lowercase();
+    key.starts_with(SIGNED_PARAM_PREFIX) || SECRET_KEYS.contains(&key.as_str())
+}
 
-    fn error_code(&self) -> &str {
-        match self.kind {
-            GcsErrorKind::NotFound => "gcs_not_found",
-            GcsErrorKind::Auth => "gcs_auth",
-            GcsErrorKind::Config => "gcs_config",
-            GcsErrorKind::Api => "gcs_api",
-            GcsErrorKind::Transport => "gcs_transport",
-        }
-    }
+fn is_token_end(ch: char) -> bool {
+    ch.is_whitespace()
+        || matches!(
+            ch,
+            '"' | '\'' | '<' | '>' | ')' | '\\' | ',' | ';' | ']' | '}'
+        )
+}
 
-    fn message(&self) -> String {
-        let message = match self.kind {
-            GcsErrorKind::NotFound => "storage object not found",
-            GcsErrorKind::Auth | GcsErrorKind::Config => "storage is not available",
-            GcsErrorKind::Api | GcsErrorKind::Transport => "storage request failed",
-        };
-        message.to_string()
-    }
+// The gcp code and the gcs code have the same meaning. The message and the source stay.
+pub(crate) fn from_gcp(err: Exception) -> Exception {
+    let code = match err.code() {
+        code::GCP_AUTH => code::GCS_AUTH,
+        code::GCP_CONFIG => code::GCS_CONFIG,
+        code::GCP_API => code::GCS_API,
+        code::GCP_TRANSPORT => code::GCS_TRANSPORT,
+        _ => return err,
+    };
+    err.with_code(code)
+}
+
+pub(crate) async fn gcs_response_exception(response: reqwest::Response) -> Exception {
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    let detail = response_detail(&text);
+    let code = match status {
+        401 | 403 => code::GCS_AUTH,
+        404 => code::GCS_NOT_FOUND,
+        _ => code::GCS_API,
+    };
+    exception!(code, format!("status {status}: {detail}"), status = status)
+}
+
+// The upstream body can hold a signed URL, so the detail has no URL query and no control character.
+fn response_detail(body: &str) -> String {
+    let detail = api_detail(body).unwrap_or_else(|| body.to_string());
+    let redacted = redact_query(truncate(&detail, RESPONSE_DETAIL_MAX_BYTES * 10));
+    let clean: String = redacted
+        .chars()
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
+        .collect();
+    truncate(&clean, RESPONSE_DETAIL_MAX_BYTES).to_string()
 }
 
 #[cfg(test)]
@@ -156,53 +147,147 @@ mod tests {
     use super::*;
 
     #[test]
-    fn retryable_status_codes_match_the_upload_policy() {
-        assert!(GcsError::new(GcsErrorKind::Transport, "reset").is_retryable());
-        for status in [408_u16, 429, 500, 502, 503, 504] {
-            assert!(GcsError::with_status(GcsErrorKind::Api, status, "retry").is_retryable());
-        }
-        assert!(!GcsError::with_status(GcsErrorKind::NotFound, 404, "missing").is_retryable());
-        assert!(!GcsError::with_status(GcsErrorKind::Api, 400, "bad").is_retryable());
-        assert!(!GcsError::new(GcsErrorKind::Config, "config").is_retryable());
+    fn from_gcp_keeps_the_meaning_message_and_source() {
+        let source = exception!(code::GCP_API, "inner");
+        let err = exception!(code::GCP_TRANSPORT, "outer", caused_by = source.clone());
+        let err = from_gcp(err);
+        assert_eq!(err.code(), code::GCS_TRANSPORT);
+        assert_eq!(err.message(), "outer");
+        assert_eq!(err.source_exception(), Some(&source));
+        assert_eq!(
+            from_gcp(exception!(code::GCP_AUTH, "x")).code(),
+            code::GCS_AUTH
+        );
+        assert_eq!(
+            from_gcp(exception!(code::GCP_CONFIG, "x")).code(),
+            code::GCS_CONFIG
+        );
+        assert_eq!(
+            from_gcp(exception!(code::GCP_API, "x")).code(),
+            code::GCS_API
+        );
     }
 
     #[test]
-    fn api_error_hides_the_internal_message() {
-        use crate::http::ApiError;
-        use axum::http::StatusCode;
-
-        let cases = [
-            (
-                GcsErrorKind::NotFound,
-                StatusCode::NOT_FOUND,
-                "gcs_not_found",
-            ),
-            (
-                GcsErrorKind::Auth,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "gcs_auth",
-            ),
-            (
-                GcsErrorKind::Config,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "gcs_config",
-            ),
-            (GcsErrorKind::Api, StatusCode::BAD_GATEWAY, "gcs_api"),
-            (
-                GcsErrorKind::Transport,
-                StatusCode::BAD_GATEWAY,
-                "gcs_transport",
-            ),
-        ];
-        for (kind, status, code) in cases {
-            let error = ApiError::from(GcsError::new(kind, "secret bucket detail"));
-            assert_eq!(error.status, status);
-            assert_eq!(error.code, code);
-            assert!(!error.message.contains("secret"));
+    fn retryable_status_list_is_shared() {
+        for status in [408_u16, 429, 500, 502, 503, 504] {
+            assert!(is_retryable_status(status), "{status}");
         }
+        for status in [200_u16, 400, 401, 403, 404, 501] {
+            assert!(!is_retryable_status(status), "{status}");
+        }
+    }
 
-        let error = ApiError::from(GcsError::with_status(GcsErrorKind::Api, 400, "bad"));
-        assert_eq!(error.status, StatusCode::BAD_GATEWAY);
-        assert_eq!(error.message, "storage request failed");
+    #[test]
+    fn response_detail_has_no_url_query_or_control_character() {
+        let body = "bad url https://storage.example/o?X-Goog-Signature=abc&token=xyz now\r\nnext";
+        let detail = response_detail(body);
+        assert_eq!(detail, "bad url https://storage.example/o now  next");
+        let json = r#"{"error":{"message":"see https://h/o?sig=secret"}}"#;
+        assert_eq!(response_detail(json), "see https://h/o");
+        assert_eq!(response_detail(&"é".repeat(500)).len(), 200);
+    }
+
+    #[test]
+    fn redact_query_keeps_plain_text_with_a_question_mark() {
+        for text in [
+            "Invalid argument?name=foo",
+            "is it correct? more text",
+            "what?",
+        ] {
+            assert_eq!(redact_query(text), text);
+        }
+    }
+
+    #[test]
+    fn redact_query_cuts_only_the_url_query_in_compact_json() {
+        let json = r#"{"url":"https://h/o?sig=secret&a=1","next":"ok?x"}"#;
+        assert_eq!(redact_query(json), r#"{"url":"https://h/o","next":"ok?x"}"#);
+        let text = "failed (HTTPS://h/o?upload_id=secret): reset";
+        assert_eq!(redact_query(text), "failed (HTTPS://h/o): reset");
+    }
+
+    #[test]
+    fn redact_query_hides_a_signed_parameter_without_a_url() {
+        let text = "bad X-Goog-Signature=abc&X-Goog-Expires=60 done";
+        let redacted = redact_query(text);
+        assert_eq!(redacted, "bad X-Goog-Signature=***&X-Goog-Expires=*** done");
+    }
+
+    #[test]
+    fn redact_query_cuts_the_query_of_a_relative_or_scheme_less_url() {
+        for (text, expected) in [
+            (
+                "GET /upload/o?upload_id=secret failed",
+                "GET /upload/o failed",
+            ),
+            (
+                "see storage.example/b/o?sig=secret now",
+                "see storage.example/b/o now",
+            ),
+            ("path=/o?x=1,next", "path=/o,next"),
+        ] {
+            assert_eq!(redact_query(text), expected);
+        }
+    }
+
+    #[test]
+    fn redact_query_hides_a_known_secret_key_without_a_query() {
+        assert_eq!(
+            redact_query("denied access_token=ya29.abc and upload_id=xyz"),
+            "denied access_token=*** and upload_id=***"
+        );
+        assert_eq!(redact_query("sig=abc&keep=1"), "sig=***&keep=1");
+        assert_eq!(
+            redact_query("Authorization: Bearer ya29.abc failed"),
+            "Authorization: Bearer *** failed"
+        );
+        assert_eq!(redact_query("bearer abc"), "bearer ***");
+    }
+
+    #[test]
+    fn redact_query_ends_a_token_at_a_comma_or_a_semicolon() {
+        assert_eq!(
+            redact_query("a=https://h/o?sig=secret;b=2,c=3]d}"),
+            "a=https://h/o;b=2,c=3]d}"
+        );
+        assert_eq!(redact_query("token=abc,next=1"), "token=***,next=1");
+        assert_eq!(redact_query("[\"https://h/o?sig=s\"]"), "[\"https://h/o\"]");
+    }
+
+    #[test]
+    fn redact_query_keeps_prose() {
+        for text in [
+            "is it correct? more text",
+            "Invalid argument?name=foo",
+            "what? yes, no; maybe",
+            "the token was rejected",
+        ] {
+            assert_eq!(redact_query(text), text);
+        }
+    }
+
+    #[test]
+    fn retryable_status_codes_match_the_upload_policy() {
+        assert!(is_retryable(&exception!(code::GCS_TRANSPORT, "reset")));
+        assert!(!is_retryable(&exception!(code::GCS_LOCAL, "read failed")));
+        for status in [408_u16, 429, 500, 502, 503, 504] {
+            assert!(is_retryable(&exception!(
+                code::GCS_API,
+                "retry",
+                status = status
+            )));
+        }
+        assert!(!is_retryable(&exception!(
+            code::GCS_NOT_FOUND,
+            "missing",
+            status = 404
+        )));
+        assert!(!is_retryable(&exception!(
+            code::GCS_API,
+            "bad",
+            status = 400
+        )));
+        assert!(!is_retryable(&exception!(code::GCS_CONFIG, "config")));
     }
 }

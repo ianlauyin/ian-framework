@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::logging::{event, LogEvent, LogLevel, LogValue, Logger};
+use crate::logging::{LogEvent, LogValue, Logger};
 use crate::shutdown::ShutdownReceiver;
 
 const DEFAULT_PATH: &str = "/";
@@ -47,8 +47,9 @@ impl DiskMonitor {
         tokio::spawn(async move {
             let path = self.config.path;
             if read_usage(&path).is_none() {
-                Logger::warn(
+                Logger::warn_with(
                     "DISK/cannotReadUsage",
+                    "cannot read the disk usage",
                     BTreeMap::from([(
                         "path".to_string(),
                         LogValue::from(path.display().to_string()),
@@ -103,7 +104,7 @@ impl Alert {
             return None;
         }
         self.active = true;
-        let mut event = event(ACTION, LogLevel::Warn);
+        let mut event = LogEvent::warn(ACTION);
         event
             .info
             .insert("disk_percent".to_string(), round_one(percent).into());
@@ -161,6 +162,7 @@ fn round_one(value: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::LogLevel;
 
     use serde_json::json;
 

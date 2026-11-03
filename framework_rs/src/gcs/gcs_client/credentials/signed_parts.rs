@@ -4,10 +4,12 @@ use base64::Engine;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use crate::gcs::encode::encode_seg;
 use crate::gcs::gcs_client::request::Call;
 use crate::gcs::gcs_client::GcsClient;
-use crate::gcs::{GcsError, GcsErrorKind};
 
 const HOST: &str = "storage.googleapis.com";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
@@ -25,7 +27,7 @@ impl SignedParts {
         now: DateTime<Utc>,
         expires_in: Option<Duration>,
         attachment_filename: Option<&str>,
-    ) -> Result<Self, GcsError> {
+    ) -> Result<Self, Exception> {
         let expires_secs = signed_lifetime_seconds(expires_in)?;
         let disposition = attachment_filename
             .map(attachment_disposition)
@@ -66,7 +68,7 @@ impl SignedParts {
         })
     }
 
-    pub(crate) async fn sign(self, client: &GcsClient) -> Result<String, GcsError> {
+    pub(crate) async fn sign(self, client: &GcsClient) -> Result<String, Exception> {
         let signature = sign_blob(client, self.string_to_sign.as_bytes()).await?;
         Ok(format!(
             "{}&X-Goog-Signature={}",
@@ -76,7 +78,7 @@ impl SignedParts {
     }
 }
 
-async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
+async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, Exception> {
     let url = format!(
         "{}/projects/-/serviceAccounts/{}:signBlob",
         client.inner.endpoints.iam_root,
@@ -92,19 +94,18 @@ async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, GcsErr
         })
         .await?;
     let bytes = response.bytes().await.map_err(|err| {
-        GcsError::with_source(
-            GcsErrorKind::Transport,
+        exception!(
+            code::GCS_TRANSPORT,
             "signBlob response is not bytes",
-            err.without_url(),
+            source = err.without_url()
         )
     })?;
     signature_from_response(&bytes)
 }
 
-fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, GcsError> {
-    let parsed: SignBlobResponse = serde_json::from_slice(bytes).map_err(|err| {
-        GcsError::with_source(GcsErrorKind::Api, "signBlob response is not JSON", err)
-    })?;
+fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, Exception> {
+    let parsed: SignBlobResponse = serde_json::from_slice(bytes)
+        .map_err(|err| exception!(code::GCS_API, "signBlob response is not JSON", source = err))?;
     let cleaned: String = parsed
         .signed_blob
         .chars()
@@ -113,12 +114,16 @@ fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, GcsError> {
     let signature = base64::engine::general_purpose::STANDARD
         .decode(cleaned)
         .map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Api, "signBlob signature is not base64", err)
+            exception!(
+                code::GCS_API,
+                "signBlob signature is not base64",
+                source = err
+            )
         })?;
     if signature.is_empty() {
-        return Err(GcsError::new(
-            GcsErrorKind::Api,
-            "signBlob returned an empty signature",
+        return Err(exception!(
+            code::GCS_API,
+            "signBlob returned an empty signature"
         ));
     }
     Ok(signature)
@@ -130,35 +135,32 @@ struct SignBlobResponse {
     signed_blob: String,
 }
 
-fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, GcsError> {
+fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, Exception> {
     let Some(expires_in) = expires_in else {
-        return Err(GcsError::new(
-            GcsErrorKind::Auth,
-            "signed URL lifetime is missing",
+        return Err(exception!(
+            code::GCS_CONFIG,
+            "signed URL lifetime is missing"
         ));
     };
     let seconds = expires_in.as_secs();
     if seconds == 0 {
-        return Err(GcsError::new(
-            GcsErrorKind::Auth,
-            "signed URL lifetime must be at least 1 second",
+        return Err(exception!(
+            code::GCS_CONFIG,
+            "signed URL lifetime must be at least 1 second"
         ));
     }
     if seconds > MAX_SIGNED_URL_SECONDS {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "signed URL lifetime must be at most 604800 seconds",
+        return Err(exception!(
+            code::GCS_CONFIG,
+            "signed URL lifetime must be at most 604800 seconds"
         ));
     }
     Ok(seconds)
 }
 
-fn attachment_disposition(filename: &str) -> Result<String, GcsError> {
+fn attachment_disposition(filename: &str) -> Result<String, Exception> {
     if filename.is_empty() {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "attachment filename is empty",
-        ));
+        return Err(exception!(code::GCS_CONFIG, "attachment filename is empty"));
     }
     let fallback: String = filename
         .chars()
@@ -291,14 +293,22 @@ UNSIGNED-PAYLOAD";
     #[test]
     fn attachment_disposition_rejects_an_empty_filename() {
         let err = attachment_disposition("").unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 
     #[test]
     fn signed_lifetime_never_returns_zero() {
-        assert!(signed_lifetime_seconds(None).is_err());
-        assert!(signed_lifetime_seconds(Some(Duration::ZERO)).is_err());
-        assert!(signed_lifetime_seconds(Some(Duration::from_millis(999))).is_err());
+        for bad in [
+            None,
+            Some(Duration::ZERO),
+            Some(Duration::from_millis(999)),
+            Some(Duration::from_secs(MAX_SIGNED_URL_SECONDS + 1)),
+        ] {
+            assert_eq!(
+                signed_lifetime_seconds(bad).unwrap_err().code(),
+                code::GCS_CONFIG
+            );
+        }
         assert_eq!(
             signed_lifetime_seconds(Some(Duration::from_secs(1))).unwrap(),
             1
@@ -335,7 +345,7 @@ UNSIGNED-PAYLOAD";
     async fn sign_blob_reports_a_failed_call() {
         let (addr, _server) = serve_script(vec![Reply::new(403, "{}")]).await;
         let err = sign_blob(&fake_client(addr), b"p").await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert_eq!(err.code(), code::GCS_AUTH);
     }
 
     #[test]
@@ -346,7 +356,7 @@ UNSIGNED-PAYLOAD";
             br#"{"signedBlob":""}"#,
         ] {
             let err = signature_from_response(body).unwrap_err();
-            assert_eq!(err.kind(), GcsErrorKind::Api);
+            assert_eq!(err.code(), code::GCS_API);
         }
     }
 }

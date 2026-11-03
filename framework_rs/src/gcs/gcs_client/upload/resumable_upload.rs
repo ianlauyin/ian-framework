@@ -3,11 +3,14 @@ use std::time::Duration;
 
 use crate::logging::LogLevel;
 
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use crate::gcs::encode::encode_seg;
 use crate::gcs::gcs_client::request::{logged_error, Call, OpsRecord};
 use crate::gcs::gcs_client::upload::upload_source::UploadSource;
 use crate::gcs::gcs_client::{GcsClient, ObjectMeta, TRANSFER_TIMEOUT};
-use crate::gcs::{GcsError, GcsErrorKind};
+use crate::gcs::is_retryable;
 
 const CHUNK_SIZE: usize = 8 * 1024 * 1024;
 const CHUNK_ALIGN: u64 = 256 * 1024;
@@ -28,7 +31,7 @@ impl<'a> ResumableUpload<'a> {
         content_type: &'a str,
         metadata: &BTreeMap<String, String>,
         total: u64,
-    ) -> Result<Self, GcsError> {
+    ) -> Result<Self, Exception> {
         let url = format!(
             "{}/b/{}/o?uploadType=resumable",
             client.inner.endpoints.upload_root,
@@ -63,24 +66,17 @@ impl<'a> ResumableUpload<'a> {
         let location = response
             .headers()
             .get(reqwest::header::LOCATION)
-            .ok_or_else(|| {
-                GcsError::new(
-                    GcsErrorKind::Api,
-                    "resumable upload did not return Location",
-                )
-            })?;
+            .ok_or_else(|| exception!(code::GCS_API, "resumable upload did not return Location"))?;
         let location = location
             .to_str()
-            .map_err(|_| {
-                GcsError::new(GcsErrorKind::Api, "resumable Location header is not UTF-8")
-            })?
+            .map_err(|_| exception!(code::GCS_API, "resumable Location header is not UTF-8"))?
             .to_string();
         let _ = response.bytes().await;
         // Every chunk request carries the access token, so the session URL must stay on the Google host.
         if !location.starts_with(&client.inner.endpoints.upload_location_prefix) {
-            return Err(GcsError::new(
-                GcsErrorKind::Api,
-                "resumable Location is not a storage.googleapis.com URL",
+            return Err(exception!(
+                code::GCS_API,
+                "resumable Location is not a storage.googleapis.com URL"
             ));
         }
         Ok(Self {
@@ -91,7 +87,7 @@ impl<'a> ResumableUpload<'a> {
         })
     }
 
-    pub(crate) async fn run(&self, source: &mut UploadSource<'_>) -> Result<ObjectMeta, GcsError> {
+    pub(crate) async fn run(&self, source: &mut UploadSource<'_>) -> Result<ObjectMeta, Exception> {
         let total = self.total;
         if total == 0 {
             return self.put_chunk_retrying(b"", 0, true).await?.expect_done();
@@ -110,9 +106,9 @@ impl<'a> ResumableUpload<'a> {
                 }
             }
         }
-        Err(GcsError::new(
-            GcsErrorKind::Api,
-            "finished upload did not return object metadata",
+        Err(exception!(
+            code::GCS_API,
+            "finished upload did not return object metadata"
         ))
     }
 
@@ -121,7 +117,7 @@ impl<'a> ResumableUpload<'a> {
         chunk: &[u8],
         start: u64,
         finished: bool,
-    ) -> Result<UploadStep, GcsError> {
+    ) -> Result<UploadStep, Exception> {
         let chunk_len = chunk.len() as u64;
         let mut offset = start;
         let mut attempt = 0u32;
@@ -131,9 +127,9 @@ impl<'a> ResumableUpload<'a> {
             }
             attempt += 1;
             if attempt > CHUNK_ATTEMPTS {
-                return Err(GcsError::new(
-                    GcsErrorKind::Transport,
-                    "resumable chunk failed after retries",
+                return Err(exception!(
+                    code::GCS_TRANSPORT,
+                    "resumable chunk failed after retries"
                 ));
             }
             if attempt > 1 {
@@ -157,7 +153,7 @@ impl<'a> ResumableUpload<'a> {
         start: u64,
         offset: u64,
         attempt: u32,
-    ) -> Result<Move, GcsError> {
+    ) -> Result<Move, Exception> {
         let end = start + chunk.len() as u64;
         let piece = chunk_piece(chunk, start, offset)?;
         if let Some(done) = self.send_piece(piece, end, offset, attempt).await? {
@@ -172,7 +168,7 @@ impl<'a> ResumableUpload<'a> {
         end: u64,
         offset: u64,
         attempt: u32,
-    ) -> Result<Option<Move>, GcsError> {
+    ) -> Result<Option<Move>, Exception> {
         match self.upload_chunk_once(piece, offset).await {
             Ok(UploadStep::Done(meta)) => Ok(Some(Move::Finish(UploadStep::Done(meta)))),
             Ok(UploadStep::Continue { next }) if next >= end => {
@@ -193,7 +189,7 @@ impl<'a> ResumableUpload<'a> {
         end: u64,
         offset: u64,
         attempt: u32,
-    ) -> Result<Move, GcsError> {
+    ) -> Result<Move, Exception> {
         match self.probe_session().await {
             Ok(UploadStep::Done(meta)) => Ok(Move::Finish(UploadStep::Done(meta))),
             Ok(UploadStep::Continue { next }) => Ok(after_probe(next, start, end, offset)),
@@ -206,12 +202,12 @@ impl<'a> ResumableUpload<'a> {
 
     fn chunk_failure(
         &self,
-        err: GcsError,
+        err: Exception,
         message: &str,
         offset: u64,
         attempt: u32,
-    ) -> Result<(), GcsError> {
-        if !err.is_retryable() {
+    ) -> Result<(), Exception> {
+        if !is_retryable(&err) {
             return Err(err);
         }
         let attempt_text = attempt.to_string();
@@ -233,7 +229,7 @@ impl<'a> ResumableUpload<'a> {
         Ok(())
     }
 
-    async fn upload_chunk_once(&self, chunk: &[u8], offset: u64) -> Result<UploadStep, GcsError> {
+    async fn upload_chunk_once(&self, chunk: &[u8], offset: u64) -> Result<UploadStep, Exception> {
         let range = chunk_content_range(offset, chunk.len() as u64, self.total);
         let response = self
             .client
@@ -255,7 +251,7 @@ impl<'a> ResumableUpload<'a> {
         UploadStep::from_response(response, offset + chunk.len() as u64).await
     }
 
-    async fn probe_session(&self) -> Result<UploadStep, GcsError> {
+    async fn probe_session(&self) -> Result<UploadStep, Exception> {
         let response = self
             .client
             .send(&Call {
@@ -295,7 +291,7 @@ impl UploadStep {
     async fn from_response(
         response: reqwest::Response,
         fallback_next: u64,
-    ) -> Result<Self, GcsError> {
+    ) -> Result<Self, Exception> {
         if response.status().is_success() {
             return Ok(Self::Done(ObjectMeta::from_response(response).await?));
         }
@@ -312,22 +308,22 @@ impl UploadStep {
         Ok(Self::Continue { next })
     }
 
-    fn expect_done(self) -> Result<ObjectMeta, GcsError> {
+    fn expect_done(self) -> Result<ObjectMeta, Exception> {
         match self {
             Self::Done(meta) => Ok(meta),
-            Self::Continue { .. } => Err(GcsError::new(
-                GcsErrorKind::Api,
-                "finished upload did not return object metadata",
+            Self::Continue { .. } => Err(exception!(
+                code::GCS_API,
+                "finished upload did not return object metadata"
             )),
         }
     }
 }
 
-fn chunk_piece(chunk: &[u8], start: u64, offset: u64) -> Result<&[u8], GcsError> {
+fn chunk_piece(chunk: &[u8], start: u64, offset: u64) -> Result<&[u8], Exception> {
     usize::try_from(offset - start)
         .ok()
         .and_then(|from| chunk.get(from..))
-        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable offset is outside the chunk"))
+        .ok_or_else(|| exception!(code::GCS_API, "resumable offset is outside the chunk"))
 }
 
 fn after_probe(next: u64, start: u64, end: u64, offset: u64) -> Move {
@@ -350,11 +346,11 @@ fn advance_offset(
     rewinds: &mut u32,
     next: u64,
     total: u64,
-) -> Result<(), GcsError> {
+) -> Result<(), Exception> {
     if next > total {
-        return Err(GcsError::new(
-            GcsErrorKind::Api,
-            "resumable offset is past the end of the object",
+        return Err(exception!(
+            code::GCS_API,
+            "resumable offset is past the end of the object"
         ));
     }
     if next > *offset {
@@ -365,17 +361,18 @@ fn advance_offset(
     if next < *offset {
         *rewinds += 1;
         if *rewinds > CHUNK_ATTEMPTS {
-            return Err(GcsError::new(
-                GcsErrorKind::Transport,
+            return Err(exception!(
+                code::GCS_API,
                 "resumable session did not keep uploaded bytes",
+                status = 503
             ));
         }
         *offset = next;
         return Ok(());
     }
-    Err(GcsError::new(
-        GcsErrorKind::Api,
-        "resumable upload did not advance",
+    Err(exception!(
+        code::GCS_API,
+        "resumable upload did not advance"
     ))
 }
 
@@ -408,9 +405,8 @@ fn probe_content_range(total: u64) -> String {
     format!("bytes */{total}")
 }
 
-fn next_offset_from_range(header: &str) -> Result<u64, GcsError> {
-    range_end(header)
-        .ok_or_else(|| GcsError::new(GcsErrorKind::Api, "resumable Range header is invalid"))
+fn next_offset_from_range(header: &str) -> Result<u64, Exception> {
+    range_end(header).ok_or_else(|| exception!(code::GCS_API, "resumable Range header is invalid"))
 }
 
 fn range_end(header: &str) -> Option<u64> {
@@ -477,12 +473,12 @@ mod tests {
         assert_eq!(offset, 4);
         assert_eq!(rewinds, 1);
         let stalled = advance_offset(&mut offset, &mut rewinds, 4, 100).unwrap_err();
-        assert_eq!(stalled.kind(), GcsErrorKind::Api);
+        assert_eq!(stalled.code(), code::GCS_API);
         advance_offset(&mut offset, &mut rewinds, 20, 100).unwrap();
         assert_eq!(offset, 20);
         assert_eq!(rewinds, 0);
         let past = advance_offset(&mut offset, &mut rewinds, 101, 100).unwrap_err();
-        assert_eq!(past.kind(), GcsErrorKind::Api);
+        assert_eq!(past.code(), code::GCS_API);
     }
 
     #[test]
@@ -494,7 +490,9 @@ mod tests {
             offset = 8;
         }
         let err = advance_offset(&mut offset, &mut rewinds, 0, 100).unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        assert_eq!(err.code(), code::GCS_API);
+        assert_eq!(err.status(), Some(503));
+        assert!(is_retryable(&err));
     }
 
     #[test]
@@ -584,7 +582,7 @@ mod tests {
         }
     }
 
-    async fn start_with(reply: Reply) -> Result<(), GcsError> {
+    async fn start_with(reply: Reply) -> Result<(), Exception> {
         let (addr, _server) = serve_script(vec![reply]).await;
         let client = fake_client(addr);
         let metadata = BTreeMap::new();
@@ -659,7 +657,7 @@ mod tests {
         assert!(upload_to(&client, 0).run(&mut source).await.is_err());
     }
 
-    async fn put_chunk(replies: Vec<Reply>, start: u64) -> Result<UploadStep, GcsError> {
+    async fn put_chunk(replies: Vec<Reply>, start: u64) -> Result<UploadStep, Exception> {
         let (addr, _server) = serve_script(replies).await;
         let client = fake_client(addr);
         upload_to(&client, 20)
@@ -667,7 +665,7 @@ mod tests {
             .await
     }
 
-    fn is_done(step: Result<UploadStep, GcsError>) -> bool {
+    fn is_done(step: Result<UploadStep, Exception>) -> bool {
         matches!(step, Ok(UploadStep::Done(_)))
     }
 
@@ -732,7 +730,7 @@ mod tests {
         assert!(is_done(put_chunk(replies, 0).await));
         let replies = vec![Reply::new(500, "{}"), Reply::new(403, "{}")];
         let err = put_chunk(replies, 0).await.map(|_| ()).unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert_eq!(err.code(), code::GCS_AUTH);
     }
 
     #[tokio::test]
@@ -741,7 +739,7 @@ mod tests {
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert_eq!(err.code(), code::GCS_AUTH);
     }
 
     #[tokio::test]
@@ -764,7 +762,7 @@ mod tests {
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Api);
+        assert_eq!(err.code(), code::GCS_API);
     }
 
     #[test]

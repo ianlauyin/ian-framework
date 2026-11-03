@@ -1,15 +1,17 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, FixedOffset};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Number, Value};
 
 use crate::time::hkt_now;
 
 const CLIENT_ACTION_MAX_CHARS: usize = 128;
+const CLIENT_ERROR_MESSAGE_MAX_CHARS: usize = 1024;
 const CLIENT_INFO_MAX_KEYS: usize = 32;
 const CLIENT_INFO_VALUE_MAX_BYTES: usize = 2048;
 const CLIENT_TS_MAX_AGE_HOURS: i64 = 24;
+const CLIENT_ERROR_PLACEHOLDER: &str = "no error message";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -98,11 +100,29 @@ pub struct LogEvent {
     pub(crate) action: String,
     pub(crate) latency_ms: Option<u64>,
     pub(crate) level: LogLevel,
+    #[serde(default, deserialize_with = "text_or_none")]
+    pub(crate) error_message: Option<String>,
     pub(crate) context: BTreeMap<String, LogValue>,
     pub(crate) info: Map<String, Value>,
 }
 
 impl LogEvent {
+    pub fn info(action: impl Into<String>) -> LogEvent {
+        Self::build(action.into(), LogLevel::Info, None)
+    }
+
+    pub fn warn(action: impl Into<String>) -> LogEvent {
+        Self::build(action.into(), LogLevel::Warn, None)
+    }
+
+    pub fn warn_with(action: impl Into<String>, error_message: impl Into<String>) -> LogEvent {
+        Self::build(action.into(), LogLevel::Warn, Some(error_message.into()))
+    }
+
+    pub fn error(action: impl Into<String>, error_message: impl Into<String>) -> LogEvent {
+        Self::build(action.into(), LogLevel::Error, Some(error_message.into()))
+    }
+
     pub fn ts(&self) -> DateTime<FixedOffset> {
         self.ts
     }
@@ -127,26 +147,61 @@ impl LogEvent {
         self.level
     }
 
+    pub fn error_message(&self) -> Option<&str> {
+        self.error_message.as_deref()
+    }
+
     pub fn context(&self) -> &BTreeMap<String, LogValue> {
         &self.context
     }
 
-    pub fn info(&self) -> &Map<String, Value> {
+    pub fn fields(&self) -> &Map<String, Value> {
         &self.info
     }
 
-    pub fn new(&self) -> LogEvent {
+    pub fn from_client(&self) -> LogEvent {
         let now = hkt_now();
+        let error_message = match self.level {
+            LogLevel::Info => None,
+            LogLevel::Warn => self
+                .error_message
+                .as_deref()
+                .map(|text| client_text(text, CLIENT_ERROR_MESSAGE_MAX_CHARS))
+                .filter(|text| !text.trim().is_empty()),
+            LogLevel::Error => Some(client_error_message(self.error_message.as_deref())),
+        };
         LogEvent {
             ts: client_ts(self.ts, now),
             id: String::new(),
-            action: client_action(&self.action),
+            action: client_text(&self.action, CLIENT_ACTION_MAX_CHARS),
             latency_ms: None,
             level: self.level,
+            error_message,
             context: BTreeMap::new(),
             info: client_info(&self.info),
         }
     }
+
+    fn build(action: String, level: LogLevel, error_message: Option<String>) -> LogEvent {
+        LogEvent {
+            ts: hkt_now(),
+            id: String::new(),
+            action,
+            latency_ms: None,
+            level,
+            error_message,
+            context: BTreeMap::new(),
+            info: Map::new(),
+        }
+    }
+}
+
+// One bad `error_message` must not reject the batch, so a value that is not a string reads as none.
+fn text_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    Ok(match Value::deserialize(deserializer)? {
+        Value::String(text) => Some(text),
+        _ => None,
+    })
 }
 
 fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<FixedOffset> {
@@ -156,13 +211,20 @@ fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<
     ts.with_timezone(now.offset())
 }
 
-// The action is shown in log lines, so a client cannot choose a line break or a long text.
-fn client_action(action: &str) -> String {
-    action
-        .chars()
+// The text is shown in log lines, so a client cannot choose a line break or a text above the limit.
+fn client_text(text: &str, max_chars: usize) -> String {
+    text.chars()
         .map(|ch| if ch.is_control() { ' ' } else { ch })
-        .take(CLIENT_ACTION_MAX_CHARS)
+        .take(max_chars)
         .collect()
+}
+
+fn client_error_message(message: Option<&str>) -> String {
+    let text = client_text(message.unwrap_or_default(), CLIENT_ERROR_MESSAGE_MAX_CHARS);
+    if text.trim().is_empty() {
+        return CLIENT_ERROR_PLACEHOLDER.to_string();
+    }
+    text
 }
 
 fn client_info(info: &Map<String, Value>) -> Map<String, Value> {
@@ -205,23 +267,22 @@ fn info_value(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::event;
     use serde_json::json;
 
     #[test]
     fn client_action_and_info_are_bounded() {
         let batch_event = |action: &str, info: Value| -> LogEvent {
-            let mut client = event(action, LogLevel::Info);
+            let mut client = LogEvent::info(action);
             client.info = info.as_object().cloned().unwrap_or_default();
-            client.new()
+            client.from_client()
         };
         let forged = batch_event("a\nINFO forged\r", json!({}));
         assert!(!forged.action().contains(['\n', '\r']));
         assert_eq!(batch_event(&"x".repeat(500), json!({})).action().len(), 128);
         let long = "y".repeat(2049);
-        assert!(batch_event("a", json!({ "k": long })).info().is_empty());
+        assert!(batch_event("a", json!({ "k": long })).fields().is_empty());
         let many: Map<String, Value> = (0..100).map(|n| (format!("k{n}"), json!("v"))).collect();
-        assert_eq!(batch_event("a", Value::Object(many)).info().len(), 32);
+        assert_eq!(batch_event("a", Value::Object(many)).fields().len(), 32);
     }
 
     #[test]
@@ -236,7 +297,7 @@ mod tests {
     }
 
     fn sample() -> LogEvent {
-        let mut event = event("GET /health", LogLevel::Info);
+        let mut event = LogEvent::info("GET /health");
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
         event.id = "req-1".to_string();
         event
@@ -285,7 +346,7 @@ mod tests {
 
     #[test]
     fn empty_http_fields_are_null_or_empty() {
-        let json = serde_json::to_string(&event("", LogLevel::Warn)).unwrap();
+        let json = serde_json::to_string(&LogEvent::warn("")).unwrap();
         let value: Value = serde_json::from_str(&json).unwrap();
         assert!(value.get("app").is_none());
         assert!(value.get("project").is_none());
@@ -308,7 +369,7 @@ mod tests {
         assert_eq!(event.latency_ms(), Some(12));
         assert_eq!(event.level(), LogLevel::Info);
         assert_eq!(event.context()["ip"], "203.0.113.8");
-        assert_eq!(event.info()["region"], "asia");
+        assert_eq!(event.fields()["region"], "asia");
     }
 
     #[test]
@@ -321,13 +382,13 @@ mod tests {
 
     #[test]
     fn a_new_event_ts_has_the_hkt_offset() {
-        let value = serde_json::to_value(event("", LogLevel::Info)).unwrap();
+        let value = serde_json::to_value(LogEvent::info("")).unwrap();
         assert!(value["ts"].as_str().unwrap().ends_with("+08:00"));
     }
 
     #[test]
     fn a_sanitized_event_ts_has_the_hkt_offset() {
-        let stored = event("/files", LogLevel::Info).new();
+        let stored = LogEvent::info("/files").from_client();
         let value = serde_json::to_value(stored).unwrap();
         assert!(value["ts"].as_str().unwrap().ends_with("+08:00"));
     }
@@ -360,7 +421,7 @@ mod tests {
 
     #[test]
     fn new_drops_untrusted_fields() {
-        let mut event = event("GET /download?sig=abc#top", LogLevel::Warn);
+        let mut event = LogEvent::warn("GET /download?sig=abc#top");
         event.ts = DateTime::parse_from_rfc3339("2000-01-01T00:00:00Z").unwrap();
         event.id = "client-id".to_string();
         event
@@ -368,7 +429,7 @@ mod tests {
             .insert("ip".to_string(), LogValue::from("203.0.113.8"));
         event.latency_ms = Some(42);
         let before = hkt_now();
-        let stored = event.new();
+        let stored = event.from_client();
         let after = hkt_now();
         assert_eq!(event.id, "client-id");
         assert_eq!(stored.id, "");
@@ -382,20 +443,20 @@ mod tests {
 
     #[test]
     fn new_keeps_a_recent_client_ts_in_hkt() {
-        let mut event = event("note", LogLevel::Info);
+        let mut event = LogEvent::info("note");
         let ts = hkt_now() - Duration::minutes(5);
         event.ts = ts.with_timezone(&FixedOffset::east_opt(0).unwrap());
-        let stored = event.new();
+        let stored = event.from_client();
         assert_eq!(stored.ts, ts);
         assert_eq!(stored.ts.offset().local_minus_utc(), 8 * 3600);
     }
 
     #[test]
     fn new_replaces_a_future_client_ts() {
-        let mut event = event("note", LogLevel::Info);
+        let mut event = LogEvent::info("note");
         event.ts = hkt_now() + Duration::hours(1);
         let before = hkt_now();
-        let stored = event.new();
+        let stored = event.from_client();
         assert!(stored.ts >= before && stored.ts <= hkt_now());
     }
 
@@ -413,14 +474,14 @@ mod tests {
             "GET /api/foo?token=secret",
             "plain",
         ] {
-            let stored = event(action, LogLevel::Info).new();
+            let stored = LogEvent::info(action).from_client();
             assert_eq!(stored.action, action);
         }
     }
 
     #[test]
     fn new_filters_info() {
-        let mut client = event("/files", LogLevel::Info);
+        let mut client = LogEvent::info("/files");
         client.info.insert("bad key".to_string(), json!("no"));
         client.info.insert("k01".to_string(), json!("kept"));
         client.info.insert("k02".to_string(), json!("a\nb"));
@@ -430,7 +491,7 @@ mod tests {
             .insert("k07".to_string(), json!("x".repeat(250)));
         client.info.insert("k08".to_string(), json!("ninth"));
         client.info.insert("k09".to_string(), json!(true));
-        let stored = client.new();
+        let stored = client.from_client();
         assert_eq!(
             stored.info.keys().cloned().collect::<Vec<_>>(),
             vec![
@@ -446,7 +507,7 @@ mod tests {
         assert_eq!(stored.info["k09"], json!("true"));
         assert!(!stored.info.contains_key("bad key"));
 
-        let mut scalars = event("/files", LogLevel::Error);
+        let mut scalars = LogEvent::error("/files", "boom");
         scalars.info.insert("a/b".to_string(), json!("no"));
         scalars.info.insert("a_b-c.d".to_string(), json!("yes"));
         scalars.info.insert("a".repeat(65), json!("long-key"));
@@ -454,7 +515,7 @@ mod tests {
         scalars.info.insert("flag".to_string(), json!(true));
         scalars.info.insert("off".to_string(), json!(false));
         scalars.info.insert("ratio".to_string(), json!(1.5));
-        let stored = scalars.new();
+        let stored = scalars.from_client();
         assert_eq!(stored.info.get("a/b"), None);
         assert_eq!(stored.info[&"a".repeat(65)], json!("long-key"));
         assert_eq!(stored.info["a_b-c.d"], json!("yes"));
@@ -463,26 +524,140 @@ mod tests {
         assert_eq!(stored.info["off"], json!("false"));
         assert_eq!(stored.info["ratio"], json!("1.5"));
 
-        let mut text = event("/files", LogLevel::Info);
+        let mut text = LogEvent::info("/files");
         text.info.insert(String::new(), json!("no"));
         text.info.insert("café".to_string(), json!("no"));
         text.info.insert("ok!".to_string(), json!("no"));
         let long = "中".repeat(67);
         text.info.insert("text".to_string(), json!(long.clone()));
-        let stored = text.new();
+        let stored = text.from_client();
         assert_eq!(stored.info.get(""), None);
         assert_eq!(stored.info.get("café"), None);
         assert_eq!(stored.info.get("ok!"), None);
         assert_eq!(stored.info["text"], json!(long));
 
-        let mut later = event("/files", LogLevel::Info);
+        let mut later = LogEvent::info("/files");
         for index in 0..8 {
             later.info.insert(format!("bad {index}"), json!("no"));
         }
         later.info.insert("zzzz".to_string(), json!("yes"));
-        let stored = later.new();
+        let stored = later.from_client();
         assert_eq!(stored.info.len(), 1);
         assert_eq!(stored.info["zzzz"], json!("yes"));
+    }
+
+    #[test]
+    fn constructors_set_the_level_and_the_message() {
+        let info = LogEvent::info("a");
+        assert_eq!((info.level(), info.error_message()), (LogLevel::Info, None));
+        let warn = LogEvent::warn("a");
+        assert_eq!((warn.level(), warn.error_message()), (LogLevel::Warn, None));
+        let warn = LogEvent::warn_with("a", "slow");
+        assert_eq!(warn.error_message(), Some("slow"));
+        let error = LogEvent::error("a", "boom");
+        assert_eq!(error.level(), LogLevel::Error);
+        assert_eq!(error.error_message(), Some("boom"));
+        assert_eq!(error.id(), "");
+        assert!(error.context().is_empty());
+        assert!(error.fields().is_empty());
+    }
+
+    #[test]
+    fn a_constructor_does_not_truncate_the_action() {
+        let long = "x".repeat(500);
+        assert_eq!(LogEvent::info(long.clone()).action(), long);
+        let message = LogEvent::error("a", long.clone());
+        assert_eq!(message.error_message(), Some(long.as_str()));
+    }
+
+    #[test]
+    fn a_client_error_event_without_a_message_gets_a_placeholder() {
+        let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
+        value.as_object_mut().unwrap().remove("error_message");
+        let parsed: LogEvent = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(parsed.error_message(), None);
+        assert_eq!(
+            parsed.from_client().error_message(),
+            Some("no error message")
+        );
+        for blank in [json!(null), json!(""), json!("  "), json!("\u{1}\n")] {
+            value["error_message"] = blank;
+            let parsed: LogEvent = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(
+                parsed.from_client().error_message(),
+                Some("no error message")
+            );
+        }
+        value["error_message"] = json!("boom");
+        let parsed: LogEvent = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.from_client().error_message(), Some("boom"));
+    }
+
+    #[test]
+    fn a_warn_event_may_have_error_message() {
+        let mut value = serde_json::to_value(LogEvent::warn("x")).unwrap();
+        assert!(value["error_message"].is_null());
+        assert_eq!(
+            serde_json::from_value::<LogEvent>(value.clone())
+                .unwrap()
+                .error_message(),
+            None
+        );
+        value["error_message"] = json!("slow");
+        let parsed: LogEvent = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.error_message(), Some("slow"));
+    }
+
+    #[test]
+    fn new_keeps_a_bounded_error_message() {
+        let mut client = LogEvent::error("x", "boom");
+        client.error_message = Some(format!("a\nb{}", "c".repeat(1500)));
+        let stored = client.from_client();
+        let message = stored.error_message().unwrap();
+        assert!(!message.contains('\n'));
+        assert_eq!(message.chars().count(), 1024);
+        let mut warn = LogEvent::warn("x");
+        warn.error_message = Some("y".repeat(2000));
+        assert_eq!(warn.from_client().error_message().unwrap().len(), 1024);
+    }
+
+    #[test]
+    fn a_non_string_error_message_reads_as_none() {
+        for bad in [
+            json!(123),
+            json!({"a": 1}),
+            json!([1]),
+            json!(true),
+            json!(null),
+        ] {
+            let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
+            value["error_message"] = bad;
+            let parsed: LogEvent = serde_json::from_value(value).unwrap();
+            assert_eq!(parsed.error_message(), None);
+            assert_eq!(
+                parsed.from_client().error_message(),
+                Some("no error message")
+            );
+        }
+    }
+
+    #[test]
+    fn from_client_turns_a_blank_warn_message_into_none() {
+        for blank in ["", "  ", "\u{1}\n\t"] {
+            let mut warn = LogEvent::warn("x");
+            warn.error_message = Some(blank.to_string());
+            assert_eq!(warn.from_client().error_message(), None, "{blank:?}");
+        }
+    }
+
+    #[test]
+    fn from_client_drops_an_error_message_on_an_info_event() {
+        let mut client = LogEvent::info("x");
+        client.error_message = Some("boom".to_string());
+        assert_eq!(client.from_client().error_message(), None);
+        let mut warn = LogEvent::warn("x");
+        warn.error_message = Some("slow".to_string());
+        assert_eq!(warn.from_client().error_message(), Some("slow"));
     }
 
     #[test]

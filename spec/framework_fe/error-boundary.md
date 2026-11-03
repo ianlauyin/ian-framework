@@ -43,13 +43,13 @@ The fallback fills the viewport height. It puts its content in the center.
 When the component shows the fallback, it logs the error with `Logger.error` from `framework_fe/src/logger.ts`. The logger is in `spec/framework_fe/logger.md`.
 
 - The log message is `ERROR-BOUNDARY/caught an error`.
+- The log `error_message` is the `message` of the error, or the thrown value as text. The message is only in `error_message`. The `info` has no `error_message` key. The component does not choose a fallback text. When that text is empty or has only whitespace, `Logger.error` gives the fallback text `unknown error`. The rule is in `spec/framework_fe/logger.md`.
 - The log has the `info` fields in the table below.
 - Each line break in these values becomes ` | `. The reason is that the log route drops a value with a line break. The log route is in `spec/framework_rs/logging/client-log.md`.
 
 | Field | Value | When |
 | --- | --- | --- |
 | `error_name` | `name` of the error. | Only when the thrown value is an `Error`. |
-| `error_message` | `message` of the error, or the thrown value as text. | Always. |
 | `error_stack` | `stack` of the error, or an empty string. | Only when the thrown value is an `Error`. |
 
 ## Out of scope

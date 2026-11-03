@@ -1,4 +1,5 @@
 pub mod env;
+pub mod exception;
 pub mod http;
 pub mod logging;
 pub mod shutdown;

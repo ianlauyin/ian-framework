@@ -37,7 +37,7 @@ The disk monitor checks the storage usage of one path on a Unix host on an inter
 - The usage is the same as `df`: used blocks divided by used blocks plus the blocks that a normal user can use.
 - The monitor reads the first sample when the task starts and checks it at once. It takes the next samples on each interval.
 - When the file system has no blocks, the monitor skips that interval.
-- When the first sample cannot be read, the monitor calls `Logger::warn` one time with the action `DISK/cannotReadUsage` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`. This is the case on a host that is not Unix, or when `path` does not exist.
+- When the first sample cannot be read, the monitor calls `Logger::warn_with` one time with the action `DISK/cannotReadUsage`, the message `cannot read the disk usage` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`. This is the case on a host that is not Unix, or when `path` does not exist.
 - When a later sample cannot be read, the monitor skips that interval.
 
 ## Event
@@ -51,6 +51,7 @@ The monitor makes one event when the usage rises to the threshold or above it. I
 | `context` | Empty object |
 | `action` | `DISK/meets threshold` |
 | `latency_ms` | null |
+| `error_message` | null |
 | `level` | `warn` |
 | `info.disk_percent` | The usage, rounded to one decimal, as a JSON number |
 | `info.threshold_percent` | The threshold, as a JSON number |

@@ -5,9 +5,11 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use tokio::sync::{Mutex, OnceCell};
 
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use crate::gcp::{
-    api_detail, http_client_builder, metadata_get, truncate, CachedToken, Credentials, GcpError,
-    GcpErrorKind,
+    api_detail, http_client_builder, metadata_get, truncate, CachedToken, Credentials,
 };
 
 const API_ROOT: &str = "https://secretmanager.googleapis.com/v1";
@@ -24,12 +26,12 @@ pub(crate) static SECRET_MANAGER: OnceCell<Option<SecretManager>> = OnceCell::co
 static UNREACHABLE_AT: StdMutex<Option<Instant>> = StdMutex::new(None);
 
 enum InitError {
-    Gcp(GcpError),
+    Gcp(Exception),
     MetadataUnreachable,
 }
 
-impl From<GcpError> for InitError {
-    fn from(err: GcpError) -> Self {
+impl From<Exception> for InitError {
+    fn from(err: Exception) -> Self {
         InitError::Gcp(err)
     }
 }
@@ -45,7 +47,7 @@ pub(crate) struct SecretManager {
 }
 
 impl SecretManager {
-    pub(crate) async fn shared() -> Result<Option<&'static SecretManager>, GcpError> {
+    pub(crate) async fn shared() -> Result<Option<&'static SecretManager>, Exception> {
         if let Some(state) = SECRET_MANAGER.get() {
             return Ok(state.as_ref());
         }
@@ -56,11 +58,11 @@ impl SecretManager {
     }
 
     // None means that the secret or its latest version does not exist.
-    pub(crate) async fn access_latest(&self, secret: &str) -> Result<Option<String>, GcpError> {
+    pub(crate) async fn access_latest(&self, secret: &str) -> Result<Option<String>, Exception> {
         if !is_name_segment(secret) {
-            return Err(GcpError::new(
-                GcpErrorKind::Config,
-                "secret id has a character that is not valid",
+            return Err(exception!(
+                code::GCP_CONFIG,
+                "secret id has a character that is not valid"
             ));
         }
         let url = format!(
@@ -90,7 +92,7 @@ impl SecretManager {
         }))
     }
 
-    async fn token(&self) -> Result<String, GcpError> {
+    async fn token(&self) -> Result<String, Exception> {
         let mut token = self.token.lock().await;
         if token.expires_at <= Instant::now() {
             *token = self.credentials.fetch_token(&self.http).await?;
@@ -101,7 +103,7 @@ impl SecretManager {
 
 fn initialized(
     result: Result<&'static Option<SecretManager>, InitError>,
-) -> Result<Option<&'static SecretManager>, GcpError> {
+) -> Result<Option<&'static SecretManager>, Exception> {
     match result {
         Ok(state) => Ok(state.as_ref()),
         Err(InitError::Gcp(err)) => Err(err),
@@ -135,28 +137,28 @@ fn unreachable_recently() -> bool {
 }
 
 // The metadata server is the last credentials source. When it cannot be reached, the process has no credentials.
-async fn metadata_project(http: &reqwest::Client, url: &str) -> Result<Option<String>, GcpError> {
+async fn metadata_project(http: &reqwest::Client, url: &str) -> Result<Option<String>, Exception> {
     let Ok(response) = metadata_get(http, url).await else {
         return Ok(None);
     };
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
-        return Err(GcpError::new(
-            GcpErrorKind::Auth,
-            format!("metadata server project status {status}"),
+        return Err(exception!(
+            code::GCP_AUTH,
+            format!("metadata server project status {status}")
         ));
     }
     let body = response.text().await.map_err(|err| {
-        GcpError::with_source(
-            GcpErrorKind::Transport,
+        exception!(
+            code::GCP_TRANSPORT,
             "metadata server project is not text",
-            err.without_url(),
+            source = err.without_url()
         )
     })?;
     checked_project(body.trim()).map(Some)
 }
 
-fn user_project(credentials: &Credentials) -> Result<Option<String>, GcpError> {
+fn user_project(credentials: &Credentials) -> Result<Option<String>, Exception> {
     let from_env = env::var(PROJECT_ENV)
         .ok()
         .filter(|project| !project.trim().is_empty());
@@ -166,11 +168,11 @@ fn user_project(credentials: &Credentials) -> Result<Option<String>, GcpError> {
     }
 }
 
-fn checked_project(project: &str) -> Result<String, GcpError> {
+fn checked_project(project: &str) -> Result<String, Exception> {
     if !is_name_segment(project) {
-        return Err(GcpError::new(
-            GcpErrorKind::Config,
-            "the project id is empty or not valid",
+        return Err(exception!(
+            code::GCP_CONFIG,
+            "the project id is empty or not valid"
         ));
     }
     Ok(project.to_string())
@@ -181,30 +183,30 @@ async fn access_at(
     url: &str,
     token: &str,
     quota_project: Option<&str>,
-) -> Result<Option<String>, GcpError> {
+) -> Result<Option<String>, Exception> {
     let mut request = http.get(url).bearer_auth(token).timeout(REQUEST_TIMEOUT);
     if let Some(project) = quota_project {
         request = request.header("x-goog-user-project", project);
     }
     let response = request.send().await.map_err(|err| {
-        GcpError::with_source(
-            GcpErrorKind::Transport,
+        exception!(
+            code::GCP_TRANSPORT,
             "secret manager request failed",
-            err.without_url(),
+            source = err.without_url()
         )
     })?;
     let status = response.status().as_u16();
     let body = response.bytes().await.map_err(|err| {
-        GcpError::with_source(
-            GcpErrorKind::Transport,
+        exception!(
+            code::GCP_TRANSPORT,
             "secret manager response is not readable",
-            err.without_url(),
+            source = err.without_url()
         )
     })?;
     decode_access_response(status, &body)
 }
 
-fn decode_access_response(status: u16, body: &[u8]) -> Result<Option<String>, GcpError> {
+fn decode_access_response(status: u16, body: &[u8]) -> Result<Option<String>, Exception> {
     if status == 404 {
         return Ok(None);
     }
@@ -214,33 +216,29 @@ fn decode_access_response(status: u16, body: &[u8]) -> Result<Option<String>, Gc
     decode_payload(body).map(Some)
 }
 
-fn status_error(status: u16, body: &[u8]) -> GcpError {
+fn status_error(status: u16, body: &[u8]) -> Exception {
     let detail = api_detail(&String::from_utf8_lossy(body)).unwrap_or_default();
     let kind = match status {
-        401 | 403 => GcpErrorKind::Auth,
-        _ => GcpErrorKind::Api,
+        401 | 403 => code::GCP_AUTH,
+        _ => code::GCP_API,
     };
-    GcpError::new(
+    exception!(
         kind,
-        format!("secret manager status {status}: {}", truncate(&detail, 300)),
+        format!("secret manager status {status}: {}", truncate(&detail, 300))
     )
 }
 
-fn decode_payload(body: &[u8]) -> Result<String, GcpError> {
-    let parsed: AccessResponse = serde_json::from_slice(body).map_err(|_| {
-        GcpError::new(
-            GcpErrorKind::Api,
-            "secret manager response has no payload data",
-        )
-    })?;
+fn decode_payload(body: &[u8]) -> Result<String, Exception> {
+    let parsed: AccessResponse = serde_json::from_slice(body)
+        .map_err(|_| exception!(code::GCP_API, "secret manager response has no payload data"))?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(parsed.payload.data)
-        .map_err(|_| GcpError::new(GcpErrorKind::Api, "secret payload is not base64"))?;
+        .map_err(|_| exception!(code::GCP_API, "secret payload is not base64"))?;
     let value = String::from_utf8(bytes)
-        .map_err(|_| GcpError::new(GcpErrorKind::Config, "secret value is not UTF-8"))?;
+        .map_err(|_| exception!(code::GCP_CONFIG, "secret value is not UTF-8"))?;
     let value = value.trim();
     if value.is_empty() {
-        return Err(GcpError::new(GcpErrorKind::Config, "secret value is empty"));
+        return Err(exception!(code::GCP_CONFIG, "secret value is empty"));
     }
     Ok(value.to_string())
 }
@@ -252,9 +250,13 @@ fn is_name_segment(segment: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
-fn http_client() -> Result<reqwest::Client, GcpError> {
+fn http_client() -> Result<reqwest::Client, Exception> {
     http_client_builder().build().map_err(|err| {
-        GcpError::with_source(GcpErrorKind::Transport, "cannot build the HTTP client", err)
+        exception!(
+            code::GCP_TRANSPORT,
+            "cannot build the HTTP client",
+            source = err
+        )
     })
 }
 
@@ -307,14 +309,14 @@ mod tests {
     fn decode_rejects_an_empty_value() {
         for value in [&b""[..], b"  \n"] {
             let err = decode_access_response(200, &ok_body(value)).unwrap_err();
-            assert_eq!(err.to_string(), "secret value is empty");
+            assert_eq!(err.message(), "secret value is empty");
         }
     }
 
     #[test]
     fn decode_rejects_a_value_that_is_not_utf8() {
         let err = decode_access_response(200, &ok_body(&[0x66, 0x80, 0x6f])).unwrap_err();
-        assert_eq!(err.to_string(), "secret value is not UTF-8");
+        assert_eq!(err.message(), "secret value is not UTF-8");
     }
 
     #[test]
@@ -327,7 +329,7 @@ mod tests {
         ];
         for body in cases {
             let err = decode_access_response(200, body).unwrap_err();
-            assert_eq!(err.kind(), GcpErrorKind::Api);
+            assert_eq!(err.code(), code::GCP_API);
             assert!(std::error::Error::source(&err).is_none());
             assert!(!format!("{err} {err:?}").contains("secret-value"), "{err}");
         }
@@ -338,14 +340,14 @@ mod tests {
         let body =
             br#"{"error":{"code":403,"message":"Permission denied","status":"PERMISSION_DENIED"}}"#;
         let err = decode_access_response(403, body).unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Auth);
+        assert_eq!(err.code(), code::GCP_AUTH);
         assert_eq!(
-            err.to_string(),
+            err.message(),
             "secret manager status 403: Permission denied"
         );
         let err = decode_access_response(500, b"<html>down</html>").unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Api);
-        assert_eq!(err.to_string(), "secret manager status 500: ");
+        assert_eq!(err.code(), code::GCP_API);
+        assert_eq!(err.message(), "secret manager status 500: ");
     }
 
     #[tokio::test]
@@ -377,7 +379,7 @@ mod tests {
         let manager = fake_secret_manager(closed_addr());
         for secret in ["", "A/B", "A?B", "A B"] {
             let err = manager.access_latest(secret).await.unwrap_err();
-            assert_eq!(err.kind(), GcpErrorKind::Config, "{secret:?}");
+            assert_eq!(err.code(), code::GCP_CONFIG, "{secret:?}");
         }
     }
 
@@ -388,7 +390,7 @@ mod tests {
         let err = access_at(&http, &format!("http://{addr}/v1/x:access"), "token", None)
             .await
             .unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Transport);
+        assert_eq!(err.code(), code::GCP_TRANSPORT);
         let source = std::error::Error::source(&err).unwrap().to_string();
         assert!(!source.contains(&addr.to_string()), "{source}");
     }
@@ -418,12 +420,12 @@ mod tests {
         let err = metadata_project(&http, &format!("http://{addr}/project-id"))
             .await
             .unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Auth);
+        assert_eq!(err.code(), code::GCP_AUTH);
         let (addr, _server) = serve(200, b" ".to_vec()).await;
         let err = metadata_project(&http, &format!("http://{addr}/project-id"))
             .await
             .unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Config);
+        assert_eq!(err.code(), code::GCP_CONFIG);
     }
 
     #[test]
@@ -443,7 +445,7 @@ mod tests {
         );
         assert_eq!(read(None, None).unwrap(), None);
         let err = read(Some("bad/project"), None).unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Config);
+        assert_eq!(err.code(), code::GCP_CONFIG);
     }
 
     fn temp_adc(name: &str, json: &str) -> std::path::PathBuf {
@@ -512,7 +514,7 @@ mod tests {
         let manager = Box::leak(Box::new(Some(fake_secret_manager(closed_addr()))));
         assert!(matches!(initialized(Ok(manager)), Ok(Some(_))));
 
-        let err = GcpError::new(GcpErrorKind::Config, "bad");
+        let err = exception!(code::GCP_CONFIG, "bad");
         assert!(initialized(Err(InitError::Gcp(err))).is_err());
 
         assert!(matches!(

@@ -50,7 +50,7 @@ A failed delete does not prove that the source still exists. If that delete fail
 | The source does not exist. | It keeps the destination. | The error tells that the object exists only at the destination. |
 | The metadata read fails. | It keeps the destination. | The error tells that the object can exist at the two names. The error includes the two errors. |
 
-- Each of these errors has the kind of the source delete error.
+- Each of these errors has the code of the source delete error. The source delete error is the `caused_by` exception of the error. It keeps its code, its status and its location. The error has the status of the source delete error, so a retryable status stays retryable.
 - A source and a destination with the same name is a configuration error.
 - An object name that is empty, is longer than 1024 bytes, is `.` or `..`, or has a line break is a `Config` error. The check occurs before the request.
 

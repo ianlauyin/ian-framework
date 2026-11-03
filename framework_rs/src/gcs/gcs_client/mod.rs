@@ -15,8 +15,13 @@ use crate::gcp::{http_client_builder, CachedToken, METADATA_TOKEN_URL};
 use crate::logging::{LogLevel, LogShipper};
 
 use crate::gcs::encode::{encode_object_id, encode_seg};
-use crate::gcs::{GcsError, GcsErrorKind, API_ROOT, IAM_ROOT, UPLOAD_HOST_ROOT, UPLOAD_ROOT};
+use crate::gcs::{
+    gcs_response_exception, is_retryable_status, API_ROOT, IAM_ROOT, UPLOAD_HOST_ROOT, UPLOAD_ROOT,
+};
 
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use credentials::{Auth, SignedParts};
 use request::{logged_error, Call, OpsRecord};
 use rewrite_step::RewriteStep;
@@ -50,19 +55,19 @@ impl GcsClient {
     pub async fn from_adc(
         bucket_name: impl Into<String>,
         signer_email: Option<&str>,
-    ) -> Result<Self, GcsError> {
+    ) -> Result<Self, Exception> {
         Self::new(bucket_name, Auth::from_adc(signer_email).await?).await
     }
 
-    pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, GcsError> {
+    pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, Exception> {
         self.open_object(name).await?.read_to_vec().await
     }
 
-    pub async fn get_bytes_opt(&self, name: &str) -> Result<Option<Vec<u8>>, GcsError> {
+    pub async fn get_bytes_opt(&self, name: &str) -> Result<Option<Vec<u8>>, Exception> {
         not_found_as_none(self.get_bytes(name).await)
     }
 
-    pub async fn open_object(&self, name: &str) -> Result<ObjectReader, GcsError> {
+    pub async fn open_object(&self, name: &str) -> Result<ObjectReader, Exception> {
         validate_object_name(name)?;
         let response = self
             .send(&Call {
@@ -74,11 +79,11 @@ impl GcsClient {
         Ok(ObjectReader { response })
     }
 
-    pub async fn open_object_opt(&self, name: &str) -> Result<Option<ObjectReader>, GcsError> {
+    pub async fn open_object_opt(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
         not_found_as_none(self.open_object(name).await)
     }
 
-    pub async fn stat(&self, name: &str) -> Result<ObjectMeta, GcsError> {
+    pub async fn stat(&self, name: &str) -> Result<ObjectMeta, Exception> {
         validate_object_name(name)?;
         let response = self
             .send(&Call {
@@ -90,11 +95,11 @@ impl GcsClient {
         ObjectMeta::from_response(response).await
     }
 
-    pub async fn stat_opt(&self, name: &str) -> Result<Option<ObjectMeta>, GcsError> {
+    pub async fn stat_opt(&self, name: &str) -> Result<Option<ObjectMeta>, Exception> {
         not_found_as_none(self.stat(name).await)
     }
 
-    pub async fn list(&self, query: &ListQuery) -> Result<ListPage, GcsError> {
+    pub async fn list(&self, query: &ListQuery) -> Result<ListPage, Exception> {
         let response = self
             .send(&Call {
                 method: reqwest::Method::GET,
@@ -103,16 +108,16 @@ impl GcsClient {
             })
             .await?;
         let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
+            exception!(
+                code::GCS_TRANSPORT,
                 "list response is not bytes",
-                err.without_url(),
+                source = err.without_url()
             )
         })?;
         ListPage::from_slice(&bytes)
     }
 
-    pub async fn put(&self, request: &PutRequest) -> Result<ObjectMeta, GcsError> {
+    pub async fn put(&self, request: &PutRequest) -> Result<ObjectMeta, Exception> {
         let name = request.name.as_str();
         let options = &request.options;
         validate_object_name(name)?;
@@ -125,7 +130,7 @@ impl GcsClient {
         upload.run(&mut source).await
     }
 
-    pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
+    pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
         validate_object_name(from)?;
         validate_object_name(to)?;
         let mut token: Option<String> = None;
@@ -135,16 +140,13 @@ impl GcsClient {
                 RewriteStep::Next(next) => next,
             };
             if token.as_deref() == Some(next.as_str()) {
-                return Err(GcsError::new(
-                    GcsErrorKind::Api,
-                    "rewrite token did not change",
-                ));
+                return Err(exception!(code::GCS_API, "rewrite token did not change"));
             }
             token = Some(next);
         }
-        Err(GcsError::new(
-            GcsErrorKind::Api,
-            "rewrite did not finish within the step limit",
+        Err(exception!(
+            code::GCS_API,
+            "rewrite did not finish within the step limit"
         ))
     }
 
@@ -152,7 +154,7 @@ impl GcsClient {
         &self,
         name: &str,
         metadata: &BTreeMap<String, String>,
-    ) -> Result<ObjectMeta, GcsError> {
+    ) -> Result<ObjectMeta, Exception> {
         validate_object_name(name)?;
         validate_metadata(metadata)?;
         let response = self
@@ -166,7 +168,7 @@ impl GcsClient {
         ObjectMeta::from_response(response).await
     }
 
-    pub async fn delete_object(&self, name: &str) -> Result<(), GcsError> {
+    pub async fn delete_object(&self, name: &str) -> Result<(), Exception> {
         validate_object_name(name)?;
         let result = self
             .send(&Call {
@@ -177,18 +179,18 @@ impl GcsClient {
             .await;
         let response = match result {
             Ok(response) => response,
-            Err(err) if err.kind() == GcsErrorKind::NotFound => return Ok(()),
+            Err(err) if err.code() == code::GCS_NOT_FOUND => return Ok(()),
             Err(err) => return Err(err),
         };
         let _ = response.bytes().await;
         Ok(())
     }
 
-    pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, GcsError> {
+    pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
         if from == to {
-            return Err(GcsError::new(
-                GcsErrorKind::Config,
-                "move source and destination are the same object",
+            return Err(exception!(
+                code::GCS_CONFIG,
+                "move source and destination are the same object"
             ));
         }
         let meta = self.rewrite_object(from, to).await?;
@@ -203,7 +205,7 @@ impl GcsClient {
         name: &str,
         expires_in: Option<Duration>,
         attachment_filename: Option<&str>,
-    ) -> Result<String, GcsError> {
+    ) -> Result<String, Exception> {
         validate_object_name(name)?;
         let parts = SignedParts::v4_get(
             self.bucket(),
@@ -229,7 +231,7 @@ impl GcsClient {
         from: &str,
         to: &str,
         token: Option<&str>,
-    ) -> Result<RewriteStep, GcsError> {
+    ) -> Result<RewriteStep, Exception> {
         let response = self
             .send(&Call {
                 method: reqwest::Method::POST,
@@ -245,10 +247,10 @@ impl GcsClient {
             })
             .await?;
         let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
+            exception!(
+                code::GCS_TRANSPORT,
                 "rewrite response is not bytes",
-                err.without_url(),
+                source = err.without_url()
             )
         })?;
         RewriteStep::from_slice(&bytes)
@@ -256,8 +258,9 @@ impl GcsClient {
 
     // A failed delete does not prove that the source still exists. Delete the copy only
     // when the source is confirmed, else the copy can be the only one.
-    async fn failed_move_error(&self, from: &str, to: &str, delete_err: GcsError) -> GcsError {
-        let kind = delete_err.kind();
+    async fn failed_move_error(&self, from: &str, to: &str, delete_err: Exception) -> Exception {
+        let kind = delete_err.code();
+        let status = delete_err.status();
         let message = match self.stat_opt(from).await {
             Ok(Some(_)) => match self.delete_object(to).await {
                 Ok(()) => return delete_err,
@@ -275,10 +278,10 @@ impl GcsClient {
                  the source ({check_err}); the object may exist at both names"
             ),
         };
-        GcsError::with_source(kind, message, delete_err)
+        exception!(kind, message, caused_by = delete_err).with_status(status)
     }
 
-    async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, GcsError> {
+    async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, Exception> {
         let bucket_name = bucket_name.into();
         validate_bucket(&bucket_name)?;
         auth.validate()?;
@@ -304,7 +307,7 @@ impl GcsClient {
         shipper.record(op.into_event(self.bucket()));
     }
 
-    async fn send(&self, call: &Call) -> Result<reqwest::Response, GcsError> {
+    async fn send(&self, call: &Call) -> Result<reqwest::Response, Exception> {
         let mut refreshed = false;
         let mut attempts = 0u32;
         loop {
@@ -324,7 +327,7 @@ impl GcsClient {
         call: &Call,
         attempts: u32,
         refreshed: bool,
-    ) -> Result<Outcome, GcsError> {
+    ) -> Result<Outcome, Exception> {
         let token = self.access_token().await?;
         let started = Instant::now();
         let response = match build_request(&self.inner.http, call, &token).send().await {
@@ -355,7 +358,7 @@ impl GcsClient {
             let _ = response.bytes().await;
             return Ok(Outcome::Retry);
         }
-        Err(GcsError::from_response(response).await)
+        Err(gcs_response_exception(response).await)
     }
 
     fn failed_send(
@@ -364,7 +367,7 @@ impl GcsClient {
         attempts: u32,
         started: Instant,
         err: reqwest::Error,
-    ) -> Result<Outcome, GcsError> {
+    ) -> Result<Outcome, Exception> {
         let error_text = logged_error(&err);
         self.record_op(OpsRecord {
             level: LogLevel::Warn,
@@ -378,10 +381,10 @@ impl GcsClient {
         if may_retry(call, attempts) {
             return Ok(Outcome::Retry);
         }
-        Err(GcsError::with_source(
-            GcsErrorKind::Transport,
+        Err(exception!(
+            code::GCS_TRANSPORT,
             "gcs request failed",
-            err.without_url(),
+            source = err.without_url()
         ))
     }
 
@@ -404,7 +407,7 @@ impl GcsClient {
         });
     }
 
-    async fn access_token(&self) -> Result<String, GcsError> {
+    async fn access_token(&self) -> Result<String, Exception> {
         let mut guard = self.inner.token.lock().await;
         if let Some(cached) = guard.as_ref() {
             if Instant::now() < cached.expires_at {
@@ -503,10 +506,10 @@ fn build_request(http: &reqwest::Client, call: &Call, token: &str) -> reqwest::R
     request
 }
 
-fn not_found_as_none<T>(result: Result<T, GcsError>) -> Result<Option<T>, GcsError> {
+fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
     match result {
         Ok(value) => Ok(Some(value)),
-        Err(err) if err.kind() == GcsErrorKind::NotFound => Ok(None),
+        Err(err) if err.code() == code::GCS_NOT_FOUND => Ok(None),
         Err(err) => Err(err),
     }
 }
@@ -521,31 +524,27 @@ fn may_retry(call: &Call, attempts: u32) -> bool {
     !call.no_retry && attempts + 1 < SEND_ATTEMPTS
 }
 
-fn is_retryable_status(status: u16) -> bool {
-    matches!(status, 408 | 429 | 500 | 502 | 503 | 504)
-}
-
-fn validate_object_name(name: &str) -> Result<(), GcsError> {
+fn validate_object_name(name: &str) -> Result<(), Exception> {
     if name.is_empty()
         || name.len() > MAX_OBJECT_NAME_BYTES
         || name == "."
         || name == ".."
         || name.contains(['\r', '\n'])
     {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "object name is empty, too long, `.`, `..` or contains a line break",
+        return Err(exception!(
+            code::GCS_CONFIG,
+            "object name is empty, too long, `.`, `..` or contains a line break"
         ));
     }
     Ok(())
 }
 
-fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(), GcsError> {
+fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(), Exception> {
     for (key, value) in metadata {
         if key.is_empty() || key.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
-            return Err(GcsError::new(
-                GcsErrorKind::Config,
-                "metadata key is empty or metadata contains a line break",
+            return Err(exception!(
+                code::GCS_CONFIG,
+                "metadata key is empty or metadata contains a line break"
             ));
         }
     }
@@ -560,26 +559,30 @@ fn object_url(api_root: &str, bucket_name: &str, name: &str) -> String {
     )
 }
 
-fn validate_bucket(bucket_name: &str) -> Result<(), GcsError> {
+fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
     if bucket_name.is_empty()
         || bucket_name.contains(['/', '\\', ' ', '\r', '\n'])
         || !bucket_name.is_ascii()
     {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "bucket name is empty or contains a forbidden character",
+        return Err(exception!(
+            code::GCS_CONFIG,
+            "bucket name is empty or contains a forbidden character"
         ));
     }
     Ok(())
 }
 
-fn http_client() -> Result<reqwest::Client, GcsError> {
+fn http_client() -> Result<reqwest::Client, Exception> {
     // A stalled read ends the call on every platform, and a long download is not cut.
     let builder = http_client_builder().read_timeout(TRANSFER_TIMEOUT);
     #[cfg(target_os = "linux")]
     let builder = builder.tcp_user_timeout(TRANSFER_TIMEOUT);
     builder.build().map_err(|err| {
-        GcsError::with_source(GcsErrorKind::Transport, "cannot build the HTTP client", err)
+        exception!(
+            code::GCS_LOCAL,
+            "cannot build the HTTP client",
+            source = err
+        )
     })
 }
 
@@ -831,12 +834,12 @@ pub(crate) mod tests {
     async fn an_api_error_keeps_the_status_and_the_detail() {
         let (addr, _server) = serve_script(vec![error_reply(403)]).await;
         let err = fake_client(addr).stat("a").await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert_eq!(err.code(), code::GCS_AUTH);
         assert_eq!(err.status(), Some(403));
         assert!(err.to_string().contains("nope"), "{err}");
         let (addr, _server) = serve_script(vec![error_reply(400)]).await;
         let err = fake_client(addr).stat("a").await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Api);
+        assert_eq!(err.code(), code::GCS_API);
     }
 
     #[tokio::test]
@@ -963,7 +966,7 @@ pub(crate) mod tests {
         client.delete_object("a").await.unwrap();
         client.delete_object("a").await.unwrap();
         let err = client.delete_object("a").await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert_eq!(err.code(), code::GCS_AUTH);
         let requests = server.await.unwrap();
         assert!(requests[0].starts_with("DELETE /storage/v1/b/my-bucket/o/a "));
     }
@@ -998,7 +1001,7 @@ pub(crate) mod tests {
             .rewrite_object("a", "b")
             .await
             .unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Api);
+        assert_eq!(err.code(), code::GCS_API);
         assert!(err.to_string().contains("did not change"), "{err}");
     }
 
@@ -1021,7 +1024,7 @@ pub(crate) mod tests {
         ];
         let (addr, server) = serve_script(replies).await;
         let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert_eq!(err.code(), code::GCS_AUTH);
         let requests = server.await.unwrap();
         assert!(requests[3].starts_with("DELETE /storage/v1/b/my-bucket/o/b "));
     }
@@ -1037,6 +1040,28 @@ pub(crate) mod tests {
         let (addr, _server) = serve_script(replies).await;
         let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
         assert!(err.to_string().contains("exists at both names"), "{err}");
+        let cause = err.source_exception().unwrap();
+        assert_eq!(cause.code(), code::GCS_AUTH);
+        assert_eq!(cause.status(), Some(403));
+        assert!(cause.location().is_some());
+    }
+
+    #[tokio::test]
+    async fn move_keeps_the_status_of_a_retryable_delete_error() {
+        let replies = vec![
+            rewrite_done(),
+            error_reply(503),
+            error_reply(503),
+            error_reply(503),
+            error_reply(503),
+            Reply::new(200, META),
+            error_reply(403),
+        ];
+        let (addr, _server) = serve_script(replies).await;
+        let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
+        assert!(err.to_string().contains("exists at both names"), "{err}");
+        assert_eq!(err.status(), Some(503));
+        assert!(crate::gcs::is_retryable(&err));
     }
 
     #[tokio::test]
@@ -1143,7 +1168,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn client_rejects_an_empty_bucket() {
         let err = GcsClient::new(" ", user_auth()).await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 
     #[tokio::test]
@@ -1158,23 +1183,19 @@ pub(crate) mod tests {
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         };
         let err = GcsClient::new("my-bucket", auth).await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 
     #[test]
     fn not_found_becomes_none() {
-        let missing: Result<(), GcsError> = Err(GcsError::with_status(
-            GcsErrorKind::NotFound,
-            404,
-            "missing",
-        ));
+        let missing: Result<(), Exception> =
+            Err(exception!(code::GCS_NOT_FOUND, "missing", status = 404));
         assert!(not_found_as_none(missing).unwrap().is_none());
         assert_eq!(not_found_as_none(Ok(7)).unwrap(), Some(7));
-        let denied: Result<(), GcsError> =
-            Err(GcsError::with_status(GcsErrorKind::Auth, 403, "denied"));
+        let denied: Result<(), Exception> = Err(exception!(code::GCS_AUTH, "denied", status = 403));
         assert_eq!(
-            not_found_as_none(denied).unwrap_err().kind(),
-            GcsErrorKind::Auth
+            not_found_as_none(denied).unwrap_err().code(),
+            code::GCS_AUTH
         );
     }
 
@@ -1182,7 +1203,7 @@ pub(crate) mod tests {
     async fn move_rejects_the_same_object() {
         let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
         let err = client.move_object("a.txt", "a.txt").await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 
     #[tokio::test]
@@ -1192,7 +1213,7 @@ pub(crate) mod tests {
             .signed_get_url("a", Some(Duration::from_secs(604_801)), None)
             .await
             .unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 
     #[tokio::test]
@@ -1203,7 +1224,7 @@ pub(crate) mod tests {
                 .signed_get_url("a", lifetime, None)
                 .await
                 .unwrap_err();
-            assert_eq!(err.kind(), GcsErrorKind::Auth);
+            assert_eq!(err.code(), code::GCS_CONFIG);
         }
     }
 
@@ -1278,7 +1299,7 @@ pub(crate) mod tests {
             })
             .await
             .unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        assert_eq!(err.code(), code::GCS_TRANSPORT);
         let source = std::error::Error::source(&err).unwrap().to_string();
         assert!(!source.contains("secret"), "{source}");
         assert!(!source.contains("upload_id"), "{source}");

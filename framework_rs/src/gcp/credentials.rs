@@ -4,7 +4,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use crate::gcp::{api_detail, truncate, GcpError, GcpErrorKind};
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
+use crate::gcp::{api_detail, truncate};
 
 pub(crate) const METADATA_TOKEN_URL: &str =
     "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token";
@@ -22,7 +25,7 @@ pub(crate) enum Credentials {
 }
 
 impl Credentials {
-    pub(crate) async fn from_adc() -> Result<Self, GcpError> {
+    pub(crate) async fn from_adc() -> Result<Self, Exception> {
         if let Ok(path) = env::var("GOOGLE_APPLICATION_CREDENTIALS") {
             if !path.is_empty() {
                 return read_adc_at(Path::new(&path)).await;
@@ -34,7 +37,7 @@ impl Credentials {
         Ok(Self::Metadata)
     }
 
-    pub(crate) fn validate(&self) -> Result<(), GcpError> {
+    pub(crate) fn validate(&self) -> Result<(), Exception> {
         match self {
             Credentials::Metadata => Ok(()),
             Credentials::User(user) => user.validate(),
@@ -51,7 +54,7 @@ impl Credentials {
     pub(crate) async fn fetch_token(
         &self,
         http: &reqwest::Client,
-    ) -> Result<CachedToken, GcpError> {
+    ) -> Result<CachedToken, Exception> {
         if let Credentials::User(user) = self {
             return user.fetch_token(http).await;
         }
@@ -77,14 +80,14 @@ pub(crate) struct UserCredentials {
 }
 
 impl UserCredentials {
-    pub(crate) fn validate(&self) -> Result<(), GcpError> {
+    pub(crate) fn validate(&self) -> Result<(), Exception> {
         if self.client_id.is_empty()
             || self.client_secret.is_empty()
             || self.refresh_token.is_empty()
         {
-            return Err(GcpError::new(
-                GcpErrorKind::Config,
-                "user credentials are incomplete",
+            return Err(exception!(
+                code::GCP_CONFIG,
+                "user credentials are incomplete"
             ));
         }
         Ok(())
@@ -93,7 +96,7 @@ impl UserCredentials {
     pub(crate) async fn fetch_token(
         &self,
         http: &reqwest::Client,
-    ) -> Result<CachedToken, GcpError> {
+    ) -> Result<CachedToken, Exception> {
         self.fetch_token_at(http, TOKEN_URL).await
     }
 
@@ -101,7 +104,7 @@ impl UserCredentials {
         &self,
         http: &reqwest::Client,
         url: &str,
-    ) -> Result<CachedToken, GcpError> {
+    ) -> Result<CachedToken, Exception> {
         let response = http
             .post(url)
             .timeout(TOKEN_HTTP_TIMEOUT)
@@ -114,10 +117,10 @@ impl UserCredentials {
             .send()
             .await
             .map_err(|err| {
-                GcpError::with_source(
-                    GcpErrorKind::Auth,
+                exception!(
+                    code::GCP_AUTH,
                     "token refresh failed",
-                    err.without_url(),
+                    source = err.without_url()
                 )
             })?;
         token_from_response(response).await
@@ -140,7 +143,7 @@ pub(crate) struct CachedToken {
 pub(crate) async fn metadata_token(
     http: &reqwest::Client,
     token_url: &str,
-) -> Result<CachedToken, GcpError> {
+) -> Result<CachedToken, Exception> {
     let scope: String = form_urlencoded::byte_serialize(CLOUD_PLATFORM_SCOPE.as_bytes()).collect();
     let url = format!("{token_url}?scopes={scope}");
     let response = metadata_get(http, &url).await?;
@@ -150,48 +153,47 @@ pub(crate) async fn metadata_token(
 pub(crate) async fn metadata_get(
     http: &reqwest::Client,
     url: &str,
-) -> Result<reqwest::Response, GcpError> {
+) -> Result<reqwest::Response, Exception> {
     http.get(url)
         .header("Metadata-Flavor", "Google")
         .timeout(METADATA_TIMEOUT)
         .send()
         .await
         .map_err(|err| {
-            GcpError::with_source(
-                GcpErrorKind::Auth,
+            exception!(
+                code::GCP_AUTH,
                 "metadata server request failed",
-                err.without_url(),
+                source = err.without_url()
             )
         })
 }
 
-async fn token_from_response(response: reqwest::Response) -> Result<CachedToken, GcpError> {
+async fn token_from_response(response: reqwest::Response) -> Result<CachedToken, Exception> {
     let status = response.status();
     let body = response.text().await.map_err(|err| {
-        GcpError::with_source(
-            GcpErrorKind::Auth,
+        exception!(
+            code::GCP_AUTH,
             "token response is not text",
-            err.without_url(),
+            source = err.without_url()
         )
     })?;
     if !status.is_success() {
         let detail = api_detail(&body).unwrap_or(body);
-        return Err(GcpError::new(
-            GcpErrorKind::Auth,
+        return Err(exception!(
+            code::GCP_AUTH,
             format!(
                 "token status {}: {}",
                 status.as_u16(),
                 truncate(&detail, 300)
-            ),
+            )
         ));
     }
-    let parsed: TokenResponse = serde_json::from_str(&body).map_err(|err| {
-        GcpError::with_source(GcpErrorKind::Auth, "token response is not JSON", err)
-    })?;
+    let parsed: TokenResponse = serde_json::from_str(&body)
+        .map_err(|err| exception!(code::GCP_AUTH, "token response is not JSON", source = err))?;
     if parsed.access_token.is_empty() {
-        return Err(GcpError::new(
-            GcpErrorKind::Auth,
-            "token response has an empty access token",
+        return Err(exception!(
+            code::GCP_AUTH,
+            "token response has an empty access token"
         ));
     }
     Ok(CachedToken {
@@ -229,53 +231,53 @@ fn well_known_adc() -> Option<PathBuf> {
     None
 }
 
-async fn read_adc_at(path: &Path) -> Result<Credentials, GcpError> {
+async fn read_adc_at(path: &Path) -> Result<Credentials, Exception> {
     let meta = tokio::fs::metadata(path).await.map_err(|err| {
-        GcpError::with_source(
-            GcpErrorKind::Config,
+        exception!(
+            code::GCP_CONFIG,
             format!(
                 "cannot read application default credentials at {}",
                 path.display()
             ),
-            err,
+            source = err
         )
     })?;
     if meta.len() > ADC_FILE_LIMIT {
-        return Err(GcpError::new(
-            GcpErrorKind::Config,
-            "application default credentials file is too large",
+        return Err(exception!(
+            code::GCP_CONFIG,
+            "application default credentials file is too large"
         ));
     }
     let bytes = tokio::fs::read(path).await.map_err(|err| {
-        GcpError::with_source(
-            GcpErrorKind::Config,
+        exception!(
+            code::GCP_CONFIG,
             format!(
                 "cannot read application default credentials at {}",
                 path.display()
             ),
-            err,
+            source = err
         )
     })?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|err| {
-        GcpError::with_source(
-            GcpErrorKind::Config,
+        exception!(
+            code::GCP_CONFIG,
             "application default credentials are not JSON",
-            err,
+            source = err
         )
     })?;
     credentials_from_value(&value)
 }
 
-fn credentials_from_value(value: &Value) -> Result<Credentials, GcpError> {
+fn credentials_from_value(value: &Value) -> Result<Credentials, Exception> {
     let typ = value.get("type").and_then(Value::as_str).unwrap_or("");
     match typ {
-        "service_account" => Err(GcpError::new(
-            GcpErrorKind::Config,
-            "service account JSON keys are rejected",
+        "service_account" => Err(exception!(
+            code::GCP_CONFIG,
+            "service account JSON keys are rejected"
         )),
-        "impersonated_service_account" => Err(GcpError::new(
-            GcpErrorKind::Config,
-            "impersonated application default credentials are rejected",
+        "impersonated_service_account" => Err(exception!(
+            code::GCP_CONFIG,
+            "impersonated application default credentials are rejected"
         )),
         "authorized_user" => Ok(Credentials::User(UserCredentials {
             client_id: string_field(value, "client_id")?,
@@ -287,22 +289,22 @@ fn credentials_from_value(value: &Value) -> Result<Credentials, GcpError> {
                 .filter(|project| !project.trim().is_empty())
                 .map(|project| project.trim().to_string()),
         })),
-        other => Err(GcpError::new(
-            GcpErrorKind::Config,
-            format!("application default credentials type `{other}` is not supported"),
+        other => Err(exception!(
+            code::GCP_CONFIG,
+            format!("application default credentials type `{other}` is not supported")
         )),
     }
 }
 
-fn string_field(value: &Value, name: &str) -> Result<String, GcpError> {
+fn string_field(value: &Value, name: &str) -> Result<String, Exception> {
     value
         .get(name)
         .and_then(Value::as_str)
         .map(str::to_string)
         .ok_or_else(|| {
-            GcpError::new(
-                GcpErrorKind::Config,
-                format!("user credentials are missing `{name}`"),
+            exception!(
+                code::GCP_CONFIG,
+                format!("user credentials are missing `{name}`")
             )
         })
 }
@@ -318,7 +320,7 @@ mod tests {
         "refresh_token": "refresh"
     }"#;
 
-    fn credentials_from_json(json: &str) -> Result<Credentials, GcpError> {
+    fn credentials_from_json(json: &str) -> Result<Credentials, Exception> {
         credentials_from_value(&serde_json::from_str(json).unwrap())
     }
 
@@ -330,7 +332,7 @@ mod tests {
             "private_key": "SECRET-KEY-MATERIAL"
         }"#;
         let err = credentials_from_json(json).unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Config);
+        assert_eq!(err.code(), code::GCP_CONFIG);
         let text = err.to_string();
         assert!(text.contains("service account JSON keys"));
         assert!(!text.contains("SECRET-KEY-MATERIAL"));
@@ -344,7 +346,7 @@ mod tests {
             "source_credentials": {"type": "authorized_user"}
         }"#;
         let err = credentials_from_json(json).unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Config);
+        assert_eq!(err.code(), code::GCP_CONFIG);
         assert!(err.to_string().contains("impersonated"));
         assert!(!err.to_string().contains("generateAccessToken"));
     }
@@ -387,7 +389,7 @@ mod tests {
     fn user_adc_needs_each_field() {
         let json = r#"{"type":"authorized_user","client_id":"id","client_secret":"secret"}"#;
         let err = credentials_from_json(json).unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Config);
+        assert_eq!(err.code(), code::GCP_CONFIG);
         assert!(err.to_string().contains("refresh_token"));
     }
 
@@ -399,7 +401,7 @@ mod tests {
             refresh_token: "refresh".to_string(),
             quota_project_id: None,
         };
-        assert_eq!(user.validate().unwrap_err().kind(), GcpErrorKind::Config);
+        assert_eq!(user.validate().unwrap_err().code(), code::GCP_CONFIG);
     }
 
     #[test]
@@ -425,7 +427,7 @@ mod tests {
         credentials: Option<&str>,
         home: Option<&Path>,
         appdata: Option<&Path>,
-    ) -> Result<Credentials, GcpError> {
+    ) -> Result<Credentials, Exception> {
         use std::ffi::OsStr;
         let credentials = credentials.map(OsStr::new);
         crate::env::tests::with_vars(
@@ -465,7 +467,7 @@ mod tests {
         assert_eq!(credentials.quota_project(), None);
         let missing = temp_path("named/missing.json");
         let err = adc_env(missing.to_str(), None, None).unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Config);
+        assert_eq!(err.code(), code::GCP_CONFIG);
     }
 
     #[test]
@@ -490,7 +492,7 @@ mod tests {
     #[tokio::test]
     async fn read_adc_at_rejects_a_missing_large_or_bad_file() {
         let missing = read_adc_at(&temp_path("read/missing.json")).await;
-        assert_eq!(missing.unwrap_err().kind(), GcpErrorKind::Config);
+        assert_eq!(missing.unwrap_err().code(), code::GCP_CONFIG);
 
         let large = temp_path("read/large.json");
         std::fs::create_dir_all(large.parent().unwrap()).unwrap();
@@ -517,7 +519,7 @@ mod tests {
             ..user()
         };
         let err = Credentials::User(incomplete).validate().unwrap_err();
-        assert_eq!(err.kind(), GcpErrorKind::Config);
+        assert_eq!(err.code(), code::GCP_CONFIG);
     }
 
     #[test]
@@ -548,14 +550,14 @@ mod tests {
     async fn token_from_response_rejects_a_bad_response() {
         let denied = response(401, r#"{"error":{"message":"bad grant"}}"#);
         let err = token_from_response(denied).await.err().unwrap();
-        assert_eq!(err.kind(), GcpErrorKind::Auth);
+        assert_eq!(err.code(), code::GCP_AUTH);
         assert!(err.to_string().contains("token status 401: bad grant"));
         for body in ["not json", r#"{"access_token":""}"#] {
             let err = token_from_response(response(200, body))
                 .await
                 .err()
                 .unwrap();
-            assert_eq!(err.kind(), GcpErrorKind::Auth);
+            assert_eq!(err.code(), code::GCP_AUTH);
         }
     }
 
@@ -574,6 +576,6 @@ mod tests {
 
         let url = format!("http://{}/token", closed_addr());
         let err = user().fetch_token_at(&http, &url).await.err().unwrap();
-        assert_eq!(err.kind(), GcpErrorKind::Auth);
+        assert_eq!(err.code(), code::GCP_AUTH);
     }
 }

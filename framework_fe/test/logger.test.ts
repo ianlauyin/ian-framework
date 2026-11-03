@@ -51,7 +51,7 @@ describe("Logger", () => {
   it("sends the queued events as one batch on each 1 minute interval", async () => {
     const Logger = await loadLogger();
     Logger.info("started");
-    Logger.error("boom", { code: 42, page: "/other" });
+    Logger.error("boom", "it broke", { code: 42, page: "/other" });
     await vi.advanceTimersByTimeAsync(59_999);
     expect(fetchMock).not.toHaveBeenCalled();
 
@@ -71,11 +71,13 @@ describe("Logger", () => {
         action: "started",
         latency_ms: null,
         level: "info",
+        error_message: null,
         context: {},
         info: { page: "/home" },
       },
       expect.objectContaining({
         level: "error",
+        error_message: "it broke",
         action: "boom",
         info: { page: "/other", code: 42 },
       }),
@@ -170,16 +172,55 @@ describe("Logger", () => {
     windowListeners.unhandledrejection({ reason: new Error("rejected") });
     windowListeners.unhandledrejection({ reason: 42 });
     hidePage();
-    const sent = sentEvents(0).map((event: { level: string; action: string }) => [
-      event.level,
-      event.action,
-    ]);
+    const sent = sentEvents(0).map(
+      (event: { level: string; action: string; error_message: string }) => [
+        event.level,
+        event.action,
+        event.error_message,
+      ],
+    );
     expect(sent).toEqual([
-      ["error", "boom"],
-      ["error", "window error"],
-      ["error", "rejected"],
-      ["error", "unhandled rejection"],
+      ["error", "WINDOW/error", "boom"],
+      ["error", "WINDOW/error", "window error"],
+      ["error", "WINDOW/unhandledrejection", "rejected"],
+      ["error", "WINDOW/unhandledrejection", "unhandled rejection"],
     ]);
+  });
+
+  it("keeps a long window error message out of the action and masks it", async () => {
+    const windowListeners: Record<string, (event: unknown) => void> = {};
+    vi.stubGlobal("window", {
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        windowListeners[type] = listener;
+      },
+    });
+    const Logger = await loadLogger();
+    Logger.setMaskPatterns([/secret-\d+/]);
+    Logger.watchWindowErrors();
+    windowListeners.error({ message: `bad secret-42 ${"x".repeat(5000)}` });
+    hidePage();
+    const [event] = sentEvents(0);
+    expect(event.action).toBe("WINDOW/error");
+    expect(event.error_message).toContain("bad *** ");
+    expect(event.error_message).not.toContain("secret-42");
+  });
+
+  it("sends a fallback error message when the message is empty", async () => {
+    const Logger = await loadLogger();
+    Logger.error("a", "");
+    Logger.error("b", "   ");
+    const fail = Logger.wrapAction("c", () => {
+      throw new Error("");
+    });
+    expect(() => fail()).toThrow();
+    hidePage();
+    const events = sentEvents(0);
+    expect(events.map((event: { error_message: string }) => event.error_message)).toEqual([
+      "unknown error",
+      "unknown error",
+      "unknown error",
+    ]);
+    expect(events[2].info.error).toBe("unknown error");
   });
 
   describe("contextWrapper", () => {
@@ -235,6 +276,7 @@ describe("Logger", () => {
       expect(events[0].level).toBe("error");
       expect(events[0].latency_ms).toBe(10);
       expect(events[0].info.error).toBe("boom");
+      expect(events[0].error_message).toBe("boom");
       expect(events[0].info.args).toBe("[]");
     });
 
@@ -284,6 +326,7 @@ describe("Logger", () => {
       expect(events[0].level).toBe("error");
       expect(events[0].latency_ms).toBe(15);
       expect(events[0].info.error).toBe("denied");
+      expect(events[0].error_message).toBe("denied");
     });
   });
 

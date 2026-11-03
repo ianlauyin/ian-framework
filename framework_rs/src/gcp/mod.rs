@@ -4,7 +4,7 @@ mod http_client;
 mod secret_manager;
 
 pub(crate) use credentials::{metadata_get, CachedToken, Credentials};
-pub(crate) use error::{api_detail, truncate, GcpError, GcpErrorKind};
+pub(crate) use error::{api_detail, truncate};
 pub(crate) use http_client::http_client_builder;
 pub(crate) use secret_manager::SecretManager;
 

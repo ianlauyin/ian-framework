@@ -8,7 +8,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value};
 
-use crate::logging::{event, LogLevel, LogShipper};
+use crate::logging::{LogEvent, LogShipper};
 
 const BODY_LOG_LIMIT: usize = 64 * 1024;
 
@@ -32,7 +32,7 @@ pub async fn log_request(
         None => StatusCode::BAD_REQUEST.into_response(),
     };
     let status = response.status().as_u16();
-    let mut event = event(action(&method, &path), level_for_status(status));
+    let mut event = new_event(action(&method, &path), status);
     event.context.insert("ip".to_string(), ip.into());
     event
         .context
@@ -115,13 +115,13 @@ fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
     }
 }
 
-fn level_for_status(status: u16) -> LogLevel {
+fn new_event(action: String, status: u16) -> LogEvent {
     if status >= 500 {
-        LogLevel::Error
+        LogEvent::error(action, format!("response status {status}"))
     } else if status >= 400 {
-        LogLevel::Warn
+        LogEvent::warn(action)
     } else {
-        LogLevel::Info
+        LogEvent::info(action)
     }
 }
 
@@ -133,6 +133,7 @@ fn millis_since(started: Instant) -> u64 {
 mod tests {
     use super::*;
     use crate::logging::tests::buffered_events;
+    use crate::logging::LogLevel;
     use crate::logging::{LogShipper, ShipperConfig};
     use axum::body::Body;
     use axum::extract::{ConnectInfo, Path};

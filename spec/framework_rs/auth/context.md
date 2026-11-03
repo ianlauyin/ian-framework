@@ -52,16 +52,15 @@ The session tests need a Redis server:
 
 ## Error
 
-`AuthError` is the error of this module. `AuthError::kind` returns one `AuthErrorKind`.
+The error of this module is `ian_framework::exception::Exception`. Its definition is in `spec/framework_rs/exception.md`.
 
-| Kind | Cause | Status | Code | Message for the client |
-| --- | --- | --- | --- | --- |
-| `Config` | Bad Redis URL or bad `SessionConfig` | 500 | `auth_config` | `session store is not available` |
-| `Store` | Redis connection failure or Redis command failure | 503 | `auth_store` | `session store is not available` |
-| `Password` | Password too long, hash failure, or blocking task failure | 500 | `auth_password` | `password hash failed` |
-| `Random` | OS random source failure | 500 | `auth_random` | `session token failed` |
+| Code | Cause | Status | Message for the client |
+| --- | --- | --- | --- |
+| `auth_config` | Bad Redis URL or bad `SessionConfig` | 500 | `session store is not available` |
+| `auth_store` | Redis connection failure or Redis command failure | 503 | `session store is not available` |
+| `auth_password` | Password too long, hash failure, or blocking task failure | 500 | `password hash failed` |
+| `auth_random` | OS random source failure | 500 | `session token failed` |
 
-- `AuthError` implements `IntoApiError`.
 - The message for the client does not contain the internal detail.
 
 ## Out of scope

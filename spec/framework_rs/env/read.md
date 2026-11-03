@@ -8,64 +8,44 @@ The parts that apply to all of this feature are in `spec/framework_rs/env/contex
 
 | Item | Kind |
 | --- | --- |
-| `EnvError` | Struct |
-| `EnvErrorKind` | Enum |
+| `missing` | Function |
+| `invalid` | Function |
 | `required` | Async function |
 | `optional` | Async function |
 | `u64_or` | Function |
 
-## EnvErrorKind
+## Errors
 
-`EnvErrorKind` implements `Debug`, `Clone`, `Copy`, `PartialEq` and `Eq`.
+The error of this feature is `ian_framework::exception::Exception`. Its definition is in `spec/framework_rs/exception.md`.
 
-| Variant | Condition |
-| --- | --- |
-| `Missing` | The variable is absent or blank. |
-| `NotUnicode` | The value of the variable is not valid unicode. |
-| `Invalid` | The value of the variable is not valid for the read. |
-| `Secret` | The Secret Manager read for the variable fails. |
-
-The build always has all the variants. Only the `gcp` feature gives `Secret`.
-
-## EnvError
-
-`EnvError` implements `Debug`, `Clone`, `PartialEq`, `Eq`, `Display` and `std::error::Error`.
-
-| Method | Signature | Effect |
+| Code | Condition | Message |
 | --- | --- | --- |
-| `EnvError::missing` | `fn missing(name: &str) -> Self` | Makes one error of the kind `Missing` for the variable `name`. Its `Display` text is `NAME is required`. |
-| `EnvError::invalid` | `fn invalid(name: &str) -> Self` | Makes one error of the kind `Invalid` for the variable `name`. |
-| `kind` | `fn kind(&self) -> EnvErrorKind` | Gives the kind of the error. |
-| `name` | `fn name(&self) -> &str` | Gives the name of the variable. |
+| `env_missing` | The variable is absent or blank. | `{name} is required` |
+| `env_not_unicode` | The value of the variable is not valid unicode. | `{name} is not valid unicode` |
+| `env_invalid` | The value of the variable is not valid for the read. | `{name} is not valid` |
+| `env_secret` | The Secret Manager read for the variable fails. | `{name} cannot be read from Secret Manager` |
 
-- A project uses `EnvError::missing` when it reads a value with `std::env::var` and the value is not set.
-- A project uses `EnvError::invalid` when its own check of a value fails.
-- `EnvError` holds the kind, the name of the variable and an optional detail.
-- Only the kind `Secret` has a detail. The detail is the Secret Manager read error. It does not hold the secret value.
-- `EnvError` does not hold the value of the variable. Thus the `Display` output and the `Debug` output do not show the value. The value can be a secret.
-- `source` gives `None`.
+Only the `gcp` feature gives `env_secret`. Its source is the Secret Manager exception, so the trace shows the cause.
 
-`Display` gives one message for each kind:
+| Function | Signature | Effect |
+| --- | --- | --- |
+| `missing` | `fn missing(name: &str) -> Exception` | Makes the exception with the code `env_missing`. |
+| `invalid` | `fn invalid(name: &str) -> Exception` | Makes the exception with the code `env_invalid`. |
 
-| Kind | Message |
-| --- | --- |
-| `Missing` | `{name} is required` |
-| `NotUnicode` | `{name} is not valid unicode` |
-| `Invalid` | `{name} is not valid` |
-| `Secret` | `{name} cannot be read from Secret Manager` |
-
-When the error has a detail, `Display` adds `: {detail}` to the message.
+- A project uses `missing` when it reads a value with `std::env::var` and the value is not set.
+- A project uses `invalid` when its own check of a value fails.
+- The exception holds the name of the variable. It does not hold the value. Thus the `Display` output and the `Debug` output do not show the value. The value can be a secret.
 
 ## required and optional
 
 | Function | Signature |
 | --- | --- |
-| `required` | `pub async fn required(name: &str) -> Result<String, EnvError>` |
-| `optional` | `pub async fn optional(name: &str) -> Result<Option<String>, EnvError>` |
+| `required` | `pub async fn required(name: &str) -> Result<String, Exception>` |
+| `optional` | `pub async fn optional(name: &str) -> Result<Option<String>, Exception>` |
 
 - The signatures are the same with and without the `gcp` feature.
 - The returned futures are `Send`.
-- `required` uses the same lookup as `optional`. When `optional` gives `None`, `required` gives the kind `Missing`.
+- `required` uses the same lookup as `optional`. When `optional` gives `None`, `required` gives the code `env_missing`.
 
 ### Lookup
 
@@ -85,7 +65,7 @@ Without the `gcp` feature, the lookup does only step 4.
 | `User` credentials and no project | The environment variable |
 | Secret Manager status 404 | The environment variable |
 | Secret Manager gives the secret | The secret value. The lookup does not read the environment variable. |
-| A different failure: credentials file not valid, token failure, metadata server status that is not 2xx, status 401, 403 or a different status, network error, bad payload, empty or non-UTF-8 value, secret id with a character that is not valid | Error of the kind `Secret` with the name `name`. The lookup does not read the environment variable. |
+| A different failure: credentials file not valid, token failure, metadata server status that is not 2xx, status 401, 403 or a different status, network error, bad payload, empty or non-UTF-8 value, secret id with a character that is not valid | Exception with the code `env_secret` for the name `name`. The lookup does not read the environment variable. |
 
 - The error detail is the Secret Manager error message and its source.
 - The lookup does not write a log line.
@@ -95,15 +75,15 @@ Without the `gcp` feature, the lookup does only step 4.
 
 - The read removes the whitespace at the start and at the end of the value.
 - An absent variable, an empty value or a value with only whitespace gives `None`.
-- When the value is not valid unicode, the read gives the kind `NotUnicode`.
+- When the value is not valid unicode, the read gives the code `env_not_unicode`.
 
 ## u64_or
 
-`pub fn u64_or(name: &str, default: u64) -> Result<u64, EnvError>` reads one optional `u64` variable.
+`pub fn u64_or(name: &str, default: u64) -> Result<u64, Exception>` reads one optional `u64` variable.
 
 - `u64_or` is not async. It reads only the environment variable. It does not read Secret Manager.
 
 - When the variable is absent, `u64_or` gives `default`.
 - `u64_or` parses the value with `str::parse::<u64>`. It does not remove whitespace.
-- When the parse fails, `u64_or` gives the kind `Invalid`. Thus an empty value, a value with whitespace, a negative value and a value larger than `u64::MAX` give `Invalid`.
-- When the value is not valid unicode, `u64_or` gives the kind `NotUnicode`.
+- When the parse fails, `u64_or` gives the code `env_invalid`. Thus an empty value, a value with whitespace, a negative value and a value larger than `u64::MAX` give `env_invalid`.
+- When the value is not valid unicode, `u64_or` gives the code `env_not_unicode`.

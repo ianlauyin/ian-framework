@@ -2,7 +2,9 @@ use std::pin::Pin;
 
 use futures_util::{Stream, StreamExt};
 
-use crate::gcs::{GcsError, GcsErrorKind};
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 
 const READ_TO_VEC_LIMIT: u64 = 256 * 1024 * 1024;
 
@@ -11,7 +13,7 @@ pub struct ObjectReader {
 }
 
 impl ObjectReader {
-    pub(crate) async fn read_to_vec(self) -> Result<Vec<u8>, GcsError> {
+    pub(crate) async fn read_to_vec(self) -> Result<Vec<u8>, Exception> {
         if self
             .response
             .content_length()
@@ -23,10 +25,10 @@ impl ObjectReader {
         let mut body = Vec::new();
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|err| {
-                GcsError::with_source(
-                    GcsErrorKind::Transport,
+                exception!(
+                    code::GCS_TRANSPORT,
                     "read object body failed",
-                    err.without_url(),
+                    source = err.without_url()
                 )
             })?;
             if (body.len() + chunk.len()) as u64 > READ_TO_VEC_LIMIT {
@@ -37,23 +39,23 @@ impl ObjectReader {
         Ok(body)
     }
 
-    pub fn byte_stream(self) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, GcsError>> + Send>> {
+    pub fn byte_stream(self) -> Pin<Box<dyn Stream<Item = Result<Vec<u8>, Exception>> + Send>> {
         Box::pin(self.response.bytes_stream().map(|item| {
             item.map(|chunk| chunk.to_vec()).map_err(|err| {
-                GcsError::with_source(
-                    GcsErrorKind::Transport,
+                exception!(
+                    code::GCS_TRANSPORT,
                     "read object body failed",
-                    err.without_url(),
+                    source = err.without_url()
                 )
             })
         }))
     }
 }
 
-fn too_large() -> GcsError {
-    GcsError::new(
-        GcsErrorKind::Config,
-        "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream",
+fn too_large() -> Exception {
+    exception!(
+        code::GCS_CONFIG,
+        "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream"
     )
 }
 
@@ -76,7 +78,7 @@ mod tests {
             serve_script(vec![Reply::new(200, "").declared_length(declared)]).await;
         let reader = fake_client(addr).open_object("a").await.unwrap();
         let err = reader.read_to_vec().await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 
     #[tokio::test]
@@ -84,7 +86,7 @@ mod tests {
         let (addr, _server) = serve_script(vec![Reply::new(200, "abc").declared_length(10)]).await;
         let reader = fake_client(addr).open_object("a").await.unwrap();
         let err = reader.read_to_vec().await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        assert_eq!(err.code(), code::GCS_TRANSPORT);
     }
 
     #[tokio::test]
@@ -94,6 +96,6 @@ mod tests {
         let items: Vec<_> = reader.byte_stream().collect().await;
         assert_eq!(items[0].as_ref().unwrap(), b"abc");
         let err = items.last().unwrap().as_ref().unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        assert_eq!(err.code(), code::GCS_TRANSPORT);
     }
 }

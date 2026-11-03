@@ -22,6 +22,7 @@ General rules:
 | `action` | `API/{method}:{path}`. `method` is the request method. `path` is the request path, with no query string. An empty path is `/`. |
 | `latency_ms` | The handler time in milliseconds. It includes the body read. |
 | `level` | From the response status. The rules are below. |
+| `error_message` | `response status {status}` when the level is `error`. Else null. |
 | `context` | The keys `ip`, `user_agent` and `request_url`. The rules are below. |
 | `info` | The JSON body. The rules are below. |
 

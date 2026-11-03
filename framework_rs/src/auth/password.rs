@@ -3,7 +3,9 @@ use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::Argon2;
 use tokio::sync::Semaphore;
 
-use super::{AuthError, AuthErrorKind};
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 
 const MAX_PASSWORD_BYTES: usize = 256;
 const MAX_CONCURRENT_HASHES: usize = 8;
@@ -12,25 +14,26 @@ const MAX_CONCURRENT_HASHES: usize = 8;
 static HASH_PERMITS: Semaphore = Semaphore::const_new(MAX_CONCURRENT_HASHES);
 
 // Argon2 takes tens of milliseconds of CPU, so it runs on the blocking pool and does not stall the async workers.
-pub async fn hash_password(password: &str) -> Result<String, AuthError> {
+pub async fn hash_password(password: &str) -> Result<String, Exception> {
     if password.len() > MAX_PASSWORD_BYTES {
-        return Err(AuthError::new(
-            AuthErrorKind::Password,
-            "password is too long",
-        ));
+        return Err(exception!(code::AUTH_PASSWORD, "password is too long"));
     }
     let password = password.to_owned();
     let _permit = HASH_PERMITS.acquire().await.map_err(|err| {
-        AuthError::with_source(
-            AuthErrorKind::Password,
+        exception!(
+            code::AUTH_PASSWORD,
             "password hash is not available",
-            err,
+            source = err
         )
     })?;
     tokio::task::spawn_blocking(move || hash(&password))
         .await
         .map_err(|err| {
-            AuthError::with_source(AuthErrorKind::Password, "password hash task failed", err)
+            exception!(
+                code::AUTH_PASSWORD,
+                "password hash task failed",
+                source = err
+            )
         })?
 }
 
@@ -48,11 +51,11 @@ pub async fn verify_password(password: &str, hash: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn hash(password: &str) -> Result<String, AuthError> {
+fn hash(password: &str) -> Result<String, Exception> {
     Argon2::default()
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
-        .map_err(|err| AuthError::with_source(AuthErrorKind::Password, "password hash failed", err))
+        .map_err(|err| exception!(code::AUTH_PASSWORD, "password hash failed", source = err))
 }
 
 fn verify(password: &str, hash: &str) -> bool {
@@ -86,8 +89,8 @@ mod tests {
         assert!(verify_password(&limit, &hash).await);
         let long = "a".repeat(MAX_PASSWORD_BYTES + 1);
         assert_eq!(
-            hash_password(&long).await.unwrap_err().kind(),
-            AuthErrorKind::Password
+            hash_password(&long).await.unwrap_err().code(),
+            code::AUTH_PASSWORD
         );
         assert!(!verify_password(&long, &hash).await);
     }

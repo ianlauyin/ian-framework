@@ -1,7 +1,10 @@
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use crate::gcp::{
     metadata_get, metadata_token, truncate, CachedToken, Credentials, UserCredentials,
 };
-use crate::gcs::{GcsError, GcsErrorKind};
+use crate::gcs::from_gcp;
 
 const METADATA_EMAIL_URL: &str =
     "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email";
@@ -17,12 +20,12 @@ pub(crate) enum Auth {
 }
 
 impl Auth {
-    pub(crate) async fn from_adc(signer_email: Option<&str>) -> Result<Self, GcsError> {
-        let credentials = Credentials::from_adc().await?;
+    pub(crate) async fn from_adc(signer_email: Option<&str>) -> Result<Self, Exception> {
+        let credentials = Credentials::from_adc().await.map_err(from_gcp)?;
         auth_from_credentials(credentials, signer_email)
     }
 
-    pub(crate) fn validate(&self) -> Result<(), GcsError> {
+    pub(crate) fn validate(&self) -> Result<(), Exception> {
         let Auth::User {
             credentials,
             signer_email,
@@ -30,11 +33,11 @@ impl Auth {
         else {
             return Ok(());
         };
-        credentials.validate()?;
+        credentials.validate().map_err(from_gcp)?;
         validate_signer_email(signer_email)
     }
 
-    pub(crate) async fn signer_email(&self, http: &reqwest::Client) -> Result<String, GcsError> {
+    pub(crate) async fn signer_email(&self, http: &reqwest::Client) -> Result<String, Exception> {
         match self {
             Auth::Metadata => metadata_email(http, METADATA_EMAIL_URL).await,
             Auth::User { signer_email, .. } => Ok(signer_email.clone()),
@@ -45,10 +48,12 @@ impl Auth {
         &self,
         http: &reqwest::Client,
         metadata_token_url: &str,
-    ) -> Result<CachedToken, GcsError> {
+    ) -> Result<CachedToken, Exception> {
         match self {
-            Auth::Metadata => Ok(metadata_token(http, metadata_token_url).await?),
-            Auth::User { credentials, .. } => Ok(credentials.fetch_token(http).await?),
+            Auth::Metadata => metadata_token(http, metadata_token_url)
+                .await
+                .map_err(from_gcp),
+            Auth::User { credentials, .. } => credentials.fetch_token(http).await.map_err(from_gcp),
         }
     }
 }
@@ -65,24 +70,24 @@ impl std::fmt::Debug for Auth {
     }
 }
 
-async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<String, GcsError> {
-    let response = metadata_get(http, url).await?;
+async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<String, Exception> {
+    let response = metadata_get(http, url).await.map_err(from_gcp)?;
     let status = response.status();
     let body = response.text().await.map_err(|err| {
-        GcsError::with_source(
-            GcsErrorKind::Auth,
+        exception!(
+            code::GCS_AUTH,
             "metadata server email response is not text",
-            err.without_url(),
+            source = err.without_url()
         )
     })?;
     if !status.is_success() {
-        return Err(GcsError::new(
-            GcsErrorKind::Auth,
+        return Err(exception!(
+            code::GCS_AUTH,
             format!(
                 "metadata server email status {}: {}",
                 status.as_u16(),
                 truncate(&body, 300)
-            ),
+            )
         ));
     }
     let email = body.trim().to_string();
@@ -90,11 +95,11 @@ async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<String, Gcs
     Ok(email)
 }
 
-fn validate_signer_email(email: &str) -> Result<(), GcsError> {
+fn validate_signer_email(email: &str) -> Result<(), Exception> {
     if !email.contains('@') || email.contains(char::is_whitespace) {
-        return Err(GcsError::new(
-            GcsErrorKind::Config,
-            "signer email is not a service account email",
+        return Err(exception!(
+            code::GCS_CONFIG,
+            "signer email is not a service account email"
         ));
     }
     Ok(())
@@ -103,14 +108,14 @@ fn validate_signer_email(email: &str) -> Result<(), GcsError> {
 fn auth_from_credentials(
     credentials: Credentials,
     signer_email: Option<&str>,
-) -> Result<Auth, GcsError> {
+) -> Result<Auth, Exception> {
     match credentials {
         Credentials::Metadata => Ok(Auth::Metadata),
         Credentials::User(credentials) => {
             let signer_email = signer_email.ok_or_else(|| {
-                GcsError::new(
-                    GcsErrorKind::Config,
-                    "user application default credentials require a signer email",
+                exception!(
+                    code::GCS_CONFIG,
+                    "user application default credentials require a signer email"
                 )
             })?;
             // GcsClient::new checks that the fields are not empty and the signer email is valid.
@@ -146,7 +151,7 @@ mod tests {
     #[test]
     fn user_adc_requires_a_signer_email() {
         let err = auth_from_credentials(user_credentials(), None).unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
         assert!(err
             .to_string()
             .contains("user application default credentials require a signer email"));
@@ -206,16 +211,17 @@ mod tests {
         let (addr, _server) = serve_script(replies).await;
         let url = format!("http://{addr}/email");
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert_eq!(err.code(), code::GCS_AUTH);
         assert!(err.to_string().contains("status 500: boom"), "{err}");
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 
     #[tokio::test]
     async fn metadata_email_reports_an_unreachable_server() {
         let url = format!("http://{}/email", closed_addr());
-        assert!(metadata_email(&http(), &url).await.is_err());
+        let err = metadata_email(&http(), &url).await.unwrap_err();
+        assert_eq!(err.code(), code::GCS_AUTH);
     }
 
     #[tokio::test]

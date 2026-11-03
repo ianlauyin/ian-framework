@@ -14,9 +14,9 @@ The client builds a V4 signed GET URL.
 
 `GcsClient::signed_get_url` takes an optional lifetime.
 
-- A missing lifetime is an authentication error.
-- A lifetime of zero is an authentication error.
-- A lifetime below 1 second is an authentication error.
+- A missing lifetime is a configuration error.
+- A lifetime of zero is a configuration error.
+- A lifetime below 1 second is a configuration error.
 - The client does not sign `X-Goog-Expires=0`.
 - The maximum lifetime is 604800 seconds.
 - A lifetime above that maximum is a configuration error.

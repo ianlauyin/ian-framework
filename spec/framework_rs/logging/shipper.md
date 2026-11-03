@@ -105,6 +105,7 @@ The warning has these fields:
 | `action` | `SHIPPER/capacity meets 80%` |
 | `latency_ms` | null |
 | `level` | `warn` |
+| `error_message` | null |
 | `context` | Empty object |
 | `info` | Empty object |
 
@@ -191,7 +192,7 @@ In trace-only mode, `LogShipper::record` writes each event with `tracing` at the
 | `warn` | `tracing::warn!` |
 | `error` | `tracing::error!` |
 
-- The tracing fields are `app`, `id`, `action`, `latency_ms`, `context`, and `info`.
+- The tracing fields are `app`, `id`, `action`, `latency_ms`, `error_message`, `context`, and `info`.
 - `context` is the JSON text of the event `context`.
 - `info` is the JSON text of the event `info`.
 - The project installs a `tracing` subscriber to show these logs.

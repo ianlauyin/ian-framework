@@ -1,116 +1,68 @@
-use std::fmt;
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnvErrorKind {
-    Missing,
-    NotUnicode,
-    Invalid,
-    Secret,
+// The exception never holds the value of the variable, because the value can be a secret.
+pub fn missing(name: &str) -> Exception {
+    exception!(code::ENV_MISSING, format!("{name} is required"))
 }
 
-// The error never holds the value of the variable, because the value can be a secret.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EnvError {
-    kind: EnvErrorKind,
-    name: String,
-    detail: Option<String>,
+pub fn invalid(name: &str) -> Exception {
+    exception!(code::ENV_INVALID, format!("{name} is not valid"))
 }
 
-impl EnvError {
-    pub fn missing(name: &str) -> Self {
-        Self::new(EnvErrorKind::Missing, name)
-    }
-
-    pub fn invalid(name: &str) -> Self {
-        Self::new(EnvErrorKind::Invalid, name)
-    }
-
-    pub fn kind(&self) -> EnvErrorKind {
-        self.kind
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub(crate) fn new(kind: EnvErrorKind, name: &str) -> Self {
-        Self {
-            kind,
-            name: name.to_string(),
-            detail: None,
-        }
-    }
-
-    #[cfg(feature = "gcp")]
-    pub(crate) fn with_detail(kind: EnvErrorKind, name: &str, detail: String) -> Self {
-        Self {
-            kind,
-            name: name.to_string(),
-            detail: Some(detail),
-        }
-    }
+pub(crate) fn not_unicode(name: &str) -> Exception {
+    exception!(
+        code::ENV_NOT_UNICODE,
+        format!("{name} is not valid unicode")
+    )
 }
 
-impl fmt::Display for EnvError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let problem = match self.kind {
-            EnvErrorKind::Missing => "is required",
-            EnvErrorKind::NotUnicode => "is not valid unicode",
-            EnvErrorKind::Invalid => "is not valid",
-            EnvErrorKind::Secret => "cannot be read from Secret Manager",
-        };
-        write!(f, "{} {problem}", self.name)?;
-        if let Some(detail) = &self.detail {
-            write!(f, ": {detail}")?;
-        }
-        Ok(())
-    }
+#[cfg(feature = "gcp")]
+pub(crate) fn secret(name: &str, source: Exception) -> Exception {
+    exception!(
+        code::ENV_SECRET,
+        format!("{name} cannot be read from Secret Manager"),
+        caused_by = source
+    )
 }
-
-impl std::error::Error for EnvError {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn invalid_reports_the_name() {
-        let error = EnvError::invalid("APP_KEY");
-        assert_eq!(error.kind(), EnvErrorKind::Invalid);
-        assert_eq!(error.name(), "APP_KEY");
-    }
-
-    #[test]
-    fn missing_reports_the_name() {
-        let error = EnvError::missing("APP_KEY");
-        assert_eq!(error.kind(), EnvErrorKind::Missing);
-        assert_eq!(error.name(), "APP_KEY");
-        assert_eq!(error.to_string(), "APP_KEY is required");
-    }
-
-    #[test]
-    fn display_gives_one_message_for_each_kind() {
+    fn display_gives_one_message_for_each_code() {
         assert_eq!(
-            EnvError::missing("APP_KEY").to_string(),
-            "APP_KEY is required"
+            missing("APP_KEY").to_string(),
+            "env_missing: APP_KEY is required"
         );
         assert_eq!(
-            EnvError::new(EnvErrorKind::NotUnicode, "APP_KEY").to_string(),
-            "APP_KEY is not valid unicode"
+            not_unicode("APP_KEY").to_string(),
+            "env_not_unicode: APP_KEY is not valid unicode"
         );
         assert_eq!(
-            EnvError::invalid("APP_KEY").to_string(),
-            "APP_KEY is not valid"
-        );
-        assert_eq!(
-            EnvError::new(EnvErrorKind::Secret, "APP_KEY").to_string(),
-            "APP_KEY cannot be read from Secret Manager"
+            invalid("APP_KEY").to_string(),
+            "env_invalid: APP_KEY is not valid"
         );
     }
 
     #[test]
-    fn is_a_std_error() {
-        let error: Box<dyn std::error::Error> = Box::new(EnvError::invalid("APP_KEY"));
-        assert!(error.source().is_none());
+    fn missing_and_invalid_keep_their_code() {
+        assert_eq!(missing("APP_KEY").code(), code::ENV_MISSING);
+        assert_eq!(invalid("APP_KEY").code(), code::ENV_INVALID);
+    }
+
+    #[cfg(feature = "gcp")]
+    #[test]
+    fn secret_keeps_the_source_in_the_trace() {
+        let error = secret("APP_KEY", exception!(code::GCP_AUTH, "denied"));
+        assert_eq!(error.code(), code::ENV_SECRET);
+        assert_eq!(
+            error.to_string(),
+            "env_secret: APP_KEY cannot be read from Secret Manager"
+        );
+        let cause = error.source_exception().unwrap();
+        assert_eq!(cause.to_string(), "gcp_auth: denied");
     }
 }

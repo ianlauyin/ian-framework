@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use crate::logging::{event, LogEvent, LogLevel, LogValue, Logger};
+use crate::logging::{LogEvent, LogValue, Logger};
 use crate::shutdown::ShutdownReceiver;
 
 const STAT_PATH: &str = "/proc/stat";
@@ -60,6 +60,7 @@ impl CpuMonitor {
         let Some(mut previous) = sample() else {
             Logger::error(
                 "CPU/cannotReadStat",
+                "cannot read the cpu stat file",
                 BTreeMap::from([("path".to_string(), LogValue::from(STAT_PATH))]),
             );
             return;
@@ -112,7 +113,7 @@ impl Alert {
             return None;
         }
         self.active = true;
-        let mut event = event(ACTION, LogLevel::Warn);
+        let mut event = LogEvent::warn(ACTION);
         event
             .info
             .insert("cpu_percent".to_string(), round_one(percent).into());
@@ -162,6 +163,7 @@ fn round_one(value: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::LogLevel;
 
     use serde_json::json;
 

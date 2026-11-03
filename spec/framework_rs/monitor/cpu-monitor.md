@@ -50,6 +50,7 @@ The monitor makes one event when the usage rises to the threshold or above it. I
 | `context` | Empty object |
 | `action` | `CPU/meets threshold` |
 | `latency_ms` | null |
+| `error_message` | null |
 | `level` | `warn` |
 | `info.cpu_percent` | The usage, rounded to one decimal, as a JSON number |
 | `info.threshold_percent` | The threshold, as a JSON number |

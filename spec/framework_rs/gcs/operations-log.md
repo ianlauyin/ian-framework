@@ -49,7 +49,7 @@ Failure records:
 
 - A failure record can include `error` in `info`.
 - An `error` value does not contain a URL query.
-- A `GcsError` source does not contain the request URL.
+- An `Exception` source does not contain the request URL.
 - A resumable chunk failure record includes `attempt` and `offset` in `info`.
 - A resumable probe failure record also includes `attempt` and `offset` in `info`.
 

@@ -4,6 +4,7 @@ const LOG_URL = "/log";
 const FLUSH_INTERVAL = 60_000;
 const MAX_QUEUE = 1000;
 const MASK = "***";
+const UNKNOWN_ERROR = "unknown error";
 
 export type LogLevel = "info" | "warn" | "error";
 export type LogFields = Record<string, string | number | boolean>;
@@ -14,6 +15,7 @@ type ClientLogEvent = {
   action: string;
   latency_ms: number | null;
   level: LogLevel;
+  error_message: string | null;
   context: LogFields;
   info: LogFields;
 };
@@ -43,24 +45,26 @@ export class Logger {
 
   public static watchWindowErrors(): void {
     window.addEventListener("error", (event) => {
-      Logger.error(event.message || "window error");
+      const message = event.message || "window error";
+      Logger.error("WINDOW/error", message);
     });
     window.addEventListener("unhandledrejection", (event) => {
       const reason = event.reason;
-      Logger.error(reason instanceof Error ? reason.message : "unhandled rejection");
+      const message = reason instanceof Error ? reason.message : "unhandled rejection";
+      Logger.error("WINDOW/unhandledrejection", message);
     });
   }
 
   public static info(action: string, info?: LogFields): void {
-    Logger.record("info", action, info);
+    Logger.record("info", action, null, info);
   }
 
   public static warn(action: string, info?: LogFields): void {
-    Logger.record("warn", action, info);
+    Logger.record("warn", action, null, info);
   }
 
-  public static error(action: string, info?: LogFields): void {
-    Logger.record("error", action, info);
+  public static error(action: string, errorMessage: string, info?: LogFields): void {
+    Logger.record("error", action, errorMessage, info);
   }
 
   public static wrapAction<Args extends unknown[], Result>(
@@ -70,14 +74,17 @@ export class Logger {
     return (...args) => {
       const start = performance.now();
       const argsInfo = Logger.argsInfo(args);
-      const succeed = () => Logger.record("info", name, argsInfo, performance.now() - start);
-      const fail = (error: unknown) =>
+      const succeed = () => Logger.record("info", name, null, argsInfo, performance.now() - start);
+      const fail = (error: unknown) => {
+        const failure = Logger.failure(error);
         Logger.record(
           "error",
           name,
-          { ...argsInfo, ...Logger.failure(error) },
+          failure.error,
+          { ...argsInfo, ...failure },
           performance.now() - start,
         );
+      };
 
       let result: Result;
       try {
@@ -125,13 +132,15 @@ export class Logger {
     }
   }
 
-  private static failure(error: unknown): LogFields {
-    return { error: error instanceof Error ? error.message : "unknown error" };
+  private static failure(error: unknown): { error: string } {
+    const message = error instanceof Error ? error.message : "";
+    return { error: message.trim() === "" ? UNKNOWN_ERROR : message };
   }
 
   private static record(
     level: LogLevel,
     action: string,
+    errorMessage: string | null,
     info?: LogFields,
     latencyMs?: number,
   ): void {
@@ -145,9 +154,22 @@ export class Logger {
       action,
       latency_ms: latencyMs === undefined ? null : Math.round(latencyMs),
       level,
+      error_message: Logger.errorMessage(level, errorMessage),
       context: { ...Logger.context },
       info: Logger.mask({ page: location.pathname, ...info }),
     });
+  }
+
+  private static errorMessage(level: LogLevel, errorMessage: string | null): string | null {
+    if (level === "error") {
+      const text = errorMessage === null || errorMessage.trim() === "" ? UNKNOWN_ERROR : errorMessage;
+      return Logger.maskText(text);
+    }
+    return errorMessage === null ? null : Logger.maskText(errorMessage);
+  }
+
+  private static maskText(text: string): string {
+    return Logger.masks.reduce((masked, mask) => masked.replace(mask, MASK), text);
   }
 
   private static mask(info: LogFields): LogFields {
@@ -158,7 +180,7 @@ export class Logger {
       if (Logger.masks.some((mask) => key.search(mask) !== -1)) {
         masked[key] = MASK;
       } else if (typeof value === "string") {
-        masked[key] = Logger.masks.reduce((text, mask) => text.replace(mask, MASK), value);
+        masked[key] = Logger.maskText(value);
       } else {
         masked[key] = value;
       }

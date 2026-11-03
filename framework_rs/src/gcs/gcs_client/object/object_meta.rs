@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
-use crate::gcs::{GcsError, GcsErrorKind};
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectMeta {
@@ -15,21 +17,20 @@ pub struct ObjectMeta {
 }
 
 impl ObjectMeta {
-    pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, GcsError> {
+    pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, Exception> {
         let bytes = response.bytes().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
+            exception!(
+                code::GCS_TRANSPORT,
                 "object response is not bytes",
-                err.without_url(),
+                source = err.without_url()
             )
         })?;
         Self::from_slice(&bytes)
     }
 
-    fn from_slice(bytes: &[u8]) -> Result<Self, GcsError> {
-        let raw: RawObject = serde_json::from_slice(bytes).map_err(|err| {
-            GcsError::with_source(GcsErrorKind::Api, "object JSON is invalid", err)
-        })?;
+    fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
+        let raw: RawObject = serde_json::from_slice(bytes)
+            .map_err(|err| exception!(code::GCS_API, "object JSON is invalid", source = err))?;
         raw.into_meta()
     }
 }
@@ -48,11 +49,11 @@ pub(crate) struct RawObject {
 }
 
 impl RawObject {
-    pub(crate) fn into_meta(self) -> Result<ObjectMeta, GcsError> {
+    pub(crate) fn into_meta(self) -> Result<ObjectMeta, Exception> {
         let size = match self.size {
-            Some(text) => text.parse().map_err(|err| {
-                GcsError::with_source(GcsErrorKind::Api, "object size is invalid", err)
-            })?,
+            Some(text) => text
+                .parse()
+                .map_err(|err| exception!(code::GCS_API, "object size is invalid", source = err))?,
             None => 0,
         };
         Ok(ObjectMeta {

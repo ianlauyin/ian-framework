@@ -16,7 +16,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 Scope:
 
-- The shipper masks only the `context` values and the `info` values. It does not mask the other event fields.
+- The shipper masks the `context` values, the `info` values and `error_message`. It does not mask the other event fields.
 - The shipper masks in buffered mode and in trace-only mode.
 - The shipper masks client events from `POST /log` and request events from the middleware.
 - The frontend logger also masks before it sends. The browser patterns and the shipper patterns are different lists. The frontend logger is in `spec/framework_fe/logger.md`.

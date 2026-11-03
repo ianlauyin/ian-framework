@@ -12,20 +12,20 @@ impl LogBatch {
         if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
             return None;
         }
-        Some(self.events.iter().map(LogEvent::new).collect())
+        Some(self.events.iter().map(LogEvent::from_client).collect())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::LogLevel;
     use crate::logging::LogValue;
-    use crate::logging::{event, LogLevel};
     use chrono::DateTime;
     use serde_json::{json, Value};
 
     fn sample() -> LogEvent {
-        let mut event = event("GET /health", LogLevel::Info);
+        let mut event = LogEvent::info("GET /health");
         event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
         event.id = "req-1".to_string();
         event
@@ -41,7 +41,8 @@ mod tests {
 
     #[test]
     fn log_batch_round_trips() {
-        let events = vec![sample(), event("down", LogLevel::Error)];
+        let down = LogEvent::error("down", "boom");
+        let events = vec![sample(), down];
         let body = serde_json::to_string(&LogBatch {
             events: events.clone(),
         })
@@ -63,10 +64,7 @@ mod tests {
     #[test]
     fn events_opt_returns_sanitized_events() {
         let body = LogBatch {
-            events: vec![
-                event("/a?x=1", LogLevel::Info),
-                event("#frag", LogLevel::Error),
-            ],
+            events: vec![LogEvent::info("/a?x=1"), LogEvent::error("#frag", "boom")],
         };
         let stored = body.events_opt().unwrap();
         assert_eq!(stored.len(), 2);
@@ -82,9 +80,7 @@ mod tests {
     #[test]
     fn events_opt_accepts_a_batch_at_the_ship_chunk() {
         let body = LogBatch {
-            events: (0..SHIP_CHUNK)
-                .map(|_| event("/ok", LogLevel::Info))
-                .collect(),
+            events: (0..SHIP_CHUNK).map(|_| LogEvent::info("/ok")).collect(),
         };
         let stored = body.events_opt().unwrap();
         assert_eq!(stored.len(), SHIP_CHUNK);
@@ -94,9 +90,7 @@ mod tests {
     #[test]
     fn events_opt_rejects_a_batch_above_the_ship_chunk() {
         let body = LogBatch {
-            events: (0..=SHIP_CHUNK)
-                .map(|_| event("/ok", LogLevel::Info))
-                .collect(),
+            events: (0..=SHIP_CHUNK).map(|_| LogEvent::info("/ok")).collect(),
         };
         assert_eq!(body.events.len(), SHIP_CHUNK + 1);
         assert!(body.events_opt().is_none());

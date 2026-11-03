@@ -67,6 +67,7 @@ mod tests {
             "action": action,
             "latency_ms": 5,
             "level": "error",
+            "error_message": "client failed",
             "context": { "ip": "10.0.0.1", "user_agent": "fake-agent" },
             "info": { "page": "/home" },
         })
@@ -109,6 +110,39 @@ mod tests {
         assert_eq!(event.id, "");
         assert_eq!(event.latency_ms, None);
         assert_eq!(event.info["page"], "/home");
+    }
+
+    #[tokio::test]
+    async fn an_error_event_without_a_message_does_not_reject_the_batch() {
+        let shipper = shipper();
+        let mut bad = client_event("old");
+        bad.as_object_mut().unwrap().remove("error_message");
+        let body = json!({ "events": [bad, client_event("good")] }).to_string();
+        let headers = [("sec-fetch-site", "same-origin")];
+        let status = send(&shipper, &headers, Body::from(body)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let events = buffered_events(&shipper);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].error_message(), Some("no error message"));
+        assert_eq!(events[1].error_message(), Some("client failed"));
+    }
+
+    #[tokio::test]
+    async fn a_non_string_error_message_does_not_reject_the_batch() {
+        let shipper = shipper();
+        let mut number = client_event("number");
+        number["error_message"] = json!(123);
+        let mut object = client_event("object");
+        object["error_message"] = json!({"a": 1});
+        let body = json!({ "events": [number, object, client_event("good")] }).to_string();
+        let headers = [("sec-fetch-site", "same-origin")];
+        let status = send(&shipper, &headers, Body::from(body)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        let events = buffered_events(&shipper);
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].error_message(), Some("no error message"));
+        assert_eq!(events[1].error_message(), Some("no error message"));
+        assert_eq!(events[2].error_message(), Some("client failed"));
     }
 
     #[tokio::test]

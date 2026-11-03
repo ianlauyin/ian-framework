@@ -1,26 +1,26 @@
 use std::env;
 
-use crate::env::{EnvError, EnvErrorKind};
+use crate::env::{invalid, not_unicode};
+use crate::exception::Exception;
 
-pub fn u64_or(name: &str, default: u64) -> Result<u64, EnvError> {
+pub fn u64_or(name: &str, default: u64) -> Result<u64, Exception> {
     match env::var(name) {
-        Ok(value) => value
-            .parse()
-            .map_err(|_| EnvError::new(EnvErrorKind::Invalid, name)),
+        Ok(value) => value.parse().map_err(|_| invalid(name)),
         Err(env::VarError::NotPresent) => Ok(default),
-        Err(env::VarError::NotUnicode(_)) => Err(EnvError::new(EnvErrorKind::NotUnicode, name)),
+        Err(env::VarError::NotUnicode(_)) => Err(not_unicode(name)),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::env::tests::{not_unicode, with_var};
+    use crate::env::tests::{not_unicode as not_unicode_value, with_var};
+    use crate::exception::code;
     use std::ffi::OsStr;
 
     const NAME: &str = "IAN_FRAMEWORK_TEST_U64_OR";
 
-    fn read(value: Option<&str>) -> Result<u64, EnvError> {
+    fn read(value: Option<&str>) -> Result<u64, Exception> {
         with_var(NAME, value.map(OsStr::new), || u64_or(NAME, 7))
     }
 
@@ -38,7 +38,7 @@ mod tests {
 
     #[test]
     fn rejects_a_value_that_is_not_a_u64() {
-        let invalid = EnvError::new(EnvErrorKind::Invalid, NAME);
+        let invalid = invalid(NAME);
         for value in ["", " 42", "-1", "1.5", "abc", "18446744073709551616"] {
             assert_eq!(read(Some(value)), Err(invalid.clone()), "{value:?}");
         }
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn rejects_a_value_that_is_not_unicode() {
-        let error = with_var(NAME, Some(not_unicode()), || u64_or(NAME, 7)).unwrap_err();
-        assert_eq!(error.kind(), EnvErrorKind::NotUnicode);
+        let error = with_var(NAME, Some(not_unicode_value()), || u64_or(NAME, 7)).unwrap_err();
+        assert_eq!(error.code(), code::ENV_NOT_UNICODE);
     }
 }

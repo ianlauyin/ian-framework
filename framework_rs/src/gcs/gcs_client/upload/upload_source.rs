@@ -2,8 +2,10 @@ use std::borrow::Cow;
 
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
+use crate::exception;
+use crate::exception::code;
+use crate::exception::Exception;
 use crate::gcs::gcs_client::PutBody;
-use crate::gcs::{GcsError, GcsErrorKind};
 
 // The source must re-read any range because the session can move the offset back.
 pub(crate) enum UploadSource<'a> {
@@ -12,29 +14,29 @@ pub(crate) enum UploadSource<'a> {
 }
 
 impl<'a> UploadSource<'a> {
-    pub(crate) async fn open(body: &'a PutBody) -> Result<Self, GcsError> {
+    pub(crate) async fn open(body: &'a PutBody) -> Result<Self, Exception> {
         let path = match body {
             PutBody::Bytes(bytes) => return Ok(Self::Bytes(bytes)),
             PutBody::File(path) => path,
         };
         let file = tokio::fs::File::open(path).await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
+            exception!(
+                code::GCS_LOCAL,
                 format!("cannot open {}", path.display()),
-                err,
+                source = err
             )
         })?;
         let meta = file.metadata().await.map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
+            exception!(
+                code::GCS_LOCAL,
                 format!("cannot read metadata for {}", path.display()),
-                err,
+                source = err
             )
         })?;
         if !meta.is_file() {
-            return Err(GcsError::new(
-                GcsErrorKind::Config,
-                format!("{} is not a file", path.display()),
+            return Err(exception!(
+                code::GCS_CONFIG,
+                format!("{} is not a file", path.display())
             ));
         }
         Ok(Self::File {
@@ -54,7 +56,7 @@ impl<'a> UploadSource<'a> {
         &mut self,
         offset: u64,
         len: usize,
-    ) -> Result<Cow<'a, [u8]>, GcsError> {
+    ) -> Result<Cow<'a, [u8]>, Exception> {
         match self {
             Self::Bytes(bytes) => bytes_chunk(bytes, offset, len).map(Cow::Borrowed),
             Self::File { file, .. } => file_chunk(file, offset, len).await.map(Cow::Owned),
@@ -62,36 +64,33 @@ impl<'a> UploadSource<'a> {
     }
 }
 
-fn bytes_chunk(bytes: &[u8], offset: u64, len: usize) -> Result<&[u8], GcsError> {
+fn bytes_chunk(bytes: &[u8], offset: u64, len: usize) -> Result<&[u8], Exception> {
     let range = usize::try_from(offset)
         .ok()
         .and_then(|start| Some(start..start.checked_add(len)?));
-    range.and_then(|range| bytes.get(range)).ok_or_else(|| {
-        GcsError::new(
-            GcsErrorKind::Api,
-            "upload range is past the end of the data",
-        )
-    })
+    range
+        .and_then(|range| bytes.get(range))
+        .ok_or_else(|| exception!(code::GCS_API, "upload range is past the end of the data"))
 }
 
 async fn file_chunk(
     file: &mut tokio::fs::File,
     offset: u64,
     len: usize,
-) -> Result<Vec<u8>, GcsError> {
+) -> Result<Vec<u8>, Exception> {
     file.seek(std::io::SeekFrom::Start(offset))
         .await
         .map_err(|err| {
-            GcsError::with_source(
-                GcsErrorKind::Transport,
+            exception!(
+                code::GCS_LOCAL,
                 "cannot seek in the upload file",
-                err,
+                source = err
             )
         })?;
     let mut chunk = vec![0u8; len];
     file.read_exact(&mut chunk)
         .await
-        .map_err(|err| GcsError::with_source(GcsErrorKind::Transport, "read file failed", err))?;
+        .map_err(|err| exception!(code::GCS_LOCAL, "read file failed", source = err))?;
     Ok(chunk)
 }
 
@@ -112,9 +111,9 @@ mod tests {
         assert_eq!(source.len(), 5);
         assert_eq!(source.read_chunk(1, 3).await.unwrap().as_ref(), b"ell");
         let err = source.read_chunk(3, 3).await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Api);
+        assert_eq!(err.code(), code::GCS_API);
         let err = source.read_chunk(u64::MAX, usize::MAX).await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Api);
+        assert_eq!(err.code(), code::GCS_API);
     }
 
     #[tokio::test]
@@ -126,7 +125,7 @@ mod tests {
         assert_eq!(source.read_chunk(2, 3).await.unwrap().as_ref(), b"llo");
         assert_eq!(source.read_chunk(0, 2).await.unwrap().as_ref(), b"he");
         let err = source.read_chunk(3, 9).await.unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        assert_eq!(err.code(), code::GCS_LOCAL);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -134,12 +133,12 @@ mod tests {
     async fn file_source_refuses_a_missing_file_and_a_directory() {
         let missing = PutBody::File(std::env::temp_dir().join("my-app-missing-file"));
         let err = UploadSource::open(&missing).await.map(|_| ()).unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        assert_eq!(err.code(), code::GCS_LOCAL);
         let directory = PutBody::File(std::env::temp_dir());
         let err = UploadSource::open(&directory)
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.kind(), GcsErrorKind::Config);
+        assert_eq!(err.code(), code::GCS_CONFIG);
     }
 }

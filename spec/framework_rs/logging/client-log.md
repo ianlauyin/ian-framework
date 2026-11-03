@@ -6,9 +6,9 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 A client can send log events. The client is not trusted.
 
-### LogEvent::new
+### LogEvent::from_client
 
-`LogEvent::new` checks one event.
+`LogEvent::from_client` checks one event.
 
 - The input is a reference to one `LogEvent`.
 - The result is one event.
@@ -24,6 +24,7 @@ The function sets the fields of the result as follows:
 | `level` | The client value. |
 | `action` | The client value, with each control character changed to a space, and cut to 128 characters. |
 | `context` | Empty object. The client value is not kept. |
+| `error_message` | For an `error` event: the client text with each control character changed to a space, and cut to 1024 characters, or the text `no error message` when that text is null, missing or blank. For a `warn` event: the same text rules, or null when the text is null, missing or blank. For an `info` event: null. The client value is not kept. |
 | `info` | The client keys and values that obey the `info` rules below. |
 
 The function reads each `info` key:
@@ -60,6 +61,8 @@ The function stores the full value text.
 - The input is one `LogBatch`.
 - The result is a list of events, or no batch.
 - An empty `events` list gives no batch.
+- An `error` event without a non-blank `error_message` does not reject the batch. `LogEvent::from_client` gives that event the placeholder `no error message`.
+- The function keeps `error_message` with the `error_message` rules in the table above.
 - The function gives no batch when `events` has more than 1000 events.
 - The function accepts 1000 events.
 - One ship batch uses this same limit of 1000 events.
