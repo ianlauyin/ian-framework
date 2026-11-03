@@ -52,14 +52,7 @@ impl SecretManager {
         if unreachable_recently() {
             return Ok(None);
         }
-        match SECRET_MANAGER.get_or_try_init(Self::from_adc).await {
-            Ok(state) => Ok(state.as_ref()),
-            Err(InitError::Gcp(err)) => Err(err),
-            Err(InitError::MetadataUnreachable) => {
-                *lock_unreachable() = Some(Instant::now());
-                Ok(None)
-            }
-        }
+        initialized(SECRET_MANAGER.get_or_try_init(Self::from_adc).await)
     }
 
     // None means that the secret or its latest version does not exist.
@@ -82,14 +75,8 @@ impl SecretManager {
         let credentials = Credentials::from_adc().await?;
         credentials.validate()?;
         let http = http_client()?;
-        let project = match &credentials {
-            Credentials::Metadata => metadata_project(&http, METADATA_PROJECT_URL)
-                .await?
-                .ok_or(InitError::MetadataUnreachable)
-                .map(Some)?,
-            Credentials::User(_) => user_project(&credentials)?,
-        };
-        let Some(project) = project else {
+        let Some(project) = resolve_project(&credentials, &http, METADATA_PROJECT_URL).await?
+        else {
             return Ok(None);
         };
         let token = credentials.fetch_token(&http).await?;
@@ -109,6 +96,33 @@ impl SecretManager {
             *token = self.credentials.fetch_token(&self.http).await?;
         }
         Ok(token.value.clone())
+    }
+}
+
+fn initialized(
+    result: Result<&'static Option<SecretManager>, InitError>,
+) -> Result<Option<&'static SecretManager>, GcpError> {
+    match result {
+        Ok(state) => Ok(state.as_ref()),
+        Err(InitError::Gcp(err)) => Err(err),
+        Err(InitError::MetadataUnreachable) => {
+            *lock_unreachable() = Some(Instant::now());
+            Ok(None)
+        }
+    }
+}
+
+async fn resolve_project(
+    credentials: &Credentials,
+    http: &reqwest::Client,
+    metadata_project_url: &str,
+) -> Result<Option<String>, InitError> {
+    match credentials {
+        Credentials::Metadata => metadata_project(http, metadata_project_url)
+            .await?
+            .ok_or(InitError::MetadataUnreachable)
+            .map(Some),
+        Credentials::User(_) => Ok(user_project(credentials)?),
     }
 }
 
@@ -195,16 +209,24 @@ fn decode_access_response(status: u16, body: &[u8]) -> Result<Option<String>, Gc
         return Ok(None);
     }
     if !(200..300).contains(&status) {
-        let detail = api_detail(&String::from_utf8_lossy(body)).unwrap_or_default();
-        let kind = match status {
-            401 | 403 => GcpErrorKind::Auth,
-            _ => GcpErrorKind::Api,
-        };
-        return Err(GcpError::new(
-            kind,
-            format!("secret manager status {status}: {}", truncate(&detail, 300)),
-        ));
+        return Err(status_error(status, body));
     }
+    decode_payload(body).map(Some)
+}
+
+fn status_error(status: u16, body: &[u8]) -> GcpError {
+    let detail = api_detail(&String::from_utf8_lossy(body)).unwrap_or_default();
+    let kind = match status {
+        401 | 403 => GcpErrorKind::Auth,
+        _ => GcpErrorKind::Api,
+    };
+    GcpError::new(
+        kind,
+        format!("secret manager status {status}: {}", truncate(&detail, 300)),
+    )
+}
+
+fn decode_payload(body: &[u8]) -> Result<String, GcpError> {
     let parsed: AccessResponse = serde_json::from_slice(body).map_err(|_| {
         GcpError::new(
             GcpErrorKind::Api,
@@ -220,7 +242,7 @@ fn decode_access_response(status: u16, body: &[u8]) -> Result<Option<String>, Gc
     if value.is_empty() {
         return Err(GcpError::new(GcpErrorKind::Config, "secret value is empty"));
     }
-    Ok(Some(value.to_string()))
+    Ok(value.to_string())
 }
 
 fn is_name_segment(segment: &str) -> bool {
@@ -422,5 +444,82 @@ mod tests {
         assert_eq!(read(None, None).unwrap(), None);
         let err = read(Some("bad/project"), None).unwrap_err();
         assert_eq!(err.kind(), GcpErrorKind::Config);
+    }
+
+    fn temp_adc(name: &str, json: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "ian-framework-test-{}-secret-{name}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, json).unwrap();
+        path
+    }
+
+    fn init_from_env(path: &std::path::Path) -> Result<Option<SecretManager>, InitError> {
+        crate::env::tests::with_vars(
+            &[
+                ("GOOGLE_APPLICATION_CREDENTIALS", Some(path.as_os_str())),
+                (PROJECT_ENV, None),
+            ],
+            || crate::env::tests::block_on(SecretManager::from_adc()),
+        )
+    }
+
+    #[test]
+    fn from_adc_without_a_project_is_no_credentials() {
+        let json = r#"{"type":"authorized_user","client_id":"id","client_secret":"secret","refresh_token":"refresh"}"#;
+        let path = temp_adc("no-project", json);
+        assert!(matches!(init_from_env(&path), Ok(None)));
+    }
+
+    #[test]
+    fn from_adc_rejects_a_bad_file_and_incomplete_credentials() {
+        let missing = std::env::temp_dir().join("ian-framework-test-secret-missing.json");
+        assert!(matches!(init_from_env(&missing), Err(InitError::Gcp(_))));
+        let json = r#"{"type":"authorized_user","client_id":"","client_secret":"secret","refresh_token":"refresh"}"#;
+        let path = temp_adc("incomplete", json);
+        assert!(matches!(init_from_env(&path), Err(InitError::Gcp(_))));
+    }
+
+    #[tokio::test]
+    async fn resolve_project_reads_the_metadata_server_or_the_user() {
+        let http = http_client().unwrap();
+        let (addr, _server) = serve(200, b"my-project".to_vec()).await;
+        let url = format!("http://{addr}/project");
+        let project = resolve_project(&Credentials::Metadata, &http, &url).await;
+        assert_eq!(project.ok().flatten().as_deref(), Some("my-project"));
+
+        let url = format!("http://{}/project", closed_addr());
+        let project = resolve_project(&Credentials::Metadata, &http, &url).await;
+        assert!(matches!(project, Err(InitError::MetadataUnreachable)));
+    }
+
+    #[test]
+    fn resolve_project_uses_the_quota_project_of_a_user() {
+        let credentials = user(Some("quota-project"));
+        let project = with_var(PROJECT_ENV, None, || {
+            let http = http_client().unwrap();
+            crate::env::tests::block_on(resolve_project(&credentials, &http, "http://unused"))
+        });
+        assert_eq!(project.ok().flatten().as_deref(), Some("quota-project"));
+    }
+
+    #[test]
+    fn initialized_maps_each_init_result() {
+        static NONE: Option<SecretManager> = None;
+        assert!(matches!(initialized(Ok(&NONE)), Ok(None)));
+
+        let manager = Box::leak(Box::new(Some(fake_secret_manager(closed_addr()))));
+        assert!(matches!(initialized(Ok(manager)), Ok(Some(_))));
+
+        let err = GcpError::new(GcpErrorKind::Config, "bad");
+        assert!(initialized(Err(InitError::Gcp(err))).is_err());
+
+        assert!(matches!(
+            initialized(Err(InitError::MetadataUnreachable)),
+            Ok(None)
+        ));
+        assert!(unreachable_recently());
+        *lock_unreachable() = None;
     }
 }

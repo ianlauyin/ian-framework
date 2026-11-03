@@ -53,12 +53,13 @@ impl EnvError {
 
 impl fmt::Display for EnvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            EnvErrorKind::Missing => write!(f, "{} is required", self.name)?,
-            EnvErrorKind::NotUnicode => write!(f, "{} is not valid unicode", self.name)?,
-            EnvErrorKind::Invalid => write!(f, "{} is not valid", self.name)?,
-            EnvErrorKind::Secret => write!(f, "{} cannot be read from Secret Manager", self.name)?,
-        }
+        let problem = match self.kind {
+            EnvErrorKind::Missing => "is required",
+            EnvErrorKind::NotUnicode => "is not valid unicode",
+            EnvErrorKind::Invalid => "is not valid",
+            EnvErrorKind::Secret => "cannot be read from Secret Manager",
+        };
+        write!(f, "{} {problem}", self.name)?;
         if let Some(detail) = &self.detail {
             write!(f, ": {detail}")?;
         }

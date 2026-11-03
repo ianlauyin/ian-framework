@@ -9,7 +9,7 @@ pub(crate) use http_client::http_client_builder;
 pub(crate) use secret_manager::SecretManager;
 
 #[cfg(feature = "gcs")]
-pub(crate) use credentials::{metadata_token, UserCredentials};
+pub(crate) use credentials::{metadata_token, UserCredentials, METADATA_TOKEN_URL};
 
 #[cfg(test)]
 pub(crate) mod tests {

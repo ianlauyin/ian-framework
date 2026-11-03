@@ -57,10 +57,7 @@ impl fmt::Display for AuthError {
 
 impl std::error::Error for AuthError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self.source {
-            Some(source) => Some(source.as_ref()),
-            None => None,
-        }
+        self.source.as_deref().map(|source| source as _)
     }
 }
 
@@ -127,5 +124,15 @@ mod tests {
             assert_eq!(error.code, code);
             assert!(!error.message.contains("secret"));
         }
+    }
+
+    #[test]
+    fn source_is_the_cause_when_there_is_one() {
+        use std::error::Error;
+        let plain = AuthError::new(AuthErrorKind::Store, "down");
+        assert!(plain.source().is_none());
+        let cause = std::io::Error::other("refused");
+        let wrapped = AuthError::with_source(AuthErrorKind::Store, "down", cause);
+        assert_eq!(wrapped.source().unwrap().to_string(), "refused");
     }
 }

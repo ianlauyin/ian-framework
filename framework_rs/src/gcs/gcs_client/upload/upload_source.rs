@@ -56,34 +56,90 @@ impl<'a> UploadSource<'a> {
         len: usize,
     ) -> Result<Cow<'a, [u8]>, GcsError> {
         match self {
-            Self::Bytes(bytes) => {
-                let range = usize::try_from(offset)
-                    .ok()
-                    .and_then(|start| Some(start..start.checked_add(len)?));
-                let chunk = range.and_then(|range| bytes.get(range)).ok_or_else(|| {
-                    GcsError::new(
-                        GcsErrorKind::Api,
-                        "upload range is past the end of the data",
-                    )
-                })?;
-                Ok(Cow::Borrowed(chunk))
-            }
-            Self::File { file, .. } => {
-                file.seek(std::io::SeekFrom::Start(offset))
-                    .await
-                    .map_err(|err| {
-                        GcsError::with_source(
-                            GcsErrorKind::Transport,
-                            "cannot seek in the upload file",
-                            err,
-                        )
-                    })?;
-                let mut chunk = vec![0u8; len];
-                file.read_exact(&mut chunk).await.map_err(|err| {
-                    GcsError::with_source(GcsErrorKind::Transport, "read file failed", err)
-                })?;
-                Ok(Cow::Owned(chunk))
-            }
+            Self::Bytes(bytes) => bytes_chunk(bytes, offset, len).map(Cow::Borrowed),
+            Self::File { file, .. } => file_chunk(file, offset, len).await.map(Cow::Owned),
         }
+    }
+}
+
+fn bytes_chunk(bytes: &[u8], offset: u64, len: usize) -> Result<&[u8], GcsError> {
+    let range = usize::try_from(offset)
+        .ok()
+        .and_then(|start| Some(start..start.checked_add(len)?));
+    range.and_then(|range| bytes.get(range)).ok_or_else(|| {
+        GcsError::new(
+            GcsErrorKind::Api,
+            "upload range is past the end of the data",
+        )
+    })
+}
+
+async fn file_chunk(
+    file: &mut tokio::fs::File,
+    offset: u64,
+    len: usize,
+) -> Result<Vec<u8>, GcsError> {
+    file.seek(std::io::SeekFrom::Start(offset))
+        .await
+        .map_err(|err| {
+            GcsError::with_source(
+                GcsErrorKind::Transport,
+                "cannot seek in the upload file",
+                err,
+            )
+        })?;
+    let mut chunk = vec![0u8; len];
+    file.read_exact(&mut chunk)
+        .await
+        .map_err(|err| GcsError::with_source(GcsErrorKind::Transport, "read file failed", err))?;
+    Ok(chunk)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_file(name: &str, content: &[u8]) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("my-app-{}-{name}", std::process::id()));
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[tokio::test]
+    async fn bytes_source_reads_a_range_and_refuses_one_past_the_end() {
+        let body = PutBody::Bytes(b"hello".to_vec());
+        let mut source = UploadSource::open(&body).await.unwrap();
+        assert_eq!(source.len(), 5);
+        assert_eq!(source.read_chunk(1, 3).await.unwrap().as_ref(), b"ell");
+        let err = source.read_chunk(3, 3).await.unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Api);
+        let err = source.read_chunk(u64::MAX, usize::MAX).await.unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Api);
+    }
+
+    #[tokio::test]
+    async fn file_source_rereads_any_range() {
+        let path = temp_file("source-range", b"hello");
+        let body = PutBody::File(path.clone());
+        let mut source = UploadSource::open(&body).await.unwrap();
+        assert_eq!(source.len(), 5);
+        assert_eq!(source.read_chunk(2, 3).await.unwrap().as_ref(), b"llo");
+        assert_eq!(source.read_chunk(0, 2).await.unwrap().as_ref(), b"he");
+        let err = source.read_chunk(3, 9).await.unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn file_source_refuses_a_missing_file_and_a_directory() {
+        let missing = PutBody::File(std::env::temp_dir().join("my-app-missing-file"));
+        let err = UploadSource::open(&missing).await.map(|_| ()).unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Transport);
+        let directory = PutBody::File(std::env::temp_dir());
+        let err = UploadSource::open(&directory)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Config);
     }
 }

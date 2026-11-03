@@ -40,34 +40,7 @@ impl CpuMonitor {
     where
         F: Fn(LogEvent) + Send + 'static,
     {
-        tokio::spawn(async move {
-            let Some(mut previous) = read_sample() else {
-                tracing::warn!("cpu monitor cannot read {STAT_PATH}, so it stops");
-                return;
-            };
-            let mut ticker = tokio::time::interval(self.config.interval);
-            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            ticker.tick().await;
-            let stop = shutdown.wait();
-            tokio::pin!(stop);
-            let mut alert = Alert::new(self.config.threshold_percent);
-            loop {
-                tokio::select! {
-                    biased;
-                    _ = &mut stop => break,
-                    _ = ticker.tick() => {}
-                }
-                let Some(current) = read_sample() else {
-                    continue;
-                };
-                if let Some(percent) = usage_percent(previous, current) {
-                    if let Some(event) = alert.check(percent) {
-                        sink(event);
-                    }
-                }
-                previous = current;
-            }
-        })
+        tokio::spawn(self.run(shutdown, sink, read_sample))
     }
 }
 
@@ -75,6 +48,41 @@ impl CpuMonitor {
 struct CpuSample {
     idle: u64,
     total: u64,
+}
+
+impl CpuMonitor {
+    async fn run<F, S>(self, shutdown: ShutdownReceiver, sink: F, mut sample: S)
+    where
+        F: Fn(LogEvent),
+        S: FnMut() -> Option<CpuSample>,
+    {
+        let Some(mut previous) = sample() else {
+            tracing::warn!("cpu monitor cannot read {STAT_PATH}, so it stops");
+            return;
+        };
+        let mut ticker = tokio::time::interval(self.config.interval);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        ticker.tick().await;
+        let stop = shutdown.wait();
+        tokio::pin!(stop);
+        let mut alert = Alert::new(self.config.threshold_percent);
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut stop => break,
+                _ = ticker.tick() => {}
+            }
+            let Some(current) = sample() else {
+                continue;
+            };
+            if let Some(percent) = usage_percent(previous, current) {
+                if let Some(event) = alert.check(percent) {
+                    sink(event);
+                }
+            }
+            previous = current;
+        }
+    }
 }
 
 struct Alert {
@@ -127,11 +135,9 @@ fn parse_sample(stat: &str) -> Option<CpuSample> {
         .take(8)
         .map(|field| field.parse::<u64>().ok())
         .collect::<Option<Vec<_>>>()?;
-    if values.len() < 5 {
-        return None;
-    }
+    let idle = values.get(3)?.checked_add(*values.get(4)?)?;
     Some(CpuSample {
-        idle: values[3] + values[4],
+        idle,
         total: values.iter().sum(),
     })
 }
@@ -227,6 +233,50 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(2), handle)
             .await
             .unwrap()
+            .unwrap();
+    }
+
+    fn sampler(samples: Vec<Option<CpuSample>>) -> impl FnMut() -> Option<CpuSample> {
+        let mut samples = samples.into_iter();
+        move || samples.next().flatten()
+    }
+
+    #[tokio::test]
+    async fn run_sends_one_event_for_a_busy_cpu_and_skips_a_failed_read() {
+        let shutdown = ShutdownReceiver::new();
+        let mut config = CpuMonitorConfig::new(50.0);
+        config.interval = Duration::from_millis(5);
+        let monitor = CpuMonitor::new(config).unwrap();
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink_events = events.clone();
+        let samples = vec![
+            Some(sample(0, 0)),
+            None,
+            Some(sample(0, 100)),
+            Some(sample(0, 200)),
+        ];
+        let run = monitor.run(
+            shutdown.clone(),
+            move |event| sink_events.lock().unwrap().push(event),
+            sampler(samples),
+        );
+        let task = tokio::spawn(run);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        shutdown.trigger();
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(events.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn run_stops_when_the_first_read_fails() {
+        let shutdown = ShutdownReceiver::new();
+        let monitor = CpuMonitor::new(CpuMonitorConfig::new(50.0)).unwrap();
+        let run = monitor.run(shutdown, |_| {}, sampler(vec![None]));
+        tokio::time::timeout(Duration::from_secs(2), run)
+            .await
             .unwrap();
     }
 }

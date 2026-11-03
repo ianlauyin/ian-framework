@@ -362,25 +362,7 @@ fn clear_value(cookie_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    async fn store_or_skip() -> Option<SessionStore> {
-        let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
-        let mut bytes = [0u8; 8];
-        getrandom::fill(&mut bytes).unwrap();
-        let config = SessionConfig {
-            prefix: format!("ian-framework-test:{}:", hex::encode(bytes)),
-            cookie_name: "sid".to_string(),
-            ttl_secs: 60,
-            max_age_secs: 120,
-        };
-        match SessionStore::connect(&url, config).await {
-            Ok(store) => Some(store),
-            Err(err) => {
-                eprintln!("skipping session store test: {err}");
-                None
-            }
-        }
-    }
+    use crate::auth::tests::store_or_skip;
 
     #[tokio::test]
     async fn sessions_store_touch_and_remove() {

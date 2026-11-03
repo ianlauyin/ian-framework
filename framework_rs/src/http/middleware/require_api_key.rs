@@ -54,29 +54,11 @@ impl ApiKeyRule {
     }
 
     fn applies(&self, method: &Method, path: &str) -> bool {
-        // A path with one trailing slash is the same as the path without it, so `/log/` cannot skip a rule for `/log`.
-        let path = match path.strip_suffix('/') {
-            Some(trimmed) if !trimmed.is_empty() => trimmed,
-            _ => path,
-        };
-        if let Some(methods) = &self.methods {
-            if !methods.contains(method) {
-                return false;
-            }
-        }
-        match &self.path {
-            PathMatch::Exact(exact) => path == exact,
-            PathMatch::Tree(root) => {
-                path == root
-                    || path
-                        .strip_prefix(root.as_str())
-                        .is_some_and(|rest| rest.starts_with('/'))
-            }
-            PathMatch::Child(root) => path
-                .strip_prefix(root.as_str())
-                .and_then(|rest| rest.strip_prefix('/'))
-                .is_some_and(|name| !name.is_empty() && !name.contains('/')),
-        }
+        let method_matches = self
+            .methods
+            .as_ref()
+            .is_none_or(|methods| methods.contains(method));
+        method_matches && self.path.matches(without_trailing_slash(path))
     }
 }
 
@@ -137,6 +119,32 @@ pub async fn require_api_key(
             .into_response();
     }
     next.run(request).await
+}
+
+impl PathMatch {
+    fn matches(&self, path: &str) -> bool {
+        match self {
+            PathMatch::Exact(exact) => path == exact,
+            PathMatch::Tree(root) => {
+                path == root
+                    || path
+                        .strip_prefix(root.as_str())
+                        .is_some_and(|rest| rest.starts_with('/'))
+            }
+            PathMatch::Child(root) => path
+                .strip_prefix(root.as_str())
+                .and_then(|rest| rest.strip_prefix('/'))
+                .is_some_and(|name| !name.is_empty() && !name.contains('/')),
+        }
+    }
+}
+
+// A path with one trailing slash is the same as the path without it, so `/log/` cannot skip a rule for `/log`.
+fn without_trailing_slash(path: &str) -> &str {
+    match path.strip_suffix('/') {
+        Some(trimmed) if !trimmed.is_empty() => trimmed,
+        _ => path,
+    }
 }
 
 #[cfg(test)]

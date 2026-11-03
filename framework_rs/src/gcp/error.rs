@@ -93,7 +93,7 @@ pub(crate) fn truncate(text: &str, max: usize) -> &str {
     while end > 0 && !text.is_char_boundary(end) {
         end -= 1;
     }
-    &text[..end]
+    text.get(..end).unwrap_or_default()
 }
 
 #[cfg(test)]

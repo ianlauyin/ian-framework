@@ -19,82 +19,18 @@ pub struct LogShipper {
 
 impl LogShipper {
     pub fn new(config: ShipperConfig) -> Option<Self> {
-        let mut chars = config.app.chars();
-        let first = chars.next()?;
-        if !first.is_ascii_alphanumeric()
-            || !config
-                .app
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
-            || config.capacity == 0
-            || config.ship_every.is_zero()
-        {
+        if !is_valid_app(&config) {
             return None;
         }
-        let endpoint = match config.endpoint {
-            None => None,
-            Some(raw) => {
-                let trimmed = raw.trim();
-                if trimmed.is_empty() {
-                    None
-                } else if trimmed.chars().any(char::is_whitespace) {
-                    return None;
-                } else {
-                    let parsed = reqwest::Url::parse(trimmed).ok()?;
-                    let secure = parsed.scheme() == "https"
-                        || (parsed.scheme() == "http" && is_loopback_host(parsed.host_str()));
-                    if !secure
-                        || parsed.host_str().is_none()
-                        || !parsed.username().is_empty()
-                        || parsed.password().is_some()
-                        || parsed.query().is_some()
-                        || parsed.fragment().is_some()
-                    {
-                        return None;
-                    }
-                    Some(parsed.to_string().trim_end_matches('/').to_string())
-                }
-            }
-        };
-        let post_api_key = match config.post_api_key {
-            None => None,
-            Some(raw) => {
-                let trimmed = raw.trim();
-                if trimmed.is_empty() {
-                    None
-                } else if trimmed.chars().any(char::is_whitespace) {
-                    return None;
-                } else {
-                    let mut value =
-                        reqwest::header::HeaderValue::from_str(&format!("Bearer {trimmed}"))
-                            .ok()?;
-                    value.set_sensitive(true);
-                    Some(value)
-                }
-            }
-        };
+        let endpoint = normalized_endpoint(config.endpoint.as_deref())?;
+        let post_api_key = bearer_header(config.post_api_key.as_deref())?;
         let masks = config
             .mask_patterns
             .iter()
             .map(|pattern| Mask::new(pattern))
             .collect::<Option<Vec<_>>>()?;
-        let http = match &endpoint {
-            Some(_) => Some(
-                reqwest::Client::builder()
-                    .connect_timeout(SHIP_TIMEOUT)
-                    .timeout(SHIP_TIMEOUT)
-                    .redirect(reqwest::redirect::Policy::none())
-                    .user_agent(concat!("ian_framework/", env!("CARGO_PKG_VERSION")))
-                    .build()
-                    .ok()?,
-            ),
-            None => None,
-        };
-        if endpoint.is_some() {
-            tracing::info!(app = %config.app, "log shipping posts to the log server");
-        } else {
-            tracing::info!(app = %config.app, "log shipping is trace-only");
-        }
+        let http = endpoint.as_ref().map(|_| ship_client()).transpose().ok()?;
+        log_mode(&config.app, endpoint.is_some());
         Some(Self {
             inner: Arc::new(Inner {
                 app: config.app,
@@ -272,6 +208,74 @@ struct Inner {
 }
 
 // The post API key is sent in each request, so a plain http endpoint is allowed only on this machine.
+fn is_valid_app(config: &ShipperConfig) -> bool {
+    let mut chars = config.app.chars();
+    let starts_alphanumeric = chars.next().is_some_and(|ch| ch.is_ascii_alphanumeric());
+    starts_alphanumeric
+        && config
+            .app
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+        && config.capacity != 0
+        && !config.ship_every.is_zero()
+}
+
+// The outer None is an endpoint that is not valid. The inner None is no endpoint.
+fn normalized_endpoint(raw: Option<&str>) -> Option<Option<String>> {
+    let Some(trimmed) = raw.map(str::trim).filter(|text| !text.is_empty()) else {
+        return Some(None);
+    };
+    if trimmed.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let parsed = reqwest::Url::parse(trimmed).ok()?;
+    if !is_plain_endpoint(&parsed) {
+        return None;
+    }
+    Some(Some(parsed.to_string().trim_end_matches('/').to_string()))
+}
+
+fn is_plain_endpoint(url: &reqwest::Url) -> bool {
+    let secure =
+        url.scheme() == "https" || (url.scheme() == "http" && is_loopback_host(url.host_str()));
+    secure
+        && url.host_str().is_some()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
+}
+
+// The outer None is a key that is not valid. The inner None is no key.
+fn bearer_header(raw: Option<&str>) -> Option<Option<reqwest::header::HeaderValue>> {
+    let Some(trimmed) = raw.map(str::trim).filter(|text| !text.is_empty()) else {
+        return Some(None);
+    };
+    if trimmed.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let mut value = reqwest::header::HeaderValue::from_str(&format!("Bearer {trimmed}")).ok()?;
+    value.set_sensitive(true);
+    Some(Some(value))
+}
+
+fn ship_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .connect_timeout(SHIP_TIMEOUT)
+        .timeout(SHIP_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(concat!("ian_framework/", env!("CARGO_PKG_VERSION")))
+        .build()
+}
+
+fn log_mode(app: &str, posts: bool) {
+    if posts {
+        tracing::info!(app = %app, "log shipping posts to the log server");
+    } else {
+        tracing::info!(app = %app, "log shipping is trace-only");
+    }
+}
+
 fn is_loopback_host(host: Option<&str>) -> bool {
     matches!(host, Some("localhost" | "127.0.0.1" | "[::1]"))
 }

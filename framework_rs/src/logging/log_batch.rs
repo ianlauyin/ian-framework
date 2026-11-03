@@ -12,12 +12,7 @@ impl LogBatch {
         if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
             return None;
         }
-        Some(
-            self.events
-                .iter()
-                .map(LogEvent::new)
-                .collect(),
-        )
+        Some(self.events.iter().map(LogEvent::new).collect())
     }
 }
 

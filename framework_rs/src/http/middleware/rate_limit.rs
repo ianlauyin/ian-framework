@@ -57,20 +57,7 @@ impl RateLimiter {
             .buckets
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if buckets.len() >= PRUNE_AT && !buckets.contains_key(key) {
-            buckets.retain(|_, bucket| refilled(bucket, now, refill, capacity) < capacity);
-        }
-        if buckets.len() >= PRUNE_AT && !buckets.contains_key(key) {
-            let mut used: Vec<(Instant, String)> = buckets
-                .iter()
-                .map(|(name, bucket)| (bucket.updated, name.clone()))
-                .collect();
-            let count = EVICT_COUNT.min(used.len());
-            used.select_nth_unstable_by_key(count - 1, |(updated, _)| *updated);
-            for (_, name) in used.into_iter().take(count) {
-                buckets.remove(&name);
-            }
-        }
+        make_room(&mut buckets, key, now, refill, capacity);
         let bucket = buckets.entry(key.to_string()).or_insert(Bucket {
             tokens: capacity,
             updated: now,
@@ -121,6 +108,31 @@ fn limit_key(ip: &str) -> String {
             format!("{}/64", std::net::Ipv6Addr::from(octets))
         }
         _ => ip.to_string(),
+    }
+}
+
+fn make_room(
+    buckets: &mut HashMap<String, Bucket>,
+    key: &str,
+    now: Instant,
+    refill: f64,
+    capacity: f64,
+) {
+    if buckets.len() < PRUNE_AT || buckets.contains_key(key) {
+        return;
+    }
+    buckets.retain(|_, bucket| refilled(bucket, now, refill, capacity) < capacity);
+    if buckets.len() < PRUNE_AT {
+        return;
+    }
+    let mut used: Vec<(Instant, String)> = buckets
+        .iter()
+        .map(|(name, bucket)| (bucket.updated, name.clone()))
+        .collect();
+    let count = EVICT_COUNT.min(used.len());
+    used.select_nth_unstable_by_key(count - 1, |(updated, _)| *updated);
+    for (_, name) in used.into_iter().take(count) {
+        buckets.remove(&name);
     }
 }
 

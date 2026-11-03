@@ -484,4 +484,10 @@ mod tests {
         assert_eq!(stored.info.len(), 1);
         assert_eq!(stored.info["zzzz"], json!("yes"));
     }
+
+    #[test]
+    fn a_float_becomes_a_number_or_text() {
+        assert_eq!(LogValue::from(1.5), serde_json::json!(1.5));
+        assert_eq!(LogValue::from(f64::NAN), "NaN");
+    }
 }

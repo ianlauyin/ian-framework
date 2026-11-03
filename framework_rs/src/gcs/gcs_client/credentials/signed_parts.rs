@@ -78,7 +78,8 @@ impl SignedParts {
 
 async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, GcsError> {
     let url = format!(
-        "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{}:signBlob",
+        "{}/projects/-/serviceAccounts/{}:signBlob",
+        client.inner.endpoints.iam_root,
         encode_seg(client.signer_email()),
     );
     let encoded = base64::engine::general_purpose::STANDARD.encode(payload);
@@ -97,7 +98,11 @@ async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, GcsErr
             err.without_url(),
         )
     })?;
-    let parsed: SignBlobResponse = serde_json::from_slice(&bytes).map_err(|err| {
+    signature_from_response(&bytes)
+}
+
+fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, GcsError> {
+    let parsed: SignBlobResponse = serde_json::from_slice(bytes).map_err(|err| {
         GcsError::with_source(GcsErrorKind::Api, "signBlob response is not JSON", err)
     })?;
     let cleaned: String = parsed
@@ -181,6 +186,7 @@ fn encode_object_path(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gcs::gcs_client::tests::{fake_client, serve_script, Reply};
 
     #[test]
     fn v4_get_matches_the_canonical_request() {
@@ -297,5 +303,50 @@ UNSIGNED-PAYLOAD";
             signed_lifetime_seconds(Some(Duration::from_secs(1))).unwrap(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn sign_blob_returns_the_decoded_signature() {
+        let reply = Reply::new(200, r#"{"signedBlob":"AQ ID\n"}"#);
+        let (addr, server) = serve_script(vec![reply]).await;
+        let signature = sign_blob(&fake_client(addr), b"payload").await.unwrap();
+        assert_eq!(signature, [1, 2, 3]);
+        let request = server.await.unwrap().remove(0);
+        assert!(request.starts_with(
+            "POST /iam/projects/-/serviceAccounts/signer%40example.iam.gserviceaccount.com:signBlob"
+        ));
+        assert!(
+            request.ends_with(r#"{"payload":"cGF5bG9hZA=="}"#),
+            "{request}"
+        );
+    }
+
+    #[tokio::test]
+    async fn signed_url_ends_with_the_hex_signature() {
+        let (addr, _server) = serve_script(vec![Reply::new(200, r#"{"signedBlob":"AQID"}"#)]).await;
+        let url = fake_client(addr)
+            .signed_get_url("a/b.txt", Some(Duration::from_secs(60)), None)
+            .await
+            .unwrap();
+        assert!(url.ends_with("&X-Goog-Signature=010203"), "{url}");
+    }
+
+    #[tokio::test]
+    async fn sign_blob_reports_a_failed_call() {
+        let (addr, _server) = serve_script(vec![Reply::new(403, "{}")]).await;
+        let err = sign_blob(&fake_client(addr), b"p").await.unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Auth);
+    }
+
+    #[test]
+    fn a_bad_sign_blob_body_is_an_api_error() {
+        for body in [
+            &b"not json"[..],
+            br#"{"signedBlob":"%%%"}"#,
+            br#"{"signedBlob":""}"#,
+        ] {
+            let err = signature_from_response(body).unwrap_err();
+            assert_eq!(err.kind(), GcsErrorKind::Api);
+        }
     }
 }

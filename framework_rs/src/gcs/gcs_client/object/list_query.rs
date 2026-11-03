@@ -1,5 +1,4 @@
 use crate::gcs::encode::encode_seg;
-use crate::gcs::API_ROOT;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListQuery {
@@ -10,7 +9,7 @@ pub struct ListQuery {
 }
 
 impl ListQuery {
-    pub(crate) fn url(&self, bucket_name: &str) -> String {
+    pub(crate) fn url(&self, api_root: &str, bucket_name: &str) -> String {
         let max_results = self.max_results.map(|max| max.to_string());
         let mut pairs: Vec<(&str, &str)> = Vec::new();
         if let Some(delimiter) = self.delimiter.as_deref() {
@@ -25,7 +24,7 @@ impl ListQuery {
         if let Some(prefix) = self.prefix.as_deref() {
             pairs.push(("prefix", prefix));
         }
-        let mut url = format!("{API_ROOT}/b/{}/o", encode_seg(bucket_name));
+        let mut url = format!("{api_root}/b/{}/o", encode_seg(bucket_name));
         if pairs.is_empty() {
             return url;
         }
@@ -45,10 +44,11 @@ impl ListQuery {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gcs::API_ROOT;
 
     #[test]
     fn list_url_encodes_query_and_does_not_add_a_cap() {
-        let url = ListQuery::default().url("buck");
+        let url = ListQuery::default().url(API_ROOT, "buck");
         assert_eq!(url, "https://storage.googleapis.com/storage/v1/b/buck/o");
         let url = ListQuery {
             prefix: Some("a b".to_string()),
@@ -56,7 +56,7 @@ mod tests {
             page_token: None,
             max_results: Some(10),
         }
-        .url("buck");
+        .url(API_ROOT, "buck");
         assert_eq!(
             url,
             "https://storage.googleapis.com/storage/v1/b/buck/o?delimiter=%2F&maxResults=10&prefix=a%20b"

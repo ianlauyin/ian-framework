@@ -11,10 +11,16 @@ pub(super) enum RewriteStep {
 }
 
 impl RewriteStep {
-    pub(super) fn url(bucket_name: &str, from: &str, to: &str, token: Option<&str>) -> String {
+    pub(super) fn url(
+        api_root: &str,
+        bucket_name: &str,
+        from: &str,
+        to: &str,
+        token: Option<&str>,
+    ) -> String {
         let mut url = format!(
             "{}/rewriteTo/b/{}/o/{}",
-            object_url(bucket_name, from),
+            object_url(api_root, bucket_name, from),
             encode_seg(bucket_name),
             encode_object_id(to),
         );
@@ -58,6 +64,7 @@ struct RawRewrite {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gcs::API_ROOT;
 
     #[test]
     fn rewrite_step_reads_a_token_until_done() {
@@ -78,10 +85,17 @@ mod tests {
     #[test]
     fn rewrite_url_sets_the_token_query() {
         assert_eq!(
-            RewriteStep::url("buck", "a/b", "c d", None),
+            RewriteStep::url(API_ROOT, "buck", "a/b", "c d", None),
             "https://storage.googleapis.com/storage/v1/b/buck/o/a%2Fb/rewriteTo/b/buck/o/c%20d"
         );
-        let url = RewriteStep::url("buck", "a", "c", Some("tok/en"));
+        let url = RewriteStep::url(API_ROOT, "buck", "a", "c", Some("tok/en"));
         assert!(url.ends_with("?rewriteToken=tok%2Fen"));
+    }
+
+    #[test]
+    fn rewrite_step_refuses_a_bad_body() {
+        assert!(RewriteStep::from_slice(b"not json").is_err());
+        let bad_size = br#"{"done":true,"resource":{"name":"b","size":"x"}}"#;
+        assert!(RewriteStep::from_slice(bad_size).is_err());
     }
 }

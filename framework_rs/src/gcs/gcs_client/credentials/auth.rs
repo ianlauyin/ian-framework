@@ -36,7 +36,7 @@ impl Auth {
 
     pub(crate) async fn signer_email(&self, http: &reqwest::Client) -> Result<String, GcsError> {
         match self {
-            Auth::Metadata => metadata_email(http).await,
+            Auth::Metadata => metadata_email(http, METADATA_EMAIL_URL).await,
             Auth::User { signer_email, .. } => Ok(signer_email.clone()),
         }
     }
@@ -44,12 +44,12 @@ impl Auth {
     pub(crate) async fn fetch_token(
         &self,
         http: &reqwest::Client,
+        metadata_token_url: &str,
     ) -> Result<CachedToken, GcsError> {
-        let token = match self {
-            Auth::Metadata => metadata_token(http).await?,
-            Auth::User { credentials, .. } => credentials.fetch_token(http).await?,
-        };
-        Ok(token)
+        match self {
+            Auth::Metadata => Ok(metadata_token(http, metadata_token_url).await?),
+            Auth::User { credentials, .. } => Ok(credentials.fetch_token(http).await?),
+        }
     }
 }
 
@@ -65,8 +65,8 @@ impl std::fmt::Debug for Auth {
     }
 }
 
-async fn metadata_email(http: &reqwest::Client) -> Result<String, GcsError> {
-    let response = metadata_get(http, METADATA_EMAIL_URL).await?;
+async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<String, GcsError> {
+    let response = metadata_get(http, url).await?;
     let status = response.status();
     let body = response.text().await.map_err(|err| {
         GcsError::with_source(
@@ -125,6 +125,8 @@ fn auth_from_credentials(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gcp::tests::closed_addr;
+    use crate::gcs::gcs_client::tests::{serve_script, Reply};
 
     fn user_credentials() -> Credentials {
         Credentials::User(UserCredentials {
@@ -180,5 +182,50 @@ mod tests {
         assert!(text.contains("signer@example.iam.gserviceaccount.com"));
         assert!(!text.contains("refresh"));
         assert!(!text.contains("secret"));
+    }
+
+    fn http() -> reqwest::Client {
+        reqwest::Client::new()
+    }
+
+    #[tokio::test]
+    async fn metadata_email_reads_the_trimmed_body() {
+        let (addr, server) = serve_script(vec![Reply::new(200, " signer@example.com\n")]).await;
+        let url = format!("http://{addr}/email");
+        assert_eq!(
+            metadata_email(&http(), &url).await.unwrap(),
+            "signer@example.com"
+        );
+        let request = server.await.unwrap().remove(0).to_ascii_lowercase();
+        assert!(request.contains("metadata-flavor: google"), "{request}");
+    }
+
+    #[tokio::test]
+    async fn metadata_email_refuses_a_failed_status_and_a_bad_email() {
+        let replies = vec![Reply::new(500, "boom"), Reply::new(200, "not an email")];
+        let (addr, _server) = serve_script(replies).await;
+        let url = format!("http://{addr}/email");
+        let err = metadata_email(&http(), &url).await.unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Auth);
+        assert!(err.to_string().contains("status 500: boom"), "{err}");
+        let err = metadata_email(&http(), &url).await.unwrap_err();
+        assert_eq!(err.kind(), GcsErrorKind::Config);
+    }
+
+    #[tokio::test]
+    async fn metadata_email_reports_an_unreachable_server() {
+        let url = format!("http://{}/email", closed_addr());
+        assert!(metadata_email(&http(), &url).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn user_auth_keeps_its_signer_email() {
+        let auth = crate::gcs::gcs_client::tests::user_auth();
+        assert_eq!(
+            auth.signer_email(&http()).await.unwrap(),
+            "signer@example.iam.gserviceaccount.com"
+        );
+        assert!(auth.validate().is_ok());
+        assert!(Auth::Metadata.validate().is_ok());
     }
 }
