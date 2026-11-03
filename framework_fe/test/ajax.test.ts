@@ -277,4 +277,14 @@ describe("ajax", () => {
       code: 200,
     } satisfies Partial<AjaxError>);
   });
+
+  it("refuses a path param that is a dot segment", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (const id of [".", ".."]) {
+      await expect(ajax("/item/{id}", "GET", null, { id })).rejects.toThrow("not valid");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

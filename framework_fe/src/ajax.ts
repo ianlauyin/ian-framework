@@ -45,7 +45,12 @@ export const ajax = async <
       if (value === undefined || value === null || value === "") {
         throw new Error(`Path param ${key} is required`);
       }
-      return encodeURIComponent(String(value));
+      const text = String(value);
+      // "." and ".." stay as they are after encoding, and the browser would then change the path.
+      if (text === "." || text === "..") {
+        throw new Error(`Path param ${key} is not valid`);
+      }
+      return encodeURIComponent(text);
     });
   if (isGetOrDelete && request) {
     const query = new URLSearchParams();
