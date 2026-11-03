@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -13,9 +14,25 @@ const API_ROOT: &str = "https://secretmanager.googleapis.com/v1";
 const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
 const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+// After a failed metadata probe, later calls skip the probe for this time.
+const UNREACHABLE_RETRY: Duration = Duration::from_secs(30);
 
 // None means that the process has no credentials, so each read falls back to the env var.
 pub(crate) static SECRET_MANAGER: OnceCell<Option<SecretManager>> = OnceCell::const_new();
+
+// The metadata server may be down for a short time, so an unreachable server is not kept in the OnceCell.
+static UNREACHABLE_AT: StdMutex<Option<Instant>> = StdMutex::new(None);
+
+enum InitError {
+    Gcp(GcpError),
+    MetadataUnreachable,
+}
+
+impl From<GcpError> for InitError {
+    fn from(err: GcpError) -> Self {
+        InitError::Gcp(err)
+    }
+}
 
 // The value is a secret. No error of this file holds the value or a parser error that can quote it.
 pub(crate) struct SecretManager {
@@ -29,10 +46,20 @@ pub(crate) struct SecretManager {
 
 impl SecretManager {
     pub(crate) async fn shared() -> Result<Option<&'static SecretManager>, GcpError> {
-        SECRET_MANAGER
-            .get_or_try_init(Self::from_adc)
-            .await
-            .map(Option::as_ref)
+        if let Some(state) = SECRET_MANAGER.get() {
+            return Ok(state.as_ref());
+        }
+        if unreachable_recently() {
+            return Ok(None);
+        }
+        match SECRET_MANAGER.get_or_try_init(Self::from_adc).await {
+            Ok(state) => Ok(state.as_ref()),
+            Err(InitError::Gcp(err)) => Err(err),
+            Err(InitError::MetadataUnreachable) => {
+                *lock_unreachable() = Some(Instant::now());
+                Ok(None)
+            }
+        }
     }
 
     // None means that the secret or its latest version does not exist.
@@ -51,12 +78,15 @@ impl SecretManager {
         access_at(&self.http, &url, &token, self.quota_project.as_deref()).await
     }
 
-    async fn from_adc() -> Result<Option<Self>, GcpError> {
+    async fn from_adc() -> Result<Option<Self>, InitError> {
         let credentials = Credentials::from_adc().await?;
         credentials.validate()?;
         let http = http_client()?;
         let project = match &credentials {
-            Credentials::Metadata => metadata_project(&http, METADATA_PROJECT_URL).await?,
+            Credentials::Metadata => metadata_project(&http, METADATA_PROJECT_URL)
+                .await?
+                .ok_or(InitError::MetadataUnreachable)
+                .map(Some)?,
             Credentials::User(_) => user_project(&credentials)?,
         };
         let Some(project) = project else {
@@ -80,6 +110,14 @@ impl SecretManager {
         }
         Ok(token.value.clone())
     }
+}
+
+fn lock_unreachable() -> std::sync::MutexGuard<'static, Option<Instant>> {
+    UNREACHABLE_AT.lock().unwrap_or_else(|err| err.into_inner())
+}
+
+fn unreachable_recently() -> bool {
+    lock_unreachable().is_some_and(|at| at.elapsed() < UNREACHABLE_RETRY)
 }
 
 // The metadata server is the last credentials source. When it cannot be reached, the process has no credentials.
