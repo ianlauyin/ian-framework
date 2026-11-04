@@ -16,3 +16,6 @@ pub mod gcs;
 
 #[cfg(feature = "monitor")]
 pub mod monitor;
+
+#[cfg(test)]
+mod test;

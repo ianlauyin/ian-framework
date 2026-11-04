@@ -1,6 +1,6 @@
-mod put_request;
-mod resumable_upload;
-mod upload_source;
+pub(crate) mod put_request;
+pub(crate) mod resumable_upload;
+pub(crate) mod upload_source;
 
 pub use put_request::{PutBody, PutOptions, PutRequest};
 

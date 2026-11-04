@@ -19,18 +19,3 @@ pub(crate) fn encode_seg(segment: &str) -> String {
 pub(crate) fn encode_object_id(name: &str) -> String {
     encode_seg(name)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn id_encodes_slashes() {
-        assert_eq!(
-            encode_object_id("photos/my cat.jpeg"),
-            "photos%2Fmy%20cat.jpeg"
-        );
-        assert_eq!(encode_seg("é"), "%C3%A9");
-        assert_eq!(encode_seg("+"), "%2B");
-    }
-}

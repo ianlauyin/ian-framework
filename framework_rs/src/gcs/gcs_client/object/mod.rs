@@ -1,7 +1,7 @@
-mod list_page;
-mod list_query;
-mod object_meta;
-mod object_reader;
+pub(crate) mod list_page;
+pub(crate) mod list_query;
+pub(crate) mod object_meta;
+pub(crate) mod object_reader;
 
 pub use list_page::ListPage;
 pub use list_query::ListQuery;

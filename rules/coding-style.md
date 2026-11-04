@@ -31,8 +31,10 @@ The Rust library is the crate `ian_framework` in `framework_rs/`.
 ### Tests
 
 - In the tests, do not use a name from a project of the user. This includes repo names, app ids, env variable names, secret names, GCP project ids, service accounts and bucket names. Use generic names: `my-app`, `my-project` and `APP_KEY`.
-- Put the tests in one `#[cfg(test)] mod tests` at the end of the source file that holds the tested item.
-- Keep each test helper in the test module that uses it. If the tests of two or more files use a test-only item, put the item in the `#[cfg(test)] mod tests` of the parent module. The other test modules can use it.
+- Put each test in `src/test/`. Do not put a test in the source file of the tested item. The `#[cfg(test)] mod test;` line in `src/lib.rs` is the only test item in the production code.
+- The folder `src/test/` has the same shape as the crate. The tests of `src/a/b.rs` are in `src/test/a/b.rs`. The tests of `src/a/mod.rs` are in `src/test/a/mod.rs`. Each test folder has a `mod.rs` that declares its child modules, with the same `#[cfg(feature = "...")]` attributes as the source.
+- A test reaches the tested item with a `crate::` path. When a test needs a private item, change the visibility of the item to `pub(crate)`. Do not use `pub` for this.
+- Keep each test helper in the test file that uses it. If the tests of two or more files use a test-only item, put the item in the `mod.rs` of the parent test folder. The other test files use it with a `crate::test::` path.
 - Keep all test-only code in a test module. This includes test constructors, test-only methods and test doubles. Do not add a `#[cfg(test)]` item to the production code.
 
 ### Safety
@@ -45,7 +47,8 @@ The Rust library is the crate `ian_framework` in `framework_rs/`.
 The frontend library is `framework_fe/`. It is not an application. It has no `src/module/` tree and no application context.
 
 - Put each library file in `framework_fe/src/`. A component with styles uses `framework_fe/src/{name}/index.tsx` and `framework_fe/src/{name}/index.css`.
-- Put the tests in `framework_fe/test/`. Do not put tests in `framework_fe/src/`.
+- Put the tests in `test/`. Do not put tests in `src/`.
+- The folder `test/` has the same shape as `src/`. The test of `src/a/b.ts` is `test/a/b.test.ts`. The test of `src/a/index.tsx` is `test/a/index.test.tsx`.
 - Each `index.css` file has only one root selector.
 - Nest each child selector inside the block of its parent.
 - Give the outermost tag of a component a class name with the `g-` prefix. Use the `g-` prefix also for the modifier classes on that tag.
