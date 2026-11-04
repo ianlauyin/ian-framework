@@ -2,7 +2,7 @@
 
 The parts that apply to all of this feature are in `spec/framework_rs/monitor/context.md`.
 
-The disk monitor checks the storage usage of one path on a Unix host on an interval. When the usage meets a threshold, it makes one `LogEvent` and gives the event to a sink that the caller supplies. The monitor does not know the shipper or the log server store.
+The disk monitor checks the storage usage of one path on a Linux host on an interval. When the usage meets a threshold, it makes one `LogEvent` and gives the event to a sink that the caller supplies. The monitor does not know the shipper or the log server store.
 
 ## DiskMonitorConfig
 
@@ -37,7 +37,8 @@ The disk monitor checks the storage usage of one path on a Unix host on an inter
 - The usage is the same as `df`: used blocks divided by used blocks plus the blocks that a normal user can use.
 - The monitor reads the first sample when the task starts and checks it at once. It takes the next samples on each interval.
 - When the file system has no blocks, the monitor skips that interval.
-- When the first sample cannot be read, the monitor calls `Logger::warn_with` one time with the action `DISK/cannotReadUsage`, an error whose display text is `cannot read the disk usage` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`. This is the case on a host that is not Unix, or when `path` does not exist.
+- On a host that is not Linux, the monitor calls `Logger::warn_with` one time with the action `DISK/unsupportedPlatform`, an error whose display text is `the disk monitor works only on Linux` and no context, and the task ends.
+- When the first sample cannot be read, the monitor calls `Logger::warn_with` one time with the action `DISK/cannotReadUsage`, an error whose display text is `cannot read the disk usage` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`. This is the case when `path` does not exist.
 - When a later sample cannot be read, the monitor skips that interval.
 
 ## Event

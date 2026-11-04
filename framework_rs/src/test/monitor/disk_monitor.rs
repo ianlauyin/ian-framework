@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
 use crate::shutdown::ShutdownReceiver;
 
 use crate::logging::LogLevel;
@@ -54,7 +55,7 @@ fn alert_gives_one_event_for_each_rise() {
     assert!(alert.check(90.0).is_some());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn read_usage_reads_an_existing_path() {
     let percent = read_usage(std::path::Path::new("/")).unwrap();
@@ -62,7 +63,7 @@ fn read_usage_reads_an_existing_path() {
     assert!(read_usage(std::path::Path::new("/no/such/path")).is_none());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn spawn_stops_on_shutdown() {
     let shutdown = ShutdownReceiver::new();

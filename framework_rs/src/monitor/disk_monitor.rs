@@ -46,6 +46,14 @@ impl DiskMonitor {
     {
         tokio::spawn(async move {
             let path = self.config.path;
+            if !cfg!(target_os = "linux") {
+                Logger::warn_with(
+                    "DISK/unsupportedPlatform",
+                    BTreeMap::new(),
+                    "the disk monitor works only on Linux".into(),
+                );
+                return;
+            }
             if read_usage(&path).is_none() {
                 Logger::warn_with(
                     "DISK/cannotReadUsage",
@@ -117,7 +125,7 @@ impl Alert {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub(crate) fn read_usage(path: &std::path::Path) -> Option<f64> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -137,12 +145,13 @@ pub(crate) fn read_usage(path: &std::path::Path) -> Option<f64> {
     )
 }
 
-#[cfg(not(unix))]
-fn read_usage(_path: &std::path::Path) -> Option<f64> {
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn read_usage(_path: &std::path::Path) -> Option<f64> {
     None
 }
 
 // Same as df: the blocks that root cannot use are not free, and the blocks that only root can use are not counted.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn usage_percent(blocks: u64, free: u64, available: u64) -> Option<f64> {
     let used = blocks.checked_sub(free)?;
     let total = used.checked_add(available)?;

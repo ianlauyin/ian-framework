@@ -10,7 +10,7 @@ A monitor checks a host value on an interval. When the value meets a threshold, 
 | Sub-feature | Document |
 | --- | --- |
 | CPU monitor on a Linux host | `spec/framework_rs/monitor/cpu-monitor.md` |
-| Disk monitor on a Unix host | `spec/framework_rs/monitor/disk-monitor.md` |
+| Disk monitor on a Linux host | `spec/framework_rs/monitor/disk-monitor.md` |
 
 ## Crate
 
