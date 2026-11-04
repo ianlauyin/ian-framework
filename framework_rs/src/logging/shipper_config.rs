@@ -1,8 +1,5 @@
 use std::fmt;
-use std::time::Duration;
 
-const DEFAULT_CAPACITY: usize = 10_000;
-const DEFAULT_SHIP_EVERY: Duration = Duration::from_secs(5);
 // log_request records the query and the JSON body, so a credential field must not reach a log.
 pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
     r"(?i)password",
@@ -19,9 +16,7 @@ pub struct ShipperConfig {
     pub(crate) app: String,
     pub(crate) endpoint: String,
     pub(crate) post_api_key: String,
-    pub(crate) capacity: usize,
     pub(crate) mask_patterns: Vec<String>,
-    pub(crate) ship_every: Duration,
 }
 
 impl ShipperConfig {
@@ -35,9 +30,7 @@ impl ShipperConfig {
             app: app.into(),
             endpoint: endpoint.into(),
             post_api_key: post_api_key.into(),
-            capacity: DEFAULT_CAPACITY,
             mask_patterns,
-            ship_every: DEFAULT_SHIP_EVERY,
         }
     }
 }
@@ -48,9 +41,7 @@ impl fmt::Debug for ShipperConfig {
             .field("app", &self.app)
             .field("endpoint", &self.endpoint)
             .field("post_api_key", &"***")
-            .field("capacity", &self.capacity)
             .field("mask_patterns", &self.mask_patterns)
-            .field("ship_every", &self.ship_every)
             .finish()
     }
 }

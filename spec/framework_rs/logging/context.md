@@ -8,7 +8,7 @@ This feature is not product business logic.
 | Sub-feature | Document |
 | --- | --- |
 | Event and log level | `spec/framework_rs/logging/event.md` |
-| Shipper, adapter and trace-only mode | `spec/framework_rs/logging/shipper.md` |
+| Shipper and adapter | `spec/framework_rs/logging/shipper.md` |
 | Global logger | `spec/framework_rs/logging/logger.md` |
 | Masking | `spec/framework_rs/logging/masking.md` |
 | Axum request middleware | `spec/framework_rs/logging/middleware.md` |
@@ -20,8 +20,8 @@ The framework does not read an environment variable for the log server settings.
 
 | Setting | Use |
 | --- | --- |
-| `endpoint` | The base URL of the log server. When it is not set or blank, the shipper is trace-only. |
-| `post_api_key` | The POST API key of the log server. The shipper sends it as `Authorization: Bearer {key}` on each batch POST. When it is not set or blank, the shipper sends no `Authorization` header. |
+| `endpoint` | The base URL of the log server. |
+| `post_api_key` | The POST API key of the log server. The shipper sends it as `Authorization: Bearer {key}` on each batch POST. |
 
 The log server trusts each event of an authorized POST. Thus it stores the `context` and `extra` that the project backend sets.
 

@@ -19,7 +19,6 @@ fn config(app: &str, endpoint: impl Into<String>) -> ShipperConfig {
 fn defaults() {
     let shipper = LogShipper::new(ShipperConfig::new("api")).unwrap();
     assert_eq!(shipper.inner.app, "api");
-    assert_eq!(shipper.inner.masks.len(), 7);
     assert_eq!(SHIP_CHUNK, 1_000);
     assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
 }
@@ -99,19 +98,6 @@ fn a_plain_http_endpoint_reaches_this_machine_or_a_private_address() {
             "{endpoint}"
         );
     }
-}
-
-#[test]
-fn default_patterns_mask_a_json_pair_in_a_string() {
-    let masks: Vec<Mask> = ShipperConfig::new("api")
-        .mask_patterns
-        .iter()
-        .filter_map(|pattern| Mask::new(pattern))
-        .collect();
-    let mut text = r#"[{"password":"hunter2","id":7},"Authorization: x"]"#.to_string();
-    mask_text(&masks, &mut text);
-    assert!(!text.contains("hunter2"), "{text}");
-    assert!(text.contains(r#""id":7"#));
 }
 
 #[test]

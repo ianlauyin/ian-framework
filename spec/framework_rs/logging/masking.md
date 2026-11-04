@@ -16,8 +16,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 Scope:
 
-- The shipper masks the `context` values, the `extra` values and `error_message`. It does not mask the other event fields.
-- The shipper masks in buffered mode and in trace-only mode.
+- The shipper masks the `context` values and the `extra` values. It does not mask the other event fields.
 - The shipper masks client events from `POST /log` and request events from the middleware.
 - The frontend logger also masks before it sends. The browser patterns and the shipper patterns are different lists. The frontend logger is in `spec/framework_fe/logger.md`.
 
@@ -31,7 +30,6 @@ Key rule:
 Value rule:
 
 - When the key does not match, the shipper first masks each `name=value` pair in a string value. The name of the pair has a match of a pattern. The shipper replaces the full pair with `***`. The value of the pair ends at `&`, `;` or whitespace.
-- The shipper also masks each JSON pair `"name": value` in a string value, where the name has a match of a pattern and the value is a string, a number or a word. The shipper replaces the full pair with `***`.
 - Then the shipper replaces each match of each pattern in the string value with `***`.
 - The patterns apply in list order.
 - The value rule also applies to a string in a nested array or a nested object of `extra`.

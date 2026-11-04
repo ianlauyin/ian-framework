@@ -41,6 +41,7 @@ The Rust library is the crate `ian_framework` in `framework_rs/`.
 
 - Do not show a secret, a token or a query string in `Debug` output or in an error message. For a type that holds a secret, write its `Debug` impl by hand.
 - Do not use `unwrap`, `expect`, `panic!`, `unreachable!`, `todo!` or an index that can be out of range outside tests. Use `get` or return an error.
+- Setup or startup work may use `expect` and `panic!` when the input is invalid, such as a constructor that runs once at startup. Write a message that names the cause. Do not put a secret in the message. Request-time code does not use them.
 
 ## Frontend (SolidJS + TypeScript)
 

@@ -2,6 +2,7 @@ pub(crate) mod client_log;
 pub(crate) mod event;
 pub(crate) mod log_shipper;
 pub(crate) mod logger;
+pub(crate) mod mask;
 pub(crate) mod shipper_config;
 
 pub use client_log::{client_events, client_log_router};

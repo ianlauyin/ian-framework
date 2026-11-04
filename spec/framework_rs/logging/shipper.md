@@ -6,21 +6,12 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 ### ShipperConfig
 
-`ShipperConfig::new` builds one `ShipperConfig` for one app. The argument is the app.
-
-| Field | Start value |
-| --- | --- |
-| `endpoint` | Not set |
-| `post_api_key` | Not set |
-| `capacity` | 10000 events |
-| `mask_patterns` | The default patterns in `spec/framework_rs/logging/masking.md` |
-| `ship_every` | 5 seconds |
+`ShipperConfig::new(app, endpoint, post_api_key, mask_patterns)` builds one `ShipperConfig` for one app. The default mask patterns are in `spec/framework_rs/logging/masking.md`.
 
 - `ShipperConfig::new` does not read an environment variable or Secret Manager.
-- The fields are public. The app sets `endpoint` and `post_api_key` on the config before `LogShipper::new`.
 - The app reads its own environment variables or secrets, with the names that the app chooses. Then it gives the values to the config. The app can use `ian_framework::env::optional` for this read. The lookup rules of `optional` are in `spec/framework_rs/env/read.md`.
 - `post_api_key` is the POST API key of the log server. It is a secret.
-- The `Debug` output of `ShipperConfig` does not show the `post_api_key` value. When `post_api_key` is set, the output shows `***`.
+- The `Debug` output of `ShipperConfig` does not show the `post_api_key` value. The output shows `***`.
 - The ship request time limit is 10 seconds.
 - The connect time limit of the ship HTTP client is 10 seconds.
 - The ship HTTP client does not follow redirects.
@@ -29,57 +20,39 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 `LogShipper::new` builds one shipper from that config. One shipper has one app. The app is the routing name.
 
-- The app name starts with a letter or a digit.
-- The other characters of the app name are letters, digits, `.`, `_`, or `-`.
+- The buffer capacity is 10000 events. The ship interval is 5 seconds. The config does not set them.
+- The app is not checked. The caller gives a valid app name.
 
-`LogShipper::new` returns no shipper in these conditions:
+`LogShipper::new` returns `LogShipper`. It panics in these conditions:
 
-- The app is empty.
-- The app has a forbidden character.
-- `capacity` is zero.
-- A `mask_patterns` item is not a valid regex.
-- `ship_every` is zero.
-- The endpoint is not valid. The endpoint rules are in the Trace-only mode section.
-- The POST API key is not valid. The POST API key rules are in the POST API key section.
+- A `mask_patterns` item is not a valid regex. The message names the pattern.
+- The POST API key is not a valid HTTP header value.
+- The HTTP client cannot be built.
 
-`LogShipper::new` writes one `tracing` info event with the field `app`. The message is one of these:
+`LogShipper::new` writes one `tracing` info event with the field `app` and the message `log shipping posts to the log server`.
 
-- `log shipping posts to the log server`, when the shipper has an endpoint.
-- `log shipping is trace-only`, when the shipper has no endpoint.
+### Endpoint and POST API key
 
-### POST API key
-
-The shipper first removes the whitespace at the start and at the end of `post_api_key`. Then it reads the key.
-
-These keys give a shipper with no POST API key:
-
-- A key that is not set.
-- A key that is empty after the removal of the whitespace.
-
-`LogShipper::new` returns no shipper for these keys:
-
-- A key with whitespace inside it, after the removal of the whitespace at the start and at the end.
-- A key that is not a valid HTTP header value.
-
-The `Debug` output of `LogShipper` does not show the POST API key. When the shipper has a key, the output shows `***`.
+- The shipper uses `endpoint` as given. It does not trim, parse or check it.
+- The shipper uses `post_api_key` as given. It does not trim or check it, except that the header value must be valid.
+- The `Debug` output of `LogShipper` does not show the POST API key. The output shows `***`.
 
 ### Record
 
 `LogShipper::record` stores one event in the local buffer.
 
-- Before it stores or traces the event, `LogShipper::record` masks the event `context` values and `extra` values.
-- In trace-only mode, `LogShipper::record` writes the event with `tracing`. It does not store the event.
+- Before it stores the event, `LogShipper::record` masks the event `context` values and `extra` values.
 - The shipper does not write `app` into the event.
 - The shipper stores the full `action`, `id`, and `context`.
-- The buffer keeps a maximum of `capacity` events.
+- The buffer keeps a maximum of 10000 events.
 - When the buffer is full, a new event removes the oldest event.
 
 ### Capacity warning
 
 After `LogShipper::record` stores the event, the shipper reads the buffer length.
 
-- The 80 percent limit is the smallest whole number that is at least 80 percent of `capacity`.
-- The length meets that limit when five times the length is at least four times `capacity`.
+- The 80 percent limit is the smallest whole number that is at least 80 percent of the capacity.
+- The length meets that limit when five times the length is at least four times the capacity.
 
 | Capacity | 80 percent limit |
 | --- | --- |
@@ -92,7 +65,7 @@ When the length meets the limit, `LogShipper::record` stores one new capacity wa
 
 - The shipper does not change the other events.
 - The warning is one event at the end of the buffer.
-- When the warning makes the buffer larger than `capacity`, the shipper first removes the oldest event.
+- When the warning makes the buffer larger than the capacity, the shipper first removes the oldest event.
 - The shipper stores the warning on the record that makes the length meet the limit.
 - The shipper does not store the warning again while the length stays at or above the limit.
 
@@ -118,8 +91,7 @@ The request has these properties:
 - The HTTP method is POST.
 - The URL is `{endpoint}/log/{app}`. `{app}` is the shipper app.
 - The content type is `application/json`.
-- When the shipper has a POST API key, the request has the header `Authorization: Bearer {key}`.
-- When the shipper has no POST API key, the request has no `Authorization` header.
+- The request has the header `Authorization: Bearer {key}`.
 - The request time limit is 10 seconds.
 
 The body is one JSON array of event objects.
@@ -136,8 +108,8 @@ Batch rules:
 - A response status from 200 through 299 keeps that batch out of the buffer.
 - A transport error puts that batch back at the front of the buffer.
 - An HTTP error status puts that batch back at the front of the buffer.
-- When that return makes the buffer larger than `capacity`, the shipper removes the newest events above the capacity.
-- An empty buffer with an endpoint does not send an HTTP request.
+- When that return makes the buffer larger than the capacity, the shipper removes the newest events above the capacity.
+- An empty buffer does not send an HTTP request.
 
 Capacity warning after a ship:
 
@@ -151,7 +123,7 @@ Loop task:
 - The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
 - `LogShipper::spawn_ship_loop` takes one `ian_framework::shutdown::ShutdownReceiver`. The shutdown module is in `spec/framework_rs/shutdown/receiver.md`.
 - It returns `tokio::task::JoinHandle<()>`.
-- The interval is `ship_every` from the config.
+- The interval is 5 seconds.
 - A ship failure does not stop the loop.
 - When the shutdown receiver is triggered, the loop stops and makes one final flush.
 - The final flush sends batches until the buffer is empty.
@@ -168,50 +140,3 @@ Log streams:
 ## Adapter
 
 The default shipper posts to `{endpoint}/log/{app}`. A consumer that maps the app to a different path uses an adapter. The adapter is outside this shipper.
-
-## Trace-only mode
-
-The shipper first removes the whitespace at the start and at the end of the endpoint. Then it reads the endpoint.
-
-These endpoints select trace-only mode:
-
-- An endpoint that is not set.
-- An endpoint that is empty after the removal of the whitespace. Thus an endpoint that has only whitespace selects trace-only mode.
-
-In trace-only mode, `LogShipper::record` writes each event with `tracing` at the event level:
-
-| Event level | Macro |
-| --- | --- |
-| `info` | `tracing::info!` |
-| `warn` | `tracing::warn!` |
-| `error` | `tracing::error!` |
-
-- The tracing fields are `app`, `id`, `action`, `latency_ms`, `error_message`, `context`, and `extra`.
-- `context` is the JSON text of the event `context`.
-- `extra` is the JSON text of the event `extra`.
-- The project installs a `tracing` subscriber to show these logs.
-
-Trace-only mode does not do these things:
-
-- Store events in the buffer.
-- Store the capacity warning.
-- Build an HTTP client.
-- Open an HTTP connection. This also applies to `LogShipper::spawn_ship_loop`.
-
-A missing log server does not cause a panic in the shipper.
-
-Endpoint rules:
-
-- An `https` endpoint sends batches. An `http` endpoint sends batches when its host is `localhost`, `127.0.0.1`, `[::1]`, or a private IPv4 address. A private IPv4 address is in `10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`. Each request carries the post API key. An `http` endpoint with a different host does not send batches.
-- The shipper removes a trailing slash from that URL.
-
-`LogShipper::new` returns no shipper for these endpoints:
-
-- An endpoint with a username or a password.
-- An endpoint with a query.
-- An endpoint with a fragment.
-- An endpoint with whitespace inside it, after the removal of the whitespace at the start and at the end.
-- An endpoint that is not a valid URL.
-- An endpoint with no host.
-- An endpoint with a scheme other than `http` or `https`.
-- An `http` endpoint with a host that is not `localhost`, `127.0.0.1`, `[::1]`, or a private IPv4 address.
