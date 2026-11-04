@@ -336,7 +336,7 @@ mod tests {
             "private_key": "SECRET-KEY-MATERIAL"
         }"#;
         let err = credentials_from_json(json).unwrap_err();
-        assert_eq!(err.code(), Some("GCP_CONFIG"));
+        assert_eq!(err.code(), "GCP_CONFIG");
         let text = err.to_string();
         assert!(text.contains("service account JSON keys"));
         assert!(!text.contains("SECRET-KEY-MATERIAL"));
@@ -350,7 +350,7 @@ mod tests {
             "source_credentials": {"type": "authorized_user"}
         }"#;
         let err = credentials_from_json(json).unwrap_err();
-        assert_eq!(err.code(), Some("GCP_CONFIG"));
+        assert_eq!(err.code(), "GCP_CONFIG");
         assert!(err.to_string().contains("impersonated"));
         assert!(!err.to_string().contains("generateAccessToken"));
     }
@@ -393,7 +393,7 @@ mod tests {
     fn user_adc_needs_each_field() {
         let json = r#"{"type":"authorized_user","client_id":"id","client_secret":"secret"}"#;
         let err = credentials_from_json(json).unwrap_err();
-        assert_eq!(err.code(), Some("GCP_CONFIG"));
+        assert_eq!(err.code(), "GCP_CONFIG");
         assert!(err.to_string().contains("refresh_token"));
     }
 
@@ -405,7 +405,7 @@ mod tests {
             refresh_token: "refresh".to_string(),
             quota_project_id: None,
         };
-        assert_eq!(user.validate().unwrap_err().code(), Some("GCP_CONFIG"));
+        assert_eq!(user.validate().unwrap_err().code(), "GCP_CONFIG");
     }
 
     #[test]
@@ -471,7 +471,7 @@ mod tests {
         assert_eq!(credentials.quota_project(), None);
         let missing = temp_path("named/missing.json");
         let err = adc_env(missing.to_str(), None, None).unwrap_err();
-        assert_eq!(err.code(), Some("GCP_CONFIG"));
+        assert_eq!(err.code(), "GCP_CONFIG");
     }
 
     #[test]
@@ -496,7 +496,7 @@ mod tests {
     #[tokio::test]
     async fn read_adc_at_rejects_a_missing_large_or_bad_file() {
         let missing = read_adc_at(&temp_path("read/missing.json")).await;
-        assert_eq!(missing.unwrap_err().code(), Some("GCP_CONFIG"));
+        assert_eq!(missing.unwrap_err().code(), "GCP_CONFIG");
 
         let large = temp_path("read/large.json");
         std::fs::create_dir_all(large.parent().unwrap()).unwrap();
@@ -523,7 +523,7 @@ mod tests {
             ..user()
         };
         let err = Credentials::User(incomplete).validate().unwrap_err();
-        assert_eq!(err.code(), Some("GCP_CONFIG"));
+        assert_eq!(err.code(), "GCP_CONFIG");
     }
 
     #[test]
@@ -554,14 +554,14 @@ mod tests {
     async fn token_from_response_rejects_a_bad_response() {
         let denied = response(401, r#"{"error":{"message":"bad grant"}}"#);
         let err = token_from_response(denied).await.err().unwrap();
-        assert_eq!(err.code(), Some("GCP_AUTH"));
+        assert_eq!(err.code(), "GCP_AUTH");
         assert!(err.to_string().contains("token status 401: bad grant"));
         for body in ["not json", r#"{"access_token":""}"#] {
             let err = token_from_response(response(200, body))
                 .await
                 .err()
                 .unwrap();
-            assert_eq!(err.code(), Some("GCP_AUTH"));
+            assert_eq!(err.code(), "GCP_AUTH");
         }
     }
 
@@ -580,6 +580,6 @@ mod tests {
 
         let url = format!("http://{}/token", closed_addr());
         let err = user().fetch_token_at(&http, &url).await.err().unwrap();
-        assert_eq!(err.code(), Some("GCP_AUTH"));
+        assert_eq!(err.code(), "GCP_AUTH");
     }
 }

@@ -45,7 +45,7 @@ The display text is the error code, then `: `, then the message.
 | `VALIDATION_ERROR` or `BAD_REQUEST` | 400 | The code of the exception | The message of the exception |
 | `FORBIDDEN` | 403 | The code of the exception | The message of the exception |
 | `NOT_FOUND` | 404 | The code of the exception | The message of the exception |
-| A different code, or no code | 500 | `INTERNAL_ERROR` | `internal error` |
+| A different code | 500 | `INTERNAL_ERROR` | `internal error` |
 
 - Only the code of the top exception counts. The code of a source does not change the result. Thus a client error that a caller wraps in a different exception becomes status 500.
 - A response with status 500 never holds the internal message or the trace.

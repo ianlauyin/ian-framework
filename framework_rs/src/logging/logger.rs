@@ -97,7 +97,7 @@ mod tests {
         Logger::warn_with("TEST/warn", "slow", BTreeMap::new());
         Logger::exception(
             "TEST/exception",
-            &crate::exception!("failed"),
+            &crate::exception!("failed", code = "TEST_FAILED"),
             BTreeMap::new(),
         );
     }

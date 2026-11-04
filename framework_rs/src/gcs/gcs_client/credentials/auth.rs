@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn user_adc_requires_a_signer_email() {
         let err = auth_from_credentials(user_credentials(), None).unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
         assert!(err
             .to_string()
             .contains("user application default credentials require a signer email"));
@@ -210,17 +210,17 @@ mod tests {
         let (addr, _server) = serve_script(replies).await;
         let url = format!("http://{addr}/email");
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
         assert!(err.to_string().contains("status 500: boom"), "{err}");
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 
     #[tokio::test]
     async fn metadata_email_reports_an_unreachable_server() {
         let url = format!("http://{}/email", closed_addr());
         let err = metadata_email(&http(), &url).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
     }
 
     #[tokio::test]

@@ -20,7 +20,7 @@ const SECRET_KEYS: [&str; 11] = [
 ];
 
 pub(crate) fn is_retryable(err: &Exception) -> bool {
-    matches!(err.code(), Some("GCS_TRANSPORT" | "GCS_UNAVAILABLE"))
+    matches!(err.code(), "GCS_TRANSPORT" | "GCS_UNAVAILABLE")
 }
 
 pub(crate) fn is_retryable_status(status: u16) -> bool {
@@ -106,10 +106,10 @@ fn is_token_end(ch: char) -> bool {
 // The gcp code and the gcs code have the same meaning. The message and the source stay.
 pub(crate) fn from_gcp(err: Exception) -> Exception {
     let code = match err.code() {
-        Some("GCP_AUTH") => "GCS_AUTH",
-        Some("GCP_CONFIG") => "GCS_CONFIG",
-        Some("GCP_API") => "GCS_API",
-        Some("GCP_TRANSPORT") => "GCS_TRANSPORT",
+        "GCP_AUTH" => "GCS_AUTH",
+        "GCP_CONFIG" => "GCS_CONFIG",
+        "GCP_API" => "GCS_API",
+        "GCP_TRANSPORT" => "GCS_TRANSPORT",
         _ => return err,
     };
     err.with_code(code)
@@ -145,23 +145,28 @@ mod tests {
 
     #[test]
     fn from_gcp_keeps_the_meaning_message_and_source() {
-        let source = exception!("inner", code = "GCP_API");
-        let err = exception!("outer", code = "GCP_TRANSPORT", source = source.clone());
+        let err = exception!(
+            "outer",
+            code = "GCP_TRANSPORT",
+            source = exception!("inner", code = "GCP_API")
+        );
         let err = from_gcp(err);
-        assert_eq!(err.code(), Some("GCS_TRANSPORT"));
+        assert_eq!(err.code(), "GCS_TRANSPORT");
         assert_eq!(err.message(), "outer");
-        assert_eq!(err.source_exception(), Some(&source));
+        let cause = err.source_exception().unwrap();
+        assert_eq!(cause.code(), "GCP_API");
+        assert_eq!(cause.message(), "inner");
         assert_eq!(
             from_gcp(exception!("x", code = "GCP_AUTH")).code(),
-            Some("GCS_AUTH")
+            "GCS_AUTH"
         );
         assert_eq!(
             from_gcp(exception!("x", code = "GCP_CONFIG")).code(),
-            Some("GCS_CONFIG")
+            "GCS_CONFIG"
         );
         assert_eq!(
             from_gcp(exception!("x", code = "GCP_API")).code(),
-            Some("GCS_API")
+            "GCS_API"
         );
     }
 

@@ -178,7 +178,7 @@ impl GcsClient {
             .await;
         let response = match result {
             Ok(response) => response,
-            Err(err) if err.code() == Some("GCS_NOT_FOUND") => return Ok(()),
+            Err(err) if err.code() == "GCS_NOT_FOUND" => return Ok(()),
             Err(err) => return Err(err),
         };
         let _ = response.bytes().await;
@@ -276,11 +276,7 @@ impl GcsClient {
                  the source ({check_err}); the object may exist at both names"
             ),
         };
-        let error = exception!(message, source = delete_err);
-        match kind {
-            Some(code) => error.with_code(code),
-            None => error,
-        }
+        exception!(message, code = kind, source = delete_err)
     }
 
     async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, Exception> {
@@ -511,7 +507,7 @@ fn build_request(http: &reqwest::Client, call: &Call, token: &str) -> reqwest::R
 fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
     match result {
         Ok(value) => Ok(Some(value)),
-        Err(err) if err.code() == Some("GCS_NOT_FOUND") => Ok(None),
+        Err(err) if err.code() == "GCS_NOT_FOUND" => Ok(None),
         Err(err) => Err(err),
     }
 }
@@ -836,12 +832,12 @@ pub(crate) mod tests {
     async fn an_api_error_keeps_the_status_text_and_the_detail() {
         let (addr, _server) = serve_script(vec![error_reply(403)]).await;
         let err = fake_client(addr).stat("a").await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
         assert!(err.to_string().contains("status 403"), "{err}");
         assert!(err.to_string().contains("nope"), "{err}");
         let (addr, _server) = serve_script(vec![error_reply(400)]).await;
         let err = fake_client(addr).stat("a").await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_API"));
+        assert_eq!(err.code(), "GCS_API");
     }
 
     #[tokio::test]
@@ -968,7 +964,7 @@ pub(crate) mod tests {
         client.delete_object("a").await.unwrap();
         client.delete_object("a").await.unwrap();
         let err = client.delete_object("a").await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
         let requests = server.await.unwrap();
         assert!(requests[0].starts_with("DELETE /storage/v1/b/my-bucket/o/a "));
     }
@@ -1003,7 +999,7 @@ pub(crate) mod tests {
             .rewrite_object("a", "b")
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCS_API"));
+        assert_eq!(err.code(), "GCS_API");
         assert!(err.to_string().contains("did not change"), "{err}");
     }
 
@@ -1026,7 +1022,7 @@ pub(crate) mod tests {
         ];
         let (addr, server) = serve_script(replies).await;
         let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
         let requests = server.await.unwrap();
         assert!(requests[3].starts_with("DELETE /storage/v1/b/my-bucket/o/b "));
     }
@@ -1043,8 +1039,8 @@ pub(crate) mod tests {
         let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
         assert!(err.to_string().contains("exists at both names"), "{err}");
         let cause = err.source_exception().unwrap();
-        assert_eq!(cause.code(), Some("GCS_AUTH"));
-        assert!(cause.location().is_some());
+        assert_eq!(cause.code(), "GCS_AUTH");
+        assert!(cause.location().1 > 0);
     }
 
     #[tokio::test]
@@ -1061,7 +1057,7 @@ pub(crate) mod tests {
         let (addr, _server) = serve_script(replies).await;
         let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
         assert!(err.to_string().contains("exists at both names"), "{err}");
-        assert_eq!(err.code(), Some("GCS_UNAVAILABLE"));
+        assert_eq!(err.code(), "GCS_UNAVAILABLE");
         assert!(crate::gcs::is_retryable(&err));
     }
 
@@ -1169,7 +1165,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn client_rejects_an_empty_bucket() {
         let err = GcsClient::new(" ", user_auth()).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 
     #[tokio::test]
@@ -1184,7 +1180,7 @@ pub(crate) mod tests {
             signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
         };
         let err = GcsClient::new("my-bucket", auth).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 
     #[test]
@@ -1193,17 +1189,14 @@ pub(crate) mod tests {
         assert!(not_found_as_none(missing).unwrap().is_none());
         assert_eq!(not_found_as_none(Ok(7)).unwrap(), Some(7));
         let denied: Result<(), Exception> = Err(exception!("denied", code = "GCS_AUTH"));
-        assert_eq!(
-            not_found_as_none(denied).unwrap_err().code(),
-            Some("GCS_AUTH")
-        );
+        assert_eq!(not_found_as_none(denied).unwrap_err().code(), "GCS_AUTH");
     }
 
     #[tokio::test]
     async fn move_rejects_the_same_object() {
         let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
         let err = client.move_object("a.txt", "a.txt").await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 
     #[tokio::test]
@@ -1213,7 +1206,7 @@ pub(crate) mod tests {
             .signed_get_url("a", Some(Duration::from_secs(604_801)), None)
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 
     #[tokio::test]
@@ -1224,7 +1217,7 @@ pub(crate) mod tests {
                 .signed_get_url("a", lifetime, None)
                 .await
                 .unwrap_err();
-            assert_eq!(err.code(), Some("GCS_CONFIG"));
+            assert_eq!(err.code(), "GCS_CONFIG");
         }
     }
 
@@ -1299,7 +1292,7 @@ pub(crate) mod tests {
             })
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCS_TRANSPORT"));
+        assert_eq!(err.code(), "GCS_TRANSPORT");
         let source = std::error::Error::source(&err).unwrap().to_string();
         assert!(!source.contains("secret"), "{source}");
         assert!(!source.contains("upload_id"), "{source}");

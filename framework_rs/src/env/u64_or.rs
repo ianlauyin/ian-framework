@@ -25,21 +25,22 @@ mod tests {
 
     #[test]
     fn gives_the_default_when_the_var_is_absent() {
-        assert_eq!(read(None), Ok(7));
+        assert_eq!(read(None).unwrap(), 7);
     }
 
     #[test]
     fn parses_the_value() {
-        assert_eq!(read(Some("0")), Ok(0));
-        assert_eq!(read(Some("42")), Ok(42));
-        assert_eq!(read(Some("18446744073709551615")), Ok(u64::MAX));
+        assert_eq!(read(Some("0")).unwrap(), 0);
+        assert_eq!(read(Some("42")).unwrap(), 42);
+        assert_eq!(read(Some("18446744073709551615")).unwrap(), u64::MAX);
     }
 
     #[test]
     fn rejects_a_value_that_is_not_a_u64() {
-        let invalid = invalid(NAME);
         for value in ["", " 42", "-1", "1.5", "abc", "18446744073709551616"] {
-            assert_eq!(read(Some(value)), Err(invalid.clone()), "{value:?}");
+            let error = read(Some(value)).unwrap_err();
+            assert_eq!(error.code(), invalid(NAME).code(), "{value:?}");
+            assert_eq!(error.message(), invalid(NAME).message(), "{value:?}");
         }
     }
 
@@ -52,6 +53,6 @@ mod tests {
     #[test]
     fn rejects_a_value_that_is_not_unicode() {
         let error = with_var(NAME, Some(not_unicode_value()), || u64_or(NAME, 7)).unwrap_err();
-        assert_eq!(error.code(), Some("ENV_NOT_UNICODE"));
+        assert_eq!(error.code(), "ENV_NOT_UNICODE");
     }
 }

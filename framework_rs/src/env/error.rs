@@ -42,15 +42,15 @@ mod tests {
 
     #[test]
     fn missing_and_invalid_keep_their_code() {
-        assert_eq!(missing("APP_KEY").code(), Some("ENV_MISSING"));
-        assert_eq!(invalid("APP_KEY").code(), Some("ENV_INVALID"));
+        assert_eq!(missing("APP_KEY").code(), "ENV_MISSING");
+        assert_eq!(invalid("APP_KEY").code(), "ENV_INVALID");
     }
 
     #[cfg(feature = "gcp")]
     #[test]
     fn secret_keeps_the_source_in_the_trace() {
         let error = secret("APP_KEY", exception!("denied", code = "GCP_AUTH"));
-        assert_eq!(error.code(), Some("ENV_SECRET"));
+        assert_eq!(error.code(), "ENV_SECRET");
         assert_eq!(
             error.to_string(),
             "APP_KEY cannot be read from Secret Manager"

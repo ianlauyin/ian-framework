@@ -300,7 +300,7 @@ UNSIGNED-PAYLOAD";
     #[test]
     fn attachment_disposition_rejects_an_empty_filename() {
         let err = attachment_disposition("").unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 
     #[test]
@@ -313,7 +313,7 @@ UNSIGNED-PAYLOAD";
         ] {
             assert_eq!(
                 signed_lifetime_seconds(bad).unwrap_err().code(),
-                Some("GCS_CONFIG")
+                "GCS_CONFIG"
             );
         }
         assert_eq!(
@@ -352,7 +352,7 @@ UNSIGNED-PAYLOAD";
     async fn sign_blob_reports_a_failed_call() {
         let (addr, _server) = serve_script(vec![Reply::new(403, "{}")]).await;
         let err = sign_blob(&fake_client(addr), b"p").await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
     }
 
     #[test]
@@ -363,7 +363,7 @@ UNSIGNED-PAYLOAD";
             br#"{"signedBlob":""}"#,
         ] {
             let err = signature_from_response(body).unwrap_err();
-            assert_eq!(err.code(), Some("GCS_API"));
+            assert_eq!(err.code(), "GCS_API");
         }
     }
 }

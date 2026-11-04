@@ -3,17 +3,20 @@ use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::Argon2;
 
 use crate::exception;
+use crate::exception::error_code;
 use crate::exception::Exception;
-use crate::validation_error;
+use crate::exception::Severity;
 
 const MAX_PASSWORD_BYTES: usize = 256;
 
 // Argon2 takes tens of milliseconds of CPU, so it runs on the blocking pool and does not stall the async workers.
 pub async fn hash_password(password: &str) -> Result<String, Exception> {
     if password.len() > MAX_PASSWORD_BYTES {
-        return Err(validation_error!(format!(
-            "password must not be longer than {MAX_PASSWORD_BYTES} bytes"
-        )));
+        return Err(exception!(
+            format!("password must not be longer than {MAX_PASSWORD_BYTES} bytes"),
+            code = error_code::VALIDATION_ERROR,
+            severity = Severity::Warn,
+        ));
     }
     let password = password.to_owned();
     tokio::task::spawn_blocking(move || hash(&password))
@@ -77,7 +80,7 @@ mod tests {
         assert!(verify_password(&limit, &hash).await);
         let long = "a".repeat(MAX_PASSWORD_BYTES + 1);
         let error = hash_password(&long).await.unwrap_err();
-        assert_eq!(error.code(), Some(error_code::VALIDATION_ERROR));
+        assert_eq!(error.code(), error_code::VALIDATION_ERROR);
         assert_eq!(
             error.message(),
             "password must not be longer than 256 bytes"

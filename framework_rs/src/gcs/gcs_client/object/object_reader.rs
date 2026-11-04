@@ -77,7 +77,7 @@ mod tests {
             serve_script(vec![Reply::new(200, "").declared_length(declared)]).await;
         let reader = fake_client(addr).open_object("a").await.unwrap();
         let err = reader.read_to_vec().await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 
     #[tokio::test]
@@ -85,7 +85,7 @@ mod tests {
         let (addr, _server) = serve_script(vec![Reply::new(200, "abc").declared_length(10)]).await;
         let reader = fake_client(addr).open_object("a").await.unwrap();
         let err = reader.read_to_vec().await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_TRANSPORT"));
+        assert_eq!(err.code(), "GCS_TRANSPORT");
     }
 
     #[tokio::test]
@@ -95,6 +95,6 @@ mod tests {
         let items: Vec<_> = reader.byte_stream().collect().await;
         assert_eq!(items[0].as_ref().unwrap(), b"abc");
         let err = items.last().unwrap().as_ref().unwrap_err();
-        assert_eq!(err.code(), Some("GCS_TRANSPORT"));
+        assert_eq!(err.code(), "GCS_TRANSPORT");
     }
 }

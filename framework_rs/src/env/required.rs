@@ -20,22 +20,23 @@ mod tests {
 
     #[test]
     fn gives_the_trimmed_value() {
-        assert_eq!(read(Some("value")), Ok("value".to_string()));
-        assert_eq!(read(Some("  value \n")), Ok("value".to_string()));
+        assert_eq!(read(Some("value")).unwrap(), "value");
+        assert_eq!(read(Some("  value \n")).unwrap(), "value");
     }
 
     #[test]
     fn rejects_an_absent_or_blank_var() {
-        let missing = missing(NAME);
-        assert_eq!(read(None), Err(missing.clone()));
-        assert_eq!(read(Some("")), Err(missing.clone()));
-        assert_eq!(read(Some(" \t")), Err(missing));
+        for value in [None, Some(""), Some(" \t")] {
+            let error = read(value).unwrap_err();
+            assert_eq!(error.code(), "ENV_MISSING");
+            assert_eq!(error.message(), missing(NAME).message());
+        }
     }
 
     #[test]
     fn rejects_a_value_that_is_not_unicode() {
         let error = with_var(NAME, Some(not_unicode()), || block_on(required(NAME))).unwrap_err();
-        assert_eq!(error.code(), Some("ENV_NOT_UNICODE"));
+        assert_eq!(error.code(), "ENV_NOT_UNICODE");
         assert!(error.message().contains(NAME));
     }
 

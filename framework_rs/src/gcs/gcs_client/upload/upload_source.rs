@@ -110,9 +110,9 @@ mod tests {
         assert_eq!(source.len(), 5);
         assert_eq!(source.read_chunk(1, 3).await.unwrap().as_ref(), b"ell");
         let err = source.read_chunk(3, 3).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_API"));
+        assert_eq!(err.code(), "GCS_API");
         let err = source.read_chunk(u64::MAX, usize::MAX).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_API"));
+        assert_eq!(err.code(), "GCS_API");
     }
 
     #[tokio::test]
@@ -124,7 +124,7 @@ mod tests {
         assert_eq!(source.read_chunk(2, 3).await.unwrap().as_ref(), b"llo");
         assert_eq!(source.read_chunk(0, 2).await.unwrap().as_ref(), b"he");
         let err = source.read_chunk(3, 9).await.unwrap_err();
-        assert_eq!(err.code(), Some("GCS_LOCAL"));
+        assert_eq!(err.code(), "GCS_LOCAL");
         std::fs::remove_file(path).unwrap();
     }
 
@@ -132,12 +132,12 @@ mod tests {
     async fn file_source_refuses_a_missing_file_and_a_directory() {
         let missing = PutBody::File(std::env::temp_dir().join("my-app-missing-file"));
         let err = UploadSource::open(&missing).await.map(|_| ()).unwrap_err();
-        assert_eq!(err.code(), Some("GCS_LOCAL"));
+        assert_eq!(err.code(), "GCS_LOCAL");
         let directory = PutBody::File(std::env::temp_dir());
         let err = UploadSource::open(&directory)
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCS_CONFIG"));
+        assert_eq!(err.code(), "GCS_CONFIG");
     }
 }

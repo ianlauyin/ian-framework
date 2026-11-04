@@ -474,12 +474,12 @@ mod tests {
         assert_eq!(offset, 4);
         assert_eq!(rewinds, 1);
         let stalled = advance_offset(&mut offset, &mut rewinds, 4, 100).unwrap_err();
-        assert_eq!(stalled.code(), Some("GCS_API"));
+        assert_eq!(stalled.code(), "GCS_API");
         advance_offset(&mut offset, &mut rewinds, 20, 100).unwrap();
         assert_eq!(offset, 20);
         assert_eq!(rewinds, 0);
         let past = advance_offset(&mut offset, &mut rewinds, 101, 100).unwrap_err();
-        assert_eq!(past.code(), Some("GCS_API"));
+        assert_eq!(past.code(), "GCS_API");
     }
 
     #[test]
@@ -491,7 +491,7 @@ mod tests {
             offset = 8;
         }
         let err = advance_offset(&mut offset, &mut rewinds, 0, 100).unwrap_err();
-        assert_eq!(err.code(), Some("GCS_UNAVAILABLE"));
+        assert_eq!(err.code(), "GCS_UNAVAILABLE");
         assert!(is_retryable(&err));
     }
 
@@ -730,7 +730,7 @@ mod tests {
         assert!(is_done(put_chunk(replies, 0).await));
         let replies = vec![Reply::new(500, "{}"), Reply::new(403, "{}")];
         let err = put_chunk(replies, 0).await.map(|_| ()).unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
     }
 
     #[tokio::test]
@@ -739,7 +739,7 @@ mod tests {
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCS_AUTH"));
+        assert_eq!(err.code(), "GCS_AUTH");
     }
 
     #[tokio::test]
@@ -762,7 +762,7 @@ mod tests {
             .await
             .map(|_| ())
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCS_API"));
+        assert_eq!(err.code(), "GCS_API");
     }
 
     #[test]

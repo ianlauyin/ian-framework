@@ -97,7 +97,7 @@ mod tests {
         ];
         for config in bad {
             let err = config.check().unwrap_err();
-            assert_eq!(err.code(), Some("AUTH_CONFIG"));
+            assert_eq!(err.code(), "AUTH_CONFIG");
         }
         let edge = config_with(|config| {
             config.max_age_secs = MAX_AGE_LIMIT_SECS;

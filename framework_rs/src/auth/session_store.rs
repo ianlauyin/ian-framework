@@ -505,7 +505,7 @@ mod tests {
         let err = SessionStore::connect("not a redis url", SessionConfig::default())
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("AUTH_CONFIG"));
+        assert_eq!(err.code(), "AUTH_CONFIG");
         assert!(!err.to_string().contains("not a redis url"));
 
         let config = SessionConfig {
@@ -515,7 +515,7 @@ mod tests {
         let err = SessionStore::connect("redis://127.0.0.1:6379", config)
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("AUTH_CONFIG"));
+        assert_eq!(err.code(), "AUTH_CONFIG");
 
         let config = SessionConfig {
             max_age_secs: 0,
@@ -524,7 +524,7 @@ mod tests {
         let err = SessionStore::connect("redis://127.0.0.1:6379", config)
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("AUTH_CONFIG"));
+        assert_eq!(err.code(), "AUTH_CONFIG");
     }
 
     #[test]

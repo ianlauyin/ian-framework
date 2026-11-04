@@ -352,7 +352,7 @@ mod tests {
         ];
         for body in cases {
             let err = decode_access_response(200, body).unwrap_err();
-            assert_eq!(err.code(), Some("GCP_API"));
+            assert_eq!(err.code(), "GCP_API");
             assert!(std::error::Error::source(&err).is_none());
             assert!(!format!("{err} {err:?}").contains("secret-value"), "{err}");
         }
@@ -363,13 +363,13 @@ mod tests {
         let body =
             br#"{"error":{"code":403,"message":"Permission denied","status":"PERMISSION_DENIED"}}"#;
         let err = decode_access_response(403, body).unwrap_err();
-        assert_eq!(err.code(), Some("GCP_AUTH"));
+        assert_eq!(err.code(), "GCP_AUTH");
         assert_eq!(
             err.message(),
             "secret manager status 403: Permission denied"
         );
         let err = decode_access_response(500, b"<html>down</html>").unwrap_err();
-        assert_eq!(err.code(), Some("GCP_API"));
+        assert_eq!(err.code(), "GCP_API");
         assert_eq!(err.message(), "secret manager status 500: ");
     }
 
@@ -402,7 +402,7 @@ mod tests {
         let manager = fake_secret_manager(closed_addr());
         for secret in ["", "A/B", "A?B", "A B"] {
             let err = manager.access_latest(secret).await.unwrap_err();
-            assert_eq!(err.code(), Some("GCP_CONFIG"), "{secret:?}");
+            assert_eq!(err.code(), "GCP_CONFIG", "{secret:?}");
         }
     }
 
@@ -413,7 +413,7 @@ mod tests {
         let err = access_at(&http, &format!("http://{addr}/v1/x:access"), "token", None)
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCP_TRANSPORT"));
+        assert_eq!(err.code(), "GCP_TRANSPORT");
         let source = std::error::Error::source(&err).unwrap().to_string();
         assert!(!source.contains(&addr.to_string()), "{source}");
     }
@@ -443,12 +443,12 @@ mod tests {
         let err = metadata_project(&http, &format!("http://{addr}/project-id"))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCP_AUTH"));
+        assert_eq!(err.code(), "GCP_AUTH");
         let (addr, _server) = serve(200, b" ".to_vec()).await;
         let err = metadata_project(&http, &format!("http://{addr}/project-id"))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), Some("GCP_CONFIG"));
+        assert_eq!(err.code(), "GCP_CONFIG");
     }
 
     #[test]
@@ -468,7 +468,7 @@ mod tests {
         );
         assert_eq!(read(None, None).unwrap(), None);
         let err = read(Some("bad/project"), None).unwrap_err();
-        assert_eq!(err.code(), Some("GCP_CONFIG"));
+        assert_eq!(err.code(), "GCP_CONFIG");
     }
 
     fn temp_adc(name: &str, json: &str) -> std::path::PathBuf {
