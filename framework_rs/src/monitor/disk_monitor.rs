@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -49,7 +49,7 @@ impl DiskMonitor {
             if read_usage(&path).is_none() {
                 Logger::warn_with(
                     "DISK/cannotReadUsage",
-                    BTreeMap::from([("path".to_string(), path.display().to_string())]),
+                    HashMap::from([("path".to_string(), path.display().to_string())]),
                     "cannot read the disk usage".into(),
                 );
                 return;
@@ -104,15 +104,14 @@ impl Alert {
         let mut event = LogEvent::warn(ACTION);
         event
             .extra
-            .insert("disk_percent".to_string(), round_one(percent).into());
+            .insert("disk_percent".to_string(), round_one(percent).to_string());
         event.extra.insert(
             "threshold_percent".to_string(),
-            self.threshold_percent.into(),
+            self.threshold_percent.to_string(),
         );
-        event.extra.insert(
-            "path".to_string(),
-            self.path.to_string_lossy().into_owned().into(),
-        );
+        event
+            .extra
+            .insert("path".to_string(), self.path.to_string_lossy().into_owned());
         Some(event)
     }
 }

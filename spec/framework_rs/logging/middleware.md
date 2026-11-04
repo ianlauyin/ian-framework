@@ -59,7 +59,7 @@ Level rules:
 
 ### Extra
 
-`extra` is the JSON object of the request body. A request with no logged body has an empty `extra`.
+`extra` is the flat form of the JSON object of the request body. A request with no logged body has an empty `extra`.
 
 The middleware reads the body only when all these rules are true:
 
@@ -69,7 +69,7 @@ The middleware reads the body only when all these rules are true:
 Body rules:
 
 - The body is one JSON object.
-- The middleware keeps each nested value.
+- The middleware keeps each string, number and `bool` value as text. It drops each array, each object and each null value.
 - A JSON body that is not an object gives an empty `extra`.
 - A body that is not valid JSON gives an empty `extra`.
 - The middleware does not log a body of a different media type.
@@ -77,4 +77,4 @@ Body rules:
 - The middleware gives the same body bytes to the inner handler.
 - The middleware does not read a different body. Thus a large body or a body without `content-length` goes to the handler as a stream.
 - When the body read fails, the middleware does not call the inner handler. It returns status 400 and records the event with status 400.
-- The shipper masks `context` and `extra` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. `extra` can have nested values, so the key rule applies to their keys. The pattern rule applies to the text of `request_url`.
+- The shipper masks `context` and `extra` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. The pattern rule applies to the text of `request_url`.

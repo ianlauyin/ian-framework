@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Instant;
 
@@ -8,6 +9,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value};
 
+use crate::logging::event::flatten_extra;
 use crate::logging::{LogEvent, LogShipper};
 
 pub(crate) const BODY_LOG_LIMIT: usize = 64 * 1024;
@@ -44,7 +46,7 @@ pub async fn log_request(
     response
 }
 
-async fn split_json_body(request: Request) -> (Option<Request>, Option<Map<String, Value>>) {
+async fn split_json_body(request: Request) -> (Option<Request>, Option<HashMap<String, String>>) {
     if !is_small_json_body(request.headers()) {
         return (Some(request), None);
     }
@@ -52,7 +54,9 @@ async fn split_json_body(request: Request) -> (Option<Request>, Option<Map<Strin
     let Ok(bytes) = to_bytes(body, BODY_LOG_LIMIT).await else {
         return (None, None);
     };
-    let fields = serde_json::from_slice::<Map<String, Value>>(&bytes).ok();
+    let fields = serde_json::from_slice::<Map<String, Value>>(&bytes)
+        .ok()
+        .map(flatten_extra);
     (Some(Request::from_parts(parts, Body::from(bytes))), fields)
 }
 

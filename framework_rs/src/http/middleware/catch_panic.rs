@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::future::Future;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::pin::Pin;
@@ -23,7 +23,7 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
         Err(_) => {
             Logger::error(
                 "HTTP/handlerPanicked",
-                BTreeMap::from([
+                HashMap::from([
                     ("method".to_string(), method.as_str().to_string()),
                     ("path".to_string(), path),
                 ]),

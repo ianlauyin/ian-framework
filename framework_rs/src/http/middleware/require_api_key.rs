@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -118,7 +118,7 @@ pub async fn require_api_key(
     if !allowed {
         Logger::warn(
             "HTTP/apiKeyRejected",
-            BTreeMap::from([("method".to_string(), method.as_str().to_string())]),
+            HashMap::from([("method".to_string(), method.as_str().to_string())]),
         );
         return ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized")
             .into_response();

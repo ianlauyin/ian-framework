@@ -4,8 +4,6 @@ use std::time::Duration;
 
 use crate::shutdown::ShutdownReceiver;
 
-use serde_json::Value;
-
 use super::{LogEvent, LogLevel, ShipperConfig, SHIP_CHUNK};
 
 pub(crate) const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -328,28 +326,11 @@ fn mask_event(masks: &[Mask], event: &mut LogEvent) {
         }
     }
     for (key, value) in event.extra.iter_mut() {
-        mask_entry(masks, key, value);
-    }
-}
-
-fn mask_entry(masks: &[Mask], key: &str, value: &mut Value) {
-    if masks.iter().any(|mask| mask.plain.is_match(key)) {
-        *value = Value::String(MASK.to_string());
-    } else {
-        mask_value(masks, value);
-    }
-}
-
-fn mask_value(masks: &[Mask], value: &mut Value) {
-    match value {
-        Value::String(text) => mask_text(masks, text),
-        Value::Array(items) => items.iter_mut().for_each(|item| mask_value(masks, item)),
-        Value::Object(map) => {
-            for (key, item) in map.iter_mut() {
-                mask_entry(masks, key, item);
-            }
+        if masks.iter().any(|mask| mask.plain.is_match(key)) {
+            *value = MASK.to_string();
+        } else {
+            mask_text(masks, value);
         }
-        _ => {}
     }
 }
 

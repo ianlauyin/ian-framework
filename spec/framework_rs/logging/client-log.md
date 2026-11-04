@@ -31,7 +31,7 @@ The function sets the fields of the result as follows:
 
 The function reads each `extra` key:
 
-- The function stores at most 32 keys. It ignores the keys after the 32nd stored key.
+- The function reads the keys in sorted order. It stores at most 32 keys. It ignores the keys after the 32nd stored key.
 - The function does not store a value that is longer than 2048 bytes.
 - The function does not store an empty key.
 - The function stores a key only when each character is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.

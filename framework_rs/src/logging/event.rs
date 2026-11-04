@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -49,8 +49,9 @@ pub struct LogEvent {
     pub(crate) level: LogLevel,
     #[serde(default, deserialize_with = "text_or_none")]
     pub(crate) error_message: Option<String>,
-    pub(crate) context: BTreeMap<String, String>,
-    pub(crate) extra: Map<String, Value>,
+    pub(crate) context: HashMap<String, String>,
+    #[serde(deserialize_with = "flat_extra")]
+    pub(crate) extra: HashMap<String, String>,
 }
 
 impl LogEvent {
@@ -98,11 +99,11 @@ impl LogEvent {
         self.error_message.as_deref()
     }
 
-    pub fn context(&self) -> &BTreeMap<String, String> {
+    pub fn context(&self) -> &HashMap<String, String> {
         &self.context
     }
 
-    pub fn extra(&self) -> &Map<String, Value> {
+    pub fn extra(&self) -> &HashMap<String, String> {
         &self.extra
     }
 
@@ -124,7 +125,7 @@ impl LogEvent {
             latency_ms: None,
             level: self.level,
             error_message,
-            context: BTreeMap::new(),
+            context: HashMap::new(),
             extra: client_extra(&self.extra),
         }
     }
@@ -137,8 +138,8 @@ impl LogEvent {
             latency_ms: None,
             level,
             error_message,
-            context: BTreeMap::new(),
-            extra: Map::new(),
+            context: HashMap::new(),
+            extra: HashMap::new(),
         }
     }
 }
@@ -174,19 +175,22 @@ fn client_error_message(message: Option<&str>) -> String {
     text
 }
 
-fn client_extra(extra: &Map<String, Value>) -> Map<String, Value> {
-    let mut kept = Map::new();
-    for (key, value) in extra {
+fn client_extra(extra: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut keys: Vec<&String> = extra.keys().collect();
+    keys.sort();
+    let mut kept = HashMap::new();
+    for key in keys {
         if kept.len() >= CLIENT_EXTRA_MAX_KEYS {
             break;
         }
         if !extra_key_ok(key) {
             continue;
         }
-        let Some(text) = extra_value(value) else {
+        let text = &extra[key];
+        if !extra_value_ok(text) {
             continue;
-        };
-        kept.insert(key.clone(), Value::String(text));
+        }
+        kept.insert(key.clone(), text.clone());
     }
     kept
 }
@@ -198,15 +202,28 @@ fn extra_key_ok(key: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
 }
 
-fn extra_value(value: &Value) -> Option<String> {
-    let text = match value {
-        Value::String(text) => text.clone(),
-        Value::Number(number) => number.to_string(),
-        Value::Bool(flag) => flag.to_string(),
-        _ => return None,
-    };
-    if text.len() > CLIENT_EXTRA_VALUE_MAX_BYTES || text.contains('\r') || text.contains('\n') {
-        return None;
-    }
-    Some(text)
+fn extra_value_ok(text: &str) -> bool {
+    text.len() <= CLIENT_EXTRA_VALUE_MAX_BYTES && !text.contains('\r') && !text.contains('\n')
+}
+
+// `extra` has one level. A string, a number or a bool becomes text. An array, an object and null are dropped.
+pub(crate) fn flatten_extra(fields: Map<String, Value>) -> HashMap<String, String> {
+    fields
+        .into_iter()
+        .filter_map(|(key, value)| {
+            let text = match value {
+                Value::String(text) => text,
+                Value::Number(number) => number.to_string(),
+                Value::Bool(flag) => flag.to_string(),
+                _ => return None,
+            };
+            Some((key, text))
+        })
+        .collect()
+}
+
+fn flat_extra<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<HashMap<String, String>, D::Error> {
+    Ok(flatten_extra(Map::deserialize(deserializer)?))
 }

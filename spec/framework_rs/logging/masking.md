@@ -24,8 +24,7 @@ Scope:
 Key rule:
 
 - When a `context` key or an `extra` key matches a pattern, the shipper replaces the full value with the string `***`.
-- This rule applies to a value of each type.
-- This rule also applies to a key in a nested object of `extra`.
+- This rule applies to each `context` value and each `extra` value.
 - The shipper does not change the key.
 
 Value rule:
@@ -34,5 +33,3 @@ Value rule:
 - The shipper also masks each JSON pair `"name": value` in a string value, where the name has a match of a pattern and the value is a string, a number or a word. The shipper replaces the full pair with `***`.
 - Then the shipper replaces each match of each pattern in the string value with `***`.
 - The patterns apply in list order.
-- The value rule also applies to a string in a nested array or a nested object of `extra`.
-- The value rule does not mask a number, a `bool`, or null.

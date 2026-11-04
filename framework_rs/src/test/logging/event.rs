@@ -9,9 +9,11 @@ use serde_json::json;
 #[test]
 fn client_action_and_info_are_bounded() {
     let batch_event = |action: &str, info: Value| -> LogEvent {
-        let mut client = LogEvent::info(action);
-        client.extra = info.as_object().cloned().unwrap_or_default();
-        client.from_client()
+        let mut wire = serde_json::to_value(LogEvent::info(action)).unwrap();
+        wire["extra"] = info;
+        serde_json::from_value::<LogEvent>(wire)
+            .unwrap()
+            .from_client()
     };
     let forged = batch_event("a\nINFO forged\r", json!({}));
     assert!(!forged.action().contains(['\n', '\r']));
@@ -44,7 +46,7 @@ fn sample() -> LogEvent {
         .context
         .insert("user_agent".to_string(), "demo-agent".to_string());
     event.latency_ms = Some(12);
-    event.extra.insert("region".to_string(), json!("asia"));
+    event.extra.insert("region".to_string(), "asia".to_string());
     event
 }
 
@@ -222,18 +224,20 @@ fn new_keeps_the_client_action() {
 #[test]
 fn new_filters_info() {
     let mut client = LogEvent::info("/files");
-    client.extra.insert("bad key".to_string(), json!("no"));
-    client.extra.insert("k01".to_string(), json!("kept"));
-    client.extra.insert("k02".to_string(), json!("a\nb"));
-    client.extra.insert("k03".to_string(), json!("a\rb"));
-    client
-        .extra
-        .insert("k07".to_string(), json!("x".repeat(250)));
-    client.extra.insert("k08".to_string(), json!("ninth"));
-    client.extra.insert("k09".to_string(), json!(true));
+    client.extra.insert("bad key".to_string(), "no".to_string());
+    client.extra.insert("k01".to_string(), "kept".to_string());
+    client.extra.insert("k02".to_string(), "a\nb".to_string());
+    client.extra.insert("k03".to_string(), "a\rb".to_string());
+    client.extra.insert("k07".to_string(), "x".repeat(250));
+    client.extra.insert("k08".to_string(), "ninth".to_string());
+    client.extra.insert("k09".to_string(), "true".to_string());
     let stored = client.from_client();
     assert_eq!(
-        stored.extra.keys().cloned().collect::<Vec<_>>(),
+        {
+            let mut keys = stored.extra.keys().cloned().collect::<Vec<_>>();
+            keys.sort();
+            keys
+        },
         vec![
             "k01".to_string(),
             "k07".to_string(),
@@ -241,49 +245,67 @@ fn new_filters_info() {
             "k09".to_string(),
         ]
     );
-    assert_eq!(stored.extra["k01"], json!("kept"));
-    assert_eq!(stored.extra["k07"], json!("x".repeat(250)));
-    assert_eq!(stored.extra["k08"], json!("ninth"));
-    assert_eq!(stored.extra["k09"], json!("true"));
+    assert_eq!(stored.extra["k01"], "kept".to_string());
+    assert_eq!(stored.extra["k07"], "x".repeat(250));
+    assert_eq!(stored.extra["k08"], "ninth".to_string());
+    assert_eq!(stored.extra["k09"], "true".to_string());
     assert!(!stored.extra.contains_key("bad key"));
 
-    let mut scalars = LogEvent::error("/files", "boom");
-    scalars.extra.insert("a/b".to_string(), json!("no"));
-    scalars.extra.insert("a_b-c.d".to_string(), json!("yes"));
-    scalars.extra.insert("a".repeat(65), json!("long-key"));
-    scalars.extra.insert("count".to_string(), json!(12));
-    scalars.extra.insert("flag".to_string(), json!(true));
-    scalars.extra.insert("off".to_string(), json!(false));
-    scalars.extra.insert("ratio".to_string(), json!(1.5));
+    let scalars: LogEvent = serde_json::from_value(json!({
+        "ts": "2026-01-01T00:00:00+08:00",
+        "id": "",
+        "action": "/files",
+        "latency_ms": null,
+        "level": "error",
+        "error_message": "boom",
+        "context": {},
+        "extra": {
+            "a/b": "no",
+            "a_b-c.d": "yes",
+            "count": 12,
+            "flag": true,
+            "off": false,
+            "ratio": 1.5,
+            "nested": {"a": "b"},
+            "list": ["a"],
+            "none": null,
+        },
+    }))
+    .unwrap();
+    assert!(!scalars.extra.contains_key("nested"));
+    assert!(!scalars.extra.contains_key("list"));
+    assert!(!scalars.extra.contains_key("none"));
+    let mut scalars = scalars;
+    scalars.extra.insert("a".repeat(65), "long-key".to_string());
     let stored = scalars.from_client();
     assert_eq!(stored.extra.get("a/b"), None);
-    assert_eq!(stored.extra[&"a".repeat(65)], json!("long-key"));
-    assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
-    assert_eq!(stored.extra["count"], json!("12"));
-    assert_eq!(stored.extra["flag"], json!("true"));
-    assert_eq!(stored.extra["off"], json!("false"));
-    assert_eq!(stored.extra["ratio"], json!("1.5"));
+    assert_eq!(stored.extra[&"a".repeat(65)], "long-key".to_string());
+    assert_eq!(stored.extra["a_b-c.d"], "yes".to_string());
+    assert_eq!(stored.extra["count"], "12".to_string());
+    assert_eq!(stored.extra["flag"], "true".to_string());
+    assert_eq!(stored.extra["off"], "false".to_string());
+    assert_eq!(stored.extra["ratio"], "1.5".to_string());
 
     let mut text = LogEvent::info("/files");
-    text.extra.insert(String::new(), json!("no"));
-    text.extra.insert("café".to_string(), json!("no"));
-    text.extra.insert("ok!".to_string(), json!("no"));
+    text.extra.insert(String::new(), "no".to_string());
+    text.extra.insert("café".to_string(), "no".to_string());
+    text.extra.insert("ok!".to_string(), "no".to_string());
     let long = "中".repeat(67);
-    text.extra.insert("text".to_string(), json!(long.clone()));
+    text.extra.insert("text".to_string(), long.clone());
     let stored = text.from_client();
     assert_eq!(stored.extra.get(""), None);
     assert_eq!(stored.extra.get("café"), None);
     assert_eq!(stored.extra.get("ok!"), None);
-    assert_eq!(stored.extra["text"], json!(long));
+    assert_eq!(stored.extra["text"], long);
 
     let mut later = LogEvent::info("/files");
     for index in 0..8 {
-        later.extra.insert(format!("bad {index}"), json!("no"));
+        later.extra.insert(format!("bad {index}"), "no".to_string());
     }
-    later.extra.insert("zzzz".to_string(), json!("yes"));
+    later.extra.insert("zzzz".to_string(), "yes".to_string());
     let stored = later.from_client();
     assert_eq!(stored.extra.len(), 1);
-    assert_eq!(stored.extra["zzzz"], json!("yes"));
+    assert_eq!(stored.extra["zzzz"], "yes".to_string());
 }
 
 #[test]

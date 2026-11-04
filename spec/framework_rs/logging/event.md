@@ -15,7 +15,7 @@ One event is one `LogEvent`. One event has these fields:
 | `level` | One `LogLevel` value |
 | `error_message` | Text of the error, or null |
 | `context` | One JSON object with the facts about where the event came from. Each value is a string. |
-| `extra` | One JSON object with the data of the event |
+| `extra` | One flat JSON object with the data of the event. Each value is a string. |
 
 - The JSON of the event always has the key `error_message`. Its value is null when the event has no message.
 - The event has no `ip` field and no `user_agent` field. The route middleware and the client log route put them in `context`.
@@ -70,10 +70,12 @@ One event is one `LogEvent`. One event has these fields:
 
 ### Values
 
-- The type of `context` is `std::collections::BTreeMap<String, String>`.
+- The type of `context` is `std::collections::HashMap<String, String>`.
 - Deserialize of an event rejects a `context` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
-- The type of `extra` is `serde_json::Map<String, serde_json::Value>`. It is a JSON object, and its values can be nested.
-- An event that the app builds keeps each `extra` value. A nested value stays nested.
+- The type of `extra` is `std::collections::HashMap<String, String>`. It has one level. It does not hold a nested value.
+- Deserialize of an event reads each `extra` string, number and `bool` value as text. It drops each array, each object and each null value.
+- An event that the app builds keeps each `extra` value.
+- The order of the keys in a `context` object and in an `extra` object is not defined.
 
 ### Time
 

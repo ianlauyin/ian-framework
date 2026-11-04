@@ -138,8 +138,7 @@ async fn middleware_logs_the_request_url_with_its_query() {
 async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
     let shipper = shipper();
     let body =
-        json!({"name": "alice", "age": 3, "tags": ["a"], "nested": {"ok": true, "none": null}})
-            .to_string();
+        json!({"name": "alice", "age": 3, "tags": ["a"], "nested": {"ok": true}}).to_string();
     let (status, echoed) = post_body(
         &shipper,
         "/echo?x=1",
@@ -152,9 +151,9 @@ async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
     let event = &buffered_events(&shipper)[0];
     assert_eq!(event.action, "API/POST:/echo");
     assert_eq!(event.extra["name"], "alice");
-    assert_eq!(event.extra["age"], json!(3));
-    assert_eq!(event.extra["tags"], json!(["a"]));
-    assert_eq!(event.extra["nested"], json!({"ok": true, "none": null}));
+    assert_eq!(event.extra["age"], "3");
+    assert!(!event.extra.contains_key("tags"));
+    assert!(!event.extra.contains_key("nested"));
     assert_eq!(event.context["request_url"], "/echo?x=1");
 }
 
