@@ -46,7 +46,7 @@ The only way to make an exception is the macro `exception!`. It is exported at t
 - `Debug` is written by hand. It shows `severity`, `code`, `message` and `location`. It does not show the source, because the text of an external source can hold a secret, a token or a query string.
 - `Exception` does not implement `Clone`, `PartialEq` or `Eq`. Compare `code` and `message`.
 - `std::error::Error::source` gives the boxed source. When the source is an `Exception`, `source_exception` and `trace` also give it. A caller that writes the text of a source to a log must make sure that the text has no secret.
-- The `From` impls for `String` give the text for a log `error_message`. `Logger::exception(action, &exception, context)` uses it. The text has one line for each exception of `trace`, from this exception to the last `Exception` source. A line is `{index}: {SEVERITY} [{code}] {message} at {file}:{line}`, with the index from 0. The text does not hold an external source.
+- The `From` impls for `String` give the trace text. `Logger::error` writes that text after the display text when `error` is an `Exception`. `Logger::warn_with` uses the display text only. The rules are in `spec/framework_rs/logging/logger.md`. The trace text has one line for each exception of `trace`, from this exception to the last `Exception` source. A line is `{index}: {SEVERITY} [{code}] {message} at {file}:{line}`, with the index from 0. The text does not hold an external source.
 
 ## Codes
 

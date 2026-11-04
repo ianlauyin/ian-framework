@@ -35,7 +35,8 @@ One event is one `LogEvent`. One event has these fields:
 - `LogEvent::info(action)` is the constructor of an `info` event. The accessor that returned the `info` map is now `fields()`.
 - `LogEvent::new` is now `LogEvent::from_client`.
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
-- `Logger::warn(action, context)` has no message. `Logger::warn_with(action, error_message, context)` and `LogEvent::warn_with` give a message.
+- `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
+- `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
 
 ### Constructors
 
@@ -60,7 +61,7 @@ One event is one `LogEvent`. One event has these fields:
 
 | Source | `error_message` |
 | --- | --- |
-| `Logger::error` | The argument of the caller |
+| `Logger::error` | When the error is an `Exception`, the display text, a line break, then the trace text. Else the display text of the error. The rules are in `spec/framework_rs/logging/logger.md`. |
 | Request middleware, status 500 or higher | `response status {status}` |
 | GCS ops record with the level `error` | The record message, followed by ` (status {status})` when the record has a status |
 

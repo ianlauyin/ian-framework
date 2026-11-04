@@ -60,8 +60,8 @@ impl CpuMonitor {
         let Some(mut previous) = sample() else {
             Logger::error(
                 "CPU/cannotReadStat",
-                "cannot read the cpu stat file",
                 BTreeMap::from([("path".to_string(), LogValue::from(STAT_PATH))]),
+                "cannot read the cpu stat file".into(),
             );
             return;
         };

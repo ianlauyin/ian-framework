@@ -7,10 +7,17 @@ use axum::Router;
 
 use crate::http::middleware::{client_ip, require_same_origin, user_agent};
 
-use super::{LogBatch, LogShipper};
+use super::{LogEvent, LogShipper, SHIP_CHUNK};
 
 const CLIENT_LOG_PATH: &str = "/log";
 const BODY_LIMIT: usize = 1024 * 1024;
+
+pub fn client_events(events: &[LogEvent]) -> Option<Vec<LogEvent>> {
+    if events.is_empty() || events.len() > SHIP_CHUNK {
+        return None;
+    }
+    Some(events.iter().map(LogEvent::from_client).collect())
+}
 
 pub fn client_log_router(shipper: LogShipper) -> Router {
     Router::new()
@@ -27,10 +34,10 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
     let Ok(body) = to_bytes(request.into_body(), BODY_LIMIT).await else {
         return StatusCode::PAYLOAD_TOO_LARGE;
     };
-    let Ok(batch) = serde_json::from_slice::<LogBatch>(&body) else {
+    let Ok(events) = serde_json::from_slice::<Vec<LogEvent>>(&body) else {
         return StatusCode::BAD_REQUEST;
     };
-    let Some(events) = batch.events_opt() else {
+    let Some(events) = client_events(&events) else {
         return StatusCode::BAD_REQUEST;
     };
     for mut event in events {
@@ -48,7 +55,7 @@ mod tests {
     use super::*;
     use crate::http::middleware::log_request;
     use crate::logging::tests::buffered_events;
-    use crate::logging::{LogLevel, ShipperConfig};
+    use crate::logging::{LogEvent, LogLevel, ShipperConfig, SHIP_CHUNK};
     use axum::body::Body;
     use axum::middleware::from_fn_with_state;
     use serde_json::json;
@@ -75,7 +82,7 @@ mod tests {
 
     fn batch_body(actions: &[&str]) -> Body {
         let events: Vec<_> = actions.iter().map(|action| client_event(action)).collect();
-        Body::from(json!({ "events": events }).to_string())
+        Body::from(json!(events).to_string())
     }
 
     async fn send(shipper: &LogShipper, headers: &[(&str, &str)], body: Body) -> StatusCode {
@@ -117,7 +124,7 @@ mod tests {
         let shipper = shipper();
         let mut bad = client_event("old");
         bad.as_object_mut().unwrap().remove("error_message");
-        let body = json!({ "events": [bad, client_event("good")] }).to_string();
+        let body = json!([bad, client_event("good")]).to_string();
         let headers = [("sec-fetch-site", "same-origin")];
         let status = send(&shipper, &headers, Body::from(body)).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
@@ -134,7 +141,7 @@ mod tests {
         number["error_message"] = json!(123);
         let mut object = client_event("object");
         object["error_message"] = json!({"a": 1});
-        let body = json!({ "events": [number, object, client_event("good")] }).to_string();
+        let body = json!([number, object, client_event("good")]).to_string();
         let headers = [("sec-fetch-site", "same-origin")];
         let status = send(&shipper, &headers, Body::from(body)).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
@@ -222,6 +229,15 @@ mod tests {
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
+            send(
+                &shipper,
+                &headers,
+                Body::from(json!({ "events": [client_event("boom")] }).to_string()),
+            )
+            .await,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
             send(&shipper, &headers, Body::from(vec![b' '; BODY_LIMIT + 1])).await,
             StatusCode::PAYLOAD_TOO_LARGE
         );
@@ -261,5 +277,39 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].action, "boom");
         assert_eq!(events[1].action, "API/POST:/log");
+    }
+
+    #[test]
+    fn client_events_rejects_an_empty_list() {
+        assert!(client_events(&[]).is_none());
+    }
+
+    #[test]
+    fn client_events_returns_sanitized_events() {
+        let stored =
+            client_events(&[LogEvent::info("/a?x=1"), LogEvent::error("#frag", "boom")]).unwrap();
+        assert_eq!(stored.len(), 2);
+        assert_eq!(stored[0].action, "/a?x=1");
+        assert_eq!(stored[0].level, LogLevel::Info);
+        assert_eq!(stored[0].id, "");
+        assert!(stored[0].context.is_empty());
+        assert_eq!(stored[0].latency_ms, None);
+        assert_eq!(stored[1].action, "#frag");
+        assert_eq!(stored[1].level, LogLevel::Error);
+    }
+
+    #[test]
+    fn client_events_accepts_a_list_at_the_ship_chunk() {
+        let events: Vec<_> = (0..SHIP_CHUNK).map(|_| LogEvent::info("/ok")).collect();
+        let stored = client_events(&events).unwrap();
+        assert_eq!(stored.len(), SHIP_CHUNK);
+        assert_eq!(stored[0].id, "");
+    }
+
+    #[test]
+    fn client_events_rejects_a_list_above_the_ship_chunk() {
+        let events: Vec<_> = (0..=SHIP_CHUNK).map(|_| LogEvent::info("/ok")).collect();
+        assert_eq!(events.len(), SHIP_CHUNK + 1);
+        assert!(client_events(&events).is_none());
     }
 }

@@ -23,11 +23,11 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
         Err(_) => {
             Logger::error(
                 "HTTP/handlerPanicked",
-                "handler panicked",
                 BTreeMap::from([
                     ("method".to_string(), LogValue::from(method.as_str())),
                     ("path".to_string(), LogValue::from(path)),
                 ]),
+                "handler panicked".into(),
             );
             ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,

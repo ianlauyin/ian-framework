@@ -17,7 +17,7 @@ function hidePage(): void {
 }
 
 function sentEvents(call: number) {
-  return JSON.parse(fetchMock.mock.calls[call][1].body).events;
+  return JSON.parse(fetchMock.mock.calls[call][1].body);
 }
 
 async function loadLogger() {

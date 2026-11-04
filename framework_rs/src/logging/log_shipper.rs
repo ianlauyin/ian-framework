@@ -6,7 +6,7 @@ use crate::shutdown::ShutdownReceiver;
 
 use serde_json::Value;
 
-use super::{LogBatch, LogEvent, LogLevel, LogValue, ShipperConfig, SHIP_CHUNK};
+use super::{LogEvent, LogLevel, LogValue, ShipperConfig, SHIP_CHUNK};
 
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";
@@ -132,9 +132,7 @@ impl LogShipper {
             return;
         };
         let url = self.batch_url(&endpoint);
-        let posted = match serde_json::to_string(&LogBatch {
-            events: batch.clone(),
-        }) {
+        let posted = match serde_json::to_string(&batch) {
             Ok(body) => {
                 let mut request = client
                     .post(&url)
@@ -846,7 +844,7 @@ mod tests {
     }
 
     fn parse_body(body: &str) -> Vec<LogEvent> {
-        serde_json::from_str::<LogBatch>(body).unwrap().events
+        serde_json::from_str(body).unwrap()
     }
 
     #[test]
@@ -909,16 +907,15 @@ mod tests {
         assert_eq!(events[1].action, "two");
         assert_eq!(events[2].action, "three");
         let body: serde_json::Value = serde_json::from_str(&captured.body).unwrap();
-        assert!(body.as_object().is_some());
-        assert!(body.as_array().is_none());
-        assert_eq!(body.as_object().unwrap().len(), 1);
-        for item in body["events"].as_array().unwrap() {
+        let items = body.as_array().unwrap();
+        assert!(body.as_object().is_none());
+        assert_eq!(items.len(), 3);
+        for item in items {
             assert!(item.get("app").is_none());
             assert!(item.get("project").is_none());
             assert!(item.get("action").is_some());
             assert!(item.get("request").is_none());
         }
-        assert!(serde_json::from_str::<Vec<LogEvent>>(&captured.body).is_err());
         shipper.ship_batch().await;
         assert_eq!(shipper.buffered_len(), 0);
     }

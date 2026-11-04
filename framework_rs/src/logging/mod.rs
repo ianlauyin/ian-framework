@@ -1,13 +1,11 @@
 mod client_log;
 mod event;
-mod log_batch;
 mod log_shipper;
 mod logger;
 mod shipper_config;
 
-pub use client_log::client_log_router;
+pub use client_log::{client_events, client_log_router};
 pub use event::{LogEvent, LogLevel, LogValue};
-pub use log_batch::LogBatch;
 pub use log_shipper::LogShipper;
 pub use logger::Logger;
 pub use shipper_config::ShipperConfig;

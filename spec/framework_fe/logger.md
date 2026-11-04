@@ -101,7 +101,7 @@ The request has these properties:
 - The URL is `/log`. The logger does not add the prefix `/ajax`.
 - The request uses `credentials: "same-origin"`.
 - The request has the header `Content-Type: application/json`.
-- The body is `{"events":[...]}`. `events` is the full queue.
+- The body is one JSON array. The array holds each event in the queue.
 
 Send rules:
 

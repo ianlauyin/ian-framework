@@ -207,7 +207,7 @@ export class Logger {
       credentials: "same-origin",
       keepalive,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify(events),
     }).catch(() => {
       // ignore failures — logging is best-effort
     });
