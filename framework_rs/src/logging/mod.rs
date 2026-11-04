@@ -8,6 +8,6 @@ pub use client_log::{client_events, client_log_router};
 pub use event::{LogEvent, LogLevel, LogValue};
 pub use log_shipper::LogShipper;
 pub use logger::Logger;
-pub use shipper_config::ShipperConfig;
+pub use shipper_config::{ShipperConfig, DEFAULT_MASK_PATTERNS};
 
 pub(crate) const SHIP_CHUNK: usize = 1_000;

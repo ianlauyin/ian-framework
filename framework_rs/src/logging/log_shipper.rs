@@ -20,8 +20,8 @@ impl LogShipper {
         if !is_valid_app(&config) {
             return None;
         }
-        let endpoint = normalized_endpoint(config.endpoint.as_deref())?;
-        let post_api_key = bearer_header(config.post_api_key.as_deref())?;
+        let endpoint = normalized_endpoint(Some(config.endpoint.as_str()))?;
+        let post_api_key = bearer_header(Some(config.post_api_key.as_str()))?;
         let masks = config
             .mask_patterns
             .iter()
