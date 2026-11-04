@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::net::IpAddr;
 use std::time::Instant;
 
@@ -7,7 +6,9 @@ use axum::extract::{Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use serde_json::{Map, Value};
 
+use crate::logging::event::is_scalar;
 use crate::logging::{LogEvent, LogShipper};
 
 pub(crate) const BODY_LOG_LIMIT: usize = 64 * 1024;
@@ -33,9 +34,13 @@ pub async fn log_request(
     };
     let status = response.status().as_u16();
     let mut event = new_event(action(&method, &path), status);
-    event.context.insert("ip".to_string(), ip);
-    event.context.insert("user_agent".to_string(), user_agent);
-    event.context.insert("request_url".to_string(), request_url);
+    event.context.insert("ip".to_string(), ip.into());
+    event
+        .context
+        .insert("user_agent".to_string(), user_agent.into());
+    event
+        .context
+        .insert("request_url".to_string(), request_url.into());
     event.latency_ms = Some(millis_since(started));
     if let Some(fields) = body {
         event.extra = fields;
@@ -44,7 +49,7 @@ pub async fn log_request(
     response
 }
 
-async fn split_json_body(request: Request) -> (Option<Request>, Option<HashMap<String, String>>) {
+async fn split_json_body(request: Request) -> (Option<Request>, Option<Map<String, Value>>) {
     if !is_small_json_body(request.headers()) {
         return (Some(request), None);
     }
@@ -52,7 +57,9 @@ async fn split_json_body(request: Request) -> (Option<Request>, Option<HashMap<S
     let Ok(bytes) = to_bytes(body, BODY_LOG_LIMIT).await else {
         return (None, None);
     };
-    let fields = serde_json::from_slice::<HashMap<String, String>>(&bytes).ok();
+    let fields = serde_json::from_slice::<Map<String, Value>>(&bytes)
+        .ok()
+        .filter(|fields| fields.values().all(is_scalar));
     (Some(Request::from_parts(parts, Body::from(bytes))), fields)
 }
 

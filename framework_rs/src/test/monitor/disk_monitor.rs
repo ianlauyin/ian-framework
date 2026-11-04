@@ -6,6 +6,8 @@ use crate::shutdown::ShutdownReceiver;
 use crate::logging::LogLevel;
 use crate::monitor::disk_monitor::*;
 
+use serde_json::json;
+
 #[test]
 fn config_defaults() {
     let config = DiskMonitorConfig::new(90.0);
@@ -43,9 +45,9 @@ fn alert_gives_one_event_for_each_rise() {
     let event = alert.check(91.26).unwrap();
     assert_eq!(event.action, "DISK/meetsThreshold");
     assert_eq!(event.level, LogLevel::Warn);
-    assert_eq!(event.extra["disk_percent"], "91.3");
-    assert_eq!(event.extra["threshold_percent"], "90");
-    assert_eq!(event.extra["path"], "/data");
+    assert_eq!(event.extra["disk_percent"], json!(91.3));
+    assert_eq!(event.extra["threshold_percent"], json!(90.0));
+    assert_eq!(event.extra["path"], json!("/data"));
     assert!(alert.check(95.0).is_none());
     assert!(alert.check(90.0).is_none());
     assert!(alert.check(10.0).is_none());

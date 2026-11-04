@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::time::hkt_now;
 
@@ -49,8 +47,10 @@ pub struct LogEvent {
     pub(crate) level: LogLevel,
     #[serde(default, deserialize_with = "text_or_none")]
     pub(crate) error_message: Option<String>,
-    pub(crate) context: HashMap<String, String>,
-    pub(crate) extra: HashMap<String, String>,
+    #[serde(deserialize_with = "scalar_fields")]
+    pub(crate) context: Map<String, Value>,
+    #[serde(deserialize_with = "scalar_fields")]
+    pub(crate) extra: Map<String, Value>,
 }
 
 impl LogEvent {
@@ -98,11 +98,11 @@ impl LogEvent {
         self.error_message.as_deref()
     }
 
-    pub fn context(&self) -> &HashMap<String, String> {
+    pub fn context(&self) -> &Map<String, Value> {
         &self.context
     }
 
-    pub fn extra(&self) -> &HashMap<String, String> {
+    pub fn extra(&self) -> &Map<String, Value> {
         &self.extra
     }
 
@@ -124,7 +124,7 @@ impl LogEvent {
             latency_ms: None,
             level: self.level,
             error_message,
-            context: HashMap::new(),
+            context: Map::new(),
             extra: client_extra(&self.extra),
         }
     }
@@ -137,10 +137,27 @@ impl LogEvent {
             latency_ms: None,
             level,
             error_message,
-            context: HashMap::new(),
-            extra: HashMap::new(),
+            context: Map::new(),
+            extra: Map::new(),
         }
     }
+}
+
+// `context` and `extra` hold only a string, a number or a bool. Any other value is a deserialize error.
+fn scalar_fields<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Map<String, Value>, D::Error> {
+    let fields = Map::<String, Value>::deserialize(deserializer)?;
+    if let Some((key, _)) = fields.iter().find(|(_, value)| !is_scalar(value)) {
+        return Err(serde::de::Error::custom(format!(
+            "the value of `{key}` must be a string, a number or a bool"
+        )));
+    }
+    Ok(fields)
+}
+
+pub(crate) fn is_scalar(value: &Value) -> bool {
+    matches!(value, Value::String(_) | Value::Number(_) | Value::Bool(_))
 }
 
 // One bad `error_message` must not reject the batch, so a value that is not a string reads as none.
@@ -174,22 +191,19 @@ fn client_error_message(message: Option<&str>) -> String {
     text
 }
 
-fn client_extra(extra: &HashMap<String, String>) -> HashMap<String, String> {
-    let mut keys: Vec<&String> = extra.keys().collect();
-    keys.sort();
-    let mut kept = HashMap::new();
-    for key in keys {
+fn client_extra(extra: &Map<String, Value>) -> Map<String, Value> {
+    let mut kept = Map::new();
+    for (key, value) in extra {
         if kept.len() >= CLIENT_EXTRA_MAX_KEYS {
             break;
         }
         if !extra_key_ok(key) {
             continue;
         }
-        let text = &extra[key];
-        if !extra_value_ok(text) {
+        let Some(text) = extra_value(value) else {
             continue;
-        }
-        kept.insert(key.clone(), text.clone());
+        };
+        kept.insert(key.clone(), Value::String(text));
     }
     kept
 }
@@ -201,6 +215,15 @@ fn extra_key_ok(key: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
 }
 
-fn extra_value_ok(text: &str) -> bool {
-    text.len() <= CLIENT_EXTRA_VALUE_MAX_BYTES && !text.contains('\r') && !text.contains('\n')
+fn extra_value(value: &Value) -> Option<String> {
+    let text = match value {
+        Value::String(text) => text.clone(),
+        Value::Number(number) => number.to_string(),
+        Value::Bool(flag) => flag.to_string(),
+        _ => return None,
+    };
+    if text.len() > CLIENT_EXTRA_VALUE_MAX_BYTES || text.contains('\r') || text.contains('\n') {
+        return None;
+    }
+    Some(text)
 }

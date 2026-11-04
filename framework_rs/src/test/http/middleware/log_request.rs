@@ -137,7 +137,7 @@ async fn middleware_logs_the_request_url_with_its_query() {
 #[tokio::test]
 async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
     let shipper = shipper();
-    let body = json!({"name": "alice", "city": "hk"}).to_string();
+    let body = json!({"name": "alice", "age": 3, "ok": true}).to_string();
     let (status, echoed) = post_body(
         &shipper,
         "/echo?x=1",
@@ -150,7 +150,8 @@ async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
     let event = &buffered_events(&shipper)[0];
     assert_eq!(event.action, "API/POST:/echo");
     assert_eq!(event.extra["name"], "alice");
-    assert_eq!(event.extra["city"], "hk");
+    assert_eq!(event.extra["age"], json!(3));
+    assert_eq!(event.extra["ok"], json!(true));
     assert_eq!(event.context["request_url"], "/echo?x=1");
 }
 
@@ -165,8 +166,9 @@ async fn middleware_skips_a_body_it_cannot_log() {
             "name=alice".to_string(),
         ),
         ("application/json", "[1, 2]".to_string()),
-        ("application/json", r#"{"age": 3}"#.to_string()),
-        ("application/json", r#"{"nested": {"a": "b"}}"#.to_string()),
+        ("application/json", r#"{"nested": {"a": 1}}"#.to_string()),
+        ("application/json", r#"{"list": [1]}"#.to_string()),
+        ("application/json", r#"{"none": null}"#.to_string()),
         ("application/json", "{not json".to_string()),
         ("application/json", large),
     ];

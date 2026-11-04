@@ -1,5 +1,5 @@
+use serde_json::{Map, Value};
 use std::any::Any;
-use std::collections::HashMap;
 use std::future::Future;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::pin::Pin;
@@ -23,9 +23,9 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
         Err(_) => {
             Logger::error(
                 "HTTP/handlerPanicked",
-                HashMap::from([
-                    ("method".to_string(), method.as_str().to_string()),
-                    ("path".to_string(), path),
+                Map::from_iter([
+                    ("method".to_string(), Value::from(method.as_str())),
+                    ("path".to_string(), Value::from(path)),
                 ]),
                 "handler panicked".into(),
             );

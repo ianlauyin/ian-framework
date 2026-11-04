@@ -14,8 +14,8 @@ One event is one `LogEvent`. One event has these fields:
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
 | `error_message` | Text of the error, or null |
-| `context` | One JSON object with the facts about where the event came from. Each value is a string. |
-| `extra` | One flat JSON object with the data of the event. Each value is a string. |
+| `context` | One JSON object with the facts about where the event came from. Each value is a string, a number or a `bool`. |
+| `extra` | One JSON object with the data of the event. Each value is a string, a number or a `bool`. |
 
 - The JSON of the event always has the key `error_message`. Its value is null when the event has no message.
 - The event has no `ip` field and no `user_agent` field. The route middleware and the client log route put them in `context`.
@@ -37,7 +37,7 @@ One event is one `LogEvent`. One event has these fields:
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
 - `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
 - `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
-- `LogValue` does not exist. Each `context` value is a `String`.
+- `LogValue` does not exist. Each `context` value and each `extra` value is a `serde_json::Value`.
 
 ### Constructors
 
@@ -70,12 +70,9 @@ One event is one `LogEvent`. One event has these fields:
 
 ### Values
 
-- The type of `context` is `std::collections::HashMap<String, String>`.
-- Deserialize of an event rejects a `context` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
-- The type of `extra` is `std::collections::HashMap<String, String>`. It has one level. It does not hold a nested value.
-- Deserialize of an event rejects an `extra` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
-- An event that the app builds keeps each `extra` value.
-- The order of the keys in a `context` object and in an `extra` object is not defined.
+- The type of `context` is `serde_json::Map<String, serde_json::Value>`. It has one level.
+- The type of `extra` is `serde_json::Map<String, serde_json::Value>`. It has one level.
+- Deserialize of an event checks each `context` value and each `extra` value. A string, a number and a `bool` are valid. Null, an array and an object give a deserialize error that names the key.
 
 ### Time
 

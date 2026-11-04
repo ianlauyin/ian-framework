@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::logging::{LogEvent, LogLevel};
 use crate::time::hkt_now;
 
@@ -28,19 +26,25 @@ impl OpsRecord<'_> {
                 Some(status) => format!("{} (status {status})", self.message),
                 None => self.message.to_string(),
             }),
-            context: HashMap::new(),
-            extra: HashMap::new(),
+            context: serde_json::Map::new(),
+            extra: serde_json::Map::new(),
         };
         event
             .extra
-            .insert("message".to_string(), self.message.to_string());
+            .insert("message".to_string(), self.message.to_string().into());
         if let Some(status) = self.status {
-            event.extra.insert("status".to_string(), status.to_string());
+            event
+                .extra
+                .insert("status".to_string(), status.to_string().into());
         }
         for (key, value) in self.extra {
-            event.extra.insert((*key).to_string(), (*value).to_string());
+            event
+                .extra
+                .insert((*key).to_string(), (*value).to_string().into());
         }
-        event.extra.insert("bucket".to_string(), bucket.to_string());
+        event
+            .extra
+            .insert("bucket".to_string(), bucket.to_string().into());
         event
     }
 }

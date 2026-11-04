@@ -641,7 +641,10 @@ async fn ops_log_writes_the_bucket_and_omits_the_query() {
     assert_eq!(events[0].extra["message"], "gcs response");
     assert_eq!(events[0].latency_ms, Some(3));
     assert_eq!(
-        events[0].extra.get("bucket").map(String::as_str),
+        events[0]
+            .extra
+            .get("bucket")
+            .and_then(|value| value.as_str()),
         Some("my-bucket")
     );
     let line = serde_json::to_string(&events[0]).unwrap();

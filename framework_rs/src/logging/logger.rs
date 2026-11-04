@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use serde_json::{Map, Value};
 use std::error::Error;
 use std::sync::OnceLock;
 
@@ -19,27 +19,23 @@ impl Logger {
         LOGGER.get()
     }
 
-    pub fn info(action: impl Into<String>, context: HashMap<String, String>) {
+    pub fn info(action: impl Into<String>, context: Map<String, Value>) {
         Self::log(LogEvent::info(action), context);
     }
 
-    pub fn warn(action: impl Into<String>, context: HashMap<String, String>) {
+    pub fn warn(action: impl Into<String>, context: Map<String, Value>) {
         Self::log(LogEvent::warn(action), context);
     }
 
     pub fn warn_with(
         action: impl Into<String>,
-        context: HashMap<String, String>,
+        context: Map<String, Value>,
         error: Box<dyn Error>,
     ) {
         Self::log(LogEvent::warn_with(action, error.to_string()), context);
     }
 
-    pub fn error(
-        action: impl Into<String>,
-        context: HashMap<String, String>,
-        error: Box<dyn Error>,
-    ) {
+    pub fn error(action: impl Into<String>, context: Map<String, Value>, error: Box<dyn Error>) {
         let error_message = match error.downcast::<Exception>() {
             Ok(exception) => {
                 let message = exception.to_string();
@@ -51,7 +47,7 @@ impl Logger {
         Self::log(LogEvent::error(action, error_message), context);
     }
 
-    fn log(mut log_event: LogEvent, context: HashMap<String, String>) {
+    fn log(mut log_event: LogEvent, context: Map<String, Value>) {
         log_event.context = context;
         match LOGGER.get() {
             Some(shipper) => shipper.record(log_event),

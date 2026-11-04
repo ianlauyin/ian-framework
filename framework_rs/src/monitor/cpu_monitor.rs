@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use serde_json::{Map, Value};
 use std::time::Duration;
 
 use crate::logging::{LogEvent, Logger};
@@ -60,7 +60,7 @@ impl CpuMonitor {
         let Some(mut previous) = sample() else {
             Logger::error(
                 "CPU/cannotReadStat",
-                HashMap::from([("path".to_string(), STAT_PATH.to_string())]),
+                Map::from_iter([("path".to_string(), Value::from(STAT_PATH))]),
                 "cannot read the cpu stat file".into(),
             );
             return;
@@ -116,10 +116,10 @@ impl Alert {
         let mut event = LogEvent::warn(ACTION);
         event
             .extra
-            .insert("cpu_percent".to_string(), round_one(percent).to_string());
+            .insert("cpu_percent".to_string(), round_one(percent).into());
         event.extra.insert(
             "threshold_percent".to_string(),
-            self.threshold_percent.to_string(),
+            self.threshold_percent.into(),
         );
         Some(event)
     }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use serde_json::{Map, Value};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -49,7 +49,7 @@ impl DiskMonitor {
             if read_usage(&path).is_none() {
                 Logger::warn_with(
                     "DISK/cannotReadUsage",
-                    HashMap::from([("path".to_string(), path.display().to_string())]),
+                    Map::from_iter([("path".to_string(), Value::from(path.display().to_string()))]),
                     "cannot read the disk usage".into(),
                 );
                 return;
@@ -104,14 +104,15 @@ impl Alert {
         let mut event = LogEvent::warn(ACTION);
         event
             .extra
-            .insert("disk_percent".to_string(), round_one(percent).to_string());
+            .insert("disk_percent".to_string(), round_one(percent).into());
         event.extra.insert(
             "threshold_percent".to_string(),
-            self.threshold_percent.to_string(),
+            self.threshold_percent.into(),
         );
-        event
-            .extra
-            .insert("path".to_string(), self.path.to_string_lossy().into_owned());
+        event.extra.insert(
+            "path".to_string(),
+            self.path.to_string_lossy().into_owned().into(),
+        );
         Some(event)
     }
 }

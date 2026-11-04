@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use serde_json::{Map, Value};
 use std::fmt;
 use std::sync::Arc;
 
@@ -118,7 +118,7 @@ pub async fn require_api_key(
     if !allowed {
         Logger::warn(
             "HTTP/apiKeyRejected",
-            HashMap::from([("method".to_string(), method.as_str().to_string())]),
+            Map::from_iter([("method".to_string(), Value::from(method.as_str()))]),
         );
         return ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized")
             .into_response();

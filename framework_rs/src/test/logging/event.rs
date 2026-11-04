@@ -9,11 +9,9 @@ use serde_json::json;
 #[test]
 fn client_action_and_info_are_bounded() {
     let batch_event = |action: &str, info: Value| -> LogEvent {
-        let mut wire = serde_json::to_value(LogEvent::info(action)).unwrap();
-        wire["extra"] = info;
-        serde_json::from_value::<LogEvent>(wire)
-            .unwrap()
-            .from_client()
+        let mut client = LogEvent::info(action);
+        client.extra = info.as_object().cloned().unwrap_or_default();
+        client.from_client()
     };
     let forged = batch_event("a\nINFO forged\r", json!({}));
     assert!(!forged.action().contains(['\n', '\r']));
@@ -41,12 +39,12 @@ fn sample() -> LogEvent {
     event.id = "req-1".to_string();
     event
         .context
-        .insert("ip".to_string(), "203.0.113.8".to_string());
+        .insert("ip".to_string(), "203.0.113.8".to_string().into());
     event
         .context
-        .insert("user_agent".to_string(), "demo-agent".to_string());
+        .insert("user_agent".to_string(), "demo-agent".to_string().into());
     event.latency_ms = Some(12);
-    event.extra.insert("region".to_string(), "asia".to_string());
+    event.extra.insert("region".to_string(), json!("asia"));
     event
 }
 
@@ -141,17 +139,24 @@ fn a_utc_ts_is_accepted() {
 }
 
 #[test]
-fn a_non_string_context_value_is_rejected() {
-    for bad in [
-        json!(null),
-        json!(1),
-        json!(true),
-        json!({"a": 1}),
-        json!([1]),
-    ] {
-        let mut value = serde_json::to_value(sample()).unwrap();
-        value["context"]["bad"] = bad;
-        assert!(serde_json::from_value::<LogEvent>(value).is_err());
+fn context_and_extra_accept_only_a_string_a_number_or_a_bool() {
+    for field in ["context", "extra"] {
+        for good in [json!("text"), json!(1), json!(1.5), json!(true)] {
+            let mut value = serde_json::to_value(sample()).unwrap();
+            value[field]["k"] = good.clone();
+            let event = serde_json::from_value::<LogEvent>(value).unwrap();
+            let fields = if field == "context" {
+                event.context()
+            } else {
+                event.extra()
+            };
+            assert_eq!(fields["k"], good);
+        }
+        for bad in [json!(null), json!({"a": 1}), json!([1])] {
+            let mut value = serde_json::to_value(sample()).unwrap();
+            value[field]["k"] = bad;
+            assert!(serde_json::from_value::<LogEvent>(value).is_err());
+        }
     }
 }
 
@@ -168,7 +173,7 @@ fn new_drops_untrusted_fields() {
     event.id = "client-id".to_string();
     event
         .context
-        .insert("ip".to_string(), "203.0.113.8".to_string());
+        .insert("ip".to_string(), "203.0.113.8".to_string().into());
     event.latency_ms = Some(42);
     let before = hkt_now();
     let stored = event.from_client();
@@ -224,20 +229,18 @@ fn new_keeps_the_client_action() {
 #[test]
 fn new_filters_info() {
     let mut client = LogEvent::info("/files");
-    client.extra.insert("bad key".to_string(), "no".to_string());
-    client.extra.insert("k01".to_string(), "kept".to_string());
-    client.extra.insert("k02".to_string(), "a\nb".to_string());
-    client.extra.insert("k03".to_string(), "a\rb".to_string());
-    client.extra.insert("k07".to_string(), "x".repeat(250));
-    client.extra.insert("k08".to_string(), "ninth".to_string());
-    client.extra.insert("k09".to_string(), "true".to_string());
+    client.extra.insert("bad key".to_string(), json!("no"));
+    client.extra.insert("k01".to_string(), json!("kept"));
+    client.extra.insert("k02".to_string(), json!("a\nb"));
+    client.extra.insert("k03".to_string(), json!("a\rb"));
+    client
+        .extra
+        .insert("k07".to_string(), json!("x".repeat(250)));
+    client.extra.insert("k08".to_string(), json!("ninth"));
+    client.extra.insert("k09".to_string(), json!(true));
     let stored = client.from_client();
     assert_eq!(
-        {
-            let mut keys = stored.extra.keys().cloned().collect::<Vec<_>>();
-            keys.sort();
-            keys
-        },
+        stored.extra.keys().cloned().collect::<Vec<_>>(),
         vec![
             "k01".to_string(),
             "k07".to_string(),
@@ -245,63 +248,49 @@ fn new_filters_info() {
             "k09".to_string(),
         ]
     );
-    assert_eq!(stored.extra["k01"], "kept".to_string());
-    assert_eq!(stored.extra["k07"], "x".repeat(250));
-    assert_eq!(stored.extra["k08"], "ninth".to_string());
-    assert_eq!(stored.extra["k09"], "true".to_string());
+    assert_eq!(stored.extra["k01"], json!("kept"));
+    assert_eq!(stored.extra["k07"], json!("x".repeat(250)));
+    assert_eq!(stored.extra["k08"], json!("ninth"));
+    assert_eq!(stored.extra["k09"], json!("true"));
     assert!(!stored.extra.contains_key("bad key"));
 
-    for bad in [
-        json!(12),
-        json!(true),
-        json!(null),
-        json!(["a"]),
-        json!({"a": "b"}),
-    ] {
-        let wire = json!({
-            "ts": "2026-01-01T00:00:00+08:00",
-            "id": "",
-            "action": "/files",
-            "latency_ms": null,
-            "level": "error",
-            "error_message": "boom",
-            "context": {},
-            "extra": { "k": bad },
-        });
-        assert!(serde_json::from_value::<LogEvent>(wire).is_err());
-    }
-
     let mut scalars = LogEvent::error("/files", "boom");
-    scalars.extra.insert("a/b".to_string(), "no".to_string());
-    scalars
-        .extra
-        .insert("a_b-c.d".to_string(), "yes".to_string());
-    scalars.extra.insert("a".repeat(65), "long-key".to_string());
+    scalars.extra.insert("a/b".to_string(), json!("no"));
+    scalars.extra.insert("a_b-c.d".to_string(), json!("yes"));
+    scalars.extra.insert("a".repeat(65), json!("long-key"));
+    scalars.extra.insert("count".to_string(), json!(12));
+    scalars.extra.insert("flag".to_string(), json!(true));
+    scalars.extra.insert("off".to_string(), json!(false));
+    scalars.extra.insert("ratio".to_string(), json!(1.5));
     let stored = scalars.from_client();
     assert_eq!(stored.extra.get("a/b"), None);
-    assert_eq!(stored.extra[&"a".repeat(65)], "long-key".to_string());
-    assert_eq!(stored.extra["a_b-c.d"], "yes".to_string());
+    assert_eq!(stored.extra[&"a".repeat(65)], json!("long-key"));
+    assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
+    assert_eq!(stored.extra["count"], json!("12"));
+    assert_eq!(stored.extra["flag"], json!("true"));
+    assert_eq!(stored.extra["off"], json!("false"));
+    assert_eq!(stored.extra["ratio"], json!("1.5"));
 
     let mut text = LogEvent::info("/files");
-    text.extra.insert(String::new(), "no".to_string());
-    text.extra.insert("café".to_string(), "no".to_string());
-    text.extra.insert("ok!".to_string(), "no".to_string());
+    text.extra.insert(String::new(), json!("no"));
+    text.extra.insert("café".to_string(), json!("no"));
+    text.extra.insert("ok!".to_string(), json!("no"));
     let long = "中".repeat(67);
-    text.extra.insert("text".to_string(), long.clone());
+    text.extra.insert("text".to_string(), json!(long.clone()));
     let stored = text.from_client();
     assert_eq!(stored.extra.get(""), None);
     assert_eq!(stored.extra.get("café"), None);
     assert_eq!(stored.extra.get("ok!"), None);
-    assert_eq!(stored.extra["text"], long);
+    assert_eq!(stored.extra["text"], json!(long));
 
     let mut later = LogEvent::info("/files");
     for index in 0..8 {
-        later.extra.insert(format!("bad {index}"), "no".to_string());
+        later.extra.insert(format!("bad {index}"), json!("no"));
     }
-    later.extra.insert("zzzz".to_string(), "yes".to_string());
+    later.extra.insert("zzzz".to_string(), json!("yes"));
     let stored = later.from_client();
     assert_eq!(stored.extra.len(), 1);
-    assert_eq!(stored.extra["zzzz"], "yes".to_string());
+    assert_eq!(stored.extra["zzzz"], json!("yes"));
 }
 
 #[test]
