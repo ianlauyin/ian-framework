@@ -21,10 +21,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 
 use crate::gcp::UserCredentials;
-use crate::logging::ShipperConfig;
 
 use crate::gcs::gcs_client::*;
-use crate::test::logging::buffered_events;
+use crate::test::logging::{buffered_events, shipper_config};
 
 #[test]
 fn object_names_are_checked() {
@@ -496,7 +495,7 @@ async fn send_retries_a_transient_status() {
 async fn send_logs_a_failed_response_with_the_bucket() {
     let (addr, _server) = serve_script(vec![error_reply(404)]).await;
     let client = fake_client(addr);
-    let mut config = shipper_config("storage");
+    let config = shipper_config("storage");
     let shipper = LogShipper::new(config);
     client.attach_ops_log(shipper.clone());
     assert!(client.stat("a").await.is_err());
@@ -618,7 +617,7 @@ async fn signed_url_rejects_a_missing_or_zero_lifetime() {
 #[tokio::test]
 async fn ops_log_writes_the_bucket_and_omits_the_query() {
     let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
-    let mut config = shipper_config("storage");
+    let config = shipper_config("storage");
     let shipper = LogShipper::new(config);
     client.attach_ops_log(shipper.clone());
     client.record_op(OpsRecord {
