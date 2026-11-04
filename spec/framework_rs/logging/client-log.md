@@ -6,6 +6,8 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 A client can send log events. The client is not trusted.
 
+The app builds each event that does not come from a client. The app does not check that event. `LogEvent::from_client` checks an event from a client.
+
 ### LogEvent::from_client
 
 `LogEvent::from_client` checks one event.

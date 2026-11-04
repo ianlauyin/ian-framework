@@ -51,6 +51,8 @@ One event is one `LogEvent`. One event has these fields:
 - `action` is `impl Into<String>`.
 - A constructor sets `ts` to the current HKT time, `id` to an empty string, `latency_ms` to null, and `context` and `extra` to empty objects.
 - A constructor does not change the `action` text or the message text. Only `LogEvent::from_client` cuts text.
+- The app builds each event that does not come from a client. The app sets `extra` and does not check the keys or the values.
+- `LogEvent::from_client` checks an event from a client. The checks are in `spec/framework_rs/logging/client-log.md`.
 
 ### Error message
 
@@ -71,6 +73,7 @@ One event is one `LogEvent`. One event has these fields:
 - The type of `context` is `std::collections::BTreeMap<String, String>`.
 - Deserialize of an event rejects a `context` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
 - The type of `extra` is `serde_json::Map<String, serde_json::Value>`. It is a JSON object, and its values can be nested.
+- An event that the app builds keeps each `extra` value. A nested value stays nested.
 
 ### Time
 
