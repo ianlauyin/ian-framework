@@ -16,6 +16,16 @@ pub struct LogShipper {
     pub(crate) inner: Arc<Inner>,
 }
 
+pub(crate) struct Inner {
+    pub(crate) app: String,
+    pub(crate) endpoint: String,
+    pub(crate) post_api_key: reqwest::header::HeaderValue,
+    pub(crate) masks: Masks,
+    buffer: Mutex<LogBuffer>,
+    pub(crate) http: reqwest::Client,
+    shipping: tokio::sync::Mutex<()>,
+}
+
 impl LogShipper {
     pub fn new(config: ShipperConfig) -> Self {
         let mut post_api_key =
@@ -23,7 +33,12 @@ impl LogShipper {
                 .expect("post API key is not a valid header value");
         post_api_key.set_sensitive(true);
         let masks = Masks::new(&config.mask_patterns);
-        let http = ship_client().expect("log shipper HTTP client cannot be built");
+        let http = reqwest::Client::builder()
+            .connect_timeout(SHIP_TIMEOUT)
+            .timeout(SHIP_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("log shipper HTTP client cannot be built");
         tracing::info!(app = %config.app, "log shipping posts to the log server");
         Self {
             inner: Arc::new(Inner {
@@ -133,23 +148,4 @@ impl std::fmt::Debug for LogShipper {
             .field("buffered", &self.buffered_len())
             .finish_non_exhaustive()
     }
-}
-
-pub(crate) struct Inner {
-    pub(crate) app: String,
-    pub(crate) endpoint: String,
-    pub(crate) post_api_key: reqwest::header::HeaderValue,
-    pub(crate) masks: Masks,
-    buffer: Mutex<LogBuffer>,
-    pub(crate) http: reqwest::Client,
-    shipping: tokio::sync::Mutex<()>,
-}
-
-fn ship_client() -> Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder()
-        .connect_timeout(SHIP_TIMEOUT)
-        .timeout(SHIP_TIMEOUT)
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("ian_framework/", env!("CARGO_PKG_VERSION")))
-        .build()
 }
