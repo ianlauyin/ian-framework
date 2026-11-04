@@ -1,4 +1,4 @@
-use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -49,7 +49,7 @@ impl DiskMonitor {
             if read_usage(&path).is_none() {
                 Logger::warn_with(
                     "DISK/cannotReadUsage",
-                    Map::from_iter([("path".to_string(), Value::from(path.display().to_string()))]),
+                    BTreeMap::from([("path".to_string(), path.display().to_string().into())]),
                     "cannot read the disk usage".into(),
                 );
                 return;

@@ -1,4 +1,4 @@
-use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::logging::{LogEvent, Logger};
@@ -60,7 +60,7 @@ impl CpuMonitor {
         let Some(mut previous) = sample() else {
             Logger::error(
                 "CPU/cannotReadStat",
-                Map::from_iter([("path".to_string(), Value::from(STAT_PATH))]),
+                BTreeMap::from([("path".to_string(), STAT_PATH.into())]),
                 "cannot read the cpu stat file".into(),
             );
             return;

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::logging::{LogEvent, LogLevel};
 use crate::time::hkt_now;
 
@@ -26,8 +28,8 @@ impl OpsRecord<'_> {
                 Some(status) => format!("{} (status {status})", self.message),
                 None => self.message.to_string(),
             }),
-            context: serde_json::Map::new(),
-            extra: serde_json::Map::new(),
+            context: BTreeMap::new(),
+            extra: BTreeMap::new(),
         };
         event
             .extra

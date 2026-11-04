@@ -1,10 +1,10 @@
-use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::sync::OnceLock;
 
 use crate::exception::Exception;
 
-use super::{LogEvent, LogLevel, LogShipper};
+use super::{LogEvent, LogLevel, LogShipper, LogValue};
 
 static LOGGER: OnceLock<LogShipper> = OnceLock::new();
 
@@ -19,23 +19,27 @@ impl Logger {
         LOGGER.get()
     }
 
-    pub fn info(action: impl Into<String>, context: Map<String, Value>) {
+    pub fn info(action: impl Into<String>, context: BTreeMap<String, LogValue>) {
         Self::log(LogEvent::info(action), context);
     }
 
-    pub fn warn(action: impl Into<String>, context: Map<String, Value>) {
+    pub fn warn(action: impl Into<String>, context: BTreeMap<String, LogValue>) {
         Self::log(LogEvent::warn(action), context);
     }
 
     pub fn warn_with(
         action: impl Into<String>,
-        context: Map<String, Value>,
+        context: BTreeMap<String, LogValue>,
         error: Box<dyn Error>,
     ) {
         Self::log(LogEvent::warn_with(action, error.to_string()), context);
     }
 
-    pub fn error(action: impl Into<String>, context: Map<String, Value>, error: Box<dyn Error>) {
+    pub fn error(
+        action: impl Into<String>,
+        context: BTreeMap<String, LogValue>,
+        error: Box<dyn Error>,
+    ) {
         let error_message = match error.downcast::<Exception>() {
             Ok(exception) => {
                 let message = exception.to_string();
@@ -47,7 +51,7 @@ impl Logger {
         Self::log(LogEvent::error(action, error_message), context);
     }
 
-    fn log(mut log_event: LogEvent, context: Map<String, Value>) {
+    fn log(mut log_event: LogEvent, context: BTreeMap<String, LogValue>) {
         log_event.context = context;
         match LOGGER.get() {
             Some(shipper) => shipper.record(log_event),

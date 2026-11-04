@@ -37,7 +37,7 @@ One event is one `LogEvent`. One event has these fields:
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
 - `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
 - `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
-- `LogValue` does not exist. Each `context` value and each `extra` value is a `serde_json::Value`.
+- `ian_framework::logging::LogValue` is an untagged enum with the variants `Bool`, `Number` and `String`. Each `context` value and each `extra` value is a `LogValue`.
 
 ### Constructors
 
@@ -70,9 +70,9 @@ One event is one `LogEvent`. One event has these fields:
 
 ### Values
 
-- The type of `context` is `serde_json::Map<String, serde_json::Value>`. It has one level.
-- The type of `extra` is `serde_json::Map<String, serde_json::Value>`. It has one level.
-- Deserialize of an event checks each `context` value and each `extra` value. A string, a number and a `bool` are valid. Null, an array and an object give a deserialize error that names the key.
+- The type of `context` is `std::collections::BTreeMap<String, LogValue>`.
+- The type of `extra` is `std::collections::BTreeMap<String, LogValue>`.
+- Deserialize of an event reads each `context` value and each `extra` value as a `LogValue`. A string, a number and a `bool` are valid. Null, an array and an object give a deserialize error.
 
 ### Time
 

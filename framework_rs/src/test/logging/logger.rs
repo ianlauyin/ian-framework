@@ -1,4 +1,4 @@
-use serde_json::Map;
+use std::collections::BTreeMap;
 
 use crate::logging::LogShipper;
 
@@ -6,15 +6,15 @@ use crate::logging::logger::*;
 
 #[test]
 fn logs_without_a_shipper_and_keeps_the_first_shipper() {
-    Logger::error("TEST/error", Map::new(), "failed".into());
+    Logger::error("TEST/error", BTreeMap::new(), "failed".into());
     if Logger::get().is_none() {
         let first = LogShipper::new(crate::logging::ShipperConfig::new("my-app")).unwrap();
         assert!(Logger::init(first).is_ok());
     }
     let second = LogShipper::new(crate::logging::ShipperConfig::new("my-app")).unwrap();
     assert!(Logger::init(second).is_err());
-    Logger::warn("TEST/warn", Map::new());
-    Logger::warn_with("TEST/warn", Map::new(), "slow".into());
+    Logger::warn("TEST/warn", BTreeMap::new());
+    Logger::warn_with("TEST/warn", BTreeMap::new(), "slow".into());
 }
 
 #[test]
@@ -24,8 +24,8 @@ fn error_adds_the_exception_trace_to_the_message() {
     let root = crate::exception!("port is not a number", code = "ENV_INVALID");
     let top = crate::exception!("app cannot start", code = "ENV_MISSING", source = root);
     tracing::subscriber::with_default(capture, || {
-        Logger::error("TEST/exceptionTrace", Map::new(), Box::new(top));
-        Logger::error("TEST/plain", Map::new(), "slow".into());
+        Logger::error("TEST/exceptionTrace", BTreeMap::new(), Box::new(top));
+        Logger::error("TEST/plain", BTreeMap::new(), "slow".into());
     });
     let messages = messages.lock().unwrap();
     let text = messages[0].as_str();

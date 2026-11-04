@@ -201,16 +201,12 @@ fn record_masks_every_pattern_match_in_context_and_info_values() {
         "user_agent".to_string(),
         "agent BEARER abc.def".to_string().into(),
     );
-    event.extra.insert(
-        "nested".to_string(),
-        serde_json::json!({"list": ["password=a", 7], "keep": "plain"}),
-    );
     event
         .extra
-        .insert("password=k".to_string(), serde_json::json!("Bearer t0k"));
+        .insert("password=k".to_string(), "Bearer t0k".into());
     event.extra.insert(
         "note".to_string(),
-        serde_json::json!("user password=a, BEARER b.c done"),
+        "user password=a, BEARER b.c done".into(),
     );
     shipper.record(event);
     let stored = buffered_events(&shipper).remove(0);
@@ -219,10 +215,6 @@ fn record_masks_every_pattern_match_in_context_and_info_values() {
     assert_eq!(stored.context["user_agent"], "agent ***");
     assert_eq!(stored.extra["password=k"], serde_json::json!("***"));
     assert_eq!(stored.extra["note"], serde_json::json!("user *** *** done"));
-    assert_eq!(
-        stored.extra["nested"],
-        serde_json::json!({"list": ["***", 7], "keep": "plain"})
-    );
 }
 
 #[test]
@@ -246,27 +238,13 @@ fn record_masks_the_value_of_a_matching_info_key() {
     config.mask_patterns = vec![r"(?i)^(password|token)$".to_string()];
     let shipper = LogShipper::new(config).unwrap();
     let mut event = LogEvent::info("login");
-    event
-        .extra
-        .insert("password".to_string(), serde_json::json!("hunter2"));
-    event
-        .extra
-        .insert("TOKEN".to_string(), serde_json::json!(1234));
-    event.extra.insert(
-        "nested".to_string(),
-        serde_json::json!({"token": {"a": 1}, "user": "alice"}),
-    );
-    event
-        .extra
-        .insert("user".to_string(), serde_json::json!("alice"));
+    event.extra.insert("password".to_string(), "hunter2".into());
+    event.extra.insert("TOKEN".to_string(), 1234u64.into());
+    event.extra.insert("user".to_string(), "alice".into());
     shipper.record(event);
     let stored = buffered_events(&shipper).remove(0);
     assert_eq!(stored.extra["password"], serde_json::json!("***"));
     assert_eq!(stored.extra["TOKEN"], serde_json::json!("***"));
-    assert_eq!(
-        stored.extra["nested"],
-        serde_json::json!({"token": "***", "user": "alice"})
-    );
     assert_eq!(stored.extra["user"], serde_json::json!("alice"));
 }
 
@@ -279,7 +257,7 @@ fn record_without_mask_patterns_keeps_the_text() {
     let mut event = LogEvent::info("password=hunter2");
     event
         .extra
-        .insert("note".to_string(), serde_json::json!("password=hunter2"));
+        .insert("note".to_string(), "password=hunter2".into());
     shipper.record(event);
     let stored = buffered_events(&shipper).remove(0);
     assert_eq!(stored.action, "password=hunter2");
@@ -343,7 +321,7 @@ fn record_inserts_one_capacity_warning_at_80_percent() {
         .context
         .insert("user_agent".to_string(), "agent".to_string().into());
     oldest.latency_ms = Some(9);
-    oldest.extra.insert("k".to_string(), serde_json::json!("v"));
+    oldest.extra.insert("k".to_string(), "v".into());
     oldest.ts = DateTime::parse_from_rfc3339("2020-01-01T08:00:00+08:00").unwrap();
     let ts = oldest.ts;
     shipper.record(oldest);
@@ -366,7 +344,7 @@ fn record_inserts_one_capacity_warning_at_80_percent() {
     assert_eq!(events[0].context["ip"], "203.0.113.9");
     assert_eq!(events[0].context["user_agent"], "agent");
     assert_eq!(events[0].latency_ms, Some(9));
-    assert_eq!(events[0].extra.get("k"), Some(&serde_json::json!("v")));
+    assert_eq!(events[0].extra.get("k"), Some(&"v".into()));
     assert_eq!(events[1].action, "second");
     assert_eq!(events[1].level, LogLevel::Info);
     assert_eq!(events[2].action, "third");
