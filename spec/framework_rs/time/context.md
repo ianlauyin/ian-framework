@@ -14,8 +14,8 @@ This feature is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::time`.
-- The source files are `framework_rs/src/time/mod.rs` and `framework_rs/src/time/hkt.rs`.
-- The tests are in `framework_rs/src/time/hkt.rs`.
+- The source file is `framework_rs/src/time.rs`.
+- This module has no tests.
 
 ## Build
 

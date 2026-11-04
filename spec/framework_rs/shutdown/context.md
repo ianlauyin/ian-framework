@@ -14,7 +14,7 @@ This feature is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::shutdown`.
-- The source files are `framework_rs/src/shutdown/mod.rs` and `framework_rs/src/test/shutdown/shutdown_receiver.rs`.
+- The source file is `framework_rs/src/shutdown.rs`.
 - The tests are in `framework_rs/src/test/shutdown/shutdown_receiver.rs`.
 
 ## Build
