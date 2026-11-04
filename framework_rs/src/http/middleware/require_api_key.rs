@@ -118,7 +118,7 @@ pub async fn require_api_key(
     if !allowed {
         Logger::warn(
             "HTTP/apiKeyRejected",
-            BTreeMap::from([("method".to_string(), method.as_str().to_string())]),
+            BTreeMap::from([("method".to_string(), method.as_str().into())]),
         );
         return ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized")
             .into_response();

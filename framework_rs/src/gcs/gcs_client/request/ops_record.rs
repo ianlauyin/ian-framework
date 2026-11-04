@@ -29,7 +29,7 @@ impl OpsRecord<'_> {
                 None => self.message.to_string(),
             }),
             context: BTreeMap::new(),
-            extra: serde_json::Map::new(),
+            extra: BTreeMap::new(),
         };
         event
             .extra

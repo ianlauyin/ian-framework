@@ -4,9 +4,7 @@ use std::time::Duration;
 
 use crate::shutdown::ShutdownReceiver;
 
-use serde_json::Value;
-
-use super::{LogEvent, LogLevel, ShipperConfig, SHIP_CHUNK};
+use super::{LogEvent, LogLevel, LogValue, ShipperConfig, SHIP_CHUNK};
 
 pub(crate) const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 pub(crate) const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";
@@ -321,35 +319,18 @@ fn mask_event(masks: &[Mask], event: &mut LogEvent) {
         mask_text(masks, text);
     }
     for (key, value) in event.context.iter_mut() {
-        if masks.iter().any(|mask| mask.plain.is_match(key)) {
-            *value = MASK.to_string();
-        } else {
-            mask_text(masks, value);
-        }
+        mask_entry(masks, key, value);
     }
     for (key, value) in event.extra.iter_mut() {
         mask_entry(masks, key, value);
     }
 }
 
-fn mask_entry(masks: &[Mask], key: &str, value: &mut Value) {
+fn mask_entry(masks: &[Mask], key: &str, value: &mut LogValue) {
     if masks.iter().any(|mask| mask.plain.is_match(key)) {
-        *value = Value::String(MASK.to_string());
-    } else {
-        mask_value(masks, value);
-    }
-}
-
-fn mask_value(masks: &[Mask], value: &mut Value) {
-    match value {
-        Value::String(text) => mask_text(masks, text),
-        Value::Array(items) => items.iter_mut().for_each(|item| mask_value(masks, item)),
-        Value::Object(map) => {
-            for (key, item) in map.iter_mut() {
-                mask_entry(masks, key, item);
-            }
-        }
-        _ => {}
+        *value = LogValue::String(MASK.to_string());
+    } else if let LogValue::String(text) = value {
+        mask_text(masks, text);
     }
 }
 

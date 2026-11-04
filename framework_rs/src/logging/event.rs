@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Number, Value};
 
 use crate::time::hkt_now;
 
@@ -40,6 +40,60 @@ impl LogLevel {
     }
 }
 
+// An untagged enum, so deserialize rejects null, an array and an object.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LogValue {
+    Bool(bool),
+    Number(Number),
+    String(String),
+}
+
+impl From<&str> for LogValue {
+    fn from(value: &str) -> Self {
+        LogValue::String(value.to_string())
+    }
+}
+
+impl From<String> for LogValue {
+    fn from(value: String) -> Self {
+        LogValue::String(value)
+    }
+}
+
+impl From<bool> for LogValue {
+    fn from(value: bool) -> Self {
+        LogValue::Bool(value)
+    }
+}
+
+impl From<u64> for LogValue {
+    fn from(value: u64) -> Self {
+        LogValue::Number(value.into())
+    }
+}
+
+impl From<f64> for LogValue {
+    fn from(value: f64) -> Self {
+        match Number::from_f64(value) {
+            Some(number) => LogValue::Number(number),
+            None => LogValue::String(value.to_string()),
+        }
+    }
+}
+
+impl PartialEq<&str> for LogValue {
+    fn eq(&self, other: &&str) -> bool {
+        matches!(self, LogValue::String(text) if text == other)
+    }
+}
+
+impl PartialEq<Value> for LogValue {
+    fn eq(&self, other: &Value) -> bool {
+        serde_json::to_value(self).is_ok_and(|value| &value == other)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     pub(crate) ts: DateTime<FixedOffset>,
@@ -49,8 +103,8 @@ pub struct LogEvent {
     pub(crate) level: LogLevel,
     #[serde(default, deserialize_with = "text_or_none")]
     pub(crate) error_message: Option<String>,
-    pub(crate) context: BTreeMap<String, String>,
-    pub(crate) extra: Map<String, Value>,
+    pub(crate) context: BTreeMap<String, LogValue>,
+    pub(crate) extra: BTreeMap<String, LogValue>,
 }
 
 impl LogEvent {
@@ -98,11 +152,11 @@ impl LogEvent {
         self.error_message.as_deref()
     }
 
-    pub fn context(&self) -> &BTreeMap<String, String> {
+    pub fn context(&self) -> &BTreeMap<String, LogValue> {
         &self.context
     }
 
-    pub fn extra(&self) -> &Map<String, Value> {
+    pub fn extra(&self) -> &BTreeMap<String, LogValue> {
         &self.extra
     }
 
@@ -138,7 +192,7 @@ impl LogEvent {
             level,
             error_message,
             context: BTreeMap::new(),
-            extra: Map::new(),
+            extra: BTreeMap::new(),
         }
     }
 }
@@ -174,8 +228,8 @@ fn client_error_message(message: Option<&str>) -> String {
     text
 }
 
-fn client_extra(extra: &Map<String, Value>) -> Map<String, Value> {
-    let mut kept = Map::new();
+fn client_extra(extra: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValue> {
+    let mut kept = BTreeMap::new();
     for (key, value) in extra {
         if kept.len() >= CLIENT_EXTRA_MAX_KEYS {
             break;
@@ -186,7 +240,7 @@ fn client_extra(extra: &Map<String, Value>) -> Map<String, Value> {
         let Some(text) = extra_value(value) else {
             continue;
         };
-        kept.insert(key.clone(), Value::String(text));
+        kept.insert(key.clone(), LogValue::String(text));
     }
     kept
 }
@@ -198,12 +252,11 @@ fn extra_key_ok(key: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
 }
 
-fn extra_value(value: &Value) -> Option<String> {
+fn extra_value(value: &LogValue) -> Option<String> {
     let text = match value {
-        Value::String(text) => text.clone(),
-        Value::Number(number) => number.to_string(),
-        Value::Bool(flag) => flag.to_string(),
-        _ => return None,
+        LogValue::String(text) => text.clone(),
+        LogValue::Number(number) => number.to_string(),
+        LogValue::Bool(flag) => flag.to_string(),
     };
     if text.len() > CLIENT_EXTRA_VALUE_MAX_BYTES || text.contains('\r') || text.contains('\n') {
         return None;

@@ -49,7 +49,7 @@ impl DiskMonitor {
             if read_usage(&path).is_none() {
                 Logger::warn_with(
                     "DISK/cannotReadUsage",
-                    BTreeMap::from([("path".to_string(), path.display().to_string())]),
+                    BTreeMap::from([("path".to_string(), path.display().to_string().into())]),
                     "cannot read the disk usage".into(),
                 );
                 return;

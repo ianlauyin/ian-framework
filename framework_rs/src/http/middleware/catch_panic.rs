@@ -24,8 +24,8 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
             Logger::error(
                 "HTTP/handlerPanicked",
                 BTreeMap::from([
-                    ("method".to_string(), method.as_str().to_string()),
-                    ("path".to_string(), path),
+                    ("method".to_string(), method.as_str().into()),
+                    ("path".to_string(), path.into()),
                 ]),
                 "handler panicked".into(),
             );

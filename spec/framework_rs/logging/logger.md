@@ -18,7 +18,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 | `Logger::error(action, context, error)` | Records one event with the level `error`. |
 
 - `action` is `impl Into<String>`.
-- `context` is `std::collections::BTreeMap<String, String>`.
+- `context` is `std::collections::BTreeMap<String, ian_framework::logging::LogValue>`.
 - `error` of `Logger::warn_with` and `Logger::error` is `Box<dyn std::error::Error>`.
 - `Logger::warn_with` sets `error_message` to the display text of `error`. When `error` is an `Exception`, that text is the message only.
 - When `error` of `Logger::error` is an `Exception`, `error_message` is the display text, a line break, then the trace text. The trace text is `String::from` of that exception. The rules are in `spec/framework_rs/exception.md`. When `error` is not an `Exception`, `error_message` is the display text of `error`.

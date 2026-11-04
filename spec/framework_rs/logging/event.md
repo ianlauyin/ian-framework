@@ -14,8 +14,8 @@ One event is one `LogEvent`. One event has these fields:
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
 | `error_message` | Text of the error, or null |
-| `context` | One JSON object with the facts about where the event came from. Each value is a string. |
-| `extra` | One JSON object with the data of the event |
+| `context` | One JSON object with the facts about where the event came from. Each value is a string, a number or a `bool`. |
+| `extra` | One JSON object with the data of the event. Each value is a string, a number or a `bool`. |
 
 - The JSON of the event always has the key `error_message`. Its value is null when the event has no message.
 - The event has no `ip` field and no `user_agent` field. The route middleware and the client log route put them in `context`.
@@ -37,7 +37,7 @@ One event is one `LogEvent`. One event has these fields:
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
 - `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
 - `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
-- `LogValue` does not exist. Each `context` value is a `String`.
+- `ian_framework::logging::LogValue` is an untagged enum with the variants `Bool`, `Number` and `String`. Each `context` value and each `extra` value is a `LogValue`.
 
 ### Constructors
 
@@ -70,10 +70,9 @@ One event is one `LogEvent`. One event has these fields:
 
 ### Values
 
-- The type of `context` is `std::collections::BTreeMap<String, String>`.
-- Deserialize of an event rejects a `context` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
-- The type of `extra` is `serde_json::Map<String, serde_json::Value>`. It is a JSON object, and its values can be nested.
-- An event that the app builds keeps each `extra` value. A nested value stays nested.
+- The type of `context` is `std::collections::BTreeMap<String, LogValue>`.
+- The type of `extra` is `std::collections::BTreeMap<String, LogValue>`.
+- Deserialize of an event reads each `context` value and each `extra` value as a `LogValue`. A string, a number and a `bool` are valid. Null, an array and an object give a deserialize error.
 
 ### Time
 
