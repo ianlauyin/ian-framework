@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use crate::logging::{LogEvent, LogValue, Logger};
+use crate::logging::{LogEvent, Logger};
 use crate::shutdown::ShutdownReceiver;
 
 const STAT_PATH: &str = "/proc/stat";
@@ -60,7 +60,7 @@ impl CpuMonitor {
         let Some(mut previous) = sample() else {
             Logger::error(
                 "CPU/cannotReadStat",
-                BTreeMap::from([("path".to_string(), LogValue::from(STAT_PATH))]),
+                BTreeMap::from([("path".to_string(), STAT_PATH.to_string())]),
                 "cannot read the cpu stat file".into(),
             );
             return;

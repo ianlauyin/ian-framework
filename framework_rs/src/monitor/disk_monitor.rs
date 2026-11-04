@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::logging::{LogEvent, LogValue, Logger};
+use crate::logging::{LogEvent, Logger};
 use crate::shutdown::ShutdownReceiver;
 
 const DEFAULT_PATH: &str = "/";
@@ -49,10 +49,7 @@ impl DiskMonitor {
             if read_usage(&path).is_none() {
                 Logger::warn_with(
                     "DISK/cannotReadUsage",
-                    BTreeMap::from([(
-                        "path".to_string(),
-                        LogValue::from(path.display().to_string()),
-                    )]),
+                    BTreeMap::from([("path".to_string(), path.display().to_string())]),
                     "cannot read the disk usage".into(),
                 );
                 return;

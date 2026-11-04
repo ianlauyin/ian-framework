@@ -9,7 +9,7 @@ use axum::response::{IntoResponse, Response};
 
 use crate::http::headers::{bearer_token, key_matches};
 use crate::http::ApiError;
-use crate::logging::{LogValue, Logger};
+use crate::logging::Logger;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathMatch {
@@ -118,7 +118,7 @@ pub async fn require_api_key(
     if !allowed {
         Logger::warn(
             "HTTP/apiKeyRejected",
-            BTreeMap::from([("method".to_string(), LogValue::from(method.as_str()))]),
+            BTreeMap::from([("method".to_string(), method.as_str().to_string())]),
         );
         return ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized")
             .into_response();

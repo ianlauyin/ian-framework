@@ -33,13 +33,9 @@ pub async fn log_request(
     };
     let status = response.status().as_u16();
     let mut event = new_event(action(&method, &path), status);
-    event.context.insert("ip".to_string(), ip.into());
-    event
-        .context
-        .insert("user_agent".to_string(), user_agent.into());
-    event
-        .context
-        .insert("request_url".to_string(), request_url.into());
+    event.context.insert("ip".to_string(), ip);
+    event.context.insert("user_agent".to_string(), user_agent);
+    event.context.insert("request_url".to_string(), request_url);
     event.latency_ms = Some(millis_since(started));
     if let Some(fields) = body {
         event.info = fields;

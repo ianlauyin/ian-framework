@@ -41,10 +41,10 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
         return StatusCode::BAD_REQUEST;
     };
     for mut event in events {
-        event.context.insert("ip".to_string(), ip.clone().into());
+        event.context.insert("ip".to_string(), ip.clone());
         event
             .context
-            .insert("user_agent".to_string(), user_agent.clone().into());
+            .insert("user_agent".to_string(), user_agent.clone());
         shipper.record(event);
     }
     StatusCode::NO_CONTENT

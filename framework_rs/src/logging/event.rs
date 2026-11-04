@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{Map, Number, Value};
+use serde_json::{Map, Value};
 
 use crate::time::hkt_now;
 
@@ -41,59 +41,6 @@ impl LogLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum LogValue {
-    Bool(bool),
-    Number(Number),
-    String(String),
-}
-
-impl From<&str> for LogValue {
-    fn from(value: &str) -> Self {
-        LogValue::String(value.to_string())
-    }
-}
-
-impl From<String> for LogValue {
-    fn from(value: String) -> Self {
-        LogValue::String(value)
-    }
-}
-
-impl From<bool> for LogValue {
-    fn from(value: bool) -> Self {
-        LogValue::Bool(value)
-    }
-}
-
-impl From<u64> for LogValue {
-    fn from(value: u64) -> Self {
-        LogValue::Number(value.into())
-    }
-}
-
-impl From<f64> for LogValue {
-    fn from(value: f64) -> Self {
-        match Number::from_f64(value) {
-            Some(number) => LogValue::Number(number),
-            None => LogValue::String(value.to_string()),
-        }
-    }
-}
-
-impl PartialEq<&str> for LogValue {
-    fn eq(&self, other: &&str) -> bool {
-        matches!(self, LogValue::String(text) if text == other)
-    }
-}
-
-impl PartialEq<Value> for LogValue {
-    fn eq(&self, other: &Value) -> bool {
-        serde_json::to_value(self).is_ok_and(|value| &value == other)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     pub(crate) ts: DateTime<FixedOffset>,
     pub(crate) id: String,
@@ -102,7 +49,7 @@ pub struct LogEvent {
     pub(crate) level: LogLevel,
     #[serde(default, deserialize_with = "text_or_none")]
     pub(crate) error_message: Option<String>,
-    pub(crate) context: BTreeMap<String, LogValue>,
+    pub(crate) context: BTreeMap<String, String>,
     pub(crate) info: Map<String, Value>,
 }
 
@@ -151,7 +98,7 @@ impl LogEvent {
         self.error_message.as_deref()
     }
 
-    pub fn context(&self) -> &BTreeMap<String, LogValue> {
+    pub fn context(&self) -> &BTreeMap<String, String> {
         &self.context
     }
 
@@ -302,10 +249,10 @@ mod tests {
         event.id = "req-1".to_string();
         event
             .context
-            .insert("ip".to_string(), LogValue::from("203.0.113.8"));
+            .insert("ip".to_string(), "203.0.113.8".to_string());
         event
             .context
-            .insert("user_agent".to_string(), LogValue::from("demo-agent"));
+            .insert("user_agent".to_string(), "demo-agent".to_string());
         event.latency_ms = Some(12);
         event.info.insert("region".to_string(), json!("asia"));
         event
@@ -403,13 +350,17 @@ mod tests {
     }
 
     #[test]
-    fn a_non_scalar_context_value_is_rejected() {
-        for field in ["context"] {
-            for bad in [json!(null), json!({"a": 1}), json!([1])] {
-                let mut value = serde_json::to_value(sample()).unwrap();
-                value[field]["bad"] = bad;
-                assert!(serde_json::from_value::<LogEvent>(value).is_err());
-            }
+    fn a_non_string_context_value_is_rejected() {
+        for bad in [
+            json!(null),
+            json!(1),
+            json!(true),
+            json!({"a": 1}),
+            json!([1]),
+        ] {
+            let mut value = serde_json::to_value(sample()).unwrap();
+            value["context"]["bad"] = bad;
+            assert!(serde_json::from_value::<LogEvent>(value).is_err());
         }
     }
 
@@ -426,7 +377,7 @@ mod tests {
         event.id = "client-id".to_string();
         event
             .context
-            .insert("ip".to_string(), LogValue::from("203.0.113.8"));
+            .insert("ip".to_string(), "203.0.113.8".to_string());
         event.latency_ms = Some(42);
         let before = hkt_now();
         let stored = event.from_client();
@@ -658,11 +609,5 @@ mod tests {
         let mut warn = LogEvent::warn("x");
         warn.error_message = Some("slow".to_string());
         assert_eq!(warn.from_client().error_message(), Some("slow"));
-    }
-
-    #[test]
-    fn a_float_becomes_a_number_or_text() {
-        assert_eq!(LogValue::from(1.5), serde_json::json!(1.5));
-        assert_eq!(LogValue::from(f64::NAN), "NaN");
     }
 }

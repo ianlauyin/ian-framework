@@ -6,7 +6,7 @@ use crate::shutdown::ShutdownReceiver;
 
 use serde_json::Value;
 
-use super::{LogEvent, LogLevel, LogValue, ShipperConfig, SHIP_CHUNK};
+use super::{LogEvent, LogLevel, ShipperConfig, SHIP_CHUNK};
 
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";
@@ -322,9 +322,9 @@ fn mask_event(masks: &[Mask], event: &mut LogEvent) {
     }
     for (key, value) in event.context.iter_mut() {
         if masks.iter().any(|mask| mask.plain.is_match(key)) {
-            *value = LogValue::String(MASK.to_string());
-        } else if let LogValue::String(text) = value {
-            mask_text(masks, text);
+            *value = MASK.to_string();
+        } else {
+            mask_text(masks, value);
         }
     }
     for (key, value) in event.info.iter_mut() {
@@ -605,10 +605,9 @@ mod tests {
         let shipper = LogShipper::new(config).unwrap();
         let mut event = LogEvent::info("POST /login?password=x");
         event.id = "password=1".to_string();
-        event.context.insert(
-            "user_agent".to_string(),
-            LogValue::from("agent BEARER abc.def"),
-        );
+        event
+            .context
+            .insert("user_agent".to_string(), "agent BEARER abc.def".to_string());
         event.info.insert(
             "nested".to_string(),
             serde_json::json!({"list": ["password=a", 7], "keep": "plain"}),
@@ -624,7 +623,7 @@ mod tests {
         let stored = buffered_events(&shipper).remove(0);
         assert_eq!(stored.action, "POST /login?password=x");
         assert_eq!(stored.id, "password=1");
-        assert_eq!(stored.context["user_agent"], serde_json::json!("agent ***"));
+        assert_eq!(stored.context["user_agent"], "agent ***");
         assert_eq!(stored.info["password=k"], serde_json::json!("***"));
         assert_eq!(stored.info["note"], serde_json::json!("user *** *** done"));
         assert_eq!(
@@ -639,7 +638,7 @@ mod tests {
         let mut event = LogEvent::info("GET /");
         event.context.insert(
             "request_url".to_string(),
-            LogValue::from("/x?a=1&access_token=abc123&page=2&Password=hunter2"),
+            "/x?a=1&access_token=abc123&page=2&Password=hunter2".to_string(),
         );
         shipper.record(event);
         let stored = buffered_events(&shipper).remove(0);
@@ -719,12 +718,10 @@ mod tests {
         let shipper = buffered();
         let mut event = LogEvent::info(format!("GET /{}", "p".repeat(3000)));
         event.id = "i".repeat(200);
+        event.context.insert("ip".to_string(), "1".repeat(80));
         event
             .context
-            .insert("ip".to_string(), LogValue::from("1".repeat(80)));
-        event
-            .context
-            .insert("user_agent".to_string(), LogValue::from("é".repeat(2000)));
+            .insert("user_agent".to_string(), "é".repeat(2000));
         let action = event.action.clone();
         let id = event.id.clone();
         let context = event.context.clone();
@@ -744,10 +741,10 @@ mod tests {
         oldest.id = "id-1".to_string();
         oldest
             .context
-            .insert("ip".to_string(), LogValue::from("203.0.113.9"));
+            .insert("ip".to_string(), "203.0.113.9".to_string());
         oldest
             .context
-            .insert("user_agent".to_string(), LogValue::from("agent"));
+            .insert("user_agent".to_string(), "agent".to_string());
         oldest.latency_ms = Some(9);
         oldest.info.insert("k".to_string(), serde_json::json!("v"));
         oldest.ts = DateTime::parse_from_rfc3339("2020-01-01T08:00:00+08:00").unwrap();

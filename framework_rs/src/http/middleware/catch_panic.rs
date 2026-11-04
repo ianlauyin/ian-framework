@@ -11,7 +11,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::http::ApiError;
-use crate::logging::{LogValue, Logger};
+use crate::logging::Logger;
 
 struct CatchUnwind<F>(Pin<Box<F>>);
 
@@ -24,8 +24,8 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
             Logger::error(
                 "HTTP/handlerPanicked",
                 BTreeMap::from([
-                    ("method".to_string(), LogValue::from(method.as_str())),
-                    ("path".to_string(), LogValue::from(path)),
+                    ("method".to_string(), method.as_str().to_string()),
+                    ("path".to_string(), path),
                 ]),
                 "handler panicked".into(),
             );

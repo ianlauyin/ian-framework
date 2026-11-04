@@ -5,7 +5,7 @@ mod logger;
 mod shipper_config;
 
 pub use client_log::{client_events, client_log_router};
-pub use event::{LogEvent, LogLevel, LogValue};
+pub use event::{LogEvent, LogLevel};
 pub use log_shipper::LogShipper;
 pub use logger::Logger;
 pub use shipper_config::ShipperConfig;
