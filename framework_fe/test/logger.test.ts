@@ -73,13 +73,13 @@ describe("Logger", () => {
         level: "info",
         error_message: null,
         context: {},
-        info: { page: "/home" },
+        extra: { page: "/home" },
       },
       expect.objectContaining({
         level: "error",
         error_message: "it broke",
         action: "boom",
-        info: { page: "/other", code: 42 },
+        extra: { page: "/other", code: 42 },
       }),
     ]);
 
@@ -119,7 +119,7 @@ describe("Logger", () => {
     expect(events[0].action).toBe("event 1");
   });
 
-  it("masks the value of a matching info key and each match in a string value", async () => {
+  it("masks the value of a matching extra key and each match in a string value", async () => {
     const Logger = await loadLogger();
     Logger.setMaskPatterns([/^(password|token)$/i, /secret=\S+/]);
     Logger.info("login secret=keep", {
@@ -131,7 +131,7 @@ describe("Logger", () => {
     hidePage();
     const [event] = sentEvents(0);
     expect(event.action).toBe("login secret=keep");
-    expect(event.info).toEqual({
+    expect(event.extra).toEqual({
       page: "/home",
       password: "***",
       TOKEN: "***",
@@ -140,11 +140,11 @@ describe("Logger", () => {
     });
   });
 
-  it("keeps the info values when no mask pattern is set", async () => {
+  it("keeps the extra values when no mask pattern is set", async () => {
     const Logger = await loadLogger();
     Logger.info("login", { password: "hunter2" });
     hidePage();
-    expect(sentEvents(0)[0].info).toEqual({ page: "/home", password: "hunter2" });
+    expect(sentEvents(0)[0].extra).toEqual({ page: "/home", password: "hunter2" });
   });
 
   it("ignores a failed send", async () => {
@@ -220,7 +220,7 @@ describe("Logger", () => {
       "unknown error",
       "unknown error",
     ]);
-    expect(events[2].info.error).toBe("unknown error");
+    expect(events[2].extra.error).toBe("unknown error");
   });
 
   describe("contextWrapper", () => {
@@ -238,7 +238,7 @@ describe("Logger", () => {
       const events = sentEvents(0);
       expect(events).toHaveLength(1);
       expect(events[0].action).toBe("cart/add");
-      expect(events[0].info.args).toBe("[1,2]");
+      expect(events[0].extra.args).toBe("[1,2]");
     });
   });
 
@@ -258,7 +258,7 @@ describe("Logger", () => {
       expect(events[0].action).toBe("cart/add");
       expect(events[0].level).toBe("info");
       expect(events[0].latency_ms).toBe(25);
-      expect(events[0].info.args).toBe("[1,2]");
+      expect(events[0].extra.args).toBe("[1,2]");
     });
 
     it("records one error event with the latency and rethrows when the action throws", async () => {
@@ -275,9 +275,9 @@ describe("Logger", () => {
       expect(events).toHaveLength(1);
       expect(events[0].level).toBe("error");
       expect(events[0].latency_ms).toBe(10);
-      expect(events[0].info.error).toBe("boom");
+      expect(events[0].extra.error).toBe("boom");
       expect(events[0].error_message).toBe("boom");
-      expect(events[0].info.args).toBe("[]");
+      expect(events[0].extra.args).toBe("[]");
     });
 
     it("records unserializable args as a fixed text", async () => {
@@ -287,7 +287,7 @@ describe("Logger", () => {
       Logger.wrapAction("cart/view", (_value: unknown) => undefined)(circular);
       vi.advanceTimersByTime(60_000);
 
-      expect(sentEvents(0)[0].info.args).toBe("unserializable");
+      expect(sentEvents(0)[0].extra.args).toBe("unserializable");
     });
 
     it("records the event after the async action resolves", async () => {
@@ -325,7 +325,7 @@ describe("Logger", () => {
       expect(events).toHaveLength(1);
       expect(events[0].level).toBe("error");
       expect(events[0].latency_ms).toBe(15);
-      expect(events[0].info.error).toBe("denied");
+      expect(events[0].extra.error).toBe("denied");
       expect(events[0].error_message).toBe("denied");
     });
   });

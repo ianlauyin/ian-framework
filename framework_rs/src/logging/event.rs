@@ -8,8 +8,8 @@ use crate::time::hkt_now;
 
 const CLIENT_ACTION_MAX_CHARS: usize = 128;
 const CLIENT_ERROR_MESSAGE_MAX_CHARS: usize = 1024;
-const CLIENT_INFO_MAX_KEYS: usize = 32;
-const CLIENT_INFO_VALUE_MAX_BYTES: usize = 2048;
+const CLIENT_EXTRA_MAX_KEYS: usize = 32;
+const CLIENT_EXTRA_VALUE_MAX_BYTES: usize = 2048;
 const CLIENT_TS_MAX_AGE_HOURS: i64 = 24;
 const CLIENT_ERROR_PLACEHOLDER: &str = "no error message";
 
@@ -103,7 +103,7 @@ pub struct LogEvent {
     #[serde(default, deserialize_with = "text_or_none")]
     pub(crate) error_message: Option<String>,
     pub(crate) context: BTreeMap<String, LogValue>,
-    pub(crate) info: Map<String, Value>,
+    pub(crate) extra: Map<String, Value>,
 }
 
 impl LogEvent {
@@ -155,8 +155,8 @@ impl LogEvent {
         &self.context
     }
 
-    pub fn fields(&self) -> &Map<String, Value> {
-        &self.info
+    pub fn extra(&self) -> &Map<String, Value> {
+        &self.extra
     }
 
     pub fn from_client(&self) -> LogEvent {
@@ -178,7 +178,7 @@ impl LogEvent {
             level: self.level,
             error_message,
             context: BTreeMap::new(),
-            info: client_info(&self.info),
+            extra: client_extra(&self.extra),
         }
     }
 
@@ -191,7 +191,7 @@ impl LogEvent {
             level,
             error_message,
             context: BTreeMap::new(),
-            info: Map::new(),
+            extra: Map::new(),
         }
     }
 }
@@ -227,16 +227,16 @@ fn client_error_message(message: Option<&str>) -> String {
     text
 }
 
-fn client_info(info: &Map<String, Value>) -> Map<String, Value> {
+fn client_extra(extra: &Map<String, Value>) -> Map<String, Value> {
     let mut kept = Map::new();
-    for (key, value) in info {
-        if kept.len() >= CLIENT_INFO_MAX_KEYS {
+    for (key, value) in extra {
+        if kept.len() >= CLIENT_EXTRA_MAX_KEYS {
             break;
         }
-        if !info_key_ok(key) {
+        if !extra_key_ok(key) {
             continue;
         }
-        let Some(text) = info_value(value) else {
+        let Some(text) = extra_value(value) else {
             continue;
         };
         kept.insert(key.clone(), Value::String(text));
@@ -244,21 +244,21 @@ fn client_info(info: &Map<String, Value>) -> Map<String, Value> {
     kept
 }
 
-fn info_key_ok(key: &str) -> bool {
+fn extra_key_ok(key: &str) -> bool {
     !key.is_empty()
         && key
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
 }
 
-fn info_value(value: &Value) -> Option<String> {
+fn extra_value(value: &Value) -> Option<String> {
     let text = match value {
         Value::String(text) => text.clone(),
         Value::Number(number) => number.to_string(),
         Value::Bool(flag) => flag.to_string(),
         _ => return None,
     };
-    if text.len() > CLIENT_INFO_VALUE_MAX_BYTES || text.contains('\r') || text.contains('\n') {
+    if text.len() > CLIENT_EXTRA_VALUE_MAX_BYTES || text.contains('\r') || text.contains('\n') {
         return None;
     }
     Some(text)
@@ -270,19 +270,19 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn client_action_and_info_are_bounded() {
-        let batch_event = |action: &str, info: Value| -> LogEvent {
+    fn client_action_and_extra_are_bounded() {
+        let batch_event = |action: &str, extra: Value| -> LogEvent {
             let mut client = LogEvent::info(action);
-            client.info = info.as_object().cloned().unwrap_or_default();
+            client.extra = extra.as_object().cloned().unwrap_or_default();
             client.from_client()
         };
         let forged = batch_event("a\nINFO forged\r", json!({}));
         assert!(!forged.action().contains(['\n', '\r']));
         assert_eq!(batch_event(&"x".repeat(500), json!({})).action().len(), 128);
         let long = "y".repeat(2049);
-        assert!(batch_event("a", json!({ "k": long })).fields().is_empty());
+        assert!(batch_event("a", json!({ "k": long })).extra().is_empty());
         let many: Map<String, Value> = (0..100).map(|n| (format!("k{n}"), json!("v"))).collect();
-        assert_eq!(batch_event("a", Value::Object(many)).fields().len(), 32);
+        assert_eq!(batch_event("a", Value::Object(many)).extra().len(), 32);
     }
 
     #[test]
@@ -307,7 +307,7 @@ mod tests {
             .context
             .insert("user_agent".to_string(), LogValue::from("demo-agent"));
         event.latency_ms = Some(12);
-        event.info.insert("region".to_string(), json!("asia"));
+        event.extra.insert("region".to_string(), json!("asia"));
         event
     }
 
@@ -322,7 +322,7 @@ mod tests {
             "latency_ms",
             "level",
             "context",
-            "info",
+            "extra",
         ] {
             assert!(value.get(key).is_some(), "{key}");
         }
@@ -341,7 +341,7 @@ mod tests {
         assert!(value.get("path").is_none());
         assert_eq!(value["latency_ms"], 12);
         assert_eq!(value["level"], "info");
-        assert_eq!(value["info"]["region"], "asia");
+        assert_eq!(value["extra"]["region"], "asia");
     }
 
     #[test]
@@ -356,7 +356,7 @@ mod tests {
         assert!(value.get("request").is_none());
         assert!(value["latency_ms"].is_null());
         assert_eq!(value["level"], "warn");
-        assert!(value["info"].as_object().unwrap().is_empty());
+        assert!(value["extra"].as_object().unwrap().is_empty());
     }
 
     #[test]
@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(event.latency_ms(), Some(12));
         assert_eq!(event.level(), LogLevel::Info);
         assert_eq!(event.context()["ip"], "203.0.113.8");
-        assert_eq!(event.fields()["region"], "asia");
+        assert_eq!(event.extra()["region"], "asia");
     }
 
     #[test]
@@ -480,20 +480,20 @@ mod tests {
     }
 
     #[test]
-    fn new_filters_info() {
+    fn new_filters_extra() {
         let mut client = LogEvent::info("/files");
-        client.info.insert("bad key".to_string(), json!("no"));
-        client.info.insert("k01".to_string(), json!("kept"));
-        client.info.insert("k02".to_string(), json!("a\nb"));
-        client.info.insert("k03".to_string(), json!("a\rb"));
+        client.extra.insert("bad key".to_string(), json!("no"));
+        client.extra.insert("k01".to_string(), json!("kept"));
+        client.extra.insert("k02".to_string(), json!("a\nb"));
+        client.extra.insert("k03".to_string(), json!("a\rb"));
         client
-            .info
+            .extra
             .insert("k07".to_string(), json!("x".repeat(250)));
-        client.info.insert("k08".to_string(), json!("ninth"));
-        client.info.insert("k09".to_string(), json!(true));
+        client.extra.insert("k08".to_string(), json!("ninth"));
+        client.extra.insert("k09".to_string(), json!(true));
         let stored = client.from_client();
         assert_eq!(
-            stored.info.keys().cloned().collect::<Vec<_>>(),
+            stored.extra.keys().cloned().collect::<Vec<_>>(),
             vec![
                 "k01".to_string(),
                 "k07".to_string(),
@@ -501,49 +501,49 @@ mod tests {
                 "k09".to_string(),
             ]
         );
-        assert_eq!(stored.info["k01"], json!("kept"));
-        assert_eq!(stored.info["k07"], json!("x".repeat(250)));
-        assert_eq!(stored.info["k08"], json!("ninth"));
-        assert_eq!(stored.info["k09"], json!("true"));
-        assert!(!stored.info.contains_key("bad key"));
+        assert_eq!(stored.extra["k01"], json!("kept"));
+        assert_eq!(stored.extra["k07"], json!("x".repeat(250)));
+        assert_eq!(stored.extra["k08"], json!("ninth"));
+        assert_eq!(stored.extra["k09"], json!("true"));
+        assert!(!stored.extra.contains_key("bad key"));
 
         let mut scalars = LogEvent::error("/files", "boom");
-        scalars.info.insert("a/b".to_string(), json!("no"));
-        scalars.info.insert("a_b-c.d".to_string(), json!("yes"));
-        scalars.info.insert("a".repeat(65), json!("long-key"));
-        scalars.info.insert("count".to_string(), json!(12));
-        scalars.info.insert("flag".to_string(), json!(true));
-        scalars.info.insert("off".to_string(), json!(false));
-        scalars.info.insert("ratio".to_string(), json!(1.5));
+        scalars.extra.insert("a/b".to_string(), json!("no"));
+        scalars.extra.insert("a_b-c.d".to_string(), json!("yes"));
+        scalars.extra.insert("a".repeat(65), json!("long-key"));
+        scalars.extra.insert("count".to_string(), json!(12));
+        scalars.extra.insert("flag".to_string(), json!(true));
+        scalars.extra.insert("off".to_string(), json!(false));
+        scalars.extra.insert("ratio".to_string(), json!(1.5));
         let stored = scalars.from_client();
-        assert_eq!(stored.info.get("a/b"), None);
-        assert_eq!(stored.info[&"a".repeat(65)], json!("long-key"));
-        assert_eq!(stored.info["a_b-c.d"], json!("yes"));
-        assert_eq!(stored.info["count"], json!("12"));
-        assert_eq!(stored.info["flag"], json!("true"));
-        assert_eq!(stored.info["off"], json!("false"));
-        assert_eq!(stored.info["ratio"], json!("1.5"));
+        assert_eq!(stored.extra.get("a/b"), None);
+        assert_eq!(stored.extra[&"a".repeat(65)], json!("long-key"));
+        assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
+        assert_eq!(stored.extra["count"], json!("12"));
+        assert_eq!(stored.extra["flag"], json!("true"));
+        assert_eq!(stored.extra["off"], json!("false"));
+        assert_eq!(stored.extra["ratio"], json!("1.5"));
 
         let mut text = LogEvent::info("/files");
-        text.info.insert(String::new(), json!("no"));
-        text.info.insert("café".to_string(), json!("no"));
-        text.info.insert("ok!".to_string(), json!("no"));
+        text.extra.insert(String::new(), json!("no"));
+        text.extra.insert("café".to_string(), json!("no"));
+        text.extra.insert("ok!".to_string(), json!("no"));
         let long = "中".repeat(67);
-        text.info.insert("text".to_string(), json!(long.clone()));
+        text.extra.insert("text".to_string(), json!(long.clone()));
         let stored = text.from_client();
-        assert_eq!(stored.info.get(""), None);
-        assert_eq!(stored.info.get("café"), None);
-        assert_eq!(stored.info.get("ok!"), None);
-        assert_eq!(stored.info["text"], json!(long));
+        assert_eq!(stored.extra.get(""), None);
+        assert_eq!(stored.extra.get("café"), None);
+        assert_eq!(stored.extra.get("ok!"), None);
+        assert_eq!(stored.extra["text"], json!(long));
 
         let mut later = LogEvent::info("/files");
         for index in 0..8 {
-            later.info.insert(format!("bad {index}"), json!("no"));
+            later.extra.insert(format!("bad {index}"), json!("no"));
         }
-        later.info.insert("zzzz".to_string(), json!("yes"));
+        later.extra.insert("zzzz".to_string(), json!("yes"));
         let stored = later.from_client();
-        assert_eq!(stored.info.len(), 1);
-        assert_eq!(stored.info["zzzz"], json!("yes"));
+        assert_eq!(stored.extra.len(), 1);
+        assert_eq!(stored.extra["zzzz"], json!("yes"));
     }
 
     #[test]
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(error.error_message(), Some("boom"));
         assert_eq!(error.id(), "");
         assert!(error.context().is_empty());
-        assert!(error.fields().is_empty());
+        assert!(error.extra().is_empty());
     }
 
     #[test]

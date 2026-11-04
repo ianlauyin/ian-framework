@@ -69,7 +69,7 @@ mod tests {
             "level": "error",
             "error_message": "client failed",
             "context": { "ip": "10.0.0.1", "user_agent": "fake-agent" },
-            "info": { "page": "/home" },
+            "extra": { "page": "/home" },
         })
     }
 
@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(event.context["user_agent"], "demo-agent");
         assert_eq!(event.id, "");
         assert_eq!(event.latency_ms, None);
-        assert_eq!(event.info["page"], "/home");
+        assert_eq!(event.extra["page"], "/home");
     }
 
     #[tokio::test]

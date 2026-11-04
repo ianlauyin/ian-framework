@@ -29,23 +29,23 @@ impl OpsRecord<'_> {
                 None => self.message.to_string(),
             }),
             context: BTreeMap::new(),
-            info: serde_json::Map::new(),
+            extra: serde_json::Map::new(),
         };
         event
-            .info
+            .extra
             .insert("message".to_string(), self.message.to_string().into());
         if let Some(status) = self.status {
             event
-                .info
+                .extra
                 .insert("status".to_string(), status.to_string().into());
         }
         for (key, value) in self.extra {
             event
-                .info
+                .extra
                 .insert((*key).to_string(), (*value).to_string().into());
         }
         event
-            .info
+            .extra
             .insert("bucket".to_string(), bucket.to_string().into());
         event
     }

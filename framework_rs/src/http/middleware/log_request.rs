@@ -42,7 +42,7 @@ pub async fn log_request(
         .insert("request_url".to_string(), request_url.into());
     event.latency_ms = Some(millis_since(started));
     if let Some(fields) = body {
-        event.info = fields;
+        event.extra = fields;
     }
     shipper.record(event);
     response
@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(value["action"], "API/GET:/status/204");
         assert!(!json.contains("req-1"));
         assert!(value.get("request").is_none());
-        assert_eq!(value["info"], json!({}));
+        assert_eq!(value["extra"], json!({}));
         assert_eq!(value["context"]["request_url"], "/status/204?***");
     }
 
@@ -258,8 +258,8 @@ mod tests {
         let body = json!({"name": "alice"}).to_string();
         post_body(&shipper, "/echo?", "application/json", body).await;
         let event = &buffered_events(&shipper)[0];
-        assert_eq!(event.info.len(), 1);
-        assert_eq!(event.info["name"], "alice");
+        assert_eq!(event.extra.len(), 1);
+        assert_eq!(event.extra["name"], "alice");
     }
 
     #[tokio::test]
@@ -268,7 +268,7 @@ mod tests {
         send(app(shipper.clone()), "/status/200?a=1&b=x%20y&flag").await;
         let event = &buffered_events(&shipper)[0];
         assert_eq!(event.context["request_url"], "/status/200?a=1&b=x%20y&flag");
-        assert!(!event.info.contains_key("query"));
+        assert!(!event.extra.contains_key("query"));
     }
 
     #[tokio::test]
@@ -288,10 +288,10 @@ mod tests {
         assert_eq!(echoed, body);
         let event = &buffered_events(&shipper)[0];
         assert_eq!(event.action, "API/POST:/echo");
-        assert_eq!(event.info["name"], "alice");
-        assert_eq!(event.info["age"], json!(3));
-        assert_eq!(event.info["tags"], json!(["a"]));
-        assert_eq!(event.info["nested"], json!({"ok": true, "none": null}));
+        assert_eq!(event.extra["name"], "alice");
+        assert_eq!(event.extra["age"], json!(3));
+        assert_eq!(event.extra["tags"], json!(["a"]));
+        assert_eq!(event.extra["nested"], json!({"ok": true, "none": null}));
         assert_eq!(event.context["request_url"], "/echo?x=1");
     }
 
@@ -315,7 +315,7 @@ mod tests {
             assert_eq!(echoed, body);
         }
         for event in buffered_events(&shipper) {
-            assert!(event.info.is_empty());
+            assert!(event.extra.is_empty());
         }
     }
 
@@ -329,8 +329,8 @@ mod tests {
         post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
         let event = &buffered_events(&shipper)[0];
         assert_eq!(event.context["request_url"], "/echo?***&page=2");
-        assert_eq!(event.info["user"], "alice");
-        assert_eq!(event.info["password"], "***");
+        assert_eq!(event.extra["user"], "alice");
+        assert_eq!(event.extra["password"], "***");
     }
 
     #[tokio::test]

@@ -1096,8 +1096,8 @@ pub(crate) mod tests {
         assert!(client.stat("a").await.is_err());
         let events = buffered_events(&shipper);
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].info["status"], "404");
-        assert_eq!(events[0].info["message"], "gcs response");
+        assert_eq!(events[0].extra["status"], "404");
+        assert_eq!(events[0].extra["message"], "gcs response");
     }
 
     #[tokio::test]
@@ -1242,12 +1242,12 @@ pub(crate) mod tests {
         assert_eq!(events[0].action, "GCS/GET:/storage/v1/b/my-bucket/o/file");
         assert_eq!(events[0].id, "");
         assert!(events[0].context.is_empty());
-        assert_eq!(events[0].info["status"], "200");
-        assert_eq!(events[0].info["message"], "gcs response");
+        assert_eq!(events[0].extra["status"], "200");
+        assert_eq!(events[0].extra["message"], "gcs response");
         assert_eq!(events[0].latency_ms, Some(3));
         assert_eq!(
             events[0]
-                .info
+                .extra
                 .get("bucket")
                 .and_then(|value| value.as_str()),
             Some("my-bucket")

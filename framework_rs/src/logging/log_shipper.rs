@@ -329,7 +329,7 @@ fn mask_event(masks: &[Mask], event: &mut LogEvent) {
             mask_text(masks, text);
         }
     }
-    for (key, value) in event.info.iter_mut() {
+    for (key, value) in event.extra.iter_mut() {
         mask_entry(masks, key, value);
     }
 }
@@ -379,7 +379,7 @@ fn capacity_warn_event() -> LogEvent {
 
 fn trace_event(app: &str, event: &LogEvent) {
     let context = serde_json::to_string(&event.context).unwrap_or_default();
-    let info = serde_json::to_string(&event.info).unwrap_or_default();
+    let extra = serde_json::to_string(&event.extra).unwrap_or_default();
     macro_rules! emit {
         ($level:ident) => {
             tracing::$level!(
@@ -389,7 +389,7 @@ fn trace_event(app: &str, event: &LogEvent) {
                 latency_ms = ?event.latency_ms,
                 error_message = ?event.error_message,
                 context = %context,
-                info = %info
+                extra = %extra
             )
         };
     }
@@ -577,7 +577,7 @@ mod tests {
         assert!(event.context.is_empty());
         assert_eq!(event.action, CAPACITY_WARN_NOTE);
         assert_eq!(event.latency_ms, None);
-        assert!(event.info.is_empty());
+        assert!(event.extra.is_empty());
     }
 
     fn assert_no_scope_keys(line: &str) {
@@ -598,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    fn record_masks_every_pattern_match_in_context_and_info_values() {
+    fn record_masks_every_pattern_match_in_context_and_extra_values() {
         let mut config = config("api", "https://logs.example");
         config.mask_patterns = vec![
             r"password=\S+".to_string(),
@@ -611,14 +611,14 @@ mod tests {
             "user_agent".to_string(),
             LogValue::from("agent BEARER abc.def"),
         );
-        event.info.insert(
+        event.extra.insert(
             "nested".to_string(),
             serde_json::json!({"list": ["password=a", 7], "keep": "plain"}),
         );
         event
-            .info
+            .extra
             .insert("password=k".to_string(), serde_json::json!("Bearer t0k"));
-        event.info.insert(
+        event.extra.insert(
             "note".to_string(),
             serde_json::json!("user password=a, BEARER b.c done"),
         );
@@ -627,10 +627,10 @@ mod tests {
         assert_eq!(stored.action, "POST /login?password=x");
         assert_eq!(stored.id, "password=1");
         assert_eq!(stored.context["user_agent"], serde_json::json!("agent ***"));
-        assert_eq!(stored.info["password=k"], serde_json::json!("***"));
-        assert_eq!(stored.info["note"], serde_json::json!("user *** *** done"));
+        assert_eq!(stored.extra["password=k"], serde_json::json!("***"));
+        assert_eq!(stored.extra["note"], serde_json::json!("user *** *** done"));
         assert_eq!(
-            stored.info["nested"],
+            stored.extra["nested"],
             serde_json::json!({"list": ["***", 7], "keep": "plain"})
         );
     }
@@ -649,33 +649,33 @@ mod tests {
     }
 
     #[test]
-    fn record_masks_the_value_of_a_matching_info_key() {
+    fn record_masks_the_value_of_a_matching_extra_key() {
         let mut config = config("api", "https://logs.example");
         config.mask_patterns = vec![r"(?i)^(password|token)$".to_string()];
         let shipper = LogShipper::new(config).unwrap();
         let mut event = LogEvent::info("login");
         event
-            .info
+            .extra
             .insert("password".to_string(), serde_json::json!("hunter2"));
         event
-            .info
+            .extra
             .insert("TOKEN".to_string(), serde_json::json!(1234));
-        event.info.insert(
+        event.extra.insert(
             "nested".to_string(),
             serde_json::json!({"token": {"a": 1}, "user": "alice"}),
         );
         event
-            .info
+            .extra
             .insert("user".to_string(), serde_json::json!("alice"));
         shipper.record(event);
         let stored = buffered_events(&shipper).remove(0);
-        assert_eq!(stored.info["password"], serde_json::json!("***"));
-        assert_eq!(stored.info["TOKEN"], serde_json::json!("***"));
+        assert_eq!(stored.extra["password"], serde_json::json!("***"));
+        assert_eq!(stored.extra["TOKEN"], serde_json::json!("***"));
         assert_eq!(
-            stored.info["nested"],
+            stored.extra["nested"],
             serde_json::json!({"token": "***", "user": "alice"})
         );
-        assert_eq!(stored.info["user"], serde_json::json!("alice"));
+        assert_eq!(stored.extra["user"], serde_json::json!("alice"));
     }
 
     #[test]
@@ -686,12 +686,12 @@ mod tests {
         let shipper = LogShipper::new(config).unwrap();
         let mut event = LogEvent::info("password=hunter2");
         event
-            .info
+            .extra
             .insert("note".to_string(), serde_json::json!("password=hunter2"));
         shipper.record(event);
         let stored = buffered_events(&shipper).remove(0);
         assert_eq!(stored.action, "password=hunter2");
-        assert_eq!(stored.info["note"], serde_json::json!("password=hunter2"));
+        assert_eq!(stored.extra["note"], serde_json::json!("password=hunter2"));
     }
 
     #[test]
@@ -751,7 +751,7 @@ mod tests {
             .context
             .insert("user_agent".to_string(), LogValue::from("agent"));
         oldest.latency_ms = Some(9);
-        oldest.info.insert("k".to_string(), serde_json::json!("v"));
+        oldest.extra.insert("k".to_string(), serde_json::json!("v"));
         oldest.ts = DateTime::parse_from_rfc3339("2020-01-01T08:00:00+08:00").unwrap();
         let ts = oldest.ts;
         shipper.record(oldest);
@@ -774,7 +774,7 @@ mod tests {
         assert_eq!(events[0].context["ip"], "203.0.113.9");
         assert_eq!(events[0].context["user_agent"], "agent");
         assert_eq!(events[0].latency_ms, Some(9));
-        assert_eq!(events[0].info.get("k"), Some(&serde_json::json!("v")));
+        assert_eq!(events[0].extra.get("k"), Some(&serde_json::json!("v")));
         assert_eq!(events[1].action, "second");
         assert_eq!(events[1].level, LogLevel::Info);
         assert_eq!(events[2].action, "third");

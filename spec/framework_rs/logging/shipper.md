@@ -67,7 +67,7 @@ The `Debug` output of `LogShipper` does not show the POST API key. When the ship
 
 `LogShipper::record` stores one event in the local buffer.
 
-- Before it stores or traces the event, `LogShipper::record` masks the event `context` values and `info` values.
+- Before it stores or traces the event, `LogShipper::record` masks the event `context` values and `extra` values.
 - In trace-only mode, `LogShipper::record` writes the event with `tracing`. It does not store the event.
 - The shipper does not write `app` into the event.
 - The shipper stores the full `action`, `id`, and `context`.
@@ -107,7 +107,7 @@ The warning has these fields:
 | `level` | `warn` |
 | `error_message` | null |
 | `context` | Empty object |
-| `info` | Empty object |
+| `extra` | Empty object |
 
 ### Ship loop
 
@@ -192,9 +192,9 @@ In trace-only mode, `LogShipper::record` writes each event with `tracing` at the
 | `warn` | `tracing::warn!` |
 | `error` | `tracing::error!` |
 
-- The tracing fields are `app`, `id`, `action`, `latency_ms`, `error_message`, `context`, and `info`.
+- The tracing fields are `app`, `id`, `action`, `latency_ms`, `error_message`, `context`, and `extra`.
 - `context` is the JSON text of the event `context`.
-- `info` is the JSON text of the event `info`.
+- `extra` is the JSON text of the event `extra`.
 - The project installs a `tracing` subscriber to show these logs.
 
 Trace-only mode does not do these things:

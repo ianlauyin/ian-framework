@@ -17,7 +17,7 @@ type ClientLogEvent = {
   level: LogLevel;
   error_message: string | null;
   context: LogFields;
-  info: LogFields;
+  extra: LogFields;
 };
 
 export class Logger {
@@ -55,16 +55,16 @@ export class Logger {
     });
   }
 
-  public static info(action: string, info?: LogFields): void {
-    Logger.record("info", action, null, info);
+  public static info(action: string, extra?: LogFields): void {
+    Logger.record("info", action, null, extra);
   }
 
-  public static warn(action: string, info?: LogFields): void {
-    Logger.record("warn", action, null, info);
+  public static warn(action: string, extra?: LogFields): void {
+    Logger.record("warn", action, null, extra);
   }
 
-  public static error(action: string, errorMessage: string, info?: LogFields): void {
-    Logger.record("error", action, errorMessage, info);
+  public static error(action: string, errorMessage: string, extra?: LogFields): void {
+    Logger.record("error", action, errorMessage, extra);
   }
 
   public static wrapAction<Args extends unknown[], Result>(
@@ -73,15 +73,15 @@ export class Logger {
   ): (...args: Args) => Result {
     return (...args) => {
       const start = performance.now();
-      const argsInfo = Logger.argsInfo(args);
-      const succeed = () => Logger.record("info", name, null, argsInfo, performance.now() - start);
+      const argsExtra = Logger.argsExtra(args);
+      const succeed = () => Logger.record("info", name, null, argsExtra, performance.now() - start);
       const fail = (error: unknown) => {
         const failure = Logger.failure(error);
         Logger.record(
           "error",
           name,
           failure.error,
-          { ...argsInfo, ...failure },
+          { ...argsExtra, ...failure },
           performance.now() - start,
         );
       };
@@ -124,7 +124,7 @@ export class Logger {
     return wrapped as Context;
   }
 
-  private static argsInfo(args: unknown[]): LogFields {
+  private static argsExtra(args: unknown[]): LogFields {
     try {
       return { args: JSON.stringify(args) };
     } catch {
@@ -141,7 +141,7 @@ export class Logger {
     level: LogLevel,
     action: string,
     errorMessage: string | null,
-    info?: LogFields,
+    extra?: LogFields,
     latencyMs?: number,
   ): void {
     if (action.trim() === "") return;
@@ -156,7 +156,7 @@ export class Logger {
       level,
       error_message: Logger.errorMessage(level, errorMessage),
       context: { ...Logger.context },
-      info: Logger.mask({ page: location.pathname, ...info }),
+      extra: Logger.mask({ page: location.pathname, ...extra }),
     });
   }
 
@@ -172,11 +172,11 @@ export class Logger {
     return Logger.masks.reduce((masked, mask) => masked.replace(mask, MASK), text);
   }
 
-  private static mask(info: LogFields): LogFields {
-    if (Logger.masks.length === 0) return info;
+  private static mask(extra: LogFields): LogFields {
+    if (Logger.masks.length === 0) return extra;
 
     const masked: LogFields = {};
-    for (const [key, value] of Object.entries(info)) {
+    for (const [key, value] of Object.entries(extra)) {
       if (Logger.masks.some((mask) => key.search(mask) !== -1)) {
         masked[key] = MASK;
       } else if (typeof value === "string") {

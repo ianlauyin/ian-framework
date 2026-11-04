@@ -35,7 +35,7 @@ mod tests {
             .context
             .insert("user_agent".to_string(), LogValue::from("demo-agent"));
         event.latency_ms = Some(12);
-        event.info.insert("region".to_string(), json!("asia"));
+        event.extra.insert("region".to_string(), json!("asia"));
         event
     }
 

@@ -53,9 +53,9 @@ The monitor makes one event when the usage rises to the threshold or above it. I
 | `latency_ms` | null |
 | `error_message` | null |
 | `level` | `warn` |
-| `info.disk_percent` | The usage, rounded to one decimal, as a JSON number |
-| `info.threshold_percent` | The threshold, as a JSON number |
-| `info.path` | The monitored path |
+| `extra.disk_percent` | The usage, rounded to one decimal, as a JSON number |
+| `extra.threshold_percent` | The threshold, as a JSON number |
+| `extra.path` | The monitored path |
 
 ## Stop
 

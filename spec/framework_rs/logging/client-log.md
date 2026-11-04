@@ -25,9 +25,9 @@ The function sets the fields of the result as follows:
 | `action` | The client value, with each control character changed to a space, and cut to 128 characters. |
 | `context` | Empty object. The client value is not kept. |
 | `error_message` | For an `error` event: the client text with each control character changed to a space, and cut to 1024 characters, or the text `no error message` when that text is null, missing or blank. For a `warn` event: the same text rules, or null when the text is null, missing or blank. For an `info` event: null. The client value is not kept. |
-| `info` | The client keys and values that obey the `info` rules below. |
+| `extra` | The client keys and values that obey the `extra` rules below. |
 
-The function reads each `info` key:
+The function reads each `extra` key:
 
 - The function stores at most 32 keys. It ignores the keys after the 32nd stored key.
 - The function does not store a value that is longer than 2048 bytes.

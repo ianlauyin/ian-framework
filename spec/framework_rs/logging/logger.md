@@ -22,7 +22,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - `context` is `BTreeMap<String, LogValue>`.
 - `Logger::info` sets no `error_message`. The event rules for `error_message` are in `spec/framework_rs/logging/event.md`.
 - The function makes the event with `LogEvent::info`, `LogEvent::warn`, `LogEvent::warn_with` or `LogEvent::error`, and then sets `context`. The constructor rules are in `spec/framework_rs/logging/event.md`.
-- The event has the current HKT time, an empty `id`, no `latency_ms` and an empty `info`.
+- The event has the current HKT time, an empty `id`, no `latency_ms` and an empty `extra`.
 - When a shipper is set, the function calls `LogShipper::record` with the event. The shipper masks and ships the event.
 - When no shipper is set, the function writes one `tracing` event at the same level. The fields are `action`, `error_message` and `context`. `context` is the JSON text of the context. The function does not mask the context in this case.
 - The framework code that must log an error uses `Logger::error`. It does not use `tracing::error!`.

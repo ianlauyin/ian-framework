@@ -23,9 +23,9 @@ This feature is not product business logic.
 
 | Method | Effect |
 | --- | --- |
-| `Logger.info(action, info?)` | Records one event with the level `info`. |
-| `Logger.warn(action, info?)` | Records one event with the level `warn`. |
-| `Logger.error(action, errorMessage, info?)` | Records one event with the level `error`. When `errorMessage` is empty or has only whitespace, the logger uses the text `unknown error`. |
+| `Logger.info(action, extra?)` | Records one event with the level `info`. |
+| `Logger.warn(action, extra?)` | Records one event with the level `warn`. |
+| `Logger.error(action, errorMessage, extra?)` | Records one event with the level `error`. When `errorMessage` is empty or has only whitespace, the logger uses the text `unknown error`. |
 | `Logger.wrapAction(name, action)` | Returns a function that logs each run of `action`. The rules are in the section "Action log". |
 | `Logger.contextWrapper(module, context)` | Returns a new object that has the keys of `context`. Each function value is wrapped with `Logger.wrapAction`. The rules are in the section "Action log". |
 | `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `boolean`. A key that exists gets the new value. |
@@ -53,12 +53,12 @@ The event has these fields:
 | `level` | The level of the method. |
 | `error_message` | `null` for an `info` event and a `warn` event. For an `error` event, the `errorMessage` argument after the masking. An empty or blank `errorMessage` becomes `unknown error` before the masking. |
 | `context` | A copy of the context of the logger. The context is empty until `Logger.addContext` adds keys. |
-| `info` | The `info` values after the masking. |
+| `extra` | The `extra` values after the masking. |
 
-`info` rules:
+`extra` rules:
 
 - The logger adds the key `page`. The value is `location.pathname`.
-- A `page` key in the caller `info` replaces that value.
+- A `page` key in the caller `extra` replaces that value.
 - The logger keeps the other caller keys.
 
 ### Context
@@ -74,9 +74,9 @@ A project wraps each of its context actions with `Logger.wrapAction(name, action
 - Each call records one event, after the wrapped function succeeds or fails. The wrapper does not record an event before the wrapped function runs.
 - The wrapper starts a timer with `performance.now()` before the wrapped function runs. `latency_ms` is the time to the end, in milliseconds, rounded to an integer.
 - When the wrapped function returns, the event has the level `info`. `action` of the event is `name`.
-- When the wrapped function throws, the event has the level `error`, and the wrapper throws the same error again. `info` has the key `error`, and `error_message` has the same text.
+- When the wrapped function throws, the event has the level `error`, and the wrapper throws the same error again. `extra` has the key `error`, and `error_message` has the same text.
 - When the wrapped function returns a promise, the wrapper records the event after the promise settles. The time includes the wait for the promise. A rejection still reaches the caller.
-- `info` has the key `args`. The value is the JSON text of the array of the arguments of the call. When the arguments cannot be made into JSON text, the value is `unserializable`.
+- `extra` has the key `args`. The value is the JSON text of the array of the arguments of the call. When the arguments cannot be made into JSON text, the value is `unserializable`.
 - The masking rules apply to `args`.
 - The value of `error` is the `message` of the error when it is an `Error` and the message is not blank. Else the value is `unknown error`.
 
@@ -120,9 +120,9 @@ Send rules:
 
 ### Masking
 
-The logger masks `info` and `error_message` before it puts the event in the queue.
+The logger masks `extra` and `error_message` before it puts the event in the queue.
 
-- The start list of patterns is empty. With no pattern, the logger does not change `info`.
+- The start list of patterns is empty. With no pattern, the logger does not change `extra`.
 - `Logger.setMaskPatterns` replaces the full list.
 - The logger adds the `g` flag to each pattern that does not have it. It keeps the other flags.
 - The masking applies to the `page` key also.
@@ -149,4 +149,4 @@ This feature does not include these items:
 - A default mask pattern.
 - A retry of a failed send.
 - A send on a page unload other than the `visibilitychange` event.
-- Nested values in `info`.
+- Nested values in `extra`.

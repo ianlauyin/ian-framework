@@ -24,7 +24,7 @@ General rules:
 | `level` | From the response status. The rules are below. |
 | `error_message` | `response status {status}` when the level is `error`. Else null. |
 | `context` | The keys `ip`, `user_agent` and `request_url`. The rules are below. |
-| `info` | The JSON body. The rules are below. |
+| `extra` | The JSON body. The rules are below. |
 
 ### Context
 
@@ -57,9 +57,9 @@ Level rules:
 | 400 through 499 | `warn` |
 | Below 400 | `info` |
 
-### Info
+### Extra
 
-`info` is the JSON object of the request body. A request with no logged body has an empty `info`.
+`extra` is the JSON object of the request body. A request with no logged body has an empty `extra`.
 
 The middleware reads the body only when all these rules are true:
 
@@ -70,11 +70,11 @@ Body rules:
 
 - The body is one JSON object.
 - The middleware keeps each nested value.
-- A JSON body that is not an object gives an empty `info`.
-- A body that is not valid JSON gives an empty `info`.
+- A JSON body that is not an object gives an empty `extra`.
+- A body that is not valid JSON gives an empty `extra`.
 - The middleware does not log a body of a different media type.
-- An empty object gives an empty `info`.
+- An empty object gives an empty `extra`.
 - The middleware gives the same body bytes to the inner handler.
 - The middleware does not read a different body. Thus a large body or a body without `content-length` goes to the handler as a stream.
 - When the body read fails, the middleware does not call the inner handler. It returns status 400 and records the event with status 400.
-- The shipper masks `context` and `info` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. `info` can have nested values, so the key rule applies to their keys. The pattern rule applies to the text of `request_url`.
+- The shipper masks `context` and `extra` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. `extra` can have nested values, so the key rule applies to their keys. The pattern rule applies to the text of `request_url`.

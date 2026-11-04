@@ -15,7 +15,7 @@ One event is one `LogEvent`. One event has these fields:
 | `level` | One `LogLevel` value |
 | `error_message` | Text of the error, or null |
 | `context` | One JSON object with the facts about where the event came from. Each value is a string, a number, or a `bool`. |
-| `info` | One JSON object with the data of the event |
+| `extra` | One JSON object with the data of the event |
 
 - The JSON of the event always has the key `error_message`. Its value is null when the event has no message.
 - The event has no `ip` field and no `user_agent` field. The route middleware and the client log route put them in `context`.
@@ -27,12 +27,12 @@ One event is one `LogEvent`. One event has these fields:
 - The fields of `LogEvent` are not public. A caller outside the crate cannot make an event with a struct literal and cannot read a field directly.
 - A caller outside the crate makes an event with `LogEvent::info`, `LogEvent::warn`, `LogEvent::warn_with` or `LogEvent::error`. The rules are in the section "Constructors".
 - A caller outside the crate also gets an event from deserialize. `LogEvent` uses the plain `Deserialize` derive, and `error_message` has `#[serde(default)]`. An event from an untrusted client goes through `LogEvent::from_client`.
-- A caller outside the crate reads an event with `ts()`, `id()`, `action()`, `latency_ms()`, `level()`, `error_message()`, `context()` and `fields()`. `fields()` returns the `info` map. The name `info` is the constructor.
+- A caller outside the crate reads an event with `ts()`, `id()`, `action()`, `latency_ms()`, `level()`, `error_message()`, `context()` and `extra()`. `extra()` returns the `extra` map. The name `info` is the constructor.
 - A caller outside the crate sets the event id with `set_id`. The log server sets the id of each event that it stores.
 
 ### Changes that break a caller
 
-- `LogEvent::info(action)` is the constructor of an `info` event. The accessor that returned the `info` map is now `fields()`.
+- `LogEvent::info(action)` is the constructor of an `info` event. The accessor of the `extra` map is `extra()`.
 - `LogEvent::new` is now `LogEvent::from_client`.
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
 - `Logger::warn(action, context)` has no message. `Logger::warn_with(action, error_message, context)` and `LogEvent::warn_with` give a message.
@@ -47,7 +47,7 @@ One event is one `LogEvent`. One event has these fields:
 | `LogEvent::error(action, error_message)` | `error` | `error_message` is `impl Into<String>`, so the caller must give it. |
 
 - `action` is `impl Into<String>`.
-- A constructor sets `ts` to the current HKT time, `id` to an empty string, `latency_ms` to null, and `context` and `info` to empty objects.
+- A constructor sets `ts` to the current HKT time, `id` to an empty string, `latency_ms` to null, and `context` and `extra` to empty objects.
 - A constructor does not change the `action` text or the message text. Only `LogEvent::from_client` cuts text.
 
 ### Error message
@@ -68,7 +68,7 @@ One event is one `LogEvent`. One event has these fields:
 
 - The type of a `context` value is `ian_framework::logging::LogValue`. It is a string, a number, or a `bool`.
 - Deserialize of an event rejects an array, an object, or null in `context`.
-- The type of `info` is `serde_json::Map<String, serde_json::Value>`. It is a JSON object, and its values can be nested.
+- The type of `extra` is `serde_json::Map<String, serde_json::Value>`. It is a JSON object, and its values can be nested.
 
 ### Time
 
