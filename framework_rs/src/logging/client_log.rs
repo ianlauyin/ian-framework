@@ -11,7 +11,8 @@ use chrono::{DateTime, Duration, FixedOffset};
 use crate::http::middleware::{client_ip, require_same_origin, user_agent};
 use crate::time::hkt_now;
 
-use super::{LogEvent, LogLevel, LogShipper, LogValue, SHIP_CHUNK};
+use super::log_shipper::SHIP_CHUNK;
+use super::{LogEvent, LogLevel, LogShipper, LogValue};
 
 const CLIENT_LOG_PATH: &str = "/log";
 const CLIENT_ACTION_MAX_CHARS: usize = 128;

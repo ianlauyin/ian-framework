@@ -2,21 +2,21 @@ use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::Router;
 
-use crate::logging::{LogEvent, LogShipper, SHIP_CHUNK};
+use crate::logging::log_shipper::SHIP_CHUNK;
+use crate::logging::{LogEvent, LogShipper};
 
 use crate::http::middleware::log_request;
 use crate::logging::client_log::*;
-use crate::logging::{LogLevel, ShipperConfig};
-use crate::test::logging::buffered_events;
+use crate::logging::LogLevel;
+use crate::test::logging::{buffered_events, shipper_config};
 use axum::body::Body;
 use axum::middleware::from_fn_with_state;
 use serde_json::json;
 use tower::ServiceExt;
 
 fn shipper() -> LogShipper {
-    let mut config = ShipperConfig::new("web");
-    config.endpoint = Some("https://logs.example".to_string());
-    LogShipper::new(config).unwrap()
+    let config = shipper_config("web");
+    LogShipper::new(config)
 }
 
 fn client_event(action: &str) -> serde_json::Value {

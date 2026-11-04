@@ -1,17 +1,15 @@
-use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::shutdown::ShutdownReceiver;
 
+use super::log_buffer::LogBuffer;
 use super::mask::{Masks, MASK};
-use super::{LogEvent, ShipperConfig, SHIP_CHUNK};
+use super::{LogEvent, ShipperConfig};
 
 pub(crate) const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
-pub(crate) const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";
-
-const CAPACITY: usize = 10_000;
-const SHIP_EVERY: Duration = Duration::from_secs(5);
+pub(crate) const SHIP_CHUNK: usize = 1_000;
+pub(crate) const SHIP_EVERY: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct LogShipper {
@@ -33,10 +31,7 @@ impl LogShipper {
                 endpoint: config.endpoint,
                 post_api_key,
                 masks,
-                buffer: Mutex::new(Buffer {
-                    events: VecDeque::new(),
-                    capacity_warned: false,
-                }),
+                buffer: Mutex::new(LogBuffer::new()),
                 http,
                 shipping: tokio::sync::Mutex::new(()),
             }),
@@ -45,18 +40,7 @@ impl LogShipper {
 
     pub fn record(&self, mut event: LogEvent) {
         self.inner.masks.mask_event(&mut event);
-        let mut buffer = self.lock_buffer();
-        while buffer.events.len() >= CAPACITY {
-            buffer.events.pop_front();
-        }
-        buffer.events.push_back(event);
-        if !buffer.capacity_warned && meets_capacity_warn(buffer.events.len(), CAPACITY) {
-            while buffer.events.len() >= CAPACITY {
-                buffer.events.pop_front();
-            }
-            buffer.events.push_back(capacity_warn_event());
-            buffer.capacity_warned = true;
-        }
+        self.lock_buffer().push(event);
     }
 
     pub fn spawn_ship_loop(&self, shutdown: ShutdownReceiver) -> tokio::task::JoinHandle<()> {
@@ -77,7 +61,7 @@ impl LogShipper {
         })
     }
 
-    pub(crate) fn lock_buffer(&self) -> std::sync::MutexGuard<'_, Buffer> {
+    pub(crate) fn lock_buffer(&self) -> std::sync::MutexGuard<'_, LogBuffer> {
         self.inner
             .buffer
             .lock()
@@ -85,7 +69,7 @@ impl LogShipper {
     }
 
     pub(crate) fn buffered_len(&self) -> usize {
-        self.lock_buffer().events.len()
+        self.lock_buffer().len()
     }
 
     // Stop at the first batch that does not leave the buffer, so a down log
@@ -105,11 +89,7 @@ impl LogShipper {
 
     pub(crate) async fn ship_batch(&self) {
         let _shipping = self.inner.shipping.lock().await;
-        let batch = {
-            let mut buffer = self.lock_buffer();
-            let count = SHIP_CHUNK.min(buffer.events.len());
-            buffer.events.drain(..count).collect::<Vec<_>>()
-        };
+        let batch = self.lock_buffer().take_chunk(SHIP_CHUNK);
         if batch.is_empty() {
             return;
         }
@@ -133,22 +113,9 @@ impl LogShipper {
             Err(_) => false,
         };
         if !posted {
-            self.restore_batch(batch);
+            self.lock_buffer().restore(batch);
         } else {
-            let mut buffer = self.lock_buffer();
-            if !meets_capacity_warn(buffer.events.len(), CAPACITY) {
-                buffer.capacity_warned = false;
-            }
-        }
-    }
-
-    fn restore_batch(&self, batch: Vec<LogEvent>) {
-        let mut buffer = self.lock_buffer();
-        for event in batch.into_iter().rev() {
-            buffer.events.push_front(event);
-        }
-        while buffer.events.len() > CAPACITY {
-            buffer.events.pop_back();
+            self.lock_buffer().shipped();
         }
     }
 
@@ -168,17 +135,12 @@ impl std::fmt::Debug for LogShipper {
     }
 }
 
-pub(crate) struct Buffer {
-    pub(crate) events: VecDeque<LogEvent>,
-    capacity_warned: bool,
-}
-
 pub(crate) struct Inner {
     pub(crate) app: String,
     pub(crate) endpoint: String,
     pub(crate) post_api_key: reqwest::header::HeaderValue,
     pub(crate) masks: Masks,
-    buffer: Mutex<Buffer>,
+    buffer: Mutex<LogBuffer>,
     pub(crate) http: reqwest::Client,
     shipping: tokio::sync::Mutex<()>,
 }
@@ -190,12 +152,4 @@ fn ship_client() -> Result<reqwest::Client, reqwest::Error> {
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(concat!("ian_framework/", env!("CARGO_PKG_VERSION")))
         .build()
-}
-
-fn meets_capacity_warn(len: usize, capacity: usize) -> bool {
-    (len as u128) * 5 >= (capacity as u128) * 4
-}
-
-fn capacity_warn_event() -> LogEvent {
-    LogEvent::warn(CAPACITY_WARN_NOTE)
 }

@@ -34,14 +34,10 @@ impl Masks {
         if self.plains.iter().any(|plain| plain.is_match(key)) {
             *value = LogValue::String(MASK.to_string());
         } else if let LogValue::String(text) = value {
-            self.mask_text(text);
-        }
-    }
-
-    fn mask_text(&self, text: &mut String) {
-        for regex in self.pairs.iter().chain(&self.plains) {
-            if let std::borrow::Cow::Owned(masked) = regex.replace_all(text, MASK) {
-                *text = masked;
+            for regex in self.pairs.iter().chain(&self.plains) {
+                if let std::borrow::Cow::Owned(masked) = regex.replace_all(text, MASK) {
+                    *text = masked;
+                }
             }
         }
     }

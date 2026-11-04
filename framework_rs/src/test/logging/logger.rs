@@ -8,10 +8,10 @@ use crate::logging::logger::*;
 fn logs_without_a_shipper_and_keeps_the_first_shipper() {
     Logger::error("TEST/error", BTreeMap::new(), "failed".into());
     if Logger::get().is_none() {
-        let first = LogShipper::new(crate::logging::ShipperConfig::new("my-app")).unwrap();
+        let first = LogShipper::new(crate::test::logging::shipper_config("my-app"));
         assert!(Logger::init(first).is_ok());
     }
-    let second = LogShipper::new(crate::logging::ShipperConfig::new("my-app")).unwrap();
+    let second = LogShipper::new(crate::test::logging::shipper_config("my-app"));
     assert!(Logger::init(second).is_err());
     Logger::warn("TEST/warn", BTreeMap::new());
     Logger::warn_with("TEST/warn", BTreeMap::new(), "slow".into());

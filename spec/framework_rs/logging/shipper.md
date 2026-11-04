@@ -20,7 +20,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 `LogShipper::new` builds one shipper from that config. One shipper has one app. The app is the routing name.
 
-- The buffer capacity is 10000 events. The ship interval is 5 seconds. The config does not set them.
+- The buffer capacity is 20000 events. The ship interval is 60 seconds. The config does not set them.
 - The app is not checked. The caller gives a valid app name.
 
 `LogShipper::new` returns `LogShipper`. It panics in these conditions:
@@ -44,7 +44,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - Before it stores the event, `LogShipper::record` masks the event `context` values and `extra` values.
 - The shipper does not write `app` into the event.
 - The shipper stores the full `action`, `id`, and `context`.
-- The buffer keeps a maximum of 10000 events.
+- The buffer keeps a maximum of 20000 events.
 - When the buffer is full, a new event removes the oldest event.
 
 ### Capacity warning
@@ -59,7 +59,7 @@ After `LogShipper::record` stores the event, the shipper reads the buffer length
 | 1 | 1 |
 | 4 | 4 |
 | 5 | 4 |
-| 10000 | 8000 |
+| 20000 | 16000 |
 
 When the length meets the limit, `LogShipper::record` stores one new capacity warning.
 
@@ -108,7 +108,7 @@ Batch rules:
 - A response status from 200 through 299 keeps that batch out of the buffer.
 - A transport error puts that batch back at the front of the buffer.
 - An HTTP error status puts that batch back at the front of the buffer.
-- When that return makes the buffer larger than the capacity, the shipper removes the newest events above the capacity.
+- When that return makes the buffer larger than the capacity, the shipper removes the oldest events above the capacity.
 - An empty buffer does not send an HTTP request.
 
 Capacity warning after a ship:
@@ -123,7 +123,7 @@ Loop task:
 - The caller runs `LogShipper::spawn_ship_loop` on a Tokio runtime.
 - `LogShipper::spawn_ship_loop` takes one `ian_framework::shutdown::ShutdownReceiver`. The shutdown module is in `spec/framework_rs/shutdown/receiver.md`.
 - It returns `tokio::task::JoinHandle<()>`.
-- The interval is 5 seconds.
+- The interval is 60 seconds.
 - A ship failure does not stop the loop.
 - When the shutdown receiver is triggered, the loop stops and makes one final flush.
 - The final flush sends batches until the buffer is empty.

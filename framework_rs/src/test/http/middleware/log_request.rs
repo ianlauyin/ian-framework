@@ -6,8 +6,8 @@ use crate::logging::LogShipper;
 
 use crate::http::middleware::log_request::*;
 use crate::logging::LogLevel;
-use crate::logging::ShipperConfig;
 use crate::test::logging::buffered_events;
+use crate::test::logging::shipper_config;
 use axum::extract::{ConnectInfo, Path};
 use axum::middleware::from_fn_with_state;
 use axum::routing::{get, post};
@@ -33,9 +33,8 @@ async fn status_from_path(Path(code): Path<u16>) -> StatusCode {
 }
 
 fn shipper() -> LogShipper {
-    let mut config = ShipperConfig::new("api");
-    config.endpoint = Some("https://logs.example".to_string());
-    LogShipper::new(config).unwrap()
+    let config = shipper_config("api");
+    LogShipper::new(config)
 }
 
 async fn echo(body: String) -> String {
@@ -184,10 +183,9 @@ async fn middleware_skips_a_body_it_cannot_log() {
 
 #[tokio::test]
 async fn middleware_masks_request_url_and_body_fields() {
-    let mut config = ShipperConfig::new("api");
-    config.endpoint = Some("https://logs.example".to_string());
+    let mut config = shipper_config("api");
     config.mask_patterns = vec![r"password".to_string(), r"token=[^&]+".to_string()];
-    let shipper = LogShipper::new(config).unwrap();
+    let shipper = LogShipper::new(config);
     let body = json!({"user": "alice", "password": "hunter2"}).to_string();
     post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
     let event = &buffered_events(&shipper)[0];

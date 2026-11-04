@@ -1,5 +1,6 @@
 pub(crate) mod client_log;
 pub(crate) mod event;
+pub(crate) mod log_buffer;
 pub(crate) mod log_shipper;
 pub(crate) mod logger;
 pub(crate) mod mask;
@@ -10,5 +11,3 @@ pub use event::{LogEvent, LogLevel, LogValue};
 pub use log_shipper::LogShipper;
 pub use logger::Logger;
 pub use shipper_config::{ShipperConfig, DEFAULT_MASK_PATTERNS};
-
-pub(crate) const SHIP_CHUNK: usize = 1_000;
