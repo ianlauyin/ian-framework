@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
 use crate::time::hkt_now;
@@ -75,7 +75,7 @@ pub struct LogEvent {
     pub(crate) action: String,
     pub(crate) latency_ms: Option<u64>,
     pub(crate) level: LogLevel,
-    #[serde(default, deserialize_with = "text_or_none")]
+    #[serde(default)]
     pub(crate) error_message: Option<String>,
     pub(crate) context: BTreeMap<String, LogValue>,
     pub(crate) extra: BTreeMap<String, LogValue>,
@@ -142,12 +142,4 @@ impl LogEvent {
             extra: BTreeMap::new(),
         }
     }
-}
-
-// One bad `error_message` must not reject the batch, so a value that is not a string reads as none.
-fn text_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
-    Ok(match Value::deserialize(deserializer)? {
-        Value::String(text) => Some(text),
-        _ => None,
-    })
 }

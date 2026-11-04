@@ -60,7 +60,7 @@ One event is one `LogEvent`. One event has these fields:
 
 - A `warn` event can have `error_message`. An `info` event can have it also, but the framework does not set it.
 - An `error` event that the framework makes has `error_message`, because `LogEvent::error` requires it.
-- Deserialize does not check `error_message`. A missing `error_message` reads as null on an event of each level. A value that is not a string, such as a number or an object, also reads as null. One bad value does not reject the batch. A client `error` event with a null, a missing or a blank `error_message` gets a placeholder in `LogEvent::from_client`. The rules are in `spec/framework_rs/logging/client-log.md`.
+- Deserialize does not check `error_message`. A missing `error_message` reads as null on an event of each level. A null reads as null. A value that is not a string and not null, such as a number or an object, gives a deserialize error. One bad value rejects the batch. A client `error` event with a null, a missing or a blank `error_message` gets a placeholder in `LogEvent::from_client`. The rules are in `spec/framework_rs/logging/client-log.md`.
 - The type of `error_message` is `Option<String>`. `error_message()` returns `Option<&str>`.
 - The framework code that makes an `error` event sets `error_message` as follows:
 

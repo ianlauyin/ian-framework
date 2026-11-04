@@ -359,23 +359,20 @@ fn new_keeps_a_bounded_error_message() {
 }
 
 #[test]
-fn a_non_string_error_message_reads_as_none() {
-    for bad in [
-        json!(123),
-        json!({"a": 1}),
-        json!([1]),
-        json!(true),
-        json!(null),
-    ] {
+fn a_non_string_error_message_is_rejected() {
+    for bad in [json!(123), json!({"a": 1}), json!([1]), json!(true)] {
         let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
         value["error_message"] = bad;
-        let parsed: LogEvent = serde_json::from_value(value).unwrap();
-        assert_eq!(parsed.error_message(), None);
-        assert_eq!(
-            parsed.from_client().error_message(),
-            Some("no error message")
-        );
+        assert!(serde_json::from_value::<LogEvent>(value).is_err());
     }
+    let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
+    value["error_message"] = json!(null);
+    let parsed: LogEvent = serde_json::from_value(value).unwrap();
+    assert_eq!(parsed.error_message(), None);
+    assert_eq!(
+        parsed.from_client().error_message(),
+        Some("no error message")
+    );
 }
 
 #[test]

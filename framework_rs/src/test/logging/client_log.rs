@@ -87,21 +87,15 @@ async fn an_error_event_without_a_message_does_not_reject_the_batch() {
 }
 
 #[tokio::test]
-async fn a_non_string_error_message_does_not_reject_the_batch() {
+async fn a_non_string_error_message_rejects_the_batch() {
     let shipper = shipper();
     let mut number = client_event("number");
     number["error_message"] = json!(123);
-    let mut object = client_event("object");
-    object["error_message"] = json!({"a": 1});
-    let body = json!([number, object, client_event("good")]).to_string();
+    let body = json!([number, client_event("good")]).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&shipper, &headers, Body::from(body)).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    let events = buffered_events(&shipper);
-    assert_eq!(events.len(), 3);
-    assert_eq!(events[0].error_message(), Some("no error message"));
-    assert_eq!(events[1].error_message(), Some("no error message"));
-    assert_eq!(events[2].error_message(), Some("client failed"));
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(buffered_events(&shipper).is_empty());
 }
 
 #[tokio::test]
