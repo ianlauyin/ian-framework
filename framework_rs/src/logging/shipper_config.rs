@@ -11,7 +11,6 @@ pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
     r"(?i)cookie",
 ];
 
-#[derive(Clone, PartialEq, Eq)]
 pub struct ShipperConfig {
     pub(crate) app: String,
     pub(crate) endpoint: String,

@@ -202,6 +202,6 @@ fn a_warn_exception_shows_its_severity_and_code() {
         severity = crate::exception::Severity::Warn
     );
     assert_eq!(warn.code(), "SLOW");
-    assert_eq!(warn.severity(), crate::exception::Severity::Warn);
+    assert_eq!(warn.severity(), &crate::exception::Severity::Warn);
     assert!(String::from(&warn).starts_with("0: WARN [SLOW] slow at "));
 }

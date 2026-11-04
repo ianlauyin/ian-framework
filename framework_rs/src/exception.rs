@@ -17,7 +17,7 @@ macro_rules! exception {
     }};
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Severity {
     Warn,
     Error,
@@ -59,8 +59,8 @@ impl Exception {
         }
     }
 
-    pub fn severity(&self) -> Severity {
-        self.severity
+    pub fn severity(&self) -> &Severity {
+        &self.severity
     }
 
     pub fn code(&self) -> &'static str {
@@ -95,7 +95,7 @@ impl Exception {
 }
 
 impl Severity {
-    pub fn as_str(self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Severity::Warn => "WARN",
             Severity::Error => "ERROR",
