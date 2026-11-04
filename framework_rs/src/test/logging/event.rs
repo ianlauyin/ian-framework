@@ -24,17 +24,6 @@ fn client_action_and_info_are_bounded() {
     assert_eq!(batch_event("a", Value::Object(many)).extra().len(), 32);
 }
 
-#[test]
-fn level_text_matches_the_json_text_and_parses_back() {
-    for level in [LogLevel::Info, LogLevel::Warn, LogLevel::Error] {
-        assert_eq!(serde_json::to_value(level).unwrap(), json!(level.as_str()));
-        assert_eq!(LogLevel::parse(level.as_str()), Some(level));
-    }
-    for text in ["", "INFO", "Info", "debug", " info"] {
-        assert_eq!(LogLevel::parse(text), None, "{text:?}");
-    }
-}
-
 fn sample() -> LogEvent {
     let mut event = LogEvent::info("GET /health");
     event.ts = DateTime::parse_from_rfc3339("2026-10-18T20:00:00+08:00").unwrap();
@@ -99,11 +88,10 @@ fn empty_http_fields_are_null_or_empty() {
 }
 
 #[test]
-fn getters_and_set_id_expose_the_fields() {
-    let mut event = sample();
-    event.set_id("req-2".to_string());
+fn getters_expose_the_fields() {
+    let event = sample();
     assert_eq!(event.ts(), sample().ts);
-    assert_eq!(event.id(), "req-2");
+    assert_eq!(event.id(), "req-1");
     assert_eq!(event.action(), "GET /health");
     assert_eq!(event.latency_ms(), Some(12));
     assert_eq!(event.level(), LogLevel::Info);

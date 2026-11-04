@@ -28,7 +28,6 @@ One event is one `LogEvent`. One event has these fields:
 - A caller outside the crate makes an event with `LogEvent::info`, `LogEvent::warn`, `LogEvent::warn_with` or `LogEvent::error`. The rules are in the section "Constructors".
 - A caller outside the crate also gets an event from deserialize. `LogEvent` uses the plain `Deserialize` derive, and `error_message` has `#[serde(default)]`. An event from an untrusted client goes through `LogEvent::from_client`.
 - A caller outside the crate reads an event with `ts()`, `id()`, `action()`, `latency_ms()`, `level()`, `error_message()`, `context()` and `extra()`. `extra()` returns the `extra` map. The name `info` is the constructor.
-- A caller outside the crate sets the event id with `set_id`. The log server sets the id of each event that it stores.
 
 ### Changes that break a caller
 
@@ -38,6 +37,9 @@ One event is one `LogEvent`. One event has these fields:
 - `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
 - `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
 - `ian_framework::logging::LogValue` is an untagged enum with the variants `Bool`, `Number` and `String`. Each `context` value and each `extra` value is a `LogValue`.
+- `LogEvent::set_id` does not exist. A caller outside the crate cannot set `id`.
+- `LogLevel::as_str` does not exist.
+- `LogLevel::parse` does not exist.
 
 ### Constructors
 
@@ -103,5 +105,3 @@ An event that the framework makes for itself, not for a request, uses the shape 
 - `LogLevel` implements `Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `Serialize` and `Deserialize`.
 - The JSON text is the lowercase variant name.
 - A JSON text that is not in the table gives a deserialize error.
-- `LogLevel::as_str` returns the JSON text of the variant.
-- `LogLevel::parse` takes a JSON text and returns `Some` variant. It returns `None` for a text that is not in the table. It does not change the letter case.

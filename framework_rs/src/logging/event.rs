@@ -1,17 +1,10 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, FixedOffset};
+use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Number, Value};
 
 use crate::time::hkt_now;
-
-const CLIENT_ACTION_MAX_CHARS: usize = 128;
-const CLIENT_ERROR_MESSAGE_MAX_CHARS: usize = 1024;
-const CLIENT_EXTRA_MAX_KEYS: usize = 32;
-const CLIENT_EXTRA_VALUE_MAX_BYTES: usize = 2048;
-const CLIENT_TS_MAX_AGE_HOURS: i64 = 24;
-const CLIENT_ERROR_PLACEHOLDER: &str = "no error message";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -19,25 +12,6 @@ pub enum LogLevel {
     Info,
     Warn,
     Error,
-}
-
-impl LogLevel {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            LogLevel::Info => "info",
-            LogLevel::Warn => "warn",
-            LogLevel::Error => "error",
-        }
-    }
-
-    pub fn parse(text: &str) -> Option<LogLevel> {
-        match text {
-            "info" => Some(LogLevel::Info),
-            "warn" => Some(LogLevel::Warn),
-            "error" => Some(LogLevel::Error),
-            _ => None,
-        }
-    }
 }
 
 // An untagged enum, so deserialize rejects null, an array and an object.
@@ -132,10 +106,6 @@ impl LogEvent {
         &self.id
     }
 
-    pub fn set_id(&mut self, id: String) {
-        self.id = id;
-    }
-
     pub fn action(&self) -> &str {
         &self.action
     }
@@ -160,29 +130,6 @@ impl LogEvent {
         &self.extra
     }
 
-    pub fn from_client(&self) -> LogEvent {
-        let now = hkt_now();
-        let error_message = match self.level {
-            LogLevel::Info => None,
-            LogLevel::Warn => self
-                .error_message
-                .as_deref()
-                .map(|text| client_text(text, CLIENT_ERROR_MESSAGE_MAX_CHARS))
-                .filter(|text| !text.trim().is_empty()),
-            LogLevel::Error => Some(client_error_message(self.error_message.as_deref())),
-        };
-        LogEvent {
-            ts: client_ts(self.ts, now),
-            id: String::new(),
-            action: client_text(&self.action, CLIENT_ACTION_MAX_CHARS),
-            latency_ms: None,
-            level: self.level,
-            error_message,
-            context: BTreeMap::new(),
-            extra: client_extra(&self.extra),
-        }
-    }
-
     fn build(action: String, level: LogLevel, error_message: Option<String>) -> LogEvent {
         LogEvent {
             ts: hkt_now(),
@@ -203,63 +150,4 @@ fn text_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Str
         Value::String(text) => Some(text),
         _ => None,
     })
-}
-
-fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<FixedOffset> {
-    if ts > now || now - ts > Duration::hours(CLIENT_TS_MAX_AGE_HOURS) {
-        return now;
-    }
-    ts.with_timezone(now.offset())
-}
-
-// The text is shown in log lines, so a client cannot choose a line break or a text above the limit.
-fn client_text(text: &str, max_chars: usize) -> String {
-    text.chars()
-        .map(|ch| if ch.is_control() { ' ' } else { ch })
-        .take(max_chars)
-        .collect()
-}
-
-fn client_error_message(message: Option<&str>) -> String {
-    let text = client_text(message.unwrap_or_default(), CLIENT_ERROR_MESSAGE_MAX_CHARS);
-    if text.trim().is_empty() {
-        return CLIENT_ERROR_PLACEHOLDER.to_string();
-    }
-    text
-}
-
-fn client_extra(extra: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValue> {
-    let mut kept = BTreeMap::new();
-    for (key, value) in extra {
-        if kept.len() >= CLIENT_EXTRA_MAX_KEYS {
-            break;
-        }
-        if !extra_key_ok(key) {
-            continue;
-        }
-        let Some(text) = extra_value(value) else {
-            continue;
-        };
-        kept.insert(key.clone(), LogValue::String(text));
-    }
-    kept
-}
-
-fn extra_key_ok(key: &str) -> bool {
-    !key.is_empty()
-        && key
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
-}
-
-fn extra_value(value: &LogValue) -> Option<String> {
-    let text = match value {
-        LogValue::String(text) => text.clone(),
-        LogValue::Number(number) => number.to_string(),
-        LogValue::Bool(flag) => flag.to_string(),
-    };
-    if text.len() > CLIENT_EXTRA_VALUE_MAX_BYTES || text.contains('\r') || text.contains('\n') {
-        return None;
-    }
-    Some(text)
 }
