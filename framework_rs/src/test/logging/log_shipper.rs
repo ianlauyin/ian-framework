@@ -205,7 +205,7 @@ fn record_drops_the_oldest_event_to_store_the_capacity_warning() {
 #[tokio::test]
 async fn empty_buffer_does_not_post() {
     let shipper = LogShipper::new(config("api", "http://127.0.0.1:9"));
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
 }
 
@@ -216,19 +216,19 @@ async fn unreachable_endpoint_keeps_the_buffer() {
     drop(listener);
     let shipper = LogShipper::new(config("api", format!("http://{addr}")));
     shipper.record(LogEvent::error("down", "boom"));
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 1);
     assert_eq!(buffered_events(&shipper)[0].action, "down");
 }
 
 #[tokio::test]
-async fn ship_batch_posts_json_to_the_app_path() {
+async fn send_buffer_posts_json_to_the_app_path() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = LogShipper::new(config("my-app", endpoint));
     shipper.record(LogEvent::info("one"));
     shipper.record(LogEvent::warn("two"));
     shipper.record(LogEvent::error("three", "boom"));
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
     let captured = rx.recv().await.unwrap();
     assert_eq!(captured.app, "my-app");
@@ -245,18 +245,18 @@ async fn ship_batch_posts_json_to_the_app_path() {
         assert!(item.get("project").is_none());
         assert!(item.get("action").is_some());
     }
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
 }
 
 #[tokio::test]
-async fn ship_batch_sends_the_post_api_key_as_a_bearer_token() {
+async fn send_buffer_sends_the_post_api_key_as_a_bearer_token() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let mut config = config("api", endpoint);
     config.post_api_key = "log-post-key".to_string();
     let shipper = LogShipper::new(config);
     shipper.record(LogEvent::info("one"));
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     let captured = rx.recv().await.unwrap();
     assert_eq!(
         captured.authorization.as_deref(),
@@ -266,18 +266,18 @@ async fn ship_batch_sends_the_post_api_key_as_a_bearer_token() {
 }
 
 #[tokio::test]
-async fn ship_batch_posts_one_chunk_and_leaves_the_rest() {
+async fn send_buffer_posts_one_chunk_and_leaves_the_rest() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = LogShipper::new(config("api", endpoint));
     fill(&shipper, SHIP_CHUNK + 1);
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 1);
     let events = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(events.len(), SHIP_CHUNK);
     assert_eq!(events[0].action, "0");
     assert_eq!(events[SHIP_CHUNK - 1].action, (SHIP_CHUNK - 1).to_string());
     assert_eq!(buffered_events(&shipper)[0].action, SHIP_CHUNK.to_string());
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
     let rest = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(rest.len(), 1);
@@ -289,7 +289,7 @@ async fn http_error_restores_the_batch() {
     let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
     let shipper = LogShipper::new(config("api", endpoint));
     shipper.record(LogEvent::info("keep"));
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     assert_eq!(buffered_events(&shipper)[0].action, "keep");
 }
 
@@ -300,7 +300,7 @@ async fn in_flight_records_stay_out_of_a_successful_batch() {
     shipper.record(LogEvent::info("a"));
     shipper.record(LogEvent::info("b"));
     let shipper_task = shipper.clone();
-    let ship = tokio::spawn(async move { shipper_task.ship_batch().await });
+    let ship = tokio::spawn(async move { shipper_task.send_buffer().await });
     tokio::time::timeout(Duration::from_secs(2), async {
         while shipper.buffered_len() != 0 {
             tokio::time::sleep(Duration::from_millis(5)).await;
@@ -354,7 +354,7 @@ async fn failed_ship_does_not_repeat_the_capacity_warning() {
     let shipper = LogShipper::new(config("api", endpoint));
     fill(&shipper, LIMIT);
     assert_eq!(warn_count(&buffered_events(&shipper)), 1);
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     shipper.record(LogEvent::info("more"));
     assert_eq!(warn_count(&buffered_events(&shipper)), 1);
 }
@@ -364,7 +364,7 @@ async fn successful_ship_below_80_percent_warns_on_the_next_crossing() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = LogShipper::new(config("api", endpoint));
     fill(&shipper, LIMIT);
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     let posted = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(warn_count(&posted), 0);
     assert_eq!(shipper.buffered_len(), LIMIT + 1 - SHIP_CHUNK);
@@ -377,7 +377,7 @@ async fn successful_ship_at_80_percent_does_not_warn_again() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = LogShipper::new(config("api", endpoint));
     fill(&shipper, CAPACITY);
-    shipper.ship_batch().await;
+    shipper.send_buffer().await;
     let posted = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(warn_count(&posted), 0);
     assert!(shipper.buffered_len() >= LIMIT);

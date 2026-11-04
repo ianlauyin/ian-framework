@@ -69,7 +69,7 @@ impl LogShipper {
                 tokio::select! {
                     biased;
                     _ = &mut stop => break,
-                    _ = ticker.tick() => shipper.ship_batch().await,
+                    _ = ticker.tick() => shipper.send_buffer().await,
                 }
             }
             shipper.flush().await;
@@ -95,42 +95,50 @@ impl LogShipper {
             if before == 0 {
                 return;
             }
-            self.ship_batch().await;
+            self.send_buffer().await;
             if self.buffered_len() >= before {
                 return;
             }
         }
     }
 
-    pub(crate) async fn ship_batch(&self) {
+    pub(crate) async fn send_buffer(&self) {
         let _shipping = self.inner.shipping.lock().await;
         let batch = self.lock_buffer().take_chunk(SHIP_CHUNK);
         if batch.is_empty() {
             return;
         }
-        let client = self.inner.http.clone();
-        let url = self.batch_url();
-        let posted = match serde_json::to_string(&batch) {
-            Ok(body) => {
-                let request = client
-                    .post(&url)
-                    .timeout(SHIP_TIMEOUT)
-                    .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .header(
-                        reqwest::header::AUTHORIZATION,
-                        self.inner.post_api_key.clone(),
-                    );
-                match request.body(body).send().await {
-                    Ok(response) => response.status().is_success(),
-                    Err(_) => false,
-                }
-            }
-            Err(_) => false,
-        };
-        if !posted {
+        if !self.post(&batch).await {
             self.lock_buffer().restore(batch);
         } else {
             self.lock_buffer().shipped();
+        }
+    }
+
+    pub async fn send(&self, mut events: Vec<LogEvent>) -> bool {
+        for event in &mut events {
+            self.inner.masks.mask_event(event);
+        }
+        self.post(&events).await
+    }
+
+    async fn post(&self, events: &[LogEvent]) -> bool {
+        let Ok(body) = serde_json::to_string(events) else {
+            return false;
+        };
+        let request = self
+            .inner
+            .http
+            .post(self.batch_url())
+            .timeout(SHIP_TIMEOUT)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(
+                reqwest::header::AUTHORIZATION,
+                self.inner.post_api_key.clone(),
+            );
+        match request.body(body).send().await {
+            Ok(response) => response.status().is_success(),
+            Err(_) => false,
         }
     }
 

@@ -23,13 +23,6 @@ const CLIENT_TS_MAX_AGE_HOURS: i64 = 24;
 const CLIENT_ERROR_PLACEHOLDER: &str = "no error message";
 pub(crate) const BODY_LIMIT: usize = 1024 * 1024;
 
-pub fn client_events(events: &[LogEvent]) -> Option<Vec<LogEvent>> {
-    if events.is_empty() || events.len() > SHIP_CHUNK {
-        return None;
-    }
-    Some(events.iter().map(LogEvent::from_client).collect())
-}
-
 pub fn client_log_router(shipper: LogShipper) -> Router {
     Router::new()
         .route(
@@ -37,6 +30,13 @@ pub fn client_log_router(shipper: LogShipper) -> Router {
             post(receive).route_layer(from_fn(require_same_origin)),
         )
         .with_state(shipper)
+}
+
+pub fn client_events(events: &[LogEvent]) -> Option<Vec<LogEvent>> {
+    if events.is_empty() || events.len() > SHIP_CHUNK {
+        return None;
+    }
+    Some(events.iter().map(LogEvent::from_client).collect())
 }
 
 impl LogEvent {
@@ -76,14 +76,21 @@ async fn receive(State(shipper): State<LogShipper>, request: Request) -> StatusC
     let Some(events) = client_events(&events) else {
         return StatusCode::BAD_REQUEST;
     };
-    for mut event in events {
-        event.context.insert("ip".to_string(), ip.clone().into());
-        event
-            .context
-            .insert("user_agent".to_string(), user_agent.clone().into());
-        shipper.record(event);
+    let events: Vec<LogEvent> = events
+        .into_iter()
+        .map(|mut event| {
+            event.context.insert("ip".to_string(), ip.clone().into());
+            event
+                .context
+                .insert("user_agent".to_string(), user_agent.clone().into());
+            event
+        })
+        .collect();
+    if shipper.send(events).await {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::BAD_GATEWAY
     }
-    StatusCode::NO_CONTENT
 }
 
 fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<FixedOffset> {

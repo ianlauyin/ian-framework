@@ -68,8 +68,8 @@ The function stores the full value text.
 - The function gives no list when the list has more than 1000 events.
 - The function accepts 1000 events.
 - One ship batch uses this same limit of 1000 events.
-- The function does not call `LogShipper::record`.
-- The caller calls `LogShipper::record` for each kept event.
+- The function does not call `LogShipper::record` or `LogShipper::send`.
+- The caller sends the kept events, for example with `LogShipper::send`.
 
 An app can keep its own HTTP handler. The client log route below is one such handler. The function has these limits:
 
@@ -88,11 +88,10 @@ An app can keep its own HTTP handler. The client log route below is one such han
 Shared shipper:
 
 - The project gives the same shipper to this router and to the Axum middleware.
-- Then the client events and the request events share one buffer.
-- The shipper ships them together, with the same capacity, warning, and batch rules.
-- When the middleware wraps this route, the `POST /log` request also records one request event.
+- The client events go to the log server at once. They do not enter the buffer.
+- The request events of the middleware still use the buffer and the ship loop.
+- When the middleware wraps this route, the `POST /log` request also records one request event in the buffer.
 - When that body is a maximum of 65536 bytes, the request event `body` holds the client batch.
-- The client events come first, because the middleware records after the handler returns.
 
 Same-origin rules:
 
@@ -111,5 +110,7 @@ Request handling:
 - A body that is not a JSON array of event objects gets status 400.
 - The route calls `client_events`. When that call gives no list, the status is 400 and the route records no event.
 - The route sets `ip` and `user_agent` in the `context` of each kept event from the request. The `ip` rule is the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
-- The route calls `LogShipper::record` for each kept event.
-- The response status is 204 with an empty body.
+- The route calls `LogShipper::send` once with all the kept events. It does not use the buffer.
+- `LogShipper::send` masks each event, then posts the list to the log server with the same URL, headers and timeout as a ship batch. It gives `true` only when the log server answers with a success status.
+- When `send` gives `true`, the response status is 204 with an empty body.
+- When `send` gives `false`, the response status is 502 with an empty body. The route does not buffer the events and does not retry.

@@ -12,11 +12,30 @@ use crate::test::logging::{buffered_events, shipper_config};
 use axum::body::Body;
 use axum::middleware::from_fn_with_state;
 use serde_json::json;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tower::ServiceExt;
 
 fn shipper() -> LogShipper {
-    let config = shipper_config("web");
+    let mut config = shipper_config("web");
+    config.endpoint = "http://127.0.0.1:9".to_string();
     LogShipper::new(config)
+}
+
+async fn shipper_with_server(status: StatusCode) -> (LogShipper, UnboundedReceiver<Vec<LogEvent>>) {
+    let (tx, rx) = unbounded_channel();
+    let app = Router::new().route(
+        "/log/web",
+        axum::routing::post(move |body: String| async move {
+            tx.send(serde_json::from_str(&body).unwrap()).unwrap();
+            status
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut config = shipper_config("web");
+    config.endpoint = format!("http://{addr}");
+    (LogShipper::new(config), rx)
 }
 
 fn client_event(action: &str) -> serde_json::Value {
@@ -50,8 +69,8 @@ async fn send(shipper: &LogShipper, headers: &[(&str, &str)], body: Body) -> Sta
 }
 
 #[tokio::test]
-async fn records_a_same_origin_batch_with_the_request_ip_and_user_agent() {
-    let shipper = shipper();
+async fn sends_a_same_origin_batch_with_the_request_ip_and_user_agent() {
+    let (shipper, mut rx) = shipper_with_server(StatusCode::NO_CONTENT).await;
     let headers = [
         ("sec-fetch-site", "same-origin"),
         ("cf-connecting-ip", "203.0.113.8"),
@@ -59,8 +78,9 @@ async fn records_a_same_origin_batch_with_the_request_ip_and_user_agent() {
     ];
     let status = send(&shipper, &headers, batch_body(&["boom", "again"])).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let events = buffered_events(&shipper);
+    let events = rx.try_recv().unwrap();
     assert_eq!(events.len(), 2);
+    assert_eq!(shipper.buffered_len(), 0);
     let event = &events[0];
     assert_eq!(event.action, "boom");
     assert_eq!(event.level, LogLevel::Error);
@@ -73,14 +93,14 @@ async fn records_a_same_origin_batch_with_the_request_ip_and_user_agent() {
 
 #[tokio::test]
 async fn an_error_event_without_a_message_does_not_reject_the_batch() {
-    let shipper = shipper();
+    let (shipper, mut rx) = shipper_with_server(StatusCode::NO_CONTENT).await;
     let mut bad = client_event("old");
     bad.as_object_mut().unwrap().remove("error_message");
     let body = json!([bad, client_event("good")]).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&shipper, &headers, Body::from(body)).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let events = buffered_events(&shipper);
+    let events = rx.try_recv().unwrap();
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].error_message(), Some("no error message"));
     assert_eq!(events[1].error_message(), Some("client failed"));
@@ -100,7 +120,7 @@ async fn a_non_string_error_message_rejects_the_batch() {
 
 #[tokio::test]
 async fn ignores_every_ip_source_but_cloudflare() {
-    let shipper = shipper();
+    let (shipper, mut rx) = shipper_with_server(StatusCode::NO_CONTENT).await;
     let headers = [
         ("sec-fetch-site", "same-origin"),
         ("x-forwarded-for", "203.0.113.8"),
@@ -108,7 +128,7 @@ async fn ignores_every_ip_source_but_cloudflare() {
     ];
     let status = send(&shipper, &headers, batch_body(&["boom"])).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    assert_eq!(buffered_events(&shipper)[0].context["ip"], "");
+    assert_eq!(rx.try_recv().unwrap()[0].context["ip"], "");
 }
 
 #[tokio::test]
@@ -131,7 +151,7 @@ async fn rejects_a_request_from_another_site() {
 
 #[tokio::test]
 async fn falls_back_to_origin_and_host() {
-    let shipper = shipper();
+    let (shipper, mut rx) = shipper_with_server(StatusCode::NO_CONTENT).await;
     let same = [
         ("origin", "https://App.example:8443"),
         ("host", "app.example:8443"),
@@ -159,7 +179,8 @@ async fn falls_back_to_origin_and_host() {
         send(&shipper, &[], batch_body(&["boom"])).await,
         StatusCode::FORBIDDEN
     );
-    assert_eq!(buffered_events(&shipper).len(), 1);
+    assert_eq!(rx.try_recv().unwrap().len(), 1);
+    assert!(rx.try_recv().is_err());
 }
 
 #[tokio::test]
@@ -191,6 +212,15 @@ async fn rejects_a_bad_body() {
 }
 
 #[tokio::test]
+async fn gives_bad_gateway_when_the_log_server_refuses_the_batch() {
+    let (shipper, _rx) = shipper_with_server(StatusCode::SERVICE_UNAVAILABLE).await;
+    let headers = [("sec-fetch-site", "same-origin")];
+    let status = send(&shipper, &headers, batch_body(&["boom"])).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(shipper.buffered_len(), 0);
+}
+
+#[tokio::test]
 async fn other_methods_and_paths_are_not_accepted() {
     let router = client_log_router(shipper());
     let get = Request::builder().uri("/log").body(Body::empty()).unwrap();
@@ -206,8 +236,8 @@ async fn other_methods_and_paths_are_not_accepted() {
 }
 
 #[tokio::test]
-async fn shares_the_queue_with_the_request_middleware() {
-    let shipper = shipper();
+async fn sends_client_events_and_buffers_the_request_event() {
+    let (shipper, mut rx) = shipper_with_server(StatusCode::NO_CONTENT).await;
     let router = Router::new()
         .merge(client_log_router(shipper.clone()))
         .layer(from_fn_with_state(shipper.clone(), log_request));
@@ -219,10 +249,12 @@ async fn shares_the_queue_with_the_request_middleware() {
         .unwrap();
     let response = router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let sent = rx.try_recv().unwrap();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].action, "boom");
     let events = buffered_events(&shipper);
-    assert_eq!(events.len(), 2);
-    assert_eq!(events[0].action, "boom");
-    assert_eq!(events[1].action, "API/POST:/log");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].action, "API/POST:/log");
 }
 
 #[test]
