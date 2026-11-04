@@ -14,12 +14,14 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 | `Logger::get()` | Gives `Option<&'static LogShipper>`. It gives none before `init`. |
 | `Logger::info(action, context)` | Records one event with the level `info`. |
 | `Logger::warn(action, context)` | Records one event with the level `warn`, with no `error_message`. |
-| `Logger::warn_with(action, error_message, context)` | Records one event with the level `warn`. `error_message` is `impl Into<String>`. |
-| `Logger::error(action, error_message, context)` | Records one event with the level `error`. `error_message` is `impl Into<String>`, so the caller must give it. |
-| `Logger::exception(action, &exception, context)` | Records one event. The level is `warn` when the severity of the exception is `Warn`, else `error`. `error_message` is `String::from(exception)`, the trace text in `spec/framework_rs/exception.md`. |
+| `Logger::warn_with(action, context, error)` | Records one event with the level `warn`. |
+| `Logger::error(action, context, error)` | Records one event with the level `error`. |
 
 - `action` is `impl Into<String>`.
-- `context` is `BTreeMap<String, LogValue>`.
+- `context` is `std::collections::BTreeMap<String, String>`.
+- `error` of `Logger::warn_with` and `Logger::error` is `Box<dyn std::error::Error>`.
+- `Logger::warn_with` sets `error_message` to the display text of `error`. When `error` is an `Exception`, that text is the message only.
+- When `error` of `Logger::error` is an `Exception`, `error_message` is the display text, a line break, then the trace text. The trace text is `String::from` of that exception. The rules are in `spec/framework_rs/exception.md`. When `error` is not an `Exception`, `error_message` is the display text of `error`.
 - `Logger::info` sets no `error_message`. The event rules for `error_message` are in `spec/framework_rs/logging/event.md`.
 - The function makes the event with `LogEvent::info`, `LogEvent::warn`, `LogEvent::warn_with` or `LogEvent::error`, and then sets `context`. The constructor rules are in `spec/framework_rs/logging/event.md`.
 - The event has the current HKT time, an empty `id`, no `latency_ms` and an empty `extra`.

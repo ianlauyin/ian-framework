@@ -1,14 +1,14 @@
-mod body_limit;
-mod catch_panic;
-mod log_request;
-mod no_store;
-mod rate_limit;
-mod request_timeout;
-mod require_api_key;
-mod same_origin;
-mod security_headers;
+pub(crate) mod body_limit;
+pub(crate) mod catch_panic;
+pub(crate) mod log_request;
+pub(crate) mod no_store;
+pub(crate) mod rate_limit;
+pub(crate) mod request_timeout;
+pub(crate) mod require_api_key;
+pub(crate) mod same_origin;
+pub(crate) mod security_headers;
 #[cfg(feature = "auth")]
-mod slide_session;
+pub(crate) mod slide_session;
 
 pub use body_limit::{body_limit, BodyLimit};
 pub use catch_panic::catch_panic;

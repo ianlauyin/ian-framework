@@ -54,16 +54,16 @@ Each stored value is a string:
 
 The function stores the full value text.
 
-### LogBatch::events_opt
+### client_events
 
-`LogBatch::events_opt` checks one batch.
+`ian_framework::logging::client_events` checks one list of client events.
 
-- The input is one `LogBatch`.
-- The result is a list of events, or no batch.
-- An empty `events` list gives no batch.
-- An `error` event without a non-blank `error_message` does not reject the batch. `LogEvent::from_client` gives that event the placeholder `no error message`.
+- The input is a reference to a list of `LogEvent`.
+- The result is a list of events, or no list.
+- An empty list gives no list.
+- An `error` event without a non-blank `error_message` does not reject the list. `LogEvent::from_client` gives that event the placeholder `no error message`.
 - The function keeps `error_message` with the `error_message` rules in the table above.
-- The function gives no batch when `events` has more than 1000 events.
+- The function gives no list when the list has more than 1000 events.
 - The function accepts 1000 events.
 - One ship batch uses this same limit of 1000 events.
 - The function does not call `LogShipper::record`.
@@ -101,13 +101,13 @@ Same-origin rules:
 
 Request handling:
 
-- The body is one `LogBatch`.
+- The body is one JSON array of event objects.
 - The route does not check the content type.
 - The body size limit is 1 MiB.
 - A body that is larger than 1 MiB gets status 413.
 - When the server cannot read the body, the status is also 413.
-- A body that is not a `LogBatch` gets status 400.
-- The route calls `LogBatch::events_opt`. When that call gives no batch, the status is 400 and the route records no event.
+- A body that is not a JSON array of event objects gets status 400.
+- The route calls `client_events`. When that call gives no list, the status is 400 and the route records no event.
 - The route sets `ip` and `user_agent` in the `context` of each kept event from the request. The `ip` rule is the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
 - The route calls `LogShipper::record` for each kept event.
 - The response status is 204 with an empty body.

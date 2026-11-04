@@ -16,7 +16,7 @@ type ClientLogEvent = {
   latency_ms: number | null;
   level: LogLevel;
   error_message: string | null;
-  context: LogFields;
+  context: Record<string, string>;
   extra: LogFields;
 };
 
@@ -24,7 +24,7 @@ export class Logger {
   private static queue: ClientLogEvent[] = [];
   private static started = false;
   private static masks: RegExp[] = [];
-  private static context: LogFields = {};
+  private static context: Record<string, string> = {};
 
   public static setMaskPatterns(patterns: RegExp[]): void {
     Logger.masks = patterns.map(
@@ -33,7 +33,7 @@ export class Logger {
     );
   }
 
-  public static addContext(key: string, value: string | number | boolean): void {
+  public static addContext(key: string, value: string): void {
     Logger.context = { ...Logger.context, [key]: value };
   }
 
@@ -207,7 +207,7 @@ export class Logger {
       credentials: "same-origin",
       keepalive,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify(events),
     }).catch(() => {
       // ignore failures — logging is best-effort
     });

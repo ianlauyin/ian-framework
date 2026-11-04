@@ -6,13 +6,13 @@ use crate::gcs::encode::{encode_object_id, encode_seg};
 use crate::gcs::gcs_client::object::RawObject;
 use crate::gcs::gcs_client::{object_url, ObjectMeta};
 
-pub(super) enum RewriteStep {
+pub(crate) enum RewriteStep {
     Done(ObjectMeta),
     Next(String),
 }
 
 impl RewriteStep {
-    pub(super) fn url(
+    pub(crate) fn url(
         api_root: &str,
         bucket_name: &str,
         from: &str,
@@ -32,7 +32,7 @@ impl RewriteStep {
         url
     }
 
-    pub(super) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
+    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
         let raw: RawRewrite = serde_json::from_slice(bytes)
             .map_err(|err| exception!("rewrite JSON is invalid", code = "GCS_API", source = err))?;
         if raw.done {
@@ -59,43 +59,4 @@ struct RawRewrite {
     rewrite_token: Option<String>,
     #[serde(default)]
     resource: Option<RawObject>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::gcs::API_ROOT;
-
-    #[test]
-    fn rewrite_step_reads_a_token_until_done() {
-        let step = RewriteStep::from_slice(br#"{"done":false,"rewriteToken":"abc"}"#).unwrap();
-        assert!(matches!(step, RewriteStep::Next(token) if token == "abc"));
-        let done = RewriteStep::from_slice(br#"{"done":true,"resource":{"name":"b","size":"3"}}"#)
-            .unwrap();
-        let RewriteStep::Done(resource) = done else {
-            panic!("expected a finished rewrite");
-        };
-        assert_eq!(resource.name, "b");
-        assert_eq!(resource.size, 3);
-        assert!(RewriteStep::from_slice(br#"{"done":false}"#).is_err());
-        assert!(RewriteStep::from_slice(br#"{"done":true}"#).is_err());
-        assert!(RewriteStep::from_slice(br#"{"done":false,"rewriteToken":""}"#).is_err());
-    }
-
-    #[test]
-    fn rewrite_url_sets_the_token_query() {
-        assert_eq!(
-            RewriteStep::url(API_ROOT, "buck", "a/b", "c d", None),
-            "https://storage.googleapis.com/storage/v1/b/buck/o/a%2Fb/rewriteTo/b/buck/o/c%20d"
-        );
-        let url = RewriteStep::url(API_ROOT, "buck", "a", "c", Some("tok/en"));
-        assert!(url.ends_with("?rewriteToken=tok%2Fen"));
-    }
-
-    #[test]
-    fn rewrite_step_refuses_a_bad_body() {
-        assert!(RewriteStep::from_slice(b"not json").is_err());
-        let bad_size = br#"{"done":true,"resource":{"name":"b","size":"x"}}"#;
-        assert!(RewriteStep::from_slice(bad_size).is_err());
-    }
 }

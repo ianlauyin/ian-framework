@@ -14,7 +14,7 @@ One event is one `LogEvent`. One event has these fields:
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
 | `error_message` | Text of the error, or null |
-| `context` | One JSON object with the facts about where the event came from. Each value is a string, a number, or a `bool`. |
+| `context` | One JSON object with the facts about where the event came from. Each value is a string. |
 | `extra` | One JSON object with the data of the event |
 
 - The JSON of the event always has the key `error_message`. Its value is null when the event has no message.
@@ -35,7 +35,9 @@ One event is one `LogEvent`. One event has these fields:
 - `LogEvent::info(action)` is the constructor of an `info` event. The accessor of the `extra` map is `extra()`.
 - `LogEvent::new` is now `LogEvent::from_client`.
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
-- `Logger::warn(action, context)` has no message. `Logger::warn_with(action, error_message, context)` and `LogEvent::warn_with` give a message.
+- `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
+- `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
+- `LogValue` does not exist. Each `context` value is a `String`.
 
 ### Constructors
 
@@ -60,14 +62,14 @@ One event is one `LogEvent`. One event has these fields:
 
 | Source | `error_message` |
 | --- | --- |
-| `Logger::error` | The argument of the caller |
+| `Logger::error` | When the error is an `Exception`, the display text, a line break, then the trace text. Else the display text of the error. The rules are in `spec/framework_rs/logging/logger.md`. |
 | Request middleware, status 500 or higher | `response status {status}` |
 | GCS ops record with the level `error` | The record message, followed by ` (status {status})` when the record has a status |
 
 ### Values
 
-- The type of a `context` value is `ian_framework::logging::LogValue`. It is a string, a number, or a `bool`.
-- Deserialize of an event rejects an array, an object, or null in `context`.
+- The type of `context` is `std::collections::BTreeMap<String, String>`.
+- Deserialize of an event rejects a `context` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
 - The type of `extra` is `serde_json::Map<String, serde_json::Value>`. It is a JSON object, and its values can be nested.
 
 ### Time

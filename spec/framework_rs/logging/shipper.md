@@ -122,14 +122,8 @@ The request has these properties:
 - When the shipper has no POST API key, the request has no `Authorization` header.
 - The request time limit is 10 seconds.
 
-The body is one JSON object of type `LogBatch`:
+The body is one JSON array of event objects.
 
-```json
-{"events":[...]}
-```
-
-- The body is not a bare JSON array.
-- `events` is one JSON array of event objects.
 - Each event object has each field in the event table. The event table is in `spec/framework_rs/logging/event.md`.
 - Each event object has no `app` key.
 - Each event object has no `project` key.

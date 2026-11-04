@@ -17,7 +17,7 @@ function hidePage(): void {
 }
 
 function sentEvents(call: number) {
-  return JSON.parse(fetchMock.mock.calls[call][1].body).events;
+  return JSON.parse(fetchMock.mock.calls[call][1].body);
 }
 
 async function loadLogger() {
@@ -335,25 +335,25 @@ describe("Logger", () => {
       const Logger = await loadLogger();
       Logger.info("before");
       Logger.addContext("user", "u1");
-      Logger.addContext("beta", true);
+      Logger.addContext("beta", "on");
       Logger.addContext("user", "u2");
       Logger.info("after");
       vi.advanceTimersByTime(60_000);
 
       const events = sentEvents(0);
       expect(events[0].context).toEqual({});
-      expect(events[1].context).toEqual({ user: "u2", beta: true });
+      expect(events[1].context).toEqual({ user: "u2", beta: "on" });
     });
 
     it("removes the named keys", async () => {
       const Logger = await loadLogger();
       Logger.addContext("user", "u1");
-      Logger.addContext("beta", true);
+      Logger.addContext("beta", "on");
       Logger.removeContext("user", "missing");
       Logger.info("after");
       vi.advanceTimersByTime(60_000);
 
-      expect(sentEvents(0)[0].context).toEqual({ beta: true });
+      expect(sentEvents(0)[0].context).toEqual({ beta: "on" });
     });
   });
 });

@@ -17,7 +17,7 @@ A monitor checks a host value on an interval. When the value meets a threshold, 
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::monitor`.
-- The source files are in `framework_rs/src/monitor/`. The tests are in the source file of each monitor.
+- The source files are in `framework_rs/src/monitor/`. The tests are in `framework_rs/src/test/monitor/`.
 - The monitors use `ian_framework::logging::LogEvent` and `ian_framework::shutdown::ShutdownReceiver`.
 
 ## Build
