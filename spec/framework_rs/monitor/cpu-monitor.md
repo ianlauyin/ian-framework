@@ -22,6 +22,7 @@ The CPU monitor checks the CPU usage of a Linux host on an interval. When the us
 
 - `threshold_percent` is not more than 0 and not at most 100. A NaN value is not valid.
 - `interval` is zero.
+- The OS is not Linux.
 
 `CpuMonitor::spawn` takes a `ian_framework::shutdown::ShutdownReceiver` and a sink. The sink is `Fn(LogEvent) + Send + 'static`. It returns `tokio::task::JoinHandle<()>`. The caller runs it on a Tokio runtime.
 
@@ -35,9 +36,10 @@ The CPU monitor checks the CPU usage of a Linux host on an interval. When the us
 - The monitor reads the first line of `/proc/stat`, the total `cpu` line.
 - The monitor takes the first sample when the task starts. It takes the next samples on each interval.
 - The usage is the part of the total CPU time that is not idle time between two samples. Idle time is `idle` plus `iowait`.
-- When the total time does not change, or a counter goes down, the monitor skips that interval.
-- When the first sample cannot be read, the monitor calls `Logger::error` one time with the action `CPU/cannotReadStat`, an error whose display text is `cannot read the cpu stat file` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`. This is the case on a host that is not Linux.
-- When a later sample cannot be read, the monitor skips that interval.
+- When the total time does not change, a counter goes down, or the idle time is more than the total time, the monitor skips that interval.
+- When the sum of the fields overflows, the sample is not valid.
+- When the first sample cannot be read, the monitor calls `Logger::error` one time with the action `CPU/cannotReadStat`, an error whose display text is `cannot read the cpu stat file` and the context key `path`, and the task ends. The logger rules are in `spec/framework_rs/logging/logger.md`.
+- When a later sample cannot be read, the monitor skips that interval. On the first failure after a good read, it calls `Logger::error` with the same action, error text and context as above. It does not log again until a read works.
 
 ## Event
 

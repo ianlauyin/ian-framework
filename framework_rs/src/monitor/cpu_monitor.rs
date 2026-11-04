@@ -8,7 +8,7 @@ const STAT_PATH: &str = "/proc/stat";
 const DEFAULT_INTERVAL: Duration = Duration::from_secs(30);
 const ACTION: &str = "CPU/meetsThreshold";
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct CpuMonitorConfig {
     pub threshold_percent: f64,
     pub interval: Duration,
@@ -25,11 +25,14 @@ impl CpuMonitorConfig {
 
 #[derive(Debug, Clone)]
 pub struct CpuMonitor {
-    config: CpuMonitorConfig,
+    pub(crate) config: CpuMonitorConfig,
 }
 
 impl CpuMonitor {
     pub fn new(config: CpuMonitorConfig) -> Option<Self> {
+        if !cfg!(target_os = "linux") {
+            return None;
+        }
         let threshold = config.threshold_percent;
         if !(threshold > 0.0 && threshold <= 100.0) || config.interval.is_zero() {
             return None;
@@ -43,15 +46,7 @@ impl CpuMonitor {
     {
         tokio::spawn(self.run(shutdown, sink, read_sample))
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CpuSample {
-    pub(crate) idle: u64,
-    pub(crate) total: u64,
-}
-
-impl CpuMonitor {
     pub(crate) async fn run<F, S>(self, shutdown: ShutdownReceiver, sink: F, mut sample: S)
     where
         F: Fn(LogEvent),
@@ -71,6 +66,7 @@ impl CpuMonitor {
         let stop = shutdown.wait();
         tokio::pin!(stop);
         let mut alert = Alert::new(self.config.threshold_percent);
+        let mut read_failed = false;
         loop {
             tokio::select! {
                 biased;
@@ -78,8 +74,17 @@ impl CpuMonitor {
                 _ = ticker.tick() => {}
             }
             let Some(current) = sample() else {
+                if !read_failed {
+                    read_failed = true;
+                    Logger::error(
+                        "CPU/cannotReadStat",
+                        BTreeMap::from([("path".to_string(), STAT_PATH.into())]),
+                        "cannot read the cpu stat file".into(),
+                    );
+                }
                 continue;
             };
+            read_failed = false;
             if let Some(percent) = usage_percent(previous, current) {
                 if let Some(event) = alert.check(percent) {
                     sink(event);
@@ -88,6 +93,12 @@ impl CpuMonitor {
             previous = current;
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CpuSample {
+    pub(crate) idle: u64,
+    pub(crate) total: u64,
 }
 
 pub(crate) struct Alert {
@@ -141,19 +152,19 @@ pub(crate) fn parse_sample(stat: &str) -> Option<CpuSample> {
         .map(|field| field.parse::<u64>().ok())
         .collect::<Option<Vec<_>>>()?;
     let idle = values.get(3)?.checked_add(*values.get(4)?)?;
-    Some(CpuSample {
-        idle,
-        total: values.iter().sum(),
-    })
+    let total = values
+        .iter()
+        .try_fold(0u64, |sum, value| sum.checked_add(*value))?;
+    Some(CpuSample { idle, total })
 }
 
 pub(crate) fn usage_percent(previous: CpuSample, current: CpuSample) -> Option<f64> {
     let total = current.total.checked_sub(previous.total)?;
     let idle = current.idle.checked_sub(previous.idle)?;
-    if total == 0 {
+    if total == 0 || idle > total {
         return None;
     }
-    Some(100.0 * total.saturating_sub(idle) as f64 / total as f64)
+    Some(100.0 * (total - idle) as f64 / total as f64)
 }
 
 fn round_one(value: f64) -> f64 {
