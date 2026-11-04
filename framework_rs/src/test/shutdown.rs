@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use crate::shutdown::shutdown_receiver::*;
+use crate::shutdown::*;
 use std::time::Duration;
 
 async fn resolves(wait: impl Future<Output = ()>) -> bool {
