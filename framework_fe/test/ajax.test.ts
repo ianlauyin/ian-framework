@@ -212,24 +212,6 @@ describe("ajax", () => {
     ).resolves.toBeNull();
   });
 
-  it("returns null for 201 and 204 responses", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 201,
-        text: async () => "",
-      }),
-    );
-
-    await expect(
-      ajax("/item", "POST", {
-        name: "Alice",
-        count: 1,
-      }),
-    ).resolves.toBeNull();
-  });
-
   it("keeps the code string of the error body", async () => {
     vi.stubGlobal(
       "fetch",

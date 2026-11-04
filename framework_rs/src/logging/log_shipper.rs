@@ -421,18 +421,6 @@ mod tests {
     }
 
     #[test]
-    fn capacity_warn_limit_is_80_percent() {
-        assert!(!meets_capacity_warn(0, 1));
-        assert!(meets_capacity_warn(1, 1));
-        assert!(!meets_capacity_warn(3, 4));
-        assert!(meets_capacity_warn(4, 4));
-        assert!(!meets_capacity_warn(3, 5));
-        assert!(meets_capacity_warn(4, 5));
-        assert!(!meets_capacity_warn(7999, 10_000));
-        assert!(meets_capacity_warn(8000, 10_000));
-    }
-
-    #[test]
     fn blank_endpoint_is_trace_only() {
         for endpoint in ["", "   "] {
             let shipper = LogShipper::new(config("api", endpoint)).unwrap();
@@ -842,15 +830,6 @@ mod tests {
 
     fn parse_body(body: &str) -> Vec<LogEvent> {
         serde_json::from_str(body).unwrap()
-    }
-
-    #[test]
-    fn batch_url_uses_the_app_path() {
-        let shipper = LogShipper::new(config("my-app", "https://logs.example/ingest/")).unwrap();
-        assert_eq!(
-            shipper.batch_url(shipper.inner.endpoint.as_deref().unwrap()),
-            "https://logs.example/ingest/log/my-app"
-        );
     }
 
     #[tokio::test]

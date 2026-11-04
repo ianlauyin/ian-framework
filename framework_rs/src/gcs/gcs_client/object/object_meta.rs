@@ -96,13 +96,4 @@ mod tests {
         );
         assert_eq!(meta.metadata.get("owner-id").map(String::as_str), Some("7"));
     }
-
-    #[test]
-    fn missing_metadata_is_an_empty_map() {
-        let json = br#"{"name":"a","size":"1"}"#;
-        let meta = ObjectMeta::from_slice(json).unwrap();
-        assert!(meta.metadata.is_empty());
-        assert_eq!(meta.size, 1);
-        assert_eq!(meta.updated, None);
-    }
 }

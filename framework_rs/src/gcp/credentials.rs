@@ -526,19 +526,6 @@ mod tests {
         assert_eq!(err.code(), "GCP_CONFIG");
     }
 
-    #[test]
-    fn quota_project_comes_from_the_user() {
-        let with_quota = UserCredentials {
-            quota_project_id: Some("my-project".to_string()),
-            ..user()
-        };
-        assert_eq!(
-            Credentials::User(with_quota).quota_project(),
-            Some("my-project")
-        );
-        assert_eq!(Credentials::Metadata.quota_project(), None);
-    }
-
     #[tokio::test]
     async fn token_from_response_reads_the_token_and_its_expiry() {
         let ok = response(200, r#"{"access_token":"abc","expires_in":3600}"#);

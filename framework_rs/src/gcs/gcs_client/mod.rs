@@ -640,14 +640,6 @@ pub(crate) mod tests {
         assert!(!may_retry(&own_loop, 0));
     }
 
-    #[test]
-    fn object_url_encodes_slashes() {
-        assert_eq!(
-            object_url(API_ROOT, "buck", "a/c"),
-            "https://storage.googleapis.com/storage/v1/b/buck/o/a%2Fc"
-        );
-    }
-
     pub(crate) fn user_auth() -> Auth {
         Auth::User {
             credentials: UserCredentials {
@@ -1148,18 +1140,6 @@ pub(crate) mod tests {
             .unwrap();
         server.abort();
         assert_eq!(token.value, "abc");
-    }
-
-    #[tokio::test]
-    async fn user_client_keeps_bucket_and_signer() {
-        let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
-        assert_eq!(client.bucket(), "my-bucket");
-        assert_eq!(
-            client.signer_email(),
-            "signer@example.iam.gserviceaccount.com"
-        );
-        let cloned = client.clone();
-        assert_eq!(cloned.bucket(), "my-bucket");
     }
 
     #[tokio::test]

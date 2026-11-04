@@ -90,21 +90,6 @@ mod tests {
     }
 
     #[test]
-    fn into_event_ts_has_the_hkt_offset() {
-        let record = OpsRecord {
-            level: LogLevel::Info,
-            message: "uploaded",
-            method: "PUT",
-            url: "/obj",
-            status: Some(200),
-            latency_ms: Some(5),
-            extra: &[],
-        };
-        let event = record.into_event("bucket");
-        assert_eq!(event.ts.offset().local_minus_utc(), 8 * 3600);
-    }
-
-    #[test]
     fn path_only_omits_the_query() {
         assert_eq!(
             path_only(

@@ -5,6 +5,7 @@
 - After a refactor, fix all the warnings.
 - Readability is more important than strict DRY. Do not add a helper, a generic type or an abstraction only to remove duplication.
 - Write a comment only when the code cannot show the reason.
+- Write tests only for functions that hold important logic. For each of these functions, test each edge case. Do not test a trivial function, a getter or a pass-through. This rule applies to the Rust code and to the frontend code.
 
 ## Backend (Rust)
 

@@ -222,15 +222,4 @@ mod tests {
         let err = metadata_email(&http(), &url).await.unwrap_err();
         assert_eq!(err.code(), "GCS_AUTH");
     }
-
-    #[tokio::test]
-    async fn user_auth_keeps_its_signer_email() {
-        let auth = crate::gcs::gcs_client::tests::user_auth();
-        assert_eq!(
-            auth.signer_email(&http()).await.unwrap(),
-            "signer@example.iam.gserviceaccount.com"
-        );
-        assert!(auth.validate().is_ok());
-        assert!(Auth::Metadata.validate().is_ok());
-    }
 }

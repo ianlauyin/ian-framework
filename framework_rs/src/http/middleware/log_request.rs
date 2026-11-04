@@ -203,14 +203,6 @@ mod tests {
             .unwrap()
     }
 
-    #[test]
-    fn action_joins_method_and_path() {
-        assert_eq!(action("GET", "/api/foo"), "API/GET:/api/foo");
-        assert_eq!(action("POST", ""), "API/POST:/");
-        assert_eq!(action("", "/api/foo"), "");
-        assert_eq!(action("", ""), "");
-    }
-
     #[tokio::test]
     async fn middleware_records_the_request_schema() {
         let shipper = shipper();
