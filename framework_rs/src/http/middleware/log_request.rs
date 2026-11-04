@@ -7,9 +7,7 @@ use axum::extract::{Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use serde_json::{Map, Value};
 
-use crate::logging::event::flatten_extra;
 use crate::logging::{LogEvent, LogShipper};
 
 pub(crate) const BODY_LOG_LIMIT: usize = 64 * 1024;
@@ -54,9 +52,7 @@ async fn split_json_body(request: Request) -> (Option<Request>, Option<HashMap<S
     let Ok(bytes) = to_bytes(body, BODY_LOG_LIMIT).await else {
         return (None, None);
     };
-    let fields = serde_json::from_slice::<Map<String, Value>>(&bytes)
-        .ok()
-        .map(flatten_extra);
+    let fields = serde_json::from_slice::<HashMap<String, String>>(&bytes).ok();
     (Some(Request::from_parts(parts, Body::from(bytes))), fields)
 }
 

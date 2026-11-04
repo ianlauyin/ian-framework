@@ -6,7 +6,6 @@ use crate::shutdown::ShutdownReceiver;
 use crate::logging::LogLevel;
 use crate::monitor::disk_monitor::*;
 
-
 #[test]
 fn config_defaults() {
     let config = DiskMonitorConfig::new(90.0);

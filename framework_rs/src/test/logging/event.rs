@@ -251,40 +251,36 @@ fn new_filters_info() {
     assert_eq!(stored.extra["k09"], "true".to_string());
     assert!(!stored.extra.contains_key("bad key"));
 
-    let scalars: LogEvent = serde_json::from_value(json!({
-        "ts": "2026-01-01T00:00:00+08:00",
-        "id": "",
-        "action": "/files",
-        "latency_ms": null,
-        "level": "error",
-        "error_message": "boom",
-        "context": {},
-        "extra": {
-            "a/b": "no",
-            "a_b-c.d": "yes",
-            "count": 12,
-            "flag": true,
-            "off": false,
-            "ratio": 1.5,
-            "nested": {"a": "b"},
-            "list": ["a"],
-            "none": null,
-        },
-    }))
-    .unwrap();
-    assert!(!scalars.extra.contains_key("nested"));
-    assert!(!scalars.extra.contains_key("list"));
-    assert!(!scalars.extra.contains_key("none"));
-    let mut scalars = scalars;
+    for bad in [
+        json!(12),
+        json!(true),
+        json!(null),
+        json!(["a"]),
+        json!({"a": "b"}),
+    ] {
+        let wire = json!({
+            "ts": "2026-01-01T00:00:00+08:00",
+            "id": "",
+            "action": "/files",
+            "latency_ms": null,
+            "level": "error",
+            "error_message": "boom",
+            "context": {},
+            "extra": { "k": bad },
+        });
+        assert!(serde_json::from_value::<LogEvent>(wire).is_err());
+    }
+
+    let mut scalars = LogEvent::error("/files", "boom");
+    scalars.extra.insert("a/b".to_string(), "no".to_string());
+    scalars
+        .extra
+        .insert("a_b-c.d".to_string(), "yes".to_string());
     scalars.extra.insert("a".repeat(65), "long-key".to_string());
     let stored = scalars.from_client();
     assert_eq!(stored.extra.get("a/b"), None);
     assert_eq!(stored.extra[&"a".repeat(65)], "long-key".to_string());
     assert_eq!(stored.extra["a_b-c.d"], "yes".to_string());
-    assert_eq!(stored.extra["count"], "12".to_string());
-    assert_eq!(stored.extra["flag"], "true".to_string());
-    assert_eq!(stored.extra["off"], "false".to_string());
-    assert_eq!(stored.extra["ratio"], "1.5".to_string());
 
     let mut text = LogEvent::info("/files");
     text.extra.insert(String::new(), "no".to_string());

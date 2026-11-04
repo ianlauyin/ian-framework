@@ -59,7 +59,7 @@ Level rules:
 
 ### Extra
 
-`extra` is the flat form of the JSON object of the request body. A request with no logged body has an empty `extra`.
+`extra` is the JSON object of the request body, when each value is a string. A request with no logged body has an empty `extra`.
 
 The middleware reads the body only when all these rules are true:
 
@@ -69,7 +69,7 @@ The middleware reads the body only when all these rules are true:
 Body rules:
 
 - The body is one JSON object.
-- The middleware keeps each string, number and `bool` value as text. It drops each array, each object and each null value.
+- A JSON object with a value that is not a string gives an empty `extra`.
 - A JSON body that is not an object gives an empty `extra`.
 - A body that is not valid JSON gives an empty `extra`.
 - The middleware does not log a body of a different media type.

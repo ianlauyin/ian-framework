@@ -5,7 +5,6 @@ use crate::shutdown::ShutdownReceiver;
 use crate::logging::LogLevel;
 use crate::monitor::cpu_monitor::*;
 
-
 fn sample(idle: u64, total: u64) -> CpuSample {
     CpuSample { idle, total }
 }

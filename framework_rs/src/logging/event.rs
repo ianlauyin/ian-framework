@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::time::hkt_now;
 
@@ -50,7 +50,6 @@ pub struct LogEvent {
     #[serde(default, deserialize_with = "text_or_none")]
     pub(crate) error_message: Option<String>,
     pub(crate) context: HashMap<String, String>,
-    #[serde(deserialize_with = "flat_extra")]
     pub(crate) extra: HashMap<String, String>,
 }
 
@@ -204,26 +203,4 @@ fn extra_key_ok(key: &str) -> bool {
 
 fn extra_value_ok(text: &str) -> bool {
     text.len() <= CLIENT_EXTRA_VALUE_MAX_BYTES && !text.contains('\r') && !text.contains('\n')
-}
-
-// `extra` has one level. A string, a number or a bool becomes text. An array, an object and null are dropped.
-pub(crate) fn flatten_extra(fields: Map<String, Value>) -> HashMap<String, String> {
-    fields
-        .into_iter()
-        .filter_map(|(key, value)| {
-            let text = match value {
-                Value::String(text) => text,
-                Value::Number(number) => number.to_string(),
-                Value::Bool(flag) => flag.to_string(),
-                _ => return None,
-            };
-            Some((key, text))
-        })
-        .collect()
-}
-
-fn flat_extra<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<HashMap<String, String>, D::Error> {
-    Ok(flatten_extra(Map::deserialize(deserializer)?))
 }

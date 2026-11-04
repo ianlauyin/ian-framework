@@ -73,7 +73,7 @@ One event is one `LogEvent`. One event has these fields:
 - The type of `context` is `std::collections::HashMap<String, String>`.
 - Deserialize of an event rejects a `context` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
 - The type of `extra` is `std::collections::HashMap<String, String>`. It has one level. It does not hold a nested value.
-- Deserialize of an event reads each `extra` string, number and `bool` value as text. It drops each array, each object and each null value.
+- Deserialize of an event rejects an `extra` value that is not a string. A number, a `bool`, an array, an object, or null gives a deserialize error.
 - An event that the app builds keeps each `extra` value.
 - The order of the keys in a `context` object and in an `extra` object is not defined.
 
