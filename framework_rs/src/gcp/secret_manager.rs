@@ -73,22 +73,42 @@ impl SecretManager {
     }
 
     async fn from_adc() -> Result<Option<Self>, InitError> {
+        let credentials = Self::validated_credentials().await?;
+        let http = http_client()?;
+        Self::manager_for(http, credentials).await
+    }
+
+    async fn validated_credentials() -> Result<Credentials, InitError> {
         let credentials = Credentials::from_adc().await?;
         credentials.validate()?;
-        let http = http_client()?;
+        Ok(credentials)
+    }
+
+    async fn manager_for(
+        http: reqwest::Client,
+        credentials: Credentials,
+    ) -> Result<Option<Self>, InitError> {
         let Some(project) = resolve_project(&credentials, &http, METADATA_PROJECT_URL).await?
         else {
             return Ok(None);
         };
+        Self::with_token(http, project, credentials).await.map(Some)
+    }
+
+    async fn with_token(
+        http: reqwest::Client,
+        project: String,
+        credentials: Credentials,
+    ) -> Result<Self, InitError> {
         let token = credentials.fetch_token(&http).await?;
-        Ok(Some(Self {
+        Ok(Self {
             http,
             api_root: API_ROOT.to_string(),
             project,
             quota_project: credentials.quota_project().map(str::to_string),
             credentials,
             token: Mutex::new(token),
-        }))
+        })
     }
 
     async fn token(&self) -> Result<String, Exception> {
