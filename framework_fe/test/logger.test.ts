@@ -17,7 +17,7 @@ function hidePage(): void {
 }
 
 function sentEvents(call: number) {
-  return JSON.parse(fetchMock.mock.calls[call][1].body);
+  return JSON.parse(fetchMock.mock.calls[call][1].body).events;
 }
 
 async function loadLogger() {
@@ -67,7 +67,6 @@ describe("Logger", () => {
     expect(sentEvents(0)).toEqual([
       {
         ts: "2026-10-25T20:00:00.000+08:00",
-        id: "",
         action: "started",
         latency_ms: null,
         level: "info",

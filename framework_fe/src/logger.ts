@@ -11,12 +11,11 @@ export type LogFields = Record<string, string | number | boolean>;
 
 type ClientLogEvent = {
   ts: string;
-  id: string;
   action: string;
   latency_ms: number | null;
   level: LogLevel;
   error_message: string | null;
-  context: Record<string, string>;
+  context: LogFields;
   extra: LogFields;
 };
 
@@ -24,7 +23,7 @@ export class Logger {
   private static queue: ClientLogEvent[] = [];
   private static started = false;
   private static masks: RegExp[] = [];
-  private static context: Record<string, string> = {};
+  private static context: LogFields = {};
 
   public static setMaskPatterns(patterns: RegExp[]): void {
     Logger.masks = patterns.map(
@@ -33,7 +32,7 @@ export class Logger {
     );
   }
 
-  public static addContext(key: string, value: string): void {
+  public static addContext(key: string, value: string | number | boolean): void {
     Logger.context = { ...Logger.context, [key]: value };
   }
 
@@ -150,7 +149,6 @@ export class Logger {
     if (Logger.queue.length >= MAX_QUEUE) Logger.queue.shift();
     Logger.queue.push({
       ts: hktIsoString(new Date()),
-      id: "",
       action,
       latency_ms: latencyMs === undefined ? null : Math.round(latencyMs),
       level,
@@ -207,7 +205,7 @@ export class Logger {
       credentials: "same-origin",
       keepalive,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(events),
+      body: JSON.stringify({ events }),
     }).catch(() => {
       // ignore failures — logging is best-effort
     });

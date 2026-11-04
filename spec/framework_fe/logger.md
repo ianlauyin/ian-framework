@@ -28,7 +28,7 @@ This feature is not product business logic.
 | `Logger.error(action, errorMessage, extra?)` | Records one event with the level `error`. When `errorMessage` is empty or has only whitespace, the logger uses the text `unknown error`. |
 | `Logger.wrapAction(name, action)` | Returns a function that logs each run of `action`. The rules are in the section "Action log". |
 | `Logger.contextWrapper(module, context)` | Returns a new object that has the keys of `context`. Each function value is wrapped with `Logger.wrapAction`. The rules are in the section "Action log". |
-| `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string. A key that exists gets the new value. |
+| `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `bool`. A key that exists gets the new value. |
 | `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 | `Logger.setMaskPatterns(patterns)` | Sets the mask patterns. `patterns` is a `RegExp[]`. |
 | `Logger.watchWindowErrors()` | Records the window errors and the unhandled promise rejections. |
@@ -47,12 +47,11 @@ The event has these fields:
 | Field | Value |
 | --- | --- |
 | `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe/time`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
-| `id` | Empty string |
 | `action` | The `action` argument of the method, with no change. |
 | `latency_ms` | `null`, or the time of the action for an event from `Logger.wrapAction`. |
 | `level` | The level of the method. |
 | `error_message` | `null` for an `info` event and a `warn` event. For an `error` event, the `errorMessage` argument after the masking. An empty or blank `errorMessage` becomes `unknown error` before the masking. |
-| `context` | A copy of the context of the logger. Each value is a string. The context is empty until `Logger.addContext` adds keys. |
+| `context` | A copy of the context of the logger. Each value is a string, a number or a `bool`. The context is empty until `Logger.addContext` adds keys. |
 | `extra` | The `extra` values after the masking. |
 
 `extra` rules:
@@ -65,7 +64,7 @@ The event has these fields:
 
 - The logger keeps one context object in memory for the page. It is empty at the start.
 - `Logger.addContext` and `Logger.removeContext` change the context for the events that the logger records after the call. They do not change the events that are already in the queue.
-- The Rust log route does not keep the `context` of a browser event. The route rules are in `spec/framework_rs/logging/client-log.md`.
+- The Rust log route keeps the `context` of a browser event, with the same key and value rules as `extra`. It sets `ip` and `user_agent` from the request. The route rules are in `spec/framework_rs/logging/client-log.md`.
 
 ### Action log
 
@@ -101,7 +100,7 @@ The request has these properties:
 - The URL is `/log`. The logger does not add the prefix `/ajax`.
 - The request uses `credentials: "same-origin"`.
 - The request has the header `Content-Type: application/json`.
-- The body is one JSON array. The array holds each event in the queue.
+- The body is one JSON object `{"events": [...]}`. The `events` array holds each event in the queue.
 
 Send rules:
 

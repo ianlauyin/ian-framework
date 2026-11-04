@@ -15,17 +15,6 @@ use axum::Router;
 use serde_json::json;
 use std::net::SocketAddr;
 
-#[test]
-fn a_header_that_is_not_an_ip_gives_an_empty_ip() {
-    let request = Request::builder()
-        .header("cf-connecting-ip", "not an ip")
-        .header("x-forwarded-for", "203.0.113.8")
-        .header("x-real-ip", "203.0.113.5")
-        .body(Body::empty())
-        .unwrap();
-    assert_eq!(client_ip(&request), "");
-}
-
 use tower::ServiceExt;
 
 async fn status_from_path(Path(code): Path<u16>) -> StatusCode {
@@ -95,7 +84,7 @@ async fn middleware_records_the_request_schema() {
     let events = buffered_events(&shipper);
     assert_eq!(events.len(), 1);
     let event = &events[0];
-    assert_eq!(event.id, "");
+    crate::test::logging::assert_uuid_v7(&event.id);
     assert_eq!(event.action, "API/GET:/status/204");
     assert_eq!(event.context["ip"], "");
     assert_eq!(event.context["user_agent"], "");
@@ -106,7 +95,7 @@ async fn middleware_records_the_request_schema() {
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(value.get("app").is_none());
     assert!(value.get("project").is_none());
-    assert_eq!(value["id"], "");
+    crate::test::logging::assert_uuid_v7(value["id"].as_str().unwrap());
     assert_eq!(value["action"], "API/GET:/status/204");
     assert!(!json.contains("req-1"));
     assert!(value.get("request").is_none());

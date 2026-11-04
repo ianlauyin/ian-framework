@@ -17,6 +17,15 @@ pub(crate) fn shipper_config(app: &str) -> ShipperConfig {
     )
 }
 
+pub(crate) fn client_log_event(event: &LogEvent) -> ClientLogEvent {
+    serde_json::from_value(serde_json::to_value(event).unwrap()).unwrap()
+}
+
+pub(crate) fn assert_uuid_v7(id: &str) {
+    let uuid = uuid::Uuid::parse_str(id).unwrap();
+    assert_eq!(uuid.get_version_num(), 7);
+}
+
 pub(crate) fn buffered_events(shipper: &LogShipper) -> Vec<LogEvent> {
     shipper.lock_buffer().events.iter().cloned().collect()
 }

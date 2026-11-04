@@ -74,7 +74,7 @@ The warning has these fields:
 | Field | Value |
 | --- | --- |
 | `ts` | Current HKT time, from `ian_framework::time::hkt_now()` |
-| `id` | Empty string |
+| `id` | A new UUID v7 text |
 | `action` | `SHIPPER/capacity meets 80%` |
 | `latency_ms` | null |
 | `level` | `warn` |

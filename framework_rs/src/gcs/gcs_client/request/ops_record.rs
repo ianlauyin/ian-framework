@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::logging::event::new_id;
 use crate::logging::{LogEvent, LogLevel};
 use crate::time::hkt_now;
 
@@ -20,7 +21,7 @@ impl OpsRecord<'_> {
     pub(crate) fn into_event(self, bucket: &str) -> LogEvent {
         let mut event = LogEvent {
             ts: hkt_now(),
-            id: String::new(),
+            id: new_id(),
             action: action(self.method, self.url),
             latency_ms: self.latency_ms,
             level: self.level,

@@ -6,33 +6,36 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 A client can send log events. The client is not trusted.
 
-The app builds each event that does not come from a client. The app does not check that event. `LogEvent::from_client` checks an event from a client.
+The app builds each event that does not come from a client. The app does not check that event. `ClientLog::log_events` checks the events from a client.
 
-### LogEvent::from_client
+### ClientLogEvent
 
-`LogEvent::from_client` checks one event.
+`ian_framework::logging::ClientLogEvent` is one event that a client sends. It has the same fields as `LogEvent` (`ts`, `action`, `latency_ms`, `level`, `error_message`, `context`, `extra`) except `id`. The client does not send an `id`. A client `id` in the JSON is ignored.
 
-- The input is a reference to one `LogEvent`.
-- The result is one event.
-- The function does not change the input event.
+### Check of one event
+
+`ClientLog::log_events` checks each event with these rules.
+
+- The result is one new event for each input event.
+- The function does not change the input events.
 
 The function sets the fields of the result as follows:
 
 | Field | Stored value |
 | --- | --- |
-| `id` | Empty string. The client value is not kept. |
-| `latency_ms` | null. The client value is not kept. |
+| `id` | A new UUID v7 text. The client value is not kept. |
+| `latency_ms` | The client value. |
 | `ts` | The client value in HKT, when it is not later than `ian_framework::time::hkt_now()` and is not more than 24 hours before it. In all other cases, the current HKT time from `hkt_now()`. |
 | `level` | The client value. |
 | `action` | The client value, with each control character changed to a space, and cut to 128 characters. |
-| `context` | Empty object. The client value is not kept. |
-| `error_message` | For an `error` event: the client text with each control character changed to a space, and cut to 1024 characters, or the text `no error message` when that text is null, missing or blank. For a `warn` event: the same text rules, or null when the text is null, missing or blank. For an `info` event: null. The client value is not kept. |
+| `context` | The client keys and values that obey the key and value rules below, with the keys `ip` and `user_agent` read from `headers` with `client_ip` and `user_agent`. A client `ip` or `user_agent` is replaced. |
+| `error_message` | For an `error` event: the client text with each control character changed to a space, and cut to 1024 characters, or the text `unknown error` when that text is null, missing or blank. For a `warn` event: the same text rules, or null when the text is null, missing or blank. For an `info` event: null. The client value is not kept. |
 | `extra` | The client keys and values that obey the `extra` rules below. |
 
-The function reads each `extra` key:
+The function reads each `extra` key. The function reads each client `context` key with the same rules:
 
 - The function stores at most 32 keys. It ignores the keys after the 32nd stored key.
-- The function does not store a value that is longer than 2048 bytes.
+- The function does not store a string value that is longer than 2048 bytes.
 - The function does not store an empty key.
 - The function stores a key only when each character is an ASCII letter, an ASCII digit, `_`, `-`, or `.`.
 - The function stores a value only when it is a string, a number, or a `bool`.
@@ -45,25 +48,16 @@ The function does not store these values:
 - Text that contains `\r`
 - Text that contains `\n`
 
-Each stored value is a string:
+The function checks a value and does not change it. A stored value has the same type as the client value: a string, a number or a `bool`. The function stores the full string.
 
-| Client value | Stored value |
-| --- | --- |
-| String | That string |
-| Number | Its number text |
-| True | `true` |
-| False | `false` |
+### ClientLog::log_events
 
-The function stores the full value text.
+`ian_framework::logging::ClientLog::log_events` checks one list of client events. `ClientLog` has one public field `events`.
 
-### client_events
-
-`ian_framework::logging::client_events` checks one list of client events.
-
-- The input is a reference to a list of `LogEvent`.
+- The input is `&self`, with a list of `ClientLogEvent` in `events`, and `headers: &axum::http::HeaderMap`.
 - The result is a list of events, or no list.
 - An empty list gives no list.
-- An `error` event without a non-blank `error_message` does not reject the list. `LogEvent::from_client` gives that event the placeholder `no error message`.
+- An `error` event without a non-blank `error_message` does not reject the list. The check of one event gives that event the placeholder `unknown error`.
 - The function keeps `error_message` with the `error_message` rules in the table above.
 - The function gives no list when the list has more than 1000 events.
 - The function accepts 1000 events.
@@ -102,14 +96,13 @@ Same-origin rules:
 
 Request handling:
 
-- The body is one JSON array of event objects.
-- The route does not check the content type.
-- The body size limit is 1 MiB.
-- A body that is larger than 1 MiB gets status 413.
-- When the server cannot read the body, the status is also 413.
-- A body that is not a JSON array of event objects gets status 400.
-- The route calls `client_events`. When that call gives no list, the status is 400 and the route records no event.
-- The route sets `ip` and `user_agent` in the `context` of each kept event from the request. The `ip` rule is the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
+- The handler takes `axum::Json<ClientLog>`. `ClientLog` has one field `events`, an array of event objects. `ClientLog::log_events` gives the checked events, or no list.
+- The `Json` extractor sets the statuses of a bad body. The request needs the content type `application/json`, or the status is 415.
+- The body size limit is 1 MiB, set with `DefaultBodyLimit`. A body that is larger than 1 MiB gets status 413.
+- A body that is not valid JSON gets status 400.
+- A body that is valid JSON but is not `{"events": [...]}` of event objects gets status 422. A bare JSON array gets status 422.
+- The route calls `ClientLog::log_events`. When that call gives no list, the status is 400 and the route records no event.
+- `ClientLog::log_events` sets `ip` and `user_agent` in the `context` of each kept event from the request headers, after it keeps the client `context`. The `ip` rule is the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
 - The route calls `LogShipper::send` once with all the kept events. It does not use the buffer.
 - `LogShipper::send` masks each event, then posts the list to the log server with the same URL, headers and timeout as a ship batch. It gives `true` only when the log server answers with a success status.
 - When `send` gives `true`, the response status is 204 with an empty body.

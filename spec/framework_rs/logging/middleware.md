@@ -10,7 +10,7 @@ General rules:
 
 - The middleware does not read the header `x-request-id`.
 - The middleware does not write the header `x-request-id`.
-- The middleware leaves the event field `id` empty.
+- The middleware does not set the event field `id`. The event constructor gives a new UUID v7 text.
 - The middleware records one event after the inner handler returns.
 - The middleware does not set `app` on the event.
 - A log failure does not change the HTTP response.
@@ -37,6 +37,8 @@ General rules:
 | `request_url` | The request path with the query string, as the request line gives it. An empty path is `/`. |
 
 Cloudflare sets the header `cf-connecting-ip` to the real client IP. It is the only source of `ip`.
+
+- `ian_framework::http::headers::client_ip(headers)` and `ian_framework::http::headers::user_agent(headers)` read these two values from a `HeaderMap`. The middleware, the rate limit middleware and the client log route use them.
 
 - The framework supports only one deployment: Cloudflare in front of a reverse proxy, and the reverse proxy in front of the process.
 - The middleware does not read `x-forwarded-for`, `x-real-ip` or the socket address.

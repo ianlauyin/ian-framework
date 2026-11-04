@@ -6,7 +6,7 @@ pub(crate) mod logger;
 pub(crate) mod mask;
 pub(crate) mod shipper_config;
 
-pub use client_log::{client_events, client_log_router};
+pub use client_log::{client_log_router, ClientLog, ClientLogEvent};
 pub use event::{LogEvent, LogLevel, LogValue};
 pub use log_shipper::LogShipper;
 pub use logger::Logger;

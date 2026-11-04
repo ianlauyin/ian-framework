@@ -9,7 +9,7 @@ One event is one `LogEvent`. One event has these fields:
 | Field | Value |
 | --- | --- |
 | `ts` | Hong Kong time (HKT) in RFC 3339, with the offset `+08:00` |
-| `id` | Event id, or an empty string |
+| `id` | Event id. A UUID v7 text, which is based on time. |
 | `action` | `API/{method}:{path}`, a client text, or an empty string |
 | `latency_ms` | Latency in milliseconds, or null |
 | `level` | One `LogLevel` value |
@@ -26,13 +26,12 @@ One event is one `LogEvent`. One event has these fields:
 
 - The fields of `LogEvent` are not public. A caller outside the crate cannot make an event with a struct literal and cannot read a field directly.
 - A caller outside the crate makes an event with `LogEvent::info`, `LogEvent::warn`, `LogEvent::warn_with` or `LogEvent::error`. The rules are in the section "Constructors".
-- A caller outside the crate also gets an event from deserialize. `LogEvent` uses the plain `Deserialize` derive, and `error_message` has `#[serde(default)]`. An event from an untrusted client goes through `LogEvent::from_client`.
+- A caller outside the crate also gets an event from deserialize. `LogEvent` uses the plain `Deserialize` derive, and `error_message` has `#[serde(default)]`. An event from an untrusted client goes through `ClientLog::log_events`.
 - A caller outside the crate reads an event with `ts()`, `id()`, `action()`, `latency_ms()`, `level()`, `error_message()`, `context()` and `extra()`. `extra()` returns the `extra` map. The name `info` is the constructor.
 
 ### Changes that break a caller
 
 - `LogEvent::info(action)` is the constructor of an `info` event. The accessor of the `extra` map is `extra()`.
-- `LogEvent::new` is now `LogEvent::from_client`.
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
 - `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
 - `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
@@ -51,16 +50,16 @@ One event is one `LogEvent`. One event has these fields:
 | `LogEvent::error(action, error_message)` | `error` | `error_message` is `impl Into<String>`, so the caller must give it. |
 
 - `action` is `impl Into<String>`.
-- A constructor sets `ts` to the current HKT time, `id` to an empty string, `latency_ms` to null, and `context` and `extra` to empty objects.
-- A constructor does not change the `action` text or the message text. Only `LogEvent::from_client` cuts text.
+- A constructor sets `ts` to the current HKT time, `id` to a new UUID v7 text, `latency_ms` to null, and `context` and `extra` to empty objects.
+- A constructor does not change the `action` text or the message text. Only `ClientLog::log_events` cuts text.
 - The app builds each event that does not come from a client. The app sets `extra` and does not check the keys or the values.
-- `LogEvent::from_client` checks an event from a client. The checks are in `spec/framework_rs/logging/client-log.md`.
+- `ClientLog::log_events` checks an event from a client. The checks are in `spec/framework_rs/logging/client-log.md`.
 
 ### Error message
 
 - A `warn` event can have `error_message`. An `info` event can have it also, but the framework does not set it.
 - An `error` event that the framework makes has `error_message`, because `LogEvent::error` requires it.
-- Deserialize does not check `error_message`. A missing `error_message` reads as null on an event of each level. A null reads as null. A value that is not a string and not null, such as a number or an object, gives a deserialize error. One bad value rejects the batch. A client `error` event with a null, a missing or a blank `error_message` gets a placeholder in `LogEvent::from_client`. The rules are in `spec/framework_rs/logging/client-log.md`.
+- Deserialize does not check `error_message`. A missing `error_message` reads as null on an event of each level. A null reads as null. A value that is not a string and not null, such as a number or an object, gives a deserialize error. One bad value rejects the batch. A client `error` event with a null, a missing or a blank `error_message` gets a placeholder in `ClientLog::log_events`. The rules are in `spec/framework_rs/logging/client-log.md`.
 - The type of `error_message` is `Option<String>`. `error_message()` returns `Option<&str>`.
 - The framework code that makes an `error` event sets `error_message` as follows:
 

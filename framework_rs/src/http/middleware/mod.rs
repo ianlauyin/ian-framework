@@ -13,7 +13,6 @@ pub(crate) mod slide_session;
 pub use body_limit::{body_limit, BodyLimit};
 pub use catch_panic::catch_panic;
 pub use log_request::log_request;
-pub(crate) use log_request::{client_ip, user_agent};
 pub use no_store::no_store;
 pub use rate_limit::{rate_limit, RateLimitConfig, RateLimiter};
 pub use request_timeout::{request_timeout, RequestTimeout};

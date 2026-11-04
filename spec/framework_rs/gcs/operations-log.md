@@ -22,7 +22,7 @@ Record content:
 - The record `action` is `GCS/{method}:{path}`. The path starts with `/`.
 - The path is the URL path. The client does not write the URL query.
 - A token record has an empty `action`.
-- An operations record has an empty `id`.
+- An operations record has a new UUID v7 `id`.
 - An operations record has an empty `context`.
 - Each record has `bucket` in `extra`. The value is the bucket name.
 - Each record has `message` in `extra`. The values are in the table below.

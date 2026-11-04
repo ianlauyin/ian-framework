@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
+use uuid::Uuid;
 
 use crate::time::hkt_now;
 
@@ -81,6 +82,10 @@ pub struct LogEvent {
     pub(crate) extra: BTreeMap<String, LogValue>,
 }
 
+pub(crate) fn new_id() -> String {
+    Uuid::now_v7().to_string()
+}
+
 impl LogEvent {
     pub fn info(action: impl Into<String>) -> LogEvent {
         Self::build(action.into(), LogLevel::Info, None)
@@ -133,7 +138,7 @@ impl LogEvent {
     fn build(action: String, level: LogLevel, error_message: Option<String>) -> LogEvent {
         LogEvent {
             ts: hkt_now(),
-            id: String::new(),
+            id: new_id(),
             action,
             latency_ms: None,
             level,

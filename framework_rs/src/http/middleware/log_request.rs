@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::net::IpAddr;
 use std::time::Instant;
 
 use axum::body::{to_bytes, Body};
@@ -8,6 +7,7 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
+use crate::http::headers::client::{client_ip, header_text, user_agent};
 use crate::logging::{LogEvent, LogShipper, LogValue};
 
 pub(crate) const BODY_LOG_LIMIT: usize = 64 * 1024;
@@ -19,7 +19,7 @@ pub async fn log_request(
 ) -> Response {
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
-    let ip = client_ip(&request);
+    let ip = client_ip(request.headers());
     let user_agent = user_agent(request.headers());
     let request_url = request
         .uri()
@@ -94,26 +94,6 @@ fn request_path(path: &str) -> String {
         "/".to_string()
     } else {
         path.to_string()
-    }
-}
-
-pub(crate) fn client_ip(request: &Request) -> String {
-    header_text(request.headers(), "cf-connecting-ip")
-        .and_then(|value| value.parse::<IpAddr>().ok())
-        .map(|ip| ip.to_string())
-        .unwrap_or_default()
-}
-
-pub(crate) fn user_agent(headers: &HeaderMap) -> String {
-    header_text(headers, "user-agent").unwrap_or_default()
-}
-
-fn header_text(headers: &HeaderMap, name: &str) -> Option<String> {
-    let value = headers.get(name)?.to_str().ok()?.trim();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value.to_string())
     }
 }
 

@@ -632,7 +632,7 @@ async fn ops_log_writes_the_bucket_and_omits_the_query() {
     let events = buffered_events(&shipper);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].action, "GCS/GET:/storage/v1/b/my-bucket/o/file");
-    assert_eq!(events[0].id, "");
+    crate::test::logging::assert_uuid_v7(&events[0].id);
     assert!(events[0].context.is_empty());
     assert_eq!(events[0].extra["status"], "200");
     assert_eq!(events[0].extra["message"], "gcs response");

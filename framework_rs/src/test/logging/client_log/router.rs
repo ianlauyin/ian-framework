@@ -2,13 +2,11 @@ use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::Router;
 
-use crate::logging::log_shipper::SHIP_CHUNK;
-use crate::logging::{LogEvent, LogShipper};
+use crate::logging::{LogEvent, LogLevel, LogShipper};
 
 use crate::http::middleware::log_request;
-use crate::logging::client_log::*;
-use crate::logging::LogLevel;
-use crate::test::logging::{buffered_events, shipper_config};
+use crate::logging::client_log::router::*;
+use crate::test::logging::{assert_uuid_v7, buffered_events, shipper_config};
 use axum::body::Body;
 use axum::middleware::from_fn_with_state;
 use serde_json::json;
@@ -53,11 +51,14 @@ fn client_event(action: &str) -> serde_json::Value {
 
 fn batch_body(actions: &[&str]) -> Body {
     let events: Vec<_> = actions.iter().map(|action| client_event(action)).collect();
-    Body::from(json!(events).to_string())
+    Body::from(json!({ "events": events }).to_string())
 }
 
 async fn send(shipper: &LogShipper, headers: &[(&str, &str)], body: Body) -> StatusCode {
-    let mut request = Request::builder().method("POST").uri("/log");
+    let mut request = Request::builder()
+        .method("POST")
+        .uri("/log")
+        .header("content-type", "application/json");
     for (name, value) in headers {
         request = request.header(*name, *value);
     }
@@ -86,8 +87,8 @@ async fn sends_a_same_origin_batch_with_the_request_ip_and_user_agent() {
     assert_eq!(event.level, LogLevel::Error);
     assert_eq!(event.context["ip"], "203.0.113.8");
     assert_eq!(event.context["user_agent"], "demo-agent");
-    assert_eq!(event.id, "");
-    assert_eq!(event.latency_ms, None);
+    assert_uuid_v7(&event.id);
+    assert_eq!(event.latency_ms, Some(5));
     assert_eq!(event.extra["page"], "/home");
 }
 
@@ -96,13 +97,13 @@ async fn an_error_event_without_a_message_does_not_reject_the_batch() {
     let (shipper, mut rx) = shipper_with_server(StatusCode::NO_CONTENT).await;
     let mut bad = client_event("old");
     bad.as_object_mut().unwrap().remove("error_message");
-    let body = json!([bad, client_event("good")]).to_string();
+    let body = json!({ "events": [bad, client_event("good")] }).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&shipper, &headers, Body::from(body)).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     let events = rx.try_recv().unwrap();
     assert_eq!(events.len(), 2);
-    assert_eq!(events[0].error_message(), Some("no error message"));
+    assert_eq!(events[0].error_message(), Some("unknown error"));
     assert_eq!(events[1].error_message(), Some("client failed"));
 }
 
@@ -111,10 +112,10 @@ async fn a_non_string_error_message_rejects_the_batch() {
     let shipper = shipper();
     let mut number = client_event("number");
     number["error_message"] = json!(123);
-    let body = json!([number, client_event("good")]).to_string();
+    let body = json!({ "events": [number, client_event("good")] }).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&shipper, &headers, Body::from(body)).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(buffered_events(&shipper).is_empty());
 }
 
@@ -199,10 +200,10 @@ async fn rejects_a_bad_body() {
         send(
             &shipper,
             &headers,
-            Body::from(json!({ "events": [client_event("boom")] }).to_string()),
+            Body::from(json!([client_event("boom")]).to_string()),
         )
         .await,
-        StatusCode::BAD_REQUEST
+        StatusCode::UNPROCESSABLE_ENTITY
     );
     assert_eq!(
         send(&shipper, &headers, Body::from(vec![b' '; BODY_LIMIT + 1])).await,
@@ -245,6 +246,7 @@ async fn sends_client_events_and_buffers_the_request_event() {
         .method("POST")
         .uri("/log")
         .header("sec-fetch-site", "same-origin")
+        .header("content-type", "application/json")
         .body(batch_body(&["boom"]))
         .unwrap();
     let response = router.oneshot(request).await.unwrap();
@@ -255,38 +257,4 @@ async fn sends_client_events_and_buffers_the_request_event() {
     let events = buffered_events(&shipper);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].action, "API/POST:/log");
-}
-
-#[test]
-fn client_events_rejects_an_empty_list() {
-    assert!(client_events(&[]).is_none());
-}
-
-#[test]
-fn client_events_returns_sanitized_events() {
-    let stored =
-        client_events(&[LogEvent::info("/a?x=1"), LogEvent::error("#frag", "boom")]).unwrap();
-    assert_eq!(stored.len(), 2);
-    assert_eq!(stored[0].action, "/a?x=1");
-    assert_eq!(stored[0].level, LogLevel::Info);
-    assert_eq!(stored[0].id, "");
-    assert!(stored[0].context.is_empty());
-    assert_eq!(stored[0].latency_ms, None);
-    assert_eq!(stored[1].action, "#frag");
-    assert_eq!(stored[1].level, LogLevel::Error);
-}
-
-#[test]
-fn client_events_accepts_a_list_at_the_ship_chunk() {
-    let events: Vec<_> = (0..SHIP_CHUNK).map(|_| LogEvent::info("/ok")).collect();
-    let stored = client_events(&events).unwrap();
-    assert_eq!(stored.len(), SHIP_CHUNK);
-    assert_eq!(stored[0].id, "");
-}
-
-#[test]
-fn client_events_rejects_a_list_above_the_ship_chunk() {
-    let events: Vec<_> = (0..=SHIP_CHUNK).map(|_| LogEvent::info("/ok")).collect();
-    assert_eq!(events.len(), SHIP_CHUNK + 1);
-    assert!(client_events(&events).is_none());
 }
