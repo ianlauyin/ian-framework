@@ -2,20 +2,14 @@ use crate::logging::LogEvent;
 
 pub(crate) struct Alert {
     action: &'static str,
-    percent_key: &'static str,
     threshold_percent: f64,
     active: bool,
 }
 
 impl Alert {
-    pub(crate) fn new(
-        action: &'static str,
-        percent_key: &'static str,
-        threshold_percent: f64,
-    ) -> Self {
+    pub(crate) fn new(action: &'static str, threshold_percent: f64) -> Self {
         Self {
             action,
-            percent_key,
             threshold_percent,
             active: false,
         }
@@ -34,7 +28,7 @@ impl Alert {
         let mut event = LogEvent::warn(self.action);
         event
             .extra
-            .insert(self.percent_key.to_string(), round_one(percent).into());
+            .insert("percent".to_string(), round_one(percent).into());
         event.extra.insert(
             "threshold_percent".to_string(),
             self.threshold_percent.into(),

@@ -43,7 +43,7 @@ The monitor makes one event when the usage rises to the threshold or above it. I
 | `latency_ms` | 0 |
 | `error_message` | null |
 | `level` | `warn` |
-| `extra.cpu_percent` | The usage, rounded to one decimal, as a JSON number |
+| `extra.percent` | The usage, rounded to one decimal, as a JSON number |
 | `extra.threshold_percent` | The threshold, as a JSON number |
 
 ## Stop

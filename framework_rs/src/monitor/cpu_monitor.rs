@@ -61,7 +61,7 @@ impl CpuMonitor {
         ticker.tick().await;
         let stop = shutdown.wait();
         tokio::pin!(stop);
-        let mut alert = Alert::new(ACTION, "cpu_percent", self.threshold_percent);
+        let mut alert = Alert::new(ACTION, self.threshold_percent);
         let mut read_failed = false;
         loop {
             tokio::select! {
