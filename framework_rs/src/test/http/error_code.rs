@@ -25,42 +25,42 @@ async fn message(response: Response) -> String {
 async fn a_well_known_code_gives_its_status_and_message() {
     for (error, status) in [
         (
-            exception!("name is blank", code = error_code::VALIDATION_ERROR),
+            exception!(code = error_code::VALIDATION_ERROR, "name is blank"),
             StatusCode::BAD_REQUEST,
         ),
         (
-            exception!("bad query", code = error_code::BAD_REQUEST),
+            exception!(code = error_code::BAD_REQUEST, "bad query"),
             StatusCode::BAD_REQUEST,
         ),
         (
-            exception!("unauthorized", code = error_code::UNAUTHORIZED),
+            exception!(code = error_code::UNAUTHORIZED, "unauthorized"),
             StatusCode::UNAUTHORIZED,
         ),
         (
-            exception!("access denied", code = error_code::FORBIDDEN),
+            exception!(code = error_code::FORBIDDEN, "access denied"),
             StatusCode::FORBIDDEN,
         ),
         (
-            exception!("job not found", code = error_code::NOT_FOUND),
+            exception!(code = error_code::NOT_FOUND, "job not found"),
             StatusCode::NOT_FOUND,
         ),
         (
-            exception!("request timed out", code = error_code::REQUEST_TIMEOUT),
+            exception!(code = error_code::REQUEST_TIMEOUT, "request timed out"),
             StatusCode::REQUEST_TIMEOUT,
         ),
         (
             exception!(
+                code = error_code::PAYLOAD_TOO_LARGE,
                 "request body is too large",
-                code = error_code::PAYLOAD_TOO_LARGE
             ),
             StatusCode::PAYLOAD_TOO_LARGE,
         ),
         (
-            exception!("too many requests", code = error_code::TOO_MANY_REQUESTS),
+            exception!(code = error_code::TOO_MANY_REQUESTS, "too many requests"),
             StatusCode::TOO_MANY_REQUESTS,
         ),
         (
-            exception!("internal error", code = error_code::INTERNAL_ERROR),
+            exception!(code = error_code::INTERNAL_ERROR, "internal error"),
             StatusCode::INTERNAL_SERVER_ERROR,
         ),
     ] {
@@ -83,9 +83,9 @@ async fn a_well_known_code_gives_its_status_and_message() {
 #[tokio::test]
 async fn a_different_code_is_a_hidden_500() {
     for error in [
-        exception!("db down", code = "MY_CODE"),
-        exception!("secret detail", code = "GCS_NOT_FOUND"),
-        exception!("external", code = "EXTERNAL_ERROR"),
+        exception!(code = "MY_CODE", "db down"),
+        exception!(code = "GCS_NOT_FOUND", "secret detail"),
+        exception!(code = "EXTERNAL_ERROR", "external"),
     ] {
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
@@ -95,16 +95,16 @@ async fn a_different_code_is_a_hidden_500() {
 
 #[tokio::test]
 async fn only_the_code_of_the_top_exception_counts() {
-    let inner = exception!("name is blank", code = error_code::VALIDATION_ERROR);
-    let outer = exception!("secret message", code = "MY_CODE", source = inner);
+    let inner = exception!(code = error_code::VALIDATION_ERROR, "name is blank");
+    let outer = exception!(code = "MY_CODE", "secret message", source = inner);
     let response = outer.into_response();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(message(response).await, "internal server error");
 
     let wrapped = exception!(
-        "secret message",
         code = "MY_CODE",
-        source = exception!("x", code = error_code::VALIDATION_ERROR)
+        "secret message",
+        source = exception!(code = error_code::VALIDATION_ERROR, "x"),
     );
     let response = wrapped.into_response();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
@@ -113,7 +113,7 @@ async fn only_the_code_of_the_top_exception_counts() {
 
 #[tokio::test]
 async fn into_response_encodes_json_strings() {
-    let response = exception!("line\n\"x", code = error_code::BAD_REQUEST).into_response();
+    let response = exception!(code = error_code::BAD_REQUEST, "line\n\"x").into_response();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = bytes(response).await;
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();

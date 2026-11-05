@@ -94,9 +94,9 @@ pub(crate) async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<
         .await?;
     let bytes = response.bytes().await.map_err(|err| {
         exception!(
-            "signBlob response is not bytes",
             code = "GCS_TRANSPORT",
-            source = err.without_url()
+            "signBlob response is not bytes",
+            source = err.without_url(),
         )
     })?;
     signature_from_response(&bytes)
@@ -105,9 +105,9 @@ pub(crate) async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<
 pub(crate) fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, Exception> {
     let parsed: SignBlobResponse = serde_json::from_slice(bytes).map_err(|err| {
         exception!(
-            "signBlob response is not JSON",
             code = "GCS_API",
-            source = err
+            "signBlob response is not JSON",
+            source = err,
         )
     })?;
     let cleaned: String = parsed
@@ -119,15 +119,15 @@ pub(crate) fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, Exception
         .decode(cleaned)
         .map_err(|err| {
             exception!(
-                "signBlob signature is not base64",
                 code = "GCS_API",
-                source = err
+                "signBlob signature is not base64",
+                source = err,
             )
         })?;
     if signature.is_empty() {
         return Err(exception!(
+            code = "GCS_API",
             "signBlob returned an empty signature",
-            code = "GCS_API"
         ));
     }
     Ok(signature)
@@ -142,21 +142,21 @@ struct SignBlobResponse {
 pub(crate) fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, Exception> {
     let Some(expires_in) = expires_in else {
         return Err(exception!(
+            code = "GCS_CONFIG",
             "signed URL lifetime is missing",
-            code = "GCS_CONFIG"
         ));
     };
     let seconds = expires_in.as_secs();
     if seconds == 0 {
         return Err(exception!(
+            code = "GCS_CONFIG",
             "signed URL lifetime must be at least 1 second",
-            code = "GCS_CONFIG"
         ));
     }
     if seconds > MAX_SIGNED_URL_SECONDS {
         return Err(exception!(
+            code = "GCS_CONFIG",
             "signed URL lifetime must be at most 604800 seconds",
-            code = "GCS_CONFIG"
         ));
     }
     Ok(seconds)
@@ -165,8 +165,8 @@ pub(crate) fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u6
 pub(crate) fn attachment_disposition(filename: &str) -> Result<String, Exception> {
     if filename.is_empty() {
         return Err(exception!(
+            code = "GCS_CONFIG",
             "attachment filename is empty",
-            code = "GCS_CONFIG"
         ));
     }
     let fallback: String = filename

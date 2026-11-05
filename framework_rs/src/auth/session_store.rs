@@ -39,7 +39,7 @@ impl SessionStore {
     pub async fn connect(url: &str, config: SessionConfig) -> Result<Self, Exception> {
         config.check()?;
         let client = redis::Client::open(url).map_err(|err| {
-            exception!("redis url is not valid", code = "AUTH_CONFIG", source = err)
+            exception!(code = "AUTH_CONFIG", "redis url is not valid", source = err)
         })?;
         let mut conn = ConnectionManager::new_with_config(client, manager_config())
             .await
@@ -49,7 +49,7 @@ impl SessionStore {
             .await
             .map_err(unreachable)?;
         if pong != "PONG" {
-            return Err(exception!("cannot reach redis", code = "AUTH_STORE"));
+            return Err(exception!(code = "AUTH_STORE", "cannot reach redis"));
         }
         Ok(Self {
             inner: Arc::new(Inner { conn, config }),
@@ -269,9 +269,9 @@ pub(crate) struct Inner {
 
 fn store_err(err: redis::RedisError) -> Exception {
     exception!(
-        "session store command failed",
         code = "AUTH_STORE",
-        source = err
+        "session store command failed",
+        source = err,
     )
 }
 
@@ -298,15 +298,15 @@ fn manager_config() -> ConnectionManagerConfig {
 }
 
 fn unreachable(err: redis::RedisError) -> Exception {
-    exception!("cannot reach redis", code = "AUTH_STORE", source = err)
+    exception!(code = "AUTH_STORE", "cannot reach redis", source = err)
 }
 
 pub(crate) fn random_token() -> Result<String, Exception> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|err| {
         exception!(
+            code = "AUTH_RANDOM",
             format!("os random source failed: {err}"),
-            code = "AUTH_RANDOM"
         )
     })?;
     Ok(hex::encode(bytes))

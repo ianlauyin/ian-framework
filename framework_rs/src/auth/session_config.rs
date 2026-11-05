@@ -29,7 +29,7 @@ impl SessionConfig {
         } else {
             return Ok(());
         };
-        Err(exception!(problem, code = "AUTH_CONFIG"))
+        Err(exception!(code = "AUTH_CONFIG", problem))
     }
 
     pub(crate) fn cookie(&self, token: &str, now: DateTime<Utc>) -> String {

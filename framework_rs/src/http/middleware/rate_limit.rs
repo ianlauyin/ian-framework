@@ -86,7 +86,7 @@ pub async fn rate_limit(
         Ok(()) => next.run(request).await,
         Err(wait) => {
             let mut response =
-                exception!("too many requests", code = error_code::TOO_MANY_REQUESTS)
+                exception!(code = error_code::TOO_MANY_REQUESTS, "too many requests")
                     .into_response();
             let seconds = wait.as_secs_f64().ceil().max(1.0) as u64;
             if let Ok(value) = HeaderValue::from_str(&seconds.to_string()) {

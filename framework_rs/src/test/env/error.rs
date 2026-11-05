@@ -22,7 +22,7 @@ fn missing_and_invalid_keep_their_code() {
 #[cfg(feature = "gcp")]
 #[test]
 fn secret_keeps_the_source_in_the_trace() {
-    let error = secret("APP_KEY", exception!("denied", code = "GCP_AUTH"));
+    let error = secret("APP_KEY", exception!(code = "GCP_AUTH", "denied"));
     assert_eq!(error.code(), "ENV_SECRET");
     assert_eq!(
         error.to_string(),

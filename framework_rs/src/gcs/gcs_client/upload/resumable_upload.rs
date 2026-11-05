@@ -66,18 +66,18 @@ impl<'a> ResumableUpload<'a> {
             .headers()
             .get(reqwest::header::LOCATION)
             .ok_or_else(|| {
-                exception!("resumable upload did not return Location", code = "GCS_API")
+                exception!(code = "GCS_API", "resumable upload did not return Location")
             })?;
         let location = location
             .to_str()
-            .map_err(|_| exception!("resumable Location header is not UTF-8", code = "GCS_API"))?
+            .map_err(|_| exception!(code = "GCS_API", "resumable Location header is not UTF-8"))?
             .to_string();
         let _ = response.bytes().await;
         // Every chunk request carries the access token, so the session URL must stay on the Google host.
         if !location.starts_with(&client.inner.endpoints.upload_location_prefix) {
             return Err(exception!(
+                code = "GCS_API",
                 "resumable Location is not a storage.googleapis.com URL",
-                code = "GCS_API"
             ));
         }
         Ok(Self {
@@ -108,8 +108,8 @@ impl<'a> ResumableUpload<'a> {
             }
         }
         Err(exception!(
+            code = "GCS_API",
             "finished upload did not return object metadata",
-            code = "GCS_API"
         ))
     }
 
@@ -129,8 +129,8 @@ impl<'a> ResumableUpload<'a> {
             attempt += 1;
             if attempt > CHUNK_ATTEMPTS {
                 return Err(exception!(
+                    code = "GCS_TRANSPORT",
                     "resumable chunk failed after retries",
-                    code = "GCS_TRANSPORT"
                 ));
             }
             if attempt > 1 {
@@ -313,8 +313,8 @@ impl UploadStep {
         match self {
             Self::Done(meta) => Ok(meta),
             Self::Continue { .. } => Err(exception!(
+                code = "GCS_API",
                 "finished upload did not return object metadata",
-                code = "GCS_API"
             )),
         }
     }
@@ -324,7 +324,7 @@ fn chunk_piece(chunk: &[u8], start: u64, offset: u64) -> Result<&[u8], Exception
     usize::try_from(offset - start)
         .ok()
         .and_then(|from| chunk.get(from..))
-        .ok_or_else(|| exception!("resumable offset is outside the chunk", code = "GCS_API"))
+        .ok_or_else(|| exception!(code = "GCS_API", "resumable offset is outside the chunk"))
 }
 
 pub(crate) fn after_probe(next: u64, start: u64, end: u64, offset: u64) -> Move {
@@ -350,8 +350,8 @@ pub(crate) fn advance_offset(
 ) -> Result<(), Exception> {
     if next > total {
         return Err(exception!(
+            code = "GCS_API",
             "resumable offset is past the end of the object",
-            code = "GCS_API"
         ));
     }
     if next > *offset {
@@ -363,16 +363,16 @@ pub(crate) fn advance_offset(
         *rewinds += 1;
         if *rewinds > CHUNK_ATTEMPTS {
             return Err(exception!(
+                code = "GCS_UNAVAILABLE",
                 "resumable session did not keep uploaded bytes",
-                code = "GCS_UNAVAILABLE"
             ));
         }
         *offset = next;
         return Ok(());
     }
     Err(exception!(
+        code = "GCS_API",
         "resumable upload did not advance",
-        code = "GCS_API"
     ))
 }
 
@@ -412,7 +412,7 @@ pub(crate) fn probe_content_range(total: u64) -> String {
 
 pub(crate) fn next_offset_from_range(header: &str) -> Result<u64, Exception> {
     range_end(header)
-        .ok_or_else(|| exception!("resumable Range header is invalid", code = "GCS_API"))
+        .ok_or_else(|| exception!(code = "GCS_API", "resumable Range header is invalid"))
 }
 
 fn range_end(header: &str) -> Option<u64> {

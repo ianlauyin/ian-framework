@@ -108,9 +108,9 @@ impl GcsClient {
             .await?;
         let bytes = response.bytes().await.map_err(|err| {
             exception!(
-                "list response is not bytes",
                 code = "GCS_TRANSPORT",
-                source = err.without_url()
+                "list response is not bytes",
+                source = err.without_url(),
             )
         })?;
         ListPage::from_slice(&bytes)
@@ -139,13 +139,13 @@ impl GcsClient {
                 RewriteStep::Next(next) => next,
             };
             if token.as_deref() == Some(next.as_str()) {
-                return Err(exception!("rewrite token did not change", code = "GCS_API"));
+                return Err(exception!(code = "GCS_API", "rewrite token did not change"));
             }
             token = Some(next);
         }
         Err(exception!(
+            code = "GCS_API",
             "rewrite did not finish within the step limit",
-            code = "GCS_API"
         ))
     }
 
@@ -188,8 +188,8 @@ impl GcsClient {
     pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
         if from == to {
             return Err(exception!(
+                code = "GCS_CONFIG",
                 "move source and destination are the same object",
-                code = "GCS_CONFIG"
             ));
         }
         let meta = self.rewrite_object(from, to).await?;
@@ -247,9 +247,9 @@ impl GcsClient {
             .await?;
         let bytes = response.bytes().await.map_err(|err| {
             exception!(
-                "rewrite response is not bytes",
                 code = "GCS_TRANSPORT",
-                source = err.without_url()
+                "rewrite response is not bytes",
+                source = err.without_url(),
             )
         })?;
         RewriteStep::from_slice(&bytes)
@@ -276,7 +276,7 @@ impl GcsClient {
                  the source ({check_err}); the object may exist at both names"
             ),
         };
-        exception!(message, code = kind, source = delete_err)
+        exception!(code = kind, message, source = delete_err)
     }
 
     pub(crate) async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, Exception> {
@@ -380,9 +380,9 @@ impl GcsClient {
             return Ok(Outcome::Retry);
         }
         Err(exception!(
-            "gcs request failed",
             code = "GCS_TRANSPORT",
-            source = err.without_url()
+            "gcs request failed",
+            source = err.without_url(),
         ))
     }
 
@@ -528,8 +528,8 @@ pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {
         || name.contains(['\r', '\n'])
     {
         return Err(exception!(
+            code = "GCS_CONFIG",
             "object name is empty, too long, `.`, `..` or contains a line break",
-            code = "GCS_CONFIG"
         ));
     }
     Ok(())
@@ -539,8 +539,8 @@ pub(crate) fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(
     for (key, value) in metadata {
         if key.is_empty() || key.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
             return Err(exception!(
+                code = "GCS_CONFIG",
                 "metadata key is empty or metadata contains a line break",
-                code = "GCS_CONFIG"
             ));
         }
     }
@@ -561,8 +561,8 @@ fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
         || !bucket_name.is_ascii()
     {
         return Err(exception!(
+            code = "GCS_CONFIG",
             "bucket name is empty or contains a forbidden character",
-            code = "GCS_CONFIG"
         ));
     }
     Ok(())
@@ -575,9 +575,9 @@ pub(crate) fn http_client() -> Result<reqwest::Client, Exception> {
     let builder = builder.tcp_user_timeout(TRANSFER_TIMEOUT);
     builder.build().map_err(|err| {
         exception!(
-            "cannot build the HTTP client",
             code = "GCS_LOCAL",
-            source = err
+            "cannot build the HTTP client",
+            source = err,
         )
     })
 }

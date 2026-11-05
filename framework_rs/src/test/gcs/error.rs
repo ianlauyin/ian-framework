@@ -5,9 +5,9 @@ use crate::gcs::error::*;
 #[test]
 fn from_gcp_keeps_the_meaning_message_and_source() {
     let err = exception!(
-        "outer",
         code = "GCP_TRANSPORT",
-        source = exception!("inner", code = "GCP_API")
+        "outer",
+        source = exception!(code = "GCP_API", "inner"),
     );
     let err = from_gcp(err);
     assert_eq!(err.code(), "GCS_TRANSPORT");
@@ -16,15 +16,15 @@ fn from_gcp_keeps_the_meaning_message_and_source() {
     assert_eq!(cause.code(), "GCP_API");
     assert_eq!(cause.message(), "inner");
     assert_eq!(
-        from_gcp(exception!("x", code = "GCP_AUTH")).code(),
+        from_gcp(exception!(code = "GCP_AUTH", "x")).code(),
         "GCS_AUTH"
     );
     assert_eq!(
-        from_gcp(exception!("x", code = "GCP_CONFIG")).code(),
+        from_gcp(exception!(code = "GCP_CONFIG", "x")).code(),
         "GCS_CONFIG"
     );
     assert_eq!(
-        from_gcp(exception!("x", code = "GCP_API")).code(),
+        from_gcp(exception!(code = "GCP_API", "x")).code(),
         "GCS_API"
     );
 }
@@ -130,9 +130,9 @@ fn redact_query_keeps_prose() {
 
 #[test]
 fn retryable_codes_match_the_upload_policy() {
-    assert!(is_retryable(&exception!("reset", code = "GCS_TRANSPORT")));
-    assert!(is_retryable(&exception!("busy", code = "GCS_UNAVAILABLE")));
+    assert!(is_retryable(&exception!(code = "GCS_TRANSPORT", "reset")));
+    assert!(is_retryable(&exception!(code = "GCS_UNAVAILABLE", "busy")));
     for code in ["GCS_LOCAL", "GCS_NOT_FOUND", "GCS_API", "GCS_CONFIG"] {
-        assert!(!is_retryable(&exception!("x", code = code)), "{code}");
+        assert!(!is_retryable(&exception!(code = code, "x")), "{code}");
     }
 }

@@ -47,8 +47,8 @@ fn is_json(headers: &HeaderMap) -> bool {
 
 fn too_large() -> Response {
     exception!(
+        code = error_code::PAYLOAD_TOO_LARGE,
         "request body is too large",
-        code = error_code::PAYLOAD_TOO_LARGE
     )
     .into_response()
 }

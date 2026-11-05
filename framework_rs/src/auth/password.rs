@@ -13,9 +13,9 @@ pub(crate) const MAX_PASSWORD_BYTES: usize = 256;
 pub async fn hash_password(password: &str) -> Result<String, Exception> {
     if password.len() > MAX_PASSWORD_BYTES {
         return Err(exception!(
-            format!("password must not be longer than {MAX_PASSWORD_BYTES} bytes"),
-            code = error_code::VALIDATION_ERROR,
             severity = Severity::Warn,
+            code = error_code::VALIDATION_ERROR,
+            format!("password must not be longer than {MAX_PASSWORD_BYTES} bytes"),
         ));
     }
     let password = password.to_owned();
@@ -23,9 +23,9 @@ pub async fn hash_password(password: &str) -> Result<String, Exception> {
         .await
         .map_err(|err| {
             exception!(
-                "password hash task failed",
                 code = "AUTH_PASSWORD",
-                source = err
+                "password hash task failed",
+                source = err,
             )
         })?
 }
@@ -45,7 +45,7 @@ fn hash(password: &str) -> Result<String, Exception> {
     Argon2::default()
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
-        .map_err(|err| exception!("password hash failed", code = "AUTH_PASSWORD", source = err))
+        .map_err(|err| exception!(code = "AUTH_PASSWORD", "password hash failed", source = err))
 }
 
 fn verify(password: &str, hash: &str) -> bool {

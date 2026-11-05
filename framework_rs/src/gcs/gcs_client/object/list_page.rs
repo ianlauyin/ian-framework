@@ -15,7 +15,7 @@ pub struct ListPage {
 impl ListPage {
     pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
         let raw: RawList = serde_json::from_slice(bytes)
-            .map_err(|err| exception!("list JSON is invalid", code = "GCS_API", source = err))?;
+            .map_err(|err| exception!(code = "GCS_API", "list JSON is invalid", source = err))?;
         Ok(Self {
             objects: raw
                 .items

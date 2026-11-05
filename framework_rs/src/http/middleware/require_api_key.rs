@@ -121,7 +121,7 @@ pub async fn require_api_key(
             "HTTP/apiKeyRejected",
             BTreeMap::from([("method".to_string(), method.as_str().into())]),
         );
-        return exception!("unauthorized", code = error_code::UNAUTHORIZED).into_response();
+        return exception!(code = error_code::UNAUTHORIZED, "unauthorized").into_response();
     }
     next.run(request).await
 }

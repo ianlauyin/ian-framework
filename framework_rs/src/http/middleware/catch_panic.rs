@@ -29,7 +29,7 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
                 ]),
                 "handler panicked".into(),
             );
-            exception!("internal error", code = error_code::INTERNAL_ERROR).into_response()
+            exception!(code = error_code::INTERNAL_ERROR, "internal error").into_response()
         }
     }
 }

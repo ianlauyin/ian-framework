@@ -577,10 +577,10 @@ async fn client_rejects_an_incomplete_user() {
 
 #[test]
 fn not_found_becomes_none() {
-    let missing: Result<(), Exception> = Err(exception!("missing", code = "GCS_NOT_FOUND"));
+    let missing: Result<(), Exception> = Err(exception!(code = "GCS_NOT_FOUND", "missing"));
     assert!(not_found_as_none(missing).unwrap().is_none());
     assert_eq!(not_found_as_none(Ok(7)).unwrap(), Some(7));
-    let denied: Result<(), Exception> = Err(exception!("denied", code = "GCS_AUTH"));
+    let denied: Result<(), Exception> = Err(exception!(code = "GCS_AUTH", "denied"));
     assert_eq!(not_found_as_none(denied).unwrap_err().code(), "GCS_AUTH");
 }
 

@@ -18,7 +18,7 @@ pub async fn request_timeout(
     match tokio::time::timeout(limit, next.run(request)).await {
         Ok(response) => response,
         Err(_) => {
-            exception!("request timed out", code = error_code::REQUEST_TIMEOUT).into_response()
+            exception!(code = error_code::REQUEST_TIMEOUT, "request timed out").into_response()
         }
     }
 }

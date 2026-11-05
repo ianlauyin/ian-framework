@@ -19,9 +19,9 @@ impl ObjectMeta {
     pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, Exception> {
         let bytes = response.bytes().await.map_err(|err| {
             exception!(
-                "object response is not bytes",
                 code = "GCS_TRANSPORT",
-                source = err.without_url()
+                "object response is not bytes",
+                source = err.without_url(),
             )
         })?;
         Self::from_slice(&bytes)
@@ -29,7 +29,7 @@ impl ObjectMeta {
 
     pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
         let raw: RawObject = serde_json::from_slice(bytes)
-            .map_err(|err| exception!("object JSON is invalid", code = "GCS_API", source = err))?;
+            .map_err(|err| exception!(code = "GCS_API", "object JSON is invalid", source = err))?;
         raw.into_meta()
     }
 }
@@ -51,7 +51,7 @@ impl RawObject {
     pub(crate) fn into_meta(self) -> Result<ObjectMeta, Exception> {
         let size = match self.size {
             Some(text) => text.parse().map_err(|err| {
-                exception!("object size is invalid", code = "GCS_API", source = err)
+                exception!(code = "GCS_API", "object size is invalid", source = err)
             })?,
             None => 0,
         };

@@ -31,13 +31,13 @@ The only way to make an exception is the macro `exception!`. It is exported at t
 
 | Call | Effect |
 | --- | --- |
-| `exception!(message, code = code)` | Makes an exception without a source. The severity is `Error`. `code` is required and must be a `&'static str`. |
-| `exception!(message, code = code, severity = severity, source = error)` | `severity` and `source` are optional. The order is as written. `source` takes a `std::error::Error + Send + Sync`. The macro stores that error as the source. |
+| `exception!(code = code, message)` | Makes an exception without a source. The severity is `Error`. `code` is required and must be a `&'static str`. |
+| `exception!(severity = severity, code = code, message, source = error)` | The order is severity, code, message, source. `severity` and `source` are optional. `source` takes a `std::error::Error + Send + Sync`. The macro stores that error as the source. |
 
 | Method | Effect |
 | --- | --- |
-| `with_code(code)` | Gives the same exception with a different code. The other fields stay. |
 | `with_severity(severity)` | Gives the same exception with a different severity. The other fields stay. |
+| `with_code(code)` | Gives the same exception with a different code. The other fields stay. |
 | `severity`, `code`, `message`, `source_exception` | Read the fields. `code` gives `&'static str`. `source_exception` gives the source when the source is an `Exception`. |
 | `location` | Gives `(file, line)` of the call. |
 | `trace` | Iterates from this exception through each source that is an `Exception`. An external error ends the iteration. |

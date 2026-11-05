@@ -243,7 +243,7 @@ fn initialized_maps_each_init_result() {
     let manager = Box::leak(Box::new(Some(fake_secret_manager(closed_addr()))));
     assert!(matches!(initialized(Ok(manager)), Ok(Some(_))));
 
-    let err = exception!("bad", code = "GCP_CONFIG");
+    let err = exception!(code = "GCP_CONFIG", "bad");
     assert!(initialized(Err(InitError::Gcp(err))).is_err());
 
     assert!(matches!(

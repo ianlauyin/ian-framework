@@ -125,7 +125,7 @@ pub(crate) async fn gcs_response_exception(response: reqwest::Response) -> Excep
         _ if is_retryable_status(status) => "GCS_UNAVAILABLE",
         _ => "GCS_API",
     };
-    exception!(format!("status {status}: {detail}"), code = code)
+    exception!(code = code, format!("status {status}: {detail}"))
 }
 
 // The upstream body can hold a signed URL, so the detail has no URL query and no control character.

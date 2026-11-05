@@ -34,18 +34,18 @@ impl RewriteStep {
 
     pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
         let raw: RawRewrite = serde_json::from_slice(bytes)
-            .map_err(|err| exception!("rewrite JSON is invalid", code = "GCS_API", source = err))?;
+            .map_err(|err| exception!(code = "GCS_API", "rewrite JSON is invalid", source = err))?;
         if raw.done {
             let resource = raw.resource.ok_or_else(|| {
-                exception!("rewrite did not return object metadata", code = "GCS_API")
+                exception!(code = "GCS_API", "rewrite did not return object metadata")
             })?;
             return Ok(Self::Done(resource.into_meta()?));
         }
         match raw.rewrite_token {
             Some(token) if !token.is_empty() => Ok(Self::Next(token)),
             _ => Err(exception!(
+                code = "GCS_API",
                 "rewrite did not return a token",
-                code = "GCS_API"
             )),
         }
     }

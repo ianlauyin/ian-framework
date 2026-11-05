@@ -25,9 +25,9 @@ impl ObjectReader {
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|err| {
                 exception!(
-                    "read object body failed",
                     code = "GCS_TRANSPORT",
-                    source = err.without_url()
+                    "read object body failed",
+                    source = err.without_url(),
                 )
             })?;
             if (body.len() + chunk.len()) as u64 > READ_TO_VEC_LIMIT {
@@ -42,9 +42,9 @@ impl ObjectReader {
         Box::pin(self.response.bytes_stream().map(|item| {
             item.map(|chunk| chunk.to_vec()).map_err(|err| {
                 exception!(
-                    "read object body failed",
                     code = "GCS_TRANSPORT",
-                    source = err.without_url()
+                    "read object body failed",
+                    source = err.without_url(),
                 )
             })
         }))
@@ -53,7 +53,7 @@ impl ObjectReader {
 
 fn too_large() -> Exception {
     exception!(
+        code = "GCS_CONFIG",
         "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream",
-        code = "GCS_CONFIG"
     )
 }

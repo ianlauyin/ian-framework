@@ -2,8 +2,14 @@ use std::fmt;
 
 #[macro_export]
 macro_rules! exception {
-    ($message:expr, code = $code:expr $(, severity = $severity:expr)? $(, source = $source:expr)? $(,)?) => {{
-        let exception = $crate::exception::Exception::__new($message, $code, file!(), line!());
+    ($(severity = $severity:expr,)? code = $code:expr, $message:expr $(, source = $source:expr)? $(,)?) => {{
+        let exception = $crate::exception::Exception::__new(
+            $crate::exception::Severity::Error,
+            $code,
+            $message,
+            file!(),
+            line!(),
+        );
         $( let exception = exception.with_severity($severity); )?
         $( let exception = exception.__with_source($source); )?
         exception
@@ -27,13 +33,14 @@ pub struct Exception {
 impl Exception {
     #[doc(hidden)]
     pub fn __new(
-        message: impl Into<String>,
+        severity: Severity,
         code: &'static str,
+        message: impl Into<String>,
         file: &'static str,
         line: u32,
     ) -> Self {
         Self {
-            severity: Severity::Error,
+            severity,
             code,
             message: message.into(),
             location: Location { file, line },
@@ -73,12 +80,12 @@ impl Exception {
         self.source.as_deref()?.downcast_ref::<Exception>()
     }
 
-    pub fn with_code(self, code: &'static str) -> Self {
-        Self { code, ..self }
-    }
-
     pub fn with_severity(self, severity: Severity) -> Self {
         Self { severity, ..self }
+    }
+
+    pub fn with_code(self, code: &'static str) -> Self {
+        Self { code, ..self }
     }
 
     // The trace starts at this exception and follows each source that is an Exception.

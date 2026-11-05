@@ -74,19 +74,19 @@ pub(crate) async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<
     let status = response.status();
     let body = response.text().await.map_err(|err| {
         exception!(
-            "metadata server email response is not text",
             code = "GCS_AUTH",
-            source = err.without_url()
+            "metadata server email response is not text",
+            source = err.without_url(),
         )
     })?;
     if !status.is_success() {
         return Err(exception!(
+            code = "GCS_AUTH",
             format!(
                 "metadata server email status {}: {}",
                 status.as_u16(),
                 truncate(&body, 300)
             ),
-            code = "GCS_AUTH"
         ));
     }
     let email = body.trim().to_string();
@@ -97,8 +97,8 @@ pub(crate) async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<
 fn validate_signer_email(email: &str) -> Result<(), Exception> {
     if !email.contains('@') || email.contains(char::is_whitespace) {
         return Err(exception!(
+            code = "GCS_CONFIG",
             "signer email is not a service account email",
-            code = "GCS_CONFIG"
         ));
     }
     Ok(())
@@ -113,8 +113,8 @@ pub(crate) fn auth_from_credentials(
         Credentials::User(credentials) => {
             let signer_email = signer_email.ok_or_else(|| {
                 exception!(
+                    code = "GCS_CONFIG",
                     "user application default credentials require a signer email",
-                    code = "GCS_CONFIG"
                 )
             })?;
             // GcsClient::new checks that the fields are not empty and the signer email is valid.

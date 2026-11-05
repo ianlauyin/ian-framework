@@ -85,8 +85,8 @@ impl UserCredentials {
             || self.refresh_token.is_empty()
         {
             return Err(exception!(
+                code = "GCP_CONFIG",
                 "user credentials are incomplete",
-                code = "GCP_CONFIG"
             ));
         }
         Ok(())
@@ -117,9 +117,9 @@ impl UserCredentials {
             .await
             .map_err(|err| {
                 exception!(
-                    "token refresh failed",
                     code = "GCP_AUTH",
-                    source = err.without_url()
+                    "token refresh failed",
+                    source = err.without_url(),
                 )
             })?;
         token_from_response(response).await
@@ -160,9 +160,9 @@ pub(crate) async fn metadata_get(
         .await
         .map_err(|err| {
             exception!(
-                "metadata server request failed",
                 code = "GCP_AUTH",
-                source = err.without_url()
+                "metadata server request failed",
+                source = err.without_url(),
             )
         })
 }
@@ -173,33 +173,33 @@ pub(crate) async fn token_from_response(
     let status = response.status();
     let body = response.text().await.map_err(|err| {
         exception!(
-            "token response is not text",
             code = "GCP_AUTH",
-            source = err.without_url()
+            "token response is not text",
+            source = err.without_url(),
         )
     })?;
     if !status.is_success() {
         let detail = api_detail(&body).unwrap_or(body);
         return Err(exception!(
+            code = "GCP_AUTH",
             format!(
                 "token status {}: {}",
                 status.as_u16(),
                 truncate(&detail, 300)
             ),
-            code = "GCP_AUTH"
         ));
     }
     let parsed: TokenResponse = serde_json::from_str(&body).map_err(|err| {
         exception!(
-            "token response is not JSON",
             code = "GCP_AUTH",
-            source = err
+            "token response is not JSON",
+            source = err,
         )
     })?;
     if parsed.access_token.is_empty() {
         return Err(exception!(
+            code = "GCP_AUTH",
             "token response has an empty access token",
-            code = "GCP_AUTH"
         ));
     }
     Ok(CachedToken {
@@ -240,35 +240,35 @@ fn well_known_adc() -> Option<PathBuf> {
 pub(crate) async fn read_adc_at(path: &Path) -> Result<Credentials, Exception> {
     let meta = tokio::fs::metadata(path).await.map_err(|err| {
         exception!(
+            code = "GCP_CONFIG",
             format!(
                 "cannot read application default credentials at {}",
                 path.display()
             ),
-            code = "GCP_CONFIG",
-            source = err
+            source = err,
         )
     })?;
     if meta.len() > ADC_FILE_LIMIT {
         return Err(exception!(
+            code = "GCP_CONFIG",
             "application default credentials file is too large",
-            code = "GCP_CONFIG"
         ));
     }
     let bytes = tokio::fs::read(path).await.map_err(|err| {
         exception!(
+            code = "GCP_CONFIG",
             format!(
                 "cannot read application default credentials at {}",
                 path.display()
             ),
-            code = "GCP_CONFIG",
-            source = err
+            source = err,
         )
     })?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|err| {
         exception!(
-            "application default credentials are not JSON",
             code = "GCP_CONFIG",
-            source = err
+            "application default credentials are not JSON",
+            source = err,
         )
     })?;
     credentials_from_value(&value)
@@ -278,12 +278,12 @@ pub(crate) fn credentials_from_value(value: &Value) -> Result<Credentials, Excep
     let typ = value.get("type").and_then(Value::as_str).unwrap_or("");
     match typ {
         "service_account" => Err(exception!(
+            code = "GCP_CONFIG",
             "service account JSON keys are rejected",
-            code = "GCP_CONFIG"
         )),
         "impersonated_service_account" => Err(exception!(
+            code = "GCP_CONFIG",
             "impersonated application default credentials are rejected",
-            code = "GCP_CONFIG"
         )),
         "authorized_user" => Ok(Credentials::User(UserCredentials {
             client_id: string_field(value, "client_id")?,
@@ -296,8 +296,8 @@ pub(crate) fn credentials_from_value(value: &Value) -> Result<Credentials, Excep
                 .map(|project| project.trim().to_string()),
         })),
         other => Err(exception!(
+            code = "GCP_CONFIG",
             format!("application default credentials type `{other}` is not supported"),
-            code = "GCP_CONFIG"
         )),
     }
 }
@@ -309,8 +309,8 @@ fn string_field(value: &Value, name: &str) -> Result<String, Exception> {
         .map(str::to_string)
         .ok_or_else(|| {
             exception!(
+                code = "GCP_CONFIG",
                 format!("user credentials are missing `{name}`"),
-                code = "GCP_CONFIG"
             )
         })
 }

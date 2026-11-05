@@ -20,22 +20,22 @@ impl<'a> UploadSource<'a> {
         };
         let file = tokio::fs::File::open(path).await.map_err(|err| {
             exception!(
-                format!("cannot open {}", path.display()),
                 code = "GCS_LOCAL",
-                source = err
+                format!("cannot open {}", path.display()),
+                source = err,
             )
         })?;
         let meta = file.metadata().await.map_err(|err| {
             exception!(
-                format!("cannot read metadata for {}", path.display()),
                 code = "GCS_LOCAL",
-                source = err
+                format!("cannot read metadata for {}", path.display()),
+                source = err,
             )
         })?;
         if !meta.is_file() {
             return Err(exception!(
+                code = "GCS_CONFIG",
                 format!("{} is not a file", path.display()),
-                code = "GCS_CONFIG"
             ));
         }
         Ok(Self::File {
@@ -69,7 +69,7 @@ fn bytes_chunk(bytes: &[u8], offset: u64, len: usize) -> Result<&[u8], Exception
         .and_then(|start| Some(start..start.checked_add(len)?));
     range
         .and_then(|range| bytes.get(range))
-        .ok_or_else(|| exception!("upload range is past the end of the data", code = "GCS_API"))
+        .ok_or_else(|| exception!(code = "GCS_API", "upload range is past the end of the data"))
 }
 
 async fn file_chunk(
@@ -81,14 +81,14 @@ async fn file_chunk(
         .await
         .map_err(|err| {
             exception!(
-                "cannot seek in the upload file",
                 code = "GCS_LOCAL",
-                source = err
+                "cannot seek in the upload file",
+                source = err,
             )
         })?;
     let mut chunk = vec![0u8; len];
     file.read_exact(&mut chunk)
         .await
-        .map_err(|err| exception!("read file failed", code = "GCS_LOCAL", source = err))?;
+        .map_err(|err| exception!(code = "GCS_LOCAL", "read file failed", source = err))?;
     Ok(chunk)
 }

@@ -60,8 +60,8 @@ impl SecretManager {
     pub(crate) async fn access_latest(&self, secret: &str) -> Result<Option<String>, Exception> {
         if !is_name_segment(secret) {
             return Err(exception!(
+                code = "GCP_CONFIG",
                 "secret id has a character that is not valid",
-                code = "GCP_CONFIG"
             ));
         }
         let url = format!(
@@ -166,15 +166,15 @@ pub(crate) async fn metadata_project(
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(exception!(
+            code = "GCP_AUTH",
             format!("metadata server project status {status}"),
-            code = "GCP_AUTH"
         ));
     }
     let body = response.text().await.map_err(|err| {
         exception!(
-            "metadata server project is not text",
             code = "GCP_TRANSPORT",
-            source = err.without_url()
+            "metadata server project is not text",
+            source = err.without_url(),
         )
     })?;
     checked_project(body.trim()).map(Some)
@@ -193,8 +193,8 @@ pub(crate) fn user_project(credentials: &Credentials) -> Result<Option<String>, 
 fn checked_project(project: &str) -> Result<String, Exception> {
     if !is_name_segment(project) {
         return Err(exception!(
+            code = "GCP_CONFIG",
             "the project id is empty or not valid",
-            code = "GCP_CONFIG"
         ));
     }
     Ok(project.to_string())
@@ -212,17 +212,17 @@ pub(crate) async fn access_at(
     }
     let response = request.send().await.map_err(|err| {
         exception!(
-            "secret manager request failed",
             code = "GCP_TRANSPORT",
-            source = err.without_url()
+            "secret manager request failed",
+            source = err.without_url(),
         )
     })?;
     let status = response.status().as_u16();
     let body = response.bytes().await.map_err(|err| {
         exception!(
-            "secret manager response is not readable",
             code = "GCP_TRANSPORT",
-            source = err.without_url()
+            "secret manager response is not readable",
+            source = err.without_url(),
         )
     })?;
     decode_access_response(status, &body)
@@ -248,26 +248,26 @@ fn status_error(status: u16, body: &[u8]) -> Exception {
         _ => "GCP_API",
     };
     exception!(
+        code = kind,
         format!("secret manager status {status}: {}", truncate(&detail, 300)),
-        code = kind
     )
 }
 
 fn decode_payload(body: &[u8]) -> Result<String, Exception> {
     let parsed: AccessResponse = serde_json::from_slice(body).map_err(|_| {
         exception!(
+            code = "GCP_API",
             "secret manager response has no payload data",
-            code = "GCP_API"
         )
     })?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(parsed.payload.data)
-        .map_err(|_| exception!("secret payload is not base64", code = "GCP_API"))?;
+        .map_err(|_| exception!(code = "GCP_API", "secret payload is not base64"))?;
     let value = String::from_utf8(bytes)
-        .map_err(|_| exception!("secret value is not UTF-8", code = "GCP_CONFIG"))?;
+        .map_err(|_| exception!(code = "GCP_CONFIG", "secret value is not UTF-8"))?;
     let value = value.trim();
     if value.is_empty() {
-        return Err(exception!("secret value is empty", code = "GCP_CONFIG"));
+        return Err(exception!(code = "GCP_CONFIG", "secret value is empty"));
     }
     Ok(value.to_string())
 }
@@ -282,9 +282,9 @@ fn is_name_segment(segment: &str) -> bool {
 pub(crate) fn http_client() -> Result<reqwest::Client, Exception> {
     http_client_builder().build().map_err(|err| {
         exception!(
-            "cannot build the HTTP client",
             code = "GCP_TRANSPORT",
-            source = err
+            "cannot build the HTTP client",
+            source = err,
         )
     })
 }

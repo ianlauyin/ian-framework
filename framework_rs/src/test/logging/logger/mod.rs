@@ -24,8 +24,8 @@ fn logs_without_a_shipper_and_keeps_the_first_shipper() {
 fn error_adds_the_exception_trace_to_the_message() {
     let messages = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let capture = Capture(std::sync::Arc::clone(&messages));
-    let root = crate::exception!("port is not a number", code = "ENV_INVALID");
-    let top = crate::exception!("app cannot start", code = "ENV_MISSING", source = root);
+    let root = crate::exception!(code = "ENV_INVALID", "port is not a number");
+    let top = crate::exception!(code = "ENV_MISSING", "app cannot start", source = root);
     tracing::subscriber::with_default(capture, || {
         Logger::error("TEST/exceptionTrace", BTreeMap::new(), Box::new(top));
         Logger::error("TEST/plain", BTreeMap::new(), "slow".into());
