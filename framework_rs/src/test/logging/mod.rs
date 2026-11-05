@@ -5,16 +5,23 @@ mod logger;
 
 use crate::logging::*;
 
-pub(crate) fn shipper_config(app: &str) -> ShipperConfig {
-    ShipperConfig::new(
-        app,
-        "https://logs.example",
-        "APP_KEY",
-        DEFAULT_MASK_PATTERNS
-            .iter()
-            .map(|pattern| pattern.to_string())
-            .collect(),
-    )
+pub(crate) fn http_shipper(app: &'static str, endpoint: &str) -> HttpLogShipper {
+    HttpLogShipper::new(app, endpoint.to_string(), "APP_KEY")
+}
+
+pub(crate) fn default_shipper(app: &'static str) -> HttpLogShipper {
+    http_shipper(app, "https://logs.example")
+}
+
+pub(crate) fn default_mask_patterns() -> Vec<String> {
+    DEFAULT_MASK_PATTERNS
+        .iter()
+        .map(|pattern| pattern.to_string())
+        .collect()
+}
+
+pub(crate) fn logger(shipper: HttpLogShipper) -> Logger {
+    Logger::new(shipper, default_mask_patterns())
 }
 
 pub(crate) fn client_log_event(event: &LogEvent) -> ClientLogEvent {
@@ -26,6 +33,6 @@ pub(crate) fn assert_uuid_v7(id: &str) {
     assert_eq!(uuid.get_version_num(), 7);
 }
 
-pub(crate) fn buffered_events(shipper: &LogShipper) -> Vec<LogEvent> {
-    shipper.lock_buffer().events.iter().cloned().collect()
+pub(crate) fn buffered_events(logger: &Logger) -> Vec<LogEvent> {
+    logger.lock_buffer().events.iter().cloned().collect()
 }

@@ -28,7 +28,7 @@ The install line for the crate is in `spec/framework_rs/logging/context.md`.
 
 ## Use in the framework
 
-`LogShipper::spawn_ship_loop` takes one `ShutdownReceiver`. When the receiver is triggered, the ship loop makes its final flush. The rules are in `spec/framework_rs/logging/shipper.md`.
+`Logger::spawn_ship_loop` takes one `ShutdownReceiver`. When the receiver is triggered, the ship loop makes its final flush. The rules are in `spec/framework_rs/logging/logger.md`.
 
 ## Out of scope
 

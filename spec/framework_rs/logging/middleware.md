@@ -4,7 +4,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 ## Axum middleware
 
-`ian_framework::http::middleware::log_request` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/log_request.rs`. Use it with `axum::middleware::from_fn_with_state` and one shipper.
+`ian_framework::http::middleware::log_request` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/log_request.rs`. Use it with `axum::middleware::from_fn_with_state` and one logger.
 
 General rules:
 
@@ -79,4 +79,4 @@ Body rules:
 - The middleware gives the same body bytes to the inner handler.
 - The middleware does not read a different body. Thus a large body or a body without `content-length` goes to the handler as a stream.
 - When the body read fails, the middleware does not call the inner handler. It returns status 400 and records the event with status 400.
-- The shipper masks `context` and `extra` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. The pattern rule applies to the text of `request_url`.
+- The logger masks `context` and `extra` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. The pattern rule applies to the text of `request_url`.

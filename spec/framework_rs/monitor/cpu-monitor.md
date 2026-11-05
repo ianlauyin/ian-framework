@@ -28,7 +28,7 @@ The CPU monitor checks the CPU usage of a Linux host on an interval. When the us
 
 | Caller | Sink |
 | --- | --- |
-| Project backend on the VM | Calls `LogShipper::record`. The shipper sends the event to the log server. |
+| Project backend on the VM | Calls `Logger::record`. The ship loop sends the event to the log server. |
 | Log server | Writes the event to its SQLite store directly. It does not send the event to itself. |
 
 ## Sample

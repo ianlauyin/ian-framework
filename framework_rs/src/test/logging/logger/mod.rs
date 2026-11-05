@@ -1,26 +1,98 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
-use crate::logging::{LogEvent, LogLevel};
+use crate::logging::log_shipper::SHIP_CHUNK;
+use crate::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
+use crate::logging::{HttpLogShipper, LogEvent, LogLevel, LogRequest, Logger};
 use crate::shutdown::ShutdownReceiver;
+use crate::test::logging::{buffered_events, default_shipper, http_shipper, logger};
 
-use crate::logging::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
-use crate::logging::log_shipper::*;
-use crate::logging::ShipperConfig;
-use crate::test::logging::{buffered_events, shipper_config};
+#[test]
+fn logs_without_a_shipper_and_keeps_the_first_shipper() {
+    Logger::error("TEST/error", BTreeMap::new(), "failed".into());
+    if Logger::get().is_none() {
+        let first = logger(default_shipper("my-app"));
+        assert!(Logger::init(first).is_ok());
+    }
+    let second = logger(default_shipper("my-app"));
+    assert!(Logger::init(second).is_err());
+    Logger::warn("TEST/warn", BTreeMap::new());
+    Logger::warn_with("TEST/warn", BTreeMap::new(), "slow".into());
+}
+
+#[test]
+fn error_adds_the_exception_trace_to_the_message() {
+    let messages = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capture = Capture(std::sync::Arc::clone(&messages));
+    let root = crate::exception!("port is not a number", code = "ENV_INVALID");
+    let top = crate::exception!("app cannot start", code = "ENV_MISSING", source = root);
+    tracing::subscriber::with_default(capture, || {
+        Logger::error("TEST/exceptionTrace", BTreeMap::new(), Box::new(top));
+        Logger::error("TEST/plain", BTreeMap::new(), "slow".into());
+    });
+    let messages = messages.lock().unwrap();
+    let text = messages[0].as_str();
+    assert!(text.starts_with("app cannot start\n0: ERROR [ENV_MISSING] app cannot start at "));
+    assert!(text.contains("\n1: ERROR [ENV_INVALID] port is not a number at "));
+    assert_eq!(messages[1], "slow");
+}
+
+struct Capture(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+struct MessageVisitor<'a>(&'a mut Option<String>);
+
+impl tracing::field::Visit for MessageVisitor<'_> {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "error_message" {
+            *self.0 = Some(value.to_string());
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "error_message" && self.0.is_none() {
+            let text = format!("{value:?}");
+            let text = text
+                .strip_prefix("Some(\"")
+                .and_then(|text| text.strip_suffix("\")"))
+                .unwrap_or(&text);
+            *self.0 = Some(text.replace("\\n", "\n").replace("\\\"", "\""));
+        }
+    }
+}
+
+impl tracing::Subscriber for Capture {
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        metadata.is_event()
+    }
+
+    fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+
+    fn event(&self, event: &tracing::Event<'_>) {
+        let mut message = None;
+        event.record(&mut MessageVisitor(&mut message));
+        if let Some(message) = message {
+            self.0.lock().unwrap().push(message);
+        }
+    }
+
+    fn enter(&self, _span: &tracing::span::Id) {}
+
+    fn exit(&self, _span: &tracing::span::Id) {}
+}
 
 const LIMIT: usize = CAPACITY / 5 * 4;
 
-fn config(app: &str, endpoint: impl Into<String>) -> ShipperConfig {
-    let mut config = shipper_config(app);
-    config.endpoint = endpoint.into();
-    config
+fn buffered() -> Logger {
+    logger(http_shipper("api", "https://logs.example"))
 }
 
-fn buffered() -> LogShipper {
-    LogShipper::new(config("api", "https://logs.example"))
-}
-
-fn fill(shipper: &LogShipper, count: usize) {
+fn fill(shipper: &Logger, count: usize) {
     for index in 0..count {
         shipper.record(LogEvent::info(index.to_string()));
     }
@@ -34,42 +106,7 @@ fn warn_count(events: &[LogEvent]) -> usize {
 }
 
 fn parse_body(body: &str) -> Vec<LogEvent> {
-    serde_json::from_str(body).unwrap()
-}
-
-#[test]
-fn defaults() {
-    let shipper = buffered();
-    assert_eq!(shipper.inner.app, "api");
-    assert_eq!(SHIP_CHUNK, 1_000);
-    assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
-    assert_eq!(CAPACITY, 20_000);
-    assert_eq!(SHIP_EVERY, Duration::from_secs(60));
-}
-
-#[test]
-#[should_panic(expected = "is not a valid regex")]
-fn invalid_mask_pattern_panics() {
-    let mut config = config("api", "https://logs.example");
-    config.mask_patterns = vec!["(".to_string()];
-    LogShipper::new(config);
-}
-
-#[test]
-#[should_panic(expected = "not a valid header value")]
-fn invalid_post_api_key_panics() {
-    let mut config = config("api", "https://logs.example");
-    config.post_api_key = "log\u{7f}key".to_string();
-    LogShipper::new(config);
-}
-
-#[test]
-fn debug_hides_the_post_api_key() {
-    let mut config = config("api", "https://logs.example");
-    config.post_api_key = "log-post-key".to_string();
-    let debug = format!("{:?}", LogShipper::new(config));
-    assert!(!debug.contains("log-post-key"));
-    assert!(debug.contains("post_api_key: \"***\""));
+    serde_json::from_str::<LogRequest>(body).unwrap().events
 }
 
 #[test]
@@ -92,10 +129,17 @@ fn record_keeps_the_event_and_omits_scope_keys() {
 }
 
 #[test]
+#[should_panic(expected = "is not a valid regex")]
+fn invalid_mask_pattern_panics() {
+    Logger::new(default_shipper("api"), vec!["(".to_string()]);
+}
+
+#[test]
 fn record_masks_the_value_of_a_matching_key() {
-    let mut config = config("api", "https://logs.example");
-    config.mask_patterns = vec![r"(?i)^(password|token)$".to_string()];
-    let shipper = LogShipper::new(config);
+    let shipper = Logger::new(
+        default_shipper("api"),
+        vec![r"(?i)^(password|token)$".to_string()],
+    );
     let mut event = LogEvent::info("login");
     event.extra.insert("password".to_string(), "hunter2".into());
     event.extra.insert("TOKEN".to_string(), 1234u64.into());
@@ -109,12 +153,13 @@ fn record_masks_the_value_of_a_matching_key() {
 
 #[test]
 fn record_masks_every_pattern_match_in_string_values() {
-    let mut config = config("api", "https://logs.example");
-    config.mask_patterns = vec![
-        r"password=\S+".to_string(),
-        r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
-    ];
-    let shipper = LogShipper::new(config);
+    let shipper = Logger::new(
+        default_shipper("api"),
+        vec![
+            r"password=\S+".to_string(),
+            r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
+        ],
+    );
     let mut event = LogEvent::info("POST /login?password=x");
     event.context.insert(
         "user_agent".to_string(),
@@ -148,9 +193,7 @@ fn default_patterns_mask_the_value_of_a_name_value_pair() {
 
 #[test]
 fn record_without_mask_patterns_keeps_the_text() {
-    let mut config = config("api", "https://logs.example");
-    config.mask_patterns = Vec::new();
-    let shipper = LogShipper::new(config);
+    let shipper = Logger::new(default_shipper("api"), Vec::new());
     let mut event = LogEvent::info("GET /");
     event
         .extra
@@ -204,7 +247,7 @@ fn record_drops_the_oldest_event_to_store_the_capacity_warning() {
 
 #[tokio::test]
 async fn empty_buffer_does_not_post() {
-    let shipper = LogShipper::new(config("api", "http://127.0.0.1:9"));
+    let shipper = logger(http_shipper("api", "http://127.0.0.1:9"));
     shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
 }
@@ -214,7 +257,7 @@ async fn unreachable_endpoint_keeps_the_buffer() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     drop(listener);
-    let shipper = LogShipper::new(config("api", format!("http://{addr}")));
+    let shipper = logger(http_shipper("api", &format!("http://{addr}")));
     shipper.record(LogEvent::error("down", "boom"));
     shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 1);
@@ -224,7 +267,7 @@ async fn unreachable_endpoint_keeps_the_buffer() {
 #[tokio::test]
 async fn send_buffer_posts_json_to_the_app_path() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-    let shipper = LogShipper::new(config("my-app", endpoint));
+    let shipper = logger(http_shipper("my-app", &endpoint));
     shipper.record(LogEvent::info("one"));
     shipper.record(LogEvent::warn("two"));
     shipper.record(LogEvent::error("three", "boom"));
@@ -240,7 +283,8 @@ async fn send_buffer_posts_json_to_the_app_path() {
     assert_eq!(events[1].action, "two");
     assert_eq!(events[2].action, "three");
     let body: serde_json::Value = serde_json::from_str(&captured.body).unwrap();
-    for item in body.as_array().unwrap() {
+    assert_eq!(body.as_object().unwrap().len(), 1);
+    for item in body["events"].as_array().unwrap() {
         assert!(item.get("app").is_none());
         assert!(item.get("project").is_none());
         assert!(item.get("action").is_some());
@@ -252,9 +296,7 @@ async fn send_buffer_posts_json_to_the_app_path() {
 #[tokio::test]
 async fn send_buffer_sends_the_post_api_key_as_a_bearer_token() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-    let mut config = config("api", endpoint);
-    config.post_api_key = "log-post-key".to_string();
-    let shipper = LogShipper::new(config);
+    let shipper = logger(HttpLogShipper::new("api", endpoint, "log-post-key"));
     shipper.record(LogEvent::info("one"));
     shipper.send_buffer().await;
     let captured = rx.recv().await.unwrap();
@@ -268,7 +310,7 @@ async fn send_buffer_sends_the_post_api_key_as_a_bearer_token() {
 #[tokio::test]
 async fn send_buffer_posts_one_chunk_and_leaves_the_rest() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, SHIP_CHUNK + 1);
     shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 1);
@@ -287,7 +329,7 @@ async fn send_buffer_posts_one_chunk_and_leaves_the_rest() {
 #[tokio::test]
 async fn http_error_restores_the_batch() {
     let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     shipper.record(LogEvent::info("keep"));
     shipper.send_buffer().await;
     assert_eq!(buffered_events(&shipper)[0].action, "keep");
@@ -296,7 +338,7 @@ async fn http_error_restores_the_batch() {
 #[tokio::test]
 async fn in_flight_records_stay_out_of_a_successful_batch() {
     let (endpoint, _rx) = capture_server(StatusAction::Slow).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     shipper.record(LogEvent::info("a"));
     shipper.record(LogEvent::info("b"));
     let shipper_task = shipper.clone();
@@ -318,7 +360,7 @@ async fn in_flight_records_stay_out_of_a_successful_batch() {
 #[tokio::test]
 async fn shutdown_flushes_every_chunk_and_ends_the_loop() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     let shutdown = ShutdownReceiver::new();
     let handle = shipper.spawn_ship_loop(shutdown.clone());
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -336,7 +378,7 @@ async fn shutdown_flushes_every_chunk_and_ends_the_loop() {
 #[tokio::test]
 async fn shutdown_flush_stops_when_the_endpoint_fails() {
     let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     shipper.record(LogEvent::info("keep"));
     let shutdown = ShutdownReceiver::new();
     shutdown.trigger();
@@ -351,7 +393,7 @@ async fn shutdown_flush_stops_when_the_endpoint_fails() {
 #[tokio::test]
 async fn failed_ship_does_not_repeat_the_capacity_warning() {
     let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, LIMIT);
     assert_eq!(warn_count(&buffered_events(&shipper)), 1);
     shipper.send_buffer().await;
@@ -362,7 +404,7 @@ async fn failed_ship_does_not_repeat_the_capacity_warning() {
 #[tokio::test]
 async fn successful_ship_below_80_percent_warns_on_the_next_crossing() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, LIMIT);
     shipper.send_buffer().await;
     let posted = parse_body(&rx.recv().await.unwrap().body);
@@ -375,7 +417,7 @@ async fn successful_ship_below_80_percent_warns_on_the_next_crossing() {
 #[tokio::test]
 async fn successful_ship_at_80_percent_does_not_warn_again() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-    let shipper = LogShipper::new(config("api", endpoint));
+    let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, CAPACITY);
     shipper.send_buffer().await;
     let posted = parse_body(&rx.recv().await.unwrap().body);

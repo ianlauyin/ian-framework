@@ -2,38 +2,35 @@ use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::Router;
 
-use crate::logging::{LogEvent, LogLevel, LogShipper};
+use crate::logging::{LogEvent, LogLevel, LogRequest, Logger};
 
 use crate::http::middleware::log_request;
 use crate::logging::client_log::router::*;
-use crate::test::logging::{assert_uuid_v7, buffered_events, shipper_config};
+use crate::test::logging::{assert_uuid_v7, buffered_events, http_shipper, logger};
 use axum::body::Body;
 use axum::middleware::from_fn_with_state;
+use axum::Json;
 use serde_json::json;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tower::ServiceExt;
 
-fn shipper() -> LogShipper {
-    let mut config = shipper_config("web");
-    config.endpoint = "http://127.0.0.1:9".to_string();
-    LogShipper::new(config)
+fn shipper() -> Logger {
+    logger(http_shipper("web", "http://127.0.0.1:9"))
 }
 
-async fn shipper_with_server(status: StatusCode) -> (LogShipper, UnboundedReceiver<Vec<LogEvent>>) {
+async fn shipper_with_server(status: StatusCode) -> (Logger, UnboundedReceiver<Vec<LogEvent>>) {
     let (tx, rx) = unbounded_channel();
     let app = Router::new().route(
         "/log/web",
-        axum::routing::post(move |body: String| async move {
-            tx.send(serde_json::from_str(&body).unwrap()).unwrap();
+        axum::routing::post(move |Json(log): Json<LogRequest>| async move {
+            tx.send(log.events).unwrap();
             status
         }),
     );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let mut config = shipper_config("web");
-    config.endpoint = format!("http://{addr}");
-    (LogShipper::new(config), rx)
+    (logger(http_shipper("web", &format!("http://{addr}"))), rx)
 }
 
 fn client_event(action: &str) -> serde_json::Value {
@@ -54,7 +51,7 @@ fn batch_body(actions: &[&str]) -> Body {
     Body::from(json!({ "events": events }).to_string())
 }
 
-async fn send(shipper: &LogShipper, headers: &[(&str, &str)], body: Body) -> StatusCode {
+async fn send(shipper: &Logger, headers: &[(&str, &str)], body: Body) -> StatusCode {
     let mut request = Request::builder()
         .method("POST")
         .uri("/log")

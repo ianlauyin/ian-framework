@@ -2,12 +2,12 @@ use axum::body::{to_bytes, Body};
 use axum::extract::Request;
 use axum::http::StatusCode;
 
-use crate::logging::LogShipper;
+use crate::logging::Logger;
 
 use crate::http::middleware::log_request::*;
 use crate::logging::LogLevel;
 use crate::test::logging::buffered_events;
-use crate::test::logging::shipper_config;
+use crate::test::logging::default_shipper;
 use axum::extract::{ConnectInfo, Path};
 use axum::middleware::from_fn_with_state;
 use axum::routing::{get, post};
@@ -21,16 +21,15 @@ async fn status_from_path(Path(code): Path<u16>) -> StatusCode {
     StatusCode::from_u16(code).unwrap_or(StatusCode::BAD_REQUEST)
 }
 
-fn shipper() -> LogShipper {
-    let config = shipper_config("api");
-    LogShipper::new(config)
+fn shipper() -> Logger {
+    crate::test::logging::logger(default_shipper("api"))
 }
 
 async fn echo(body: String) -> String {
     body
 }
 
-fn app(shipper: LogShipper) -> Router {
+fn app(shipper: Logger) -> Router {
     Router::new()
         .route("/status/{code}", get(status_from_path))
         .route("/echo", post(echo))
@@ -38,7 +37,7 @@ fn app(shipper: LogShipper) -> Router {
 }
 
 async fn post_body(
-    shipper: &LogShipper,
+    shipper: &Logger,
     uri: &str,
     content_type: &str,
     body: String,
@@ -172,9 +171,10 @@ async fn middleware_skips_a_body_it_cannot_log() {
 
 #[tokio::test]
 async fn middleware_masks_request_url_and_body_fields() {
-    let mut config = shipper_config("api");
-    config.mask_patterns = vec![r"password".to_string(), r"token=[^&]+".to_string()];
-    let shipper = LogShipper::new(config);
+    let shipper = Logger::new(
+        default_shipper("api"),
+        vec![r"password".to_string(), r"token=[^&]+".to_string()],
+    );
     let body = json!({"user": "alice", "password": "hunter2"}).to_string();
     post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
     let event = &buffered_events(&shipper)[0];

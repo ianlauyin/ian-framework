@@ -6,11 +6,11 @@ The parts that apply to all of this feature are in `spec/framework_rs/gcs/contex
 
 The client writes operations records through the logging module. The log route is in `spec/framework_rs/logging/shipper.md`.
 
-Shipper:
+Logger:
 
-- `GcsClient::attach_ops_log` connects one log shipper to one client.
-- A second call replaces that shipper.
-- A client with no shipper writes no operations record.
+- `GcsClient::attach_ops_log` connects one logger to one client.
+- A second call replaces that logger.
+- A client with no logger writes no operations record.
 - A logging failure does not change the storage result.
 
 Record content:

@@ -16,7 +16,7 @@ This feature is not product business logic.
 
 ## App settings
 
-The framework does not read an environment variable for the log server settings. The app reads its own environment variables, with the names that the app chooses, and gives the values to `ShipperConfig`. `ShipperConfig` is in `spec/framework_rs/logging/shipper.md`.
+The framework does not read an environment variable for the log server settings. The app reads its own environment variables, with the names that the app chooses, and gives the values to `HttpLogShipper::new`. `HttpLogShipper` is in `spec/framework_rs/logging/shipper.md`.
 
 | Setting | Use |
 | --- | --- |

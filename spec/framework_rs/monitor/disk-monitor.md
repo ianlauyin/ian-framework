@@ -28,7 +28,7 @@ The disk monitor checks the storage usage of one path on a Linux host on an inte
 
 | Caller | Sink |
 | --- | --- |
-| Project backend on the VM | Calls `LogShipper::record`. The shipper sends the event to the log server. |
+| Project backend on the VM | Calls `Logger::record`. The ship loop sends the event to the log server. |
 | Log server | Writes the event to its SQLite store directly. It does not send the event to itself. |
 
 ## Sample

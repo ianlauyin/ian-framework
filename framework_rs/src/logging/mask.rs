@@ -2,6 +2,17 @@ use super::{LogEvent, LogValue};
 
 pub(crate) const MASK: &str = "***";
 
+// log_request records the query and the JSON body, so a credential field must not reach a log.
+pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
+    r"(?i)password",
+    r"(?i)passwd",
+    r"(?i)secret",
+    r"(?i)token",
+    r"(?i)authorization",
+    r"(?i)api[_-]?key",
+    r"(?i)cookie",
+];
+
 // `pairs` match a `name=value` pair whose name holds a match of a pattern, so the value is masked too.
 pub(crate) struct Masks {
     plains: Vec<regex::Regex>,

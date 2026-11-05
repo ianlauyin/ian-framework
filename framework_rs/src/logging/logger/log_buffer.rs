@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use super::LogEvent;
+use crate::logging::LogEvent;
 
 pub(crate) const CAPACITY: usize = 20_000;
 pub(crate) const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";

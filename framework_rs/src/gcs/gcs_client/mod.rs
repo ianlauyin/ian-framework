@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use chrono::Utc;
 
 use crate::gcp::{http_client_builder, CachedToken, METADATA_TOKEN_URL};
-use crate::logging::{LogLevel, LogShipper};
+use crate::logging::{LogLevel, Logger};
 
 use crate::gcs::encode::{encode_object_id, encode_seg};
 use crate::gcs::{
@@ -217,8 +217,8 @@ impl GcsClient {
         parts.sign(self).await
     }
 
-    pub fn attach_ops_log(&self, shipper: LogShipper) {
-        *lock_ops(&self.inner.ops_log) = Some(shipper);
+    pub fn attach_ops_log(&self, logger: Logger) {
+        *lock_ops(&self.inner.ops_log) = Some(logger);
     }
 
     fn object_url(&self, name: &str) -> String {
@@ -299,10 +299,10 @@ impl GcsClient {
     }
 
     pub(crate) fn record_op(&self, op: OpsRecord<'_>) {
-        let Some(shipper) = lock_ops(&self.inner.ops_log).clone() else {
+        let Some(logger) = lock_ops(&self.inner.ops_log).clone() else {
             return;
         };
-        shipper.record(op.into_event(self.bucket()));
+        logger.record(op.into_event(self.bucket()));
     }
 
     pub(crate) async fn send(&self, call: &Call) -> Result<reqwest::Response, Exception> {
@@ -477,7 +477,7 @@ pub(crate) struct Inner {
     pub(crate) auth: Auth,
     pub(crate) http: reqwest::Client,
     pub(crate) token: tokio::sync::Mutex<Option<CachedToken>>,
-    pub(crate) ops_log: std::sync::Mutex<Option<LogShipper>>,
+    pub(crate) ops_log: std::sync::Mutex<Option<Logger>>,
 }
 
 enum Outcome {
@@ -512,9 +512,7 @@ pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Optio
     }
 }
 
-fn lock_ops(
-    slot: &std::sync::Mutex<Option<LogShipper>>,
-) -> std::sync::MutexGuard<'_, Option<LogShipper>> {
+fn lock_ops(slot: &std::sync::Mutex<Option<Logger>>) -> std::sync::MutexGuard<'_, Option<Logger>> {
     slot.lock().unwrap_or_else(|err| err.into_inner())
 }
 

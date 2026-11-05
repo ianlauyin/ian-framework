@@ -62,8 +62,8 @@ The function checks a value and does not change it. A stored value has the same 
 - The function gives no list when the list has more than 1000 events.
 - The function accepts 1000 events.
 - One ship batch uses this same limit of 1000 events.
-- The function does not call `LogShipper::record` or `LogShipper::send`.
-- The caller sends the kept events, for example with `LogShipper::send`.
+- The function does not call `Logger::record` or `Logger::direct_send`.
+- The caller sends the kept events with `Logger::direct_send`.
 
 An app can keep its own HTTP handler. The client log route below is one such handler. The function has these limits:
 
@@ -72,16 +72,16 @@ An app can keep its own HTTP handler. The client log route below is one such han
 
 ## Client log route
 
-`ian_framework::logging::client_log_router(shipper)` gives an `axum::Router` with one route.
+`ian_framework::logging::client_log_router(logger)` gives an `axum::Router` with one route.
 
-- The argument is one `LogShipper`.
+- The argument is one `Logger`.
 - The route is `POST /log`.
 - The project merges this router into its own router.
 - A browser sends its logs to this route on the same origin.
 
-Shared shipper:
+Shared logger:
 
-- The project gives the same shipper to this router and to the Axum middleware.
+- The project gives the same `Logger` to this router and to the Axum middleware.
 - The client events go to the log server at once. They do not enter the buffer.
 - The request events of the middleware still use the buffer and the ship loop.
 - When the middleware wraps this route, the `POST /log` request also records one request event in the buffer.
@@ -103,7 +103,7 @@ Request handling:
 - A body that is valid JSON but is not `{"events": [...]}` of event objects gets status 422. A bare JSON array gets status 422.
 - The route calls `ClientLog::log_events`. When that call gives no list, the status is 400 and the route records no event.
 - `ClientLog::log_events` sets `ip` and `user_agent` in the `context` of each kept event from the request headers, after it keeps the client `context`. The `ip` rule is the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
-- The route calls `LogShipper::send` once with all the kept events. It does not use the buffer.
-- `LogShipper::send` masks each event, then posts the list to the log server with the same URL, headers and timeout as a ship batch. It gives `true` only when the log server answers with a success status.
-- When `send` gives `true`, the response status is 204 with an empty body.
-- When `send` gives `false`, the response status is 502 with an empty body. The route does not buffer the events and does not retry.
+- The route calls `Logger::direct_send` once with all the kept events. It does not use the buffer.
+- `Logger::direct_send` masks each event, then calls `LogShipper::ship`. The ship rules are in `spec/framework_rs/logging/shipper.md`. It gives `true` only when the log server answers with a success status.
+- When `direct_send` gives `true`, the response status is 204 with an empty body.
+- When `direct_send` gives `false`, the response status is 502 with an empty body. The route does not buffer the events and does not retry.
