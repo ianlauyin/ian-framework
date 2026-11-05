@@ -74,7 +74,7 @@ This feature is not product business logic.
 
 `ian_framework::http::headers` exports only these items:
 
-- `bearer_token`, `is_token68` and `key_matches`
+- `bearer_token`
 - `read_cookie` and `sets_cookie`
 - `is_same_origin`
 
@@ -102,6 +102,7 @@ This module uses these dependencies:
 
 Related documents:
 
+- The token68 check is in `spec/framework_rs/token/context.md`.
 - The logging module is in `spec/framework_rs/logging/context.md`.
 - The Google Cloud Storage client is in `spec/framework_rs/gcs/context.md`.
 - Cookie sessions and password hashes are in `spec/framework_rs/auth/context.md`.

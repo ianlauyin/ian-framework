@@ -6,21 +6,17 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 A server can use a bearer API key to authenticate a request.
 
-The module `ian_framework::http::headers` has these functions:
-
-| Function | Result |
-| --- | --- |
-| `bearer_token(headers: &axum::http::HeaderMap)` | The token, `Option<&str>`. |
-| `key_matches(token: &str, key: &str)` | The match result, `bool`. |
-| `is_token68(token: &str)` | The token68 check result, `bool`. |
+The module `ian_framework::http::headers` exports `bearer_token` for this feature.
 
 ### bearer_token
+
+`bearer_token(headers: &axum::http::HeaderMap)` gives the token, `Option<&str>`.
 
 `bearer_token` reads the `Authorization` header.
 
 - The header value must be the scheme `Bearer`, then one space, then the token.
 - The scheme match is not case sensitive.
-- The token is an RFC 9110 `token68`. The rule is in the `is_token68` section.
+- The token is an RFC 9110 `token68`. The check is `ian_framework::token::is_token68`. The rules are in `spec/framework_rs/token/token68.md`.
 
 `bearer_token` gives `None` in these conditions:
 
@@ -30,16 +26,9 @@ The module `ian_framework::http::headers` has these functions:
 - The header value has no space.
 - The token is not a `token68`.
 
-### is_token68
-
-`is_token68` gives `true` only if the text is an RFC 9110 `token68`.
-
-- The text has one or more of the characters `A`-`Z`, `a`-`z`, `0`-`9`, `-`, `.`, `_`, `~`, `+`, `/`.
-- Then the text has zero or more `=`.
-- `bearer_token` uses `is_token68` for the token.
-- A project can use `is_token68` to reject an API key at startup. `bearer_token` never gives a token that is not a `token68`. Thus such a key never matches.
-
 ### key_matches
+
+`key_matches` is a function of the crate. `ian_framework::http::headers` does not export it. A project does not call it. `require_api_key` calls it. The middleware rules are in `spec/framework_rs/http/api-key-middleware.md`.
 
 - `key_matches` makes the SHA-256 hash of the token and the SHA-256 hash of the key.
 - It compares the two hashes in constant time with `subtle::ConstantTimeEq`.
@@ -51,5 +40,5 @@ The module `ian_framework::http::headers` has these functions:
 ### Project tasks
 
 - The project keeps the API key.
-- The project can check the API key with `is_token68` at startup.
-- The project selects the HTTP status and the error for a rejected request.
+- The project can check the API key with `ian_framework::token::is_token68` at startup. The rules are in `spec/framework_rs/token/token68.md`.
+- The request check is `ian_framework::http::middleware::require_api_key`. The response rules are in `spec/framework_rs/http/api-key-middleware.md`.

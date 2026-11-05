@@ -4,6 +4,7 @@ pub mod http;
 pub mod logging;
 pub mod shutdown;
 pub mod time;
+pub mod token;
 
 #[cfg(feature = "auth")]
 pub mod auth;

@@ -33,7 +33,7 @@ For each request, the middleware finds the first rule that matches the method an
 - The match uses the path without one trailing `/`. Thus the path `/log/` matches the rules of the path `/log`. The path `/` is not changed.
 - When no rule matches, the middleware passes the request to the next handler. When the rules have `deny_unmatched`, the middleware sends the 401 response instead.
 - When a public rule matches, the middleware passes the request to the next handler with no key.
-- When a rule matches, the request needs the header `Authorization: Bearer <key>`. The check uses `bearer_token` and `key_matches`.
+- When a rule matches, the request needs the header `Authorization: Bearer <key>`. The check uses `bearer_token` and `key_matches`. `key_matches` is not an export of `ian_framework::http::headers`.
 - When the check passes, the middleware passes the request to the next handler.
 - When the check fails, the middleware does not call the next handler. The response has status 401 and the message `unauthorized`.
 - Before the 401 response, the middleware calls `Logger::warn` with the action `HTTP/apiKeyRejected` and the context key `method`. The logger rules are in `spec/framework_rs/logging/logger.md`.
