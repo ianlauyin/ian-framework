@@ -81,7 +81,7 @@ pub async fn rate_limit(
     request: Request,
     next: Next,
 ) -> Response {
-    let key = limit_key(&client_ip(request.headers()));
+    let key = limit_key(client_ip(request.headers()).unwrap_or_default());
     match limiter.check(&key, Instant::now()) {
         Ok(()) => next.run(request).await,
         Err(wait) => {

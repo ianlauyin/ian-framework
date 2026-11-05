@@ -75,6 +75,7 @@ This feature is not product business logic.
 `ian_framework::http::headers` exports only these items:
 
 - `bearer_token`
+- `client_ip` and `user_agent`
 - `read_cookie` and `sets_cookie`
 - `is_same_origin`
 

@@ -26,12 +26,12 @@ impl ClientLog {
         if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
             return None;
         }
-        let ip = client_ip(headers);
-        let user_agent = user_agent(headers);
+        let ip = client_ip(headers).unwrap_or_default();
+        let user_agent = user_agent(headers).unwrap_or_default();
         Some(
             self.events
                 .iter()
-                .map(|event| client_event(event, &ip, &user_agent))
+                .map(|event| client_event(event, ip, user_agent))
                 .collect(),
         )
     }

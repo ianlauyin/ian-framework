@@ -15,8 +15,10 @@ pub(crate) const BODY_LOG_LIMIT: usize = 64 * 1024;
 pub async fn access_log(State(logger): State<Logger>, request: Request, next: Next) -> Response {
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
-    let ip = client_ip(request.headers());
-    let user_agent = user_agent(request.headers());
+    let ip = client_ip(request.headers()).unwrap_or_default().to_string();
+    let user_agent = user_agent(request.headers())
+        .unwrap_or_default()
+        .to_string();
     let request_url = request
         .uri()
         .path_and_query()
