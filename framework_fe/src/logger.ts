@@ -153,7 +153,7 @@ export class Logger {
       latency_ms: latencyMs === undefined ? null : Math.round(latencyMs),
       level,
       error_message: Logger.errorMessage(level, errorMessage),
-      context: { ...Logger.context },
+      context: { request_url: Logger.maskText(location.href), ...Logger.context },
       extra: Logger.mask({ page: location.pathname, ...extra }),
     });
   }

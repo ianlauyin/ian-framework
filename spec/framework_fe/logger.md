@@ -51,7 +51,7 @@ The event has these fields:
 | `latency_ms` | `null`, or the time of the action for an event from `Logger.wrapAction`. |
 | `level` | The level of the method. |
 | `error_message` | `null` for an `info` event and a `warn` event. For an `error` event, the `errorMessage` argument after the masking. An empty or blank `errorMessage` becomes `unknown error` before the masking. |
-| `context` | A copy of the context of the logger. Each value is a string, a number or a `bool`. The context is empty until `Logger.addContext` adds keys. |
+| `context` | A copy of the context of the logger, with the key `request_url` before it. The value of `request_url` is `location.href` after the masking. A `request_url` key from `Logger.addContext` replaces it. Each value is a string, a number or a `bool`. |
 | `extra` | The `extra` values after the masking. |
 
 `extra` rules:
@@ -125,7 +125,7 @@ The logger masks `extra` and `error_message` before it puts the event in the que
 - `Logger.setMaskPatterns` replaces the full list.
 - The logger adds the `g` flag to each pattern that does not have it. It keeps the other flags.
 - The masking applies to the `page` key also.
-- The masking also applies to `error_message`. The masking does not apply to `action` and `context`.
+- The masking also applies to `error_message`. The masking also applies to the value of `request_url` in `context`. The masking does not apply to `action` and to the other `context` values.
 
 Key rule:
 

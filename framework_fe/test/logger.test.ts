@@ -38,7 +38,7 @@ beforeEach(() => {
   };
   fetchMock = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal("document", fakeDocument);
-  vi.stubGlobal("location", { pathname: "/home" });
+  vi.stubGlobal("location", { pathname: "/home", href: "https://app.example/home?a=1" });
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -71,7 +71,7 @@ describe("Logger", () => {
         latency_ms: null,
         level: "info",
         error_message: null,
-        context: {},
+        context: { request_url: "https://app.example/home?a=1" },
         extra: { page: "/home" },
       },
       expect.objectContaining({
@@ -340,8 +340,9 @@ describe("Logger", () => {
       vi.advanceTimersByTime(60_000);
 
       const events = sentEvents(0);
-      expect(events[0].context).toEqual({});
-      expect(events[1].context).toEqual({ user: "u2", beta: "on" });
+      const request_url = "https://app.example/home?a=1";
+      expect(events[0].context).toEqual({ request_url });
+      expect(events[1].context).toEqual({ request_url, user: "u2", beta: "on" });
     });
 
     it("removes the named keys", async () => {
@@ -352,7 +353,19 @@ describe("Logger", () => {
       Logger.info("after");
       vi.advanceTimersByTime(60_000);
 
-      expect(sentEvents(0)[0].context).toEqual({ beta: "on" });
+      expect(sentEvents(0)[0].context).toEqual({
+        request_url: "https://app.example/home?a=1",
+        beta: "on",
+      });
+    });
+
+    it("masks each match in the request url", async () => {
+      const Logger = await loadLogger();
+      Logger.setMaskPatterns([/a=\d+/]);
+      Logger.info("page");
+      vi.advanceTimersByTime(60_000);
+
+      expect(sentEvents(0)[0].context).toEqual({ request_url: "https://app.example/home?***" });
     });
   });
 });
