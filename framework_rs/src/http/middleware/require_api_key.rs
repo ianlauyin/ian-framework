@@ -9,7 +9,7 @@ use axum::response::{IntoResponse, Response};
 
 use crate::exception;
 use crate::http::error_code;
-use crate::http::headers::{bearer_token, key_matches};
+use crate::http::headers::bearer::{bearer_token, key_matches};
 use crate::logging::Logger;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
