@@ -4,8 +4,8 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 ## Health route
 
-- The source file is `framework_rs/src/http/health.rs`.
-- `ian_framework::http::health_router()` gives an `axum::Router` with one route.
+- The source file is `framework_rs/src/http/router/health.rs`.
+- `ian_framework::http::router::health_router()` gives an `axum::Router` with one route.
 - The route is `GET /health`.
 - The project merges this router into its own router.
 - The project adds its own layers to the merged router.

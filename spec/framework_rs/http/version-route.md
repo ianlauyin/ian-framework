@@ -4,8 +4,8 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 ## Process version route
 
-- The source file is `framework_rs/src/http/version.rs`.
-- `ian_framework::http::version_router()` gives an `axum::Router` with one route.
+- The source file is `framework_rs/src/http/router/version.rs`.
+- `ian_framework::http::router::version_router()` gives an `axum::Router` with one route.
 - The route is `GET /version`.
 - The project merges this router into its own router.
 - The project adds its own layers to the merged router.

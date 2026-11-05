@@ -36,16 +36,16 @@ This feature is not product business logic.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::http`.
 - The header helper module path is `ian_framework::http::headers`.
+- The router module path is `ian_framework::http::router`.
 
 ## Public items
 
 `ian_framework::http` exports only these items:
 
-- `version_router`
-- `health_router`
 - The module `error_code`
 - The module `headers`
 - The module `middleware`
+- The module `router`
 
 `ian_framework::http::error_code` exports only these items:
 
@@ -77,6 +77,11 @@ This feature is not product business logic.
 - `bearer_token`, `is_token68` and `key_matches`
 - `read_cookie` and `sets_cookie`
 - `is_same_origin`
+
+`ian_framework::http::router` exports only these items:
+
+- `health_router`
+- `version_router`
 
 Each item has only one public path.
 
