@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 
 use crate::logging::Logger;
 
-use crate::http::middleware::log_request::*;
+use crate::http::middleware::access_log::*;
 use crate::logging::LogLevel;
 use crate::test::logging::buffered_events;
 use crate::test::logging::default_shipper;
@@ -33,7 +33,7 @@ fn app(shipper: Logger) -> Router {
     Router::new()
         .route("/status/{code}", get(status_from_path))
         .route("/echo", post(echo))
-        .layer(from_fn_with_state(shipper, log_request))
+        .layer(from_fn_with_state(shipper, access_log))
 }
 
 async fn post_body(

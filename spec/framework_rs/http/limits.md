@@ -40,7 +40,7 @@ Rules:
 
 - The middleware calls `Logger::error` with the action `HTTP/handlerPanicked`. The context has the keys `method` and `path`, with the request method and the request path. The event does not have the panic message. The logger rules are in `spec/framework_rs/logging/logger.md`.
 - The middleware does not spawn a task. The handler stops when the client closes the connection, as it does without the middleware.
-- Put `catch_panic` inside `log_request`. Then `log_request` records the 500 response.
+- Put `catch_panic` inside `access_log`. Then `access_log` records the 500 response.
 - The middleware does not catch a panic in a layer that is outside it.
 
 ## Body limit

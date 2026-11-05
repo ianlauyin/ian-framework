@@ -4,7 +4,7 @@ use axum::Router;
 
 use crate::logging::{LogEvent, LogLevel, LogRequest, Logger};
 
-use crate::http::middleware::log_request;
+use crate::http::middleware::access_log;
 use crate::logging::client_log::router::*;
 use crate::test::logging::{assert_uuid_v7, buffered_events, http_shipper, logger};
 use axum::body::Body;
@@ -238,7 +238,7 @@ async fn sends_client_events_and_buffers_the_request_event() {
     let (shipper, mut rx) = shipper_with_server(StatusCode::NO_CONTENT).await;
     let router = Router::new()
         .merge(client_log_router(shipper.clone()))
-        .layer(from_fn_with_state(shipper.clone(), log_request));
+        .layer(from_fn_with_state(shipper.clone(), access_log));
     let request = Request::builder()
         .method("POST")
         .uri("/log")

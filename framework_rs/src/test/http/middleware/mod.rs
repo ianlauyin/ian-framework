@@ -1,6 +1,6 @@
+mod access_log;
 mod body_limit;
 mod catch_panic;
-mod log_request;
 mod no_store;
 mod rate_limit;
 mod request_timeout;

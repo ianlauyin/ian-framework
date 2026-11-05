@@ -4,7 +4,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 ## Axum middleware
 
-`ian_framework::http::middleware::log_request` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/log_request.rs`. Use it with `axum::middleware::from_fn_with_state` and one logger.
+`ian_framework::http::middleware::access_log` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/access_log.rs`. Use it with `axum::middleware::from_fn_with_state` and one logger.
 
 General rules:
 

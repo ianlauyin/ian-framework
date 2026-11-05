@@ -12,7 +12,7 @@ use crate::logging::{LogEvent, LogValue, Logger};
 
 pub(crate) const BODY_LOG_LIMIT: usize = 64 * 1024;
 
-pub async fn log_request(State(logger): State<Logger>, request: Request, next: Next) -> Response {
+pub async fn access_log(State(logger): State<Logger>, request: Request, next: Next) -> Response {
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
     let ip = client_ip(request.headers());

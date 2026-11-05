@@ -2,7 +2,7 @@ use super::{LogEvent, LogValue};
 
 pub(crate) const MASK: &str = "***";
 
-// log_request records the query and the JSON body, so a credential field must not reach a log.
+// access_log records the query and the JSON body, so a credential field must not reach a log.
 pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
     r"(?i)password",
     r"(?i)passwd",
