@@ -23,7 +23,7 @@ pub async fn hash_password(password: &str) -> Result<String, Exception> {
         .await
         .map_err(|err| {
             exception!(
-                code = "AUTH_PASSWORD",
+                code = "AUTH_HASH_FAILED",
                 "password hash task failed",
                 source = err,
             )
@@ -36,23 +36,27 @@ pub async fn verify_password(password: &str, hash: &str) -> bool {
     }
     let password = password.to_owned();
     let hash = hash.to_owned();
-    tokio::task::spawn_blocking(move || verify(&password, &hash))
-        .await
-        .unwrap_or(false)
+    tokio::task::spawn_blocking(move || {
+        let Ok(parsed) = PasswordHash::new(&hash) else {
+            return false;
+        };
+        Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok()
+    })
+    .await
+    .unwrap_or(false)
 }
 
 fn hash(password: &str) -> Result<String, Exception> {
     Argon2::default()
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
-        .map_err(|err| exception!(code = "AUTH_PASSWORD", "password hash failed", source = err))
-}
-
-fn verify(password: &str, hash: &str) -> bool {
-    let Ok(parsed) = PasswordHash::new(hash) else {
-        return false;
-    };
-    Argon2::default()
-        .verify_password(password.as_bytes(), &parsed)
-        .is_ok()
+        .map_err(|err| {
+            exception!(
+                code = "AUTH_HASH_FAILED",
+                "password hash failed",
+                source = err
+            )
+        })
 }

@@ -58,7 +58,7 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 | --- | --- |
 | `AUTH_CONFIG` | Bad Redis URL or bad `SessionConfig` |
 | `AUTH_STORE` | Redis connection failure or Redis command failure |
-| `AUTH_PASSWORD` | Hash failure or blocking task failure |
+| `AUTH_HASH_FAILED` | Hash failure or blocking task failure |
 | `AUTH_RANDOM` | OS random source failure |
 | `VALIDATION_ERROR` | `hash_password` gets a password that is longer than 256 bytes |
 
