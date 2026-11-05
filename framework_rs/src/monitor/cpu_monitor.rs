@@ -2,49 +2,45 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::logging::{LogEvent, Logger};
+use crate::monitor::alert::Alert;
 use crate::shutdown::ShutdownReceiver;
 
 const STAT_PATH: &str = "/proc/stat";
-const DEFAULT_INTERVAL: Duration = Duration::from_secs(30);
 const ACTION: &str = "CPU/meetsThreshold";
-
-#[derive(Debug, Clone, Copy)]
-pub struct CpuMonitorConfig {
-    pub threshold_percent: f64,
-    pub interval: Duration,
-}
-
-impl CpuMonitorConfig {
-    pub fn new(threshold_percent: f64) -> Self {
-        Self {
-            threshold_percent,
-            interval: DEFAULT_INTERVAL,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct CpuMonitor {
-    pub(crate) config: CpuMonitorConfig,
+    pub(crate) threshold_percent: f64,
+    pub(crate) interval: Duration,
 }
 
 impl CpuMonitor {
-    pub fn new(config: CpuMonitorConfig) -> Option<Self> {
-        if !cfg!(target_os = "linux") {
+    pub fn new(threshold_percent: f64, interval: Duration) -> Option<Self> {
+        if !(threshold_percent > 0.0 && threshold_percent <= 100.0) || interval.is_zero() {
+            Logger::warn_with(
+                "CPU/invalidConfig",
+                BTreeMap::from([
+                    ("threshold_percent".to_string(), threshold_percent.into()),
+                    ("interval_seconds".to_string(), interval.as_secs_f64().into()),
+                ]),
+                "the threshold must be more than 0 and at most 100, and the interval must not be zero"
+                    .into(),
+            );
             return None;
         }
-        let threshold = config.threshold_percent;
-        if !(threshold > 0.0 && threshold <= 100.0) || config.interval.is_zero() {
-            return None;
-        }
-        Some(Self { config })
+        Some(Self {
+            threshold_percent,
+            interval,
+        })
     }
 
     pub fn spawn<F>(self, shutdown: ShutdownReceiver, sink: F) -> tokio::task::JoinHandle<()>
     where
         F: Fn(LogEvent) + Send + 'static,
     {
-        tokio::spawn(self.run(shutdown, sink, read_sample))
+        tokio::spawn(self.run(shutdown, sink, move || {
+            parse_sample(&std::fs::read_to_string(STAT_PATH).ok()?)
+        }))
     }
 
     pub(crate) async fn run<F, S>(self, shutdown: ShutdownReceiver, sink: F, mut sample: S)
@@ -60,12 +56,12 @@ impl CpuMonitor {
             );
             return;
         };
-        let mut ticker = tokio::time::interval(self.config.interval);
+        let mut ticker = tokio::time::interval(self.interval);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         ticker.tick().await;
         let stop = shutdown.wait();
         tokio::pin!(stop);
-        let mut alert = Alert::new(self.config.threshold_percent);
+        let mut alert = Alert::new(ACTION, "cpu_percent", self.threshold_percent);
         let mut read_failed = false;
         loop {
             tokio::select! {
@@ -101,45 +97,6 @@ pub(crate) struct CpuSample {
     pub(crate) total: u64,
 }
 
-pub(crate) struct Alert {
-    threshold_percent: f64,
-    active: bool,
-}
-
-impl Alert {
-    pub(crate) fn new(threshold_percent: f64) -> Self {
-        Self {
-            threshold_percent,
-            active: false,
-        }
-    }
-
-    // One event for each rise to the threshold. The alert arms again when the usage falls below it.
-    pub(crate) fn check(&mut self, percent: f64) -> Option<LogEvent> {
-        if percent < self.threshold_percent {
-            self.active = false;
-            return None;
-        }
-        if self.active {
-            return None;
-        }
-        self.active = true;
-        let mut event = LogEvent::warn(ACTION);
-        event
-            .extra
-            .insert("cpu_percent".to_string(), round_one(percent).into());
-        event.extra.insert(
-            "threshold_percent".to_string(),
-            self.threshold_percent.into(),
-        );
-        Some(event)
-    }
-}
-
-fn read_sample() -> Option<CpuSample> {
-    parse_sample(&std::fs::read_to_string(STAT_PATH).ok()?)
-}
-
 pub(crate) fn parse_sample(stat: &str) -> Option<CpuSample> {
     let line = stat.lines().next()?;
     let mut fields = line.split_whitespace();
@@ -165,8 +122,4 @@ pub(crate) fn usage_percent(previous: CpuSample, current: CpuSample) -> Option<f
         return None;
     }
     Some(100.0 * (total - idle) as f64 / total as f64)
-}
-
-fn round_one(value: f64) -> f64 {
-    (value * 10.0).round() / 10.0
 }

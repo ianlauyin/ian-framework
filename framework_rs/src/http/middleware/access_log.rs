@@ -36,7 +36,7 @@ pub async fn access_log(State(logger): State<Logger>, request: Request, next: Ne
     event
         .context
         .insert("request_url".to_string(), request_url.into());
-    event.latency_ms = Some(millis_since(started));
+    event.latency_ms = millis_since(started);
     if let Some(fields) = body {
         event.extra = fields;
     }

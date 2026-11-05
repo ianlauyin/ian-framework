@@ -4,25 +4,14 @@ The parts that apply to all of this feature are in `spec/framework_rs/monitor/co
 
 The CPU monitor checks the CPU usage of a Linux host on an interval. When the usage meets a threshold, it makes one `LogEvent` and gives the event to a sink that the caller supplies. The monitor does not know the shipper or the log server store.
 
-## CpuMonitorConfig
-
-`CpuMonitorConfig::new` takes the threshold in percent.
-
-| Field | Start value |
-| --- | --- |
-| `threshold_percent` | The argument |
-| `interval` | 30 seconds |
-
-- The fields are public.
-- `CpuMonitorConfig::new` does not read an environment variable. The app reads its own settings and gives the values to the config.
-
 ## CpuMonitor
 
-`CpuMonitor::new` returns no monitor in these conditions:
+`CpuMonitor::new` takes `threshold_percent` in percent and `interval`. It does not read an environment variable. The app reads its own settings and gives the values. It returns no monitor in these conditions:
 
 - `threshold_percent` is not more than 0 and not at most 100. A NaN value is not valid.
 - `interval` is zero.
-- The OS is not Linux.
+
+When it returns no monitor, it first calls `Logger::warn_with` one time with the action `CPU/invalidConfig`, an error whose display text is `the threshold must be more than 0 and at most 100, and the interval must not be zero`, and the context keys `threshold_percent` and `interval_seconds`.
 
 `CpuMonitor::spawn` takes a `ian_framework::shutdown::ShutdownReceiver` and a sink. The sink is `Fn(LogEvent) + Send + 'static`. It returns `tokio::task::JoinHandle<()>`. The caller runs it on a Tokio runtime.
 
@@ -51,7 +40,7 @@ The monitor makes one event when the usage rises to the threshold or above it. I
 | `id` | Empty string |
 | `context` | Empty object |
 | `action` | `CPU/meets threshold` |
-| `latency_ms` | null |
+| `latency_ms` | 0 |
 | `error_message` | null |
 | `level` | `warn` |
 | `extra.cpu_percent` | The usage, rounded to one decimal, as a JSON number |

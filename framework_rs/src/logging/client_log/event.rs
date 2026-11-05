@@ -5,7 +5,6 @@ use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Serialize};
 
 use crate::http::headers::{client_ip, user_agent};
-use crate::logging::event::new_id;
 use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::{LogEvent, LogLevel, LogValue};
 use crate::time::hkt_now;
@@ -55,16 +54,16 @@ fn client_event(event: &ClientLogEvent, ip: &str, user_agent: &str) -> LogEvent 
     let mut context = client_fields(&event.context);
     context.insert("ip".to_string(), ip.into());
     context.insert("user_agent".to_string(), user_agent.into());
-    LogEvent {
-        ts: client_ts(event.ts, now),
-        id: new_id(),
-        action: client_text(&event.action, CLIENT_ACTION_MAX_CHARS),
-        latency_ms: event.latency_ms,
-        level: event.level,
-        error_message: client_error_message(event),
-        context,
-        extra: client_fields(&event.extra),
-    }
+    let mut log_event = LogEvent::build(
+        client_text(&event.action, CLIENT_ACTION_MAX_CHARS),
+        event.level,
+        client_error_message(event),
+    );
+    log_event.ts = client_ts(event.ts, now);
+    log_event.latency_ms = event.latency_ms.unwrap_or(0);
+    log_event.context = context;
+    log_event.extra = client_fields(&event.extra);
+    log_event
 }
 
 fn client_error_message(event: &ClientLogEvent) -> Option<String> {

@@ -14,7 +14,7 @@ pub mod gcp;
 #[cfg(feature = "gcs")]
 pub mod gcs;
 
-#[cfg(feature = "monitor")]
+// #[cfg(all(feature = "monitor", target_os = "linux"))]
 pub mod monitor;
 
 #[cfg(test)]

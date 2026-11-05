@@ -220,7 +220,7 @@ impl<'a> ResumableUpload<'a> {
             method: "PUT",
             url: &self.location,
             status: None,
-            latency_ms: None,
+            latency_ms: 0,
             extra: &[
                 ("attempt", &attempt_text),
                 ("offset", &offset_text),

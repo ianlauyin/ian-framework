@@ -26,7 +26,7 @@ fn log_events_returns_sanitized_events() {
     assert_uuid_v7(&stored[0].id);
     assert_eq!(stored[0].context.len(), 2);
     assert_eq!(stored[0].context["ip"], "");
-    assert_eq!(stored[0].latency_ms, None);
+    assert_eq!(stored[0].latency_ms, 0);
     assert_eq!(stored[1].action, "#frag");
     assert_eq!(stored[1].level, LogLevel::Error);
 }

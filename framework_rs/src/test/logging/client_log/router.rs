@@ -85,7 +85,7 @@ async fn sends_a_same_origin_batch_with_the_request_ip_and_user_agent() {
     assert_eq!(event.context["ip"], "203.0.113.8");
     assert_eq!(event.context["user_agent"], "demo-agent");
     assert_uuid_v7(&event.id);
-    assert_eq!(event.latency_ms, Some(5));
+    assert_eq!(event.latency_ms, 5);
     assert_eq!(event.extra["page"], "/home");
 }
 

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::logging::{LogEvent, Logger};
+use crate::monitor::alert::Alert;
 use crate::shutdown::ShutdownReceiver;
 
 const DEFAULT_PATH: &str = "/";
@@ -46,14 +47,6 @@ impl DiskMonitor {
     {
         tokio::spawn(async move {
             let path = self.config.path;
-            if !cfg!(target_os = "linux") {
-                Logger::warn_with(
-                    "DISK/unsupportedPlatform",
-                    BTreeMap::new(),
-                    "the disk monitor works only on Linux".into(),
-                );
-                return;
-            }
             if read_usage(&path).is_none() {
                 Logger::warn_with(
                     "DISK/cannotReadUsage",
@@ -67,7 +60,7 @@ impl DiskMonitor {
             ticker.tick().await;
             let stop = shutdown.wait();
             tokio::pin!(stop);
-            let mut alert = Alert::new(self.config.threshold_percent, path.clone());
+            let mut alert = Alert::new(ACTION, "disk_percent", self.config.threshold_percent);
             loop {
                 if let Some(percent) = read_usage(&path) {
                     if let Some(event) = alert.check(percent) {
@@ -84,48 +77,6 @@ impl DiskMonitor {
     }
 }
 
-pub(crate) struct Alert {
-    threshold_percent: f64,
-    path: PathBuf,
-    active: bool,
-}
-
-impl Alert {
-    pub(crate) fn new(threshold_percent: f64, path: PathBuf) -> Self {
-        Self {
-            threshold_percent,
-            path,
-            active: false,
-        }
-    }
-
-    // One event for each rise to the threshold. The alert arms again when the usage falls below it.
-    pub(crate) fn check(&mut self, percent: f64) -> Option<LogEvent> {
-        if percent < self.threshold_percent {
-            self.active = false;
-            return None;
-        }
-        if self.active {
-            return None;
-        }
-        self.active = true;
-        let mut event = LogEvent::warn(ACTION);
-        event
-            .extra
-            .insert("disk_percent".to_string(), round_one(percent).into());
-        event.extra.insert(
-            "threshold_percent".to_string(),
-            self.threshold_percent.into(),
-        );
-        event.extra.insert(
-            "path".to_string(),
-            self.path.to_string_lossy().into_owned().into(),
-        );
-        Some(event)
-    }
-}
-
-#[cfg(target_os = "linux")]
 pub(crate) fn read_usage(path: &std::path::Path) -> Option<f64> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -145,13 +96,7 @@ pub(crate) fn read_usage(path: &std::path::Path) -> Option<f64> {
     )
 }
 
-#[cfg(not(target_os = "linux"))]
-pub(crate) fn read_usage(_path: &std::path::Path) -> Option<f64> {
-    None
-}
-
 // Same as df: the blocks that root cannot use are not free, and the blocks that only root can use are not counted.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn usage_percent(blocks: u64, free: u64, available: u64) -> Option<f64> {
     let used = blocks.checked_sub(free)?;
     let total = used.checked_add(available)?;
@@ -159,8 +104,4 @@ pub(crate) fn usage_percent(blocks: u64, free: u64, available: u64) -> Option<f6
         return None;
     }
     Some(100.0 * used as f64 / total as f64)
-}
-
-fn round_one(value: f64) -> f64 {
-    (value * 10.0).round() / 10.0
 }

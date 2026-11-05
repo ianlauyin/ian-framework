@@ -22,7 +22,7 @@ A monitor checks a host value on an interval. When the value meets a threshold, 
 
 ## Build
 
-This module is behind the Cargo feature `monitor`. The feature enables the `libc` dependency, which the disk monitor uses. A build without the feature does not compile this module.
+This module is behind the Cargo feature `monitor`. The feature enables the `libc` dependency, which the disk monitor uses. The module is also behind `target_os = "linux"`. A build without the feature, or for a target that is not Linux, does not compile this module.
 
 Use these commands in `framework_rs/`:
 

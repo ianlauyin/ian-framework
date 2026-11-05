@@ -34,9 +34,9 @@ fn client_action_and_info_are_bounded() {
     assert!(!forged.action().contains(['\n', '\r']));
     assert_eq!(batch_event(&"x".repeat(500), json!({})).action().len(), 128);
     let long = "y".repeat(2049);
-    assert!(batch_event("a", json!({ "k": long })).extra().is_empty());
+    assert!(batch_event("a", json!({ "k": long })).extra.is_empty());
     let many: Map<String, Value> = (0..100).map(|n| (format!("k{n}"), json!("v"))).collect();
-    assert_eq!(batch_event("a", Value::Object(many)).extra().len(), 32);
+    assert_eq!(batch_event("a", Value::Object(many)).extra.len(), 32);
 }
 
 fn sample() -> LogEvent {
@@ -49,7 +49,7 @@ fn sample() -> LogEvent {
     event
         .context
         .insert("user_agent".to_string(), "demo-agent".to_string().into());
-    event.latency_ms = Some(12);
+    event.latency_ms = 12;
     event.extra.insert("region".to_string(), "asia".into());
     event
 }
@@ -97,7 +97,7 @@ fn empty_http_fields_are_null_or_empty() {
     assert!(value["context"].as_object().unwrap().is_empty());
     assert_eq!(value["action"], "");
     assert!(value.get("request").is_none());
-    assert!(value["latency_ms"].is_null());
+    assert_eq!(value["latency_ms"], 0);
     assert_eq!(value["level"], "warn");
     assert!(value["extra"].as_object().unwrap().is_empty());
 }
@@ -108,10 +108,10 @@ fn getters_expose_the_fields() {
     assert_eq!(event.ts(), sample().ts);
     assert_eq!(event.id(), "req-1");
     assert_eq!(event.action(), "GET /health");
-    assert_eq!(event.latency_ms(), Some(12));
+    assert_eq!(event.latency_ms(), 12);
     assert_eq!(event.level(), LogLevel::Info);
-    assert_eq!(event.context()["ip"], "203.0.113.8");
-    assert_eq!(event.extra()["region"], "asia");
+    assert_eq!(event.context["ip"], "203.0.113.8");
+    assert_eq!(event.extra["region"], "asia");
 }
 
 #[test]
@@ -151,9 +151,9 @@ fn context_and_extra_accept_only_a_string_a_number_or_a_bool() {
             value[field]["k"] = good.clone();
             let event = serde_json::from_value::<LogEvent>(value).unwrap();
             let fields = if field == "context" {
-                event.context()
+                event.context
             } else {
-                event.extra()
+                event.extra
             };
             assert_eq!(fields["k"], good);
         }
@@ -179,7 +179,7 @@ fn new_drops_untrusted_fields() {
     event
         .context
         .insert("ip".to_string(), "203.0.113.8".to_string().into());
-    event.latency_ms = Some(42);
+    event.latency_ms = 42;
     let before = hkt_now();
     let stored = event.client_checked();
     let after = hkt_now();
@@ -188,7 +188,7 @@ fn new_drops_untrusted_fields() {
     assert_ne!(stored.id, event.id);
     assert_eq!(stored.context.len(), 2);
     assert_eq!(stored.context["ip"], "");
-    assert_eq!(stored.latency_ms, Some(42));
+    assert_eq!(stored.latency_ms, 42);
     assert_eq!(stored.level, LogLevel::Warn);
     assert_eq!(stored.action, "GET /download?sig=abc#top");
     assert_ne!(stored.ts, event.ts);
@@ -312,8 +312,8 @@ fn constructors_set_the_level_and_the_message() {
     assert_eq!(error.level(), LogLevel::Error);
     assert_eq!(error.error_message(), Some("boom"));
     crate::test::logging::assert_uuid_v7(error.id());
-    assert!(error.context().is_empty());
-    assert!(error.extra().is_empty());
+    assert!(error.context.is_empty());
+    assert!(error.extra.is_empty());
 }
 
 #[test]

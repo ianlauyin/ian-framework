@@ -1,8 +1,4 @@
-use std::collections::BTreeMap;
-
-use crate::logging::event::new_id;
 use crate::logging::{LogEvent, LogLevel};
-use crate::time::hkt_now;
 
 use crate::gcp::truncate;
 use crate::gcs::redact_query;
@@ -13,25 +9,18 @@ pub(crate) struct OpsRecord<'a> {
     pub(crate) method: &'a str,
     pub(crate) url: &'a str,
     pub(crate) status: Option<u16>,
-    pub(crate) latency_ms: Option<u64>,
+    pub(crate) latency_ms: u64,
     pub(crate) extra: &'a [(&'a str, &'a str)],
 }
 
 impl OpsRecord<'_> {
     pub(crate) fn into_event(self, bucket: &str) -> LogEvent {
-        let mut event = LogEvent {
-            ts: hkt_now(),
-            id: new_id(),
-            action: action(self.method, self.url),
-            latency_ms: self.latency_ms,
-            level: self.level,
-            error_message: (self.level == LogLevel::Error).then(|| match self.status {
-                Some(status) => format!("{} (status {status})", self.message),
-                None => self.message.to_string(),
-            }),
-            context: BTreeMap::new(),
-            extra: BTreeMap::new(),
-        };
+        let error_message = (self.level == LogLevel::Error).then(|| match self.status {
+            Some(status) => format!("{} (status {status})", self.message),
+            None => self.message.to_string(),
+        });
+        let mut event = LogEvent::build(action(self.method, self.url), self.level, error_message);
+        event.latency_ms = self.latency_ms;
         event
             .extra
             .insert("message".to_string(), self.message.to_string().into());

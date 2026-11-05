@@ -8,6 +8,6 @@ mod gcp;
 mod gcs;
 mod http;
 mod logging;
-#[cfg(feature = "monitor")]
+#[cfg(all(feature = "monitor", target_os = "linux"))]
 mod monitor;
 mod shutdown;

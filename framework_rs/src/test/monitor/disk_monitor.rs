@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-#[cfg(target_os = "linux")]
 use crate::shutdown::ShutdownReceiver;
 
 use crate::logging::LogLevel;
@@ -40,30 +39,12 @@ fn usage_percent_follows_df() {
 }
 
 #[test]
-fn alert_gives_one_event_for_each_rise() {
-    let mut alert = Alert::new(90.0, PathBuf::from("/data"));
-    assert!(alert.check(89.9).is_none());
-    let event = alert.check(91.26).unwrap();
-    assert_eq!(event.action, "DISK/meetsThreshold");
-    assert_eq!(event.level, LogLevel::Warn);
-    assert_eq!(event.extra["disk_percent"], json!(91.3));
-    assert_eq!(event.extra["threshold_percent"], json!(90.0));
-    assert_eq!(event.extra["path"], json!("/data"));
-    assert!(alert.check(95.0).is_none());
-    assert!(alert.check(90.0).is_none());
-    assert!(alert.check(10.0).is_none());
-    assert!(alert.check(90.0).is_some());
-}
-
-#[cfg(target_os = "linux")]
-#[test]
 fn read_usage_reads_an_existing_path() {
     let percent = read_usage(std::path::Path::new("/")).unwrap();
     assert!((0.0..=100.0).contains(&percent));
     assert!(read_usage(std::path::Path::new("/no/such/path")).is_none());
 }
 
-#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn spawn_stops_on_shutdown() {
     let shutdown = ShutdownReceiver::new();

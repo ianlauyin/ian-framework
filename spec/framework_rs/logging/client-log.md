@@ -24,7 +24,7 @@ The function sets the fields of the result as follows:
 | Field | Stored value |
 | --- | --- |
 | `id` | A new UUID v7 text. The client value is not kept. |
-| `latency_ms` | The client value. |
+| `latency_ms` | The client value, or 0 when the client sends none. |
 | `ts` | The client value in HKT, when it is not later than `ian_framework::time::hkt_now()` and is not more than 24 hours before it. In all other cases, the current HKT time from `hkt_now()`. |
 | `level` | The client value. |
 | `action` | The client value, with each control character changed to a space, and cut to 128 characters. |

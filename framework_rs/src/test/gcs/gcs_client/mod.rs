@@ -624,7 +624,7 @@ async fn ops_log_writes_the_bucket_and_omits_the_query() {
         method: "GET",
         url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file?upload_id=secret",
         status: Some(200),
-        latency_ms: Some(3),
+        latency_ms: 3,
         extra: &[],
     });
     let events = buffered_events(&logger);
@@ -634,7 +634,7 @@ async fn ops_log_writes_the_bucket_and_omits_the_query() {
     assert!(events[0].context.is_empty());
     assert_eq!(events[0].extra["status"], "200");
     assert_eq!(events[0].extra["message"], "gcs response");
-    assert_eq!(events[0].latency_ms, Some(3));
+    assert_eq!(events[0].latency_ms, 3);
     assert_eq!(events[0].extra.get("bucket"), Some(&"my-bucket".into()));
     let line = serde_json::to_string(&events[0]).unwrap();
     let value: serde_json::Value = serde_json::from_str(&line).unwrap();
@@ -653,7 +653,7 @@ async fn ops_log_without_a_shipper_does_not_panic() {
         method: "GET",
         url: "https://storage.googleapis.com/storage/v1/b/my-bucket/o/file",
         status: None,
-        latency_ms: None,
+        latency_ms: 0,
         extra: &[],
     });
 }

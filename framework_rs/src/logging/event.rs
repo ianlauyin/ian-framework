@@ -74,12 +74,12 @@ pub struct LogEvent {
     pub(crate) ts: DateTime<FixedOffset>,
     pub(crate) id: String,
     pub(crate) action: String,
-    pub(crate) latency_ms: Option<u64>,
+    pub(crate) latency_ms: u64,
     pub(crate) level: LogLevel,
     #[serde(default)]
     pub(crate) error_message: Option<String>,
-    pub(crate) context: BTreeMap<String, LogValue>,
-    pub(crate) extra: BTreeMap<String, LogValue>,
+    pub context: BTreeMap<String, LogValue>,
+    pub extra: BTreeMap<String, LogValue>,
 }
 
 pub(crate) fn new_id() -> String {
@@ -115,7 +115,7 @@ impl LogEvent {
         &self.action
     }
 
-    pub fn latency_ms(&self) -> Option<u64> {
+    pub fn latency_ms(&self) -> u64 {
         self.latency_ms
     }
 
@@ -127,20 +127,16 @@ impl LogEvent {
         self.error_message.as_deref()
     }
 
-    pub fn context(&self) -> &BTreeMap<String, LogValue> {
-        &self.context
-    }
-
-    pub fn extra(&self) -> &BTreeMap<String, LogValue> {
-        &self.extra
-    }
-
-    fn build(action: String, level: LogLevel, error_message: Option<String>) -> LogEvent {
+    pub(crate) fn build(
+        action: String,
+        level: LogLevel,
+        error_message: Option<String>,
+    ) -> LogEvent {
         LogEvent {
             ts: hkt_now(),
             id: new_id(),
             action,
-            latency_ms: None,
+            latency_ms: 0,
             level,
             error_message,
             context: BTreeMap::new(),

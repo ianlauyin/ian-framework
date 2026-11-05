@@ -373,7 +373,7 @@ impl GcsClient {
             method: call.method.as_str(),
             url: &call.url,
             status: None,
-            latency_ms: Some(millis_since(started)),
+            latency_ms: millis_since(started),
             extra: &[("error", &error_text)],
         });
         if may_retry(call, attempts) {
@@ -400,7 +400,7 @@ impl GcsClient {
             method: call.method.as_str(),
             url: &call.url,
             status: Some(status),
-            latency_ms: Some(latency_ms),
+            latency_ms,
             extra: &[],
         });
     }
@@ -425,7 +425,7 @@ impl GcsClient {
                 method: "",
                 url: "",
                 status: None,
-                latency_ms: None,
+                latency_ms: 0,
                 extra: &[("error", &error_text)],
             });
         }

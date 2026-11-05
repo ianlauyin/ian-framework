@@ -11,7 +11,7 @@ One event is one `LogEvent`. One event has these fields:
 | `ts` | Hong Kong time (HKT) in RFC 3339, with the offset `+08:00` |
 | `id` | Event id. A UUID v7 text, which is based on time. |
 | `action` | `API/{method}:{path}`, a client text, or an empty string |
-| `latency_ms` | Latency in milliseconds, or null |
+| `latency_ms` | Latency in milliseconds, as a `u64`. 0 when the action has no latency |
 | `level` | One `LogLevel` value |
 | `error_message` | Text of the error, or null |
 | `context` | One JSON object with the facts about where the event came from. Each value is a string, a number or a `bool`. |
@@ -27,11 +27,11 @@ One event is one `LogEvent`. One event has these fields:
 - The fields of `LogEvent` are not public. A caller outside the crate cannot make an event with a struct literal and cannot read a field directly.
 - A caller outside the crate makes an event with `LogEvent::info`, `LogEvent::warn`, `LogEvent::warn_with` or `LogEvent::error`. The rules are in the section "Constructors".
 - A caller outside the crate also gets an event from deserialize. `LogEvent` uses the plain `Deserialize` derive, and `error_message` has `#[serde(default)]`. An event from an untrusted client goes through `ClientLog::log_events`.
-- A caller outside the crate reads an event with `ts()`, `id()`, `action()`, `latency_ms()`, `level()`, `error_message()`, `context()` and `extra()`. `extra()` returns the `extra` map. The name `info` is the constructor.
+- A caller outside the crate reads an event with `ts()`, `id()`, `action()`, `latency_ms()`, `level()`, `error_message()`. The fields `context` and `extra` are public, so a caller reads and changes them directly. The name `info` is the constructor.
 
 ### Changes that break a caller
 
-- `LogEvent::info(action)` is the constructor of an `info` event. The accessor of the `extra` map is `extra()`.
+- `LogEvent::info(action)` is the constructor of an `info` event.
 - The crate-private helper `event(action, level)` does not exist. A caller uses a constructor.
 - `Logger::warn(action, context)` has no message. `Logger::warn_with(action, context, error)` and `Logger::error(action, context, error)` set `error_message` from `error`. The rules are in `spec/framework_rs/logging/logger.md`. `LogEvent::warn_with` and `LogEvent::error` give a message.
 - `Logger::exception` does not exist. A caller uses `Logger::warn_with` or `Logger::error`.
@@ -50,7 +50,7 @@ One event is one `LogEvent`. One event has these fields:
 | `LogEvent::error(action, error_message)` | `error` | `error_message` is `impl Into<String>`, so the caller must give it. |
 
 - `action` is `impl Into<String>`.
-- A constructor sets `ts` to the current HKT time, `id` to a new UUID v7 text, `latency_ms` to null, and `context` and `extra` to empty objects.
+- A constructor sets `ts` to the current HKT time, `id` to a new UUID v7 text, `latency_ms` to 0, and `context` and `extra` to empty objects.
 - A constructor does not change the `action` text or the message text. Only `ClientLog::log_events` cuts text.
 - The app builds each event that does not come from a client. The app sets `extra` and does not check the keys or the values.
 - `ClientLog::log_events` checks an event from a client. The checks are in `spec/framework_rs/logging/client-log.md`.

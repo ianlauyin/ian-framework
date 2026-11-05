@@ -7,35 +7,21 @@ use crate::monitor::cpu_monitor::*;
 
 use serde_json::json;
 
+const INTERVAL: Duration = Duration::from_secs(30);
+
 fn sample(idle: u64, total: u64) -> CpuSample {
     CpuSample { idle, total }
 }
 
 #[test]
-fn config_defaults() {
-    let config = CpuMonitorConfig::new(80.0);
-    assert_eq!(config.threshold_percent, 80.0);
-    assert_eq!(config.interval, Duration::from_secs(30));
-}
-
-#[cfg(not(target_os = "linux"))]
-#[test]
-fn new_returns_none_when_the_os_is_not_linux() {
-    assert!(CpuMonitor::new(CpuMonitorConfig::new(80.0)).is_none());
-}
-
-#[cfg(target_os = "linux")]
-#[test]
 fn new_rejects_a_bad_threshold_or_interval() {
     for threshold in [0.0, -1.0, 100.1, f64::NAN] {
-        assert!(CpuMonitor::new(CpuMonitorConfig::new(threshold)).is_none());
+        assert!(CpuMonitor::new(threshold, INTERVAL).is_none());
     }
     for threshold in [0.1, 80.0, 100.0] {
-        assert!(CpuMonitor::new(CpuMonitorConfig::new(threshold)).is_some());
+        assert!(CpuMonitor::new(threshold, INTERVAL).is_some());
     }
-    let mut config = CpuMonitorConfig::new(80.0);
-    config.interval = Duration::ZERO;
-    assert!(CpuMonitor::new(config).is_none());
+    assert!(CpuMonitor::new(80.0, Duration::ZERO).is_none());
 }
 
 #[test]
@@ -66,28 +52,10 @@ fn parse_sample_rejects_a_total_that_overflows() {
     assert_eq!(parse_sample(&stat), None);
 }
 
-#[test]
-fn alert_gives_one_event_for_each_rise() {
-    let mut alert = Alert::new(80.0);
-    assert!(alert.check(79.9).is_none());
-    let event = alert.check(85.26).unwrap();
-    assert_eq!(event.action, "CPU/meetsThreshold");
-    assert_eq!(event.level, LogLevel::Warn);
-    assert_eq!(event.extra["cpu_percent"], json!(85.3));
-    assert_eq!(event.extra["threshold_percent"], json!(80.0));
-    assert!(alert.check(95.0).is_none());
-    assert!(alert.check(80.0).is_none());
-    assert!(alert.check(10.0).is_none());
-    assert!(alert.check(80.0).is_some());
-}
-
-#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn spawn_stops_on_shutdown() {
     let shutdown = ShutdownReceiver::new();
-    let mut config = CpuMonitorConfig::new(100.0);
-    config.interval = Duration::from_millis(10);
-    let handle = CpuMonitor::new(config)
+    let handle = CpuMonitor::new(100.0, Duration::from_millis(10))
         .unwrap()
         .spawn(shutdown.clone(), |_| {});
     shutdown.trigger();
@@ -105,9 +73,7 @@ fn sampler(samples: Vec<Option<CpuSample>>) -> impl FnMut() -> Option<CpuSample>
 #[tokio::test]
 async fn run_sends_one_event_for_a_busy_cpu_and_skips_a_failed_read() {
     let shutdown = ShutdownReceiver::new();
-    let mut config = CpuMonitorConfig::new(50.0);
-    config.interval = Duration::from_millis(5);
-    let monitor = CpuMonitor { config };
+    let monitor = CpuMonitor::new(50.0, Duration::from_millis(5)).unwrap();
     let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let sink_events = events.clone();
     let samples = vec![
@@ -134,9 +100,7 @@ async fn run_sends_one_event_for_a_busy_cpu_and_skips_a_failed_read() {
 #[tokio::test]
 async fn run_stops_when_the_first_read_fails() {
     let shutdown = ShutdownReceiver::new();
-    let monitor = CpuMonitor {
-        config: CpuMonitorConfig::new(50.0),
-    };
+    let monitor = CpuMonitor::new(50.0, INTERVAL).unwrap();
     let run = monitor.run(shutdown, |_| {}, sampler(vec![None]));
     tokio::time::timeout(Duration::from_secs(2), run)
         .await

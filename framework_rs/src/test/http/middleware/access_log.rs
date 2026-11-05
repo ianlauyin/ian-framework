@@ -88,7 +88,6 @@ async fn middleware_records_the_request_schema() {
     assert_eq!(event.context["ip"], "");
     assert_eq!(event.context["user_agent"], "");
     assert_eq!(event.context["request_url"], "/status/204?***");
-    assert!(event.latency_ms.is_some());
     assert_eq!(event.level, LogLevel::Info);
     let json = serde_json::to_string(event).unwrap();
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
