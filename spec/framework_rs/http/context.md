@@ -41,12 +41,23 @@ This feature is not product business logic.
 
 `ian_framework::http` exports only these items:
 
-- `ApiError`
-- `IntoApiError`
 - `version_router`
 - `health_router`
+- The module `error_code`
 - The module `headers`
 - The module `middleware`
+
+`ian_framework::http::error_code` exports only these items:
+
+- `VALIDATION_ERROR`
+- `BAD_REQUEST`
+- `UNAUTHORIZED`
+- `FORBIDDEN`
+- `NOT_FOUND`
+- `REQUEST_TIMEOUT`
+- `PAYLOAD_TOO_LARGE`
+- `TOO_MANY_REQUESTS`
+- `INTERNAL_ERROR`
 
 `ian_framework::http::middleware` exports only these items:
 

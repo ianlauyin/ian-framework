@@ -5,7 +5,8 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use http_body_util::Limited;
 
-use crate::http::ApiError;
+use crate::exception;
+use crate::http::error_code;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BodyLimit(pub usize);
@@ -45,10 +46,9 @@ fn is_json(headers: &HeaderMap) -> bool {
 }
 
 fn too_large() -> Response {
-    ApiError::new(
-        StatusCode::PAYLOAD_TOO_LARGE,
-        "payload_too_large",
+    exception!(
         "request body is too large",
+        code = error_code::PAYLOAD_TOO_LARGE
     )
     .into_response()
 }

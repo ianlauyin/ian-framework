@@ -4,12 +4,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::extract::{Request, State};
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::{header, HeaderValue};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
+use crate::exception;
+use crate::http::error_code;
 use crate::http::headers::client_ip;
-use crate::http::ApiError;
 
 pub(crate) const PRUNE_AT: usize = 10_000;
 // A full map drops this many of the least recently used buckets at once, so the scan is rare.
@@ -84,12 +85,9 @@ pub async fn rate_limit(
     match limiter.check(&key, Instant::now()) {
         Ok(()) => next.run(request).await,
         Err(wait) => {
-            let mut response = ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
-                "too many requests",
-            )
-            .into_response();
+            let mut response =
+                exception!("too many requests", code = error_code::TOO_MANY_REQUESTS)
+                    .into_response();
             let seconds = wait.as_secs_f64().ceil().max(1.0) as u64;
             if let Ok(value) = HeaderValue::from_str(&seconds.to_string()) {
                 response.headers_mut().insert(header::RETRY_AFTER, value);

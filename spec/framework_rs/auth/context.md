@@ -62,7 +62,7 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 | `AUTH_RANDOM` | OS random source failure |
 | `VALIDATION_ERROR` | `hash_password` gets a password that is longer than 256 bytes |
 
-- The HTTP status of each `AUTH_*` code is 500 and the message for the client is `internal error`, as in `spec/framework_rs/http/api-error.md`.
+- The HTTP status of each `AUTH_*` code is 500 and the message for the client is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
 - The HTTP status of `VALIDATION_ERROR` is 400. The message for the client is `password must not be longer than 256 bytes`.
 
 ## Out of scope

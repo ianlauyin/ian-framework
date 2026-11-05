@@ -6,11 +6,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use axum::extract::Request;
-use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
-use crate::http::ApiError;
+use crate::exception;
+use crate::http::error_code;
 use crate::logging::Logger;
 
 struct CatchUnwind<F>(Pin<Box<F>>);
@@ -29,12 +29,7 @@ pub async fn catch_panic(request: Request, next: Next) -> Response {
                 ]),
                 "handler panicked".into(),
             );
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "internal error",
-            )
-            .into_response()
+            exception!("internal error", code = error_code::INTERNAL_ERROR).into_response()
         }
     }
 }

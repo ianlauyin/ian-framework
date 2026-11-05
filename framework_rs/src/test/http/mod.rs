@@ -1,7 +1,5 @@
-mod api_error;
+mod error_code;
 mod headers;
 mod health;
-mod into_api_error;
-mod into_response;
 mod middleware;
 mod version;

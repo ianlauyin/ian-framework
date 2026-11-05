@@ -1,4 +1,4 @@
-use crate::exception::error_code;
+use crate::http::error_code;
 
 use crate::auth::password::*;
 

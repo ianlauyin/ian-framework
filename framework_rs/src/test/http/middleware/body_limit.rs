@@ -11,7 +11,7 @@ use axum::routing::post;
 use axum::Router;
 use tower::ServiceExt;
 
-const TOO_LARGE: &str = r#"{"code":"payload_too_large","message":"request body is too large"}"#;
+const TOO_LARGE: &str = r#"{"message":"request body is too large"}"#;
 
 async fn echo_len(body: Bytes) -> String {
     body.len().to_string()

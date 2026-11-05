@@ -26,12 +26,12 @@ A browser that does not send `Sec-Fetch-Site` still sends `Origin` on a `POST`.
 The middleware calls `is_same_origin` for each request:
 
 - When `is_same_origin` returns `true`, the middleware passes the request to the next handler.
-- When `is_same_origin` returns `false`, the middleware does not call the next handler. The response is an `ApiError` with status 403, the error code `cross_origin`, and the message `cross-origin request`.
+- When `is_same_origin` returns `false`, the middleware does not call the next handler. The response has status 403 and the message `cross-origin request`.
 
 The 403 response body is:
 
 ```json
-{"code":"cross_origin","message":"cross-origin request"}
+{"message":"cross-origin request"}
 ```
 
 Usage rules:

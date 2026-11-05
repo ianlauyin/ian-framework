@@ -88,7 +88,7 @@ async fn the_rejection_body_is_json() {
         .unwrap();
     let response = router().oneshot(request).await.unwrap();
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    assert_eq!(body, r#"{"code":"unauthorized","message":"unauthorized"}"#);
+    assert_eq!(body, r#"{"message":"unauthorized"}"#);
 }
 
 #[tokio::test]

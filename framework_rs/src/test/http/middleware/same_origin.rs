@@ -45,9 +45,6 @@ async fn rejects_a_cross_origin_request_with_403() {
         let response = send(headers).await;
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        assert_eq!(
-            body,
-            r#"{"code":"cross_origin","message":"cross-origin request"}"#
-        );
+        assert_eq!(body, r#"{"message":"cross-origin request"}"#);
     }
 }

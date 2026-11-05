@@ -52,9 +52,6 @@ async fn turns_a_panic_into_a_500_without_the_detail() {
             "{path}"
         );
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        assert_eq!(
-            body, r#"{"code":"internal_error","message":"internal error"}"#,
-            "{path}"
-        );
+        assert_eq!(body, r#"{"message":"internal error"}"#, "{path}");
     }
 }

@@ -118,10 +118,7 @@ async fn answers_429_with_retry_after_and_a_json_body() {
     assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(refused.headers().get(header::RETRY_AFTER).unwrap(), "10");
     let body = to_bytes(refused.into_body(), usize::MAX).await.unwrap();
-    assert_eq!(
-        body,
-        r#"{"code":"rate_limited","message":"too many requests"}"#
-    );
+    assert_eq!(body, r#"{"message":"too many requests"}"#);
     assert_eq!(
         send(&router, "203.0.113.9").await.status(),
         StatusCode::NO_CONTENT

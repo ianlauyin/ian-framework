@@ -39,8 +39,5 @@ async fn answers_408_when_the_handler_is_slow() {
     let response = send(2_000).await;
     assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    assert_eq!(
-        body,
-        r#"{"code":"request_timeout","message":"request timed out"}"#
-    );
+    assert_eq!(body, r#"{"message":"request timed out"}"#);
 }

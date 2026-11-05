@@ -1,16 +1,13 @@
 export interface ErrorBody {
   message: string;
-  code?: string;
 }
 
-export class AjaxError extends Error {
+export class ApiError extends Error {
   public readonly code: number;
-  public readonly errorCode: string | undefined;
 
   constructor(code: number, errorBody: ErrorBody | null) {
-    super(errorBody?.message ?? "Unknown error");
+    super(typeof errorBody?.message === "string" ? errorBody.message : "Unknown error");
     this.code = code;
-    this.errorCode = typeof errorBody?.code === "string" ? errorBody.code : undefined;
   }
 }
 
@@ -75,18 +72,18 @@ export const ajax = async <
   }
 
   if (!response.ok) {
-    throw new AjaxError(response.status, parseErrorBody(body));
+    throw new ApiError(response.status, parseErrorBody(body));
   }
 
   if (!body) return null as Res;
   try {
     return JSON.parse(body);
   } catch {
-    throw new AjaxError(response.status, null);
+    throw new ApiError(response.status, null);
   }
 };
 
-// A proxy can answer with an HTML or text error page, which must still give an AjaxError.
+// A proxy can answer with an HTML or text error page, which must still give an ApiError.
 function parseErrorBody(body: string): ErrorBody | null {
   try {
     return body ? JSON.parse(body) : null;

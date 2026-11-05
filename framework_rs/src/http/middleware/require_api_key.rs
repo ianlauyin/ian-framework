@@ -3,12 +3,13 @@ use std::fmt;
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::{Method, StatusCode};
+use axum::http::Method;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
+use crate::exception;
+use crate::http::error_code;
 use crate::http::headers::{bearer_token, key_matches};
-use crate::http::ApiError;
 use crate::logging::Logger;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,8 +121,7 @@ pub async fn require_api_key(
             "HTTP/apiKeyRejected",
             BTreeMap::from([("method".to_string(), method.as_str().into())]),
         );
-        return ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized", "unauthorized")
-            .into_response();
+        return exception!("unauthorized", code = error_code::UNAUTHORIZED).into_response();
     }
     next.run(request).await
 }

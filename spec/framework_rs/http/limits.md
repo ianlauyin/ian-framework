@@ -2,7 +2,7 @@
 
 The parts that apply to all of this feature are in `spec/framework_rs/http/context.md`.
 
-Each of these middleware functions returns an `ApiError`, so the body is always the flat JSON of `spec/framework_rs/http/api-error.md`.
+The body of each of these responses is the flat JSON of `spec/framework_rs/http/api-error.md`.
 
 ## Request timeout
 
@@ -13,10 +13,10 @@ Each of these middleware functions returns an `ApiError`, so the body is always 
 
 The middleware gives the next handler the time limit. The limit counts from the call until the response is ready. It does not count the time to send the response body.
 
-When the limit passes, the middleware drops the handler. The response is an `ApiError` with status 408, the error code `request_timeout`, and the message `request timed out`:
+When the limit passes, the middleware drops the handler. The response has status 408 and the message `request timed out`:
 
 ```json
-{"code":"request_timeout","message":"request timed out"}
+{"message":"request timed out"}
 ```
 
 Rules:
@@ -30,10 +30,10 @@ Rules:
 - `ian_framework::http::middleware::catch_panic` is an Axum middleware function.
 - The project adds it to a router with `axum::middleware::from_fn`.
 
-When the next handler panics, the middleware catches the panic. The response is an `ApiError` with status 500, the error code `internal_error`, and the message `internal error`:
+When the next handler panics, the middleware catches the panic. The response has status 500 and the message `internal error`:
 
 ```json
-{"code":"internal_error","message":"internal error"}
+{"message":"internal error"}
 ```
 
 Rules:
@@ -56,10 +56,10 @@ The middleware does these steps:
 2. It wraps the request body, so a read of more than the limit bytes fails. This applies to a body with no `Content-Length` and to a body larger than its `Content-Length`.
 3. When the response has status 413 and its `Content-Type` does not start with `application/json`, it replaces the response with the 413 response. A response that already has a JSON body stays as it is.
 
-The 413 response is an `ApiError` with status 413, the error code `payload_too_large`, and the message `request body is too large`:
+The 413 response has status 413 and the message `request body is too large`:
 
 ```json
-{"code":"payload_too_large","message":"request body is too large"}
+{"message":"request body is too large"}
 ```
 
 Rules:

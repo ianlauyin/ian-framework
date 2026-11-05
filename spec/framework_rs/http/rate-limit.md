@@ -29,10 +29,10 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 ## Refused request
 
-The response is an `ApiError` with status 429, the error code `rate_limited`, and the message `too many requests`. The body is:
+The response has status 429 and the message `too many requests`. The body is:
 
 ```json
-{"code":"rate_limited","message":"too many requests"}
+{"message":"too many requests"}
 ```
 
 The response has the header `Retry-After`. The value is the wait for one token, in whole seconds, rounded up. The minimum is 1. When the bucket never refills, the value is 3600.

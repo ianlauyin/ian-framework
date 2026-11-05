@@ -8,7 +8,7 @@
 
 ## Exception
 
-`Exception` implements `Debug`, `Display`, `std::error::Error`, `From<&Exception> for String` and `From<Exception> for String`. `ApiError` implements `From<Exception>` in `ian_framework::http`.
+`Exception` implements `Debug`, `Display`, `std::error::Error`, `From<&Exception> for String` and `From<Exception> for String`. `Exception` implements `IntoResponse` in `ian_framework::http`. The rules are in `spec/framework_rs/http/api-error.md`.
 
 It holds these fields (the table "Construction" gives how to make one):
 
@@ -59,18 +59,4 @@ The only way to make an exception is the macro `exception!`. It is exported at t
 
 - A code is an upper case string that the caller writes at the call site. A project can use its own string as a code.
 - `Exception` has no HTTP status. The `exception` module does not use `axum` or `ian_framework::http`.
-
-## Well-known codes
-
-The module `ian_framework::exception::error_code` exports one `&'static str` constant for each well-known code. The value of each constant is its name.
-
-| Constant | Condition |
-| --- | --- |
-| `VALIDATION_ERROR` | A value from the client does not obey a rule. |
-| `BAD_REQUEST` | The client sent a request that the code cannot read. |
-| `FORBIDDEN` | The client cannot do this action. |
-| `NOT_FOUND` | The item that the client asked for does not exist. |
-
-- A well-known code means that the cause is the client. Each other code means that the cause is internal.
-- The message of an exception with a well-known code goes to the client. Write it for the client. It must not hold an internal detail.
-- Each transport gives the meaning of a well-known code. The HTTP rules are in `spec/framework_rs/http/api-error.md`.
+- The well-known codes are in `spec/framework_rs/http/api-error.md`.

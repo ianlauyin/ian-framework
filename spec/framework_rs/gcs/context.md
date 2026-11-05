@@ -127,9 +127,9 @@ The client gives the exception code from the GCS response status:
 
 ## HTTP error
 
-`ApiError` implements `From<Exception>`, as in `spec/framework_rs/http/api-error.md`. A handler that returns `Result<T, ApiError>` can use `?` on an `Exception` from this client.
+`Exception` implements `IntoResponse`, as in `spec/framework_rs/http/api-error.md`. A handler that returns `Result<T, Exception>` can use `?` on an `Exception` from this client.
 
-- No `GCS_*` code is a well-known code. Thus the status is 500 and the message is `internal error`, as in `spec/framework_rs/http/api-error.md`.
+- No `GCS_*` code is a well-known code. Thus the status is 500 and the message is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
 - The GCS response status does not change the HTTP status.
 - The message does not contain the internal message or the trace.
 

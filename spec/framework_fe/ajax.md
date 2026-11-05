@@ -16,19 +16,18 @@ This feature is not product business logic.
 | Item | Kind | Meaning |
 | --- | --- | --- |
 | `ajax(url, method, request?, pathParams?)` | function | Sends one request and returns the parsed JSON body. |
-| `AjaxError` | class | The error for a response status that is not 2xx. |
-| `ErrorBody` | type | The error body: `{ message: string, code?: string }`. |
+| `ApiError` | class | The error for a response status that is not 2xx. |
+| `ErrorBody` | type | The error body: `{ message: string }`. |
 | `setUnauthorizedHandler(handler?)` | function | Sets the handler for a 401 response. A call with no handler removes the handler. |
 
 `method` is one of `GET`, `DELETE`, `POST` and `PUT`.
 
-`AjaxError` has these fields:
+`ApiError` has these fields:
 
 | Field | Type | Value |
 | --- | --- | --- |
 | `code` | `number` | The HTTP status. |
-| `message` | `string` | `message` from the error body. If the body has no message, the value is `Unknown error`. |
-| `errorCode` | `string \| undefined` | `code` from the error body when it is a string. Otherwise `undefined`. |
+| `message` | `string` | `message` from the error body when it is a string. Otherwise `Unknown error`. |
 
 ## Behaviour
 
@@ -53,11 +52,11 @@ Each request uses `credentials: "same-origin"`.
 ### Response
 
 - When the status is 401, the client calls the unauthorized handler. Then the client throws.
-- When the status is not 2xx, the client throws `AjaxError`.
-- When the status is not 2xx and the body is empty or not valid JSON, the error body is `null`. Then the message is `Unknown error`.
+- When the status is not 2xx, the client throws `ApiError`.
+- When the status is not 2xx and the body is empty, not valid JSON, or has no string `message`, the message is `Unknown error`.
 - When the status is 2xx and the body is empty, the result is `null`.
 - When the status is 2xx and the body is not empty, the client parses the body as JSON.
-- When the status is 2xx and the body is not valid JSON, the client throws `AjaxError` with the HTTP status as `code` and the message `Unknown error`.
+- When the status is 2xx and the body is not valid JSON, the client throws `ApiError`. `code` is the HTTP status. The message is `Unknown error`.
 
 ## Out of scope
 
@@ -65,4 +64,3 @@ This feature does not include these items:
 
 - The text for the user for each error message.
 - A retry or a timeout.
-- A rule for the values of `errorCode`. The client gives the string as it is. The Rust `ApiError` is in `spec/framework_rs/http/api-error.md`.

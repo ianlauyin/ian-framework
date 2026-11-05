@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { type AjaxError, ajax, setUnauthorizedHandler } from "../src/ajax";
+import { type ApiError, ajax, setUnauthorizedHandler } from "../src/ajax";
 
 describe("ajax", () => {
   afterEach(() => {
@@ -111,7 +111,7 @@ describe("ajax", () => {
     },
   );
 
-  it("throws AjaxError when the response is not ok", async () => {
+  it("throws ApiError when the response is not ok", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -127,10 +127,10 @@ describe("ajax", () => {
       name: "Error",
       message: "Item not found",
       code: 404,
-    } satisfies Partial<AjaxError>);
+    } satisfies Partial<ApiError>);
   });
 
-  it("notifies the unauthorized handler and throws AjaxError for 401 responses", async () => {
+  it("notifies the unauthorized handler and throws ApiError for 401 responses", async () => {
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
     vi.stubGlobal(
@@ -145,11 +145,11 @@ describe("ajax", () => {
     await expect(ajax("/item", "GET")).rejects.toMatchObject({
       message: "Unknown error",
       code: 401,
-    } satisfies Partial<AjaxError>);
+    } satisfies Partial<ApiError>);
     expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 
-  it("throws AjaxError with Unknown error when the error body is not JSON", async () => {
+  it("throws ApiError with Unknown error when the error body is not JSON", async () => {
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
     const fetchMock = vi.fn();
@@ -164,7 +164,7 @@ describe("ajax", () => {
       name: "Error",
       message: "Unknown error",
       code: 502,
-    } satisfies Partial<AjaxError>);
+    } satisfies Partial<ApiError>);
 
     fetchMock.mockResolvedValueOnce({
       ok: false,
@@ -174,7 +174,7 @@ describe("ajax", () => {
     await expect(ajax("/item", "GET")).rejects.toMatchObject({
       message: "Unknown error",
       code: 401,
-    } satisfies Partial<AjaxError>);
+    } satisfies Partial<ApiError>);
     expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 
@@ -194,7 +194,24 @@ describe("ajax", () => {
     ).rejects.toMatchObject({
       message: "Invalid username or password",
       code: 403,
-    } satisfies Partial<AjaxError>);
+    } satisfies Partial<ApiError>);
+  });
+
+  it("uses Unknown error when the body has no string message", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (const body of [{}, { message: 7 }]) {
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify(body),
+      });
+      await expect(ajax("/item", "GET")).rejects.toMatchObject({
+        message: "Unknown error",
+        code: 400,
+      } satisfies Partial<ApiError>);
+    }
   });
 
   it("returns null for 204 responses with an empty body", async () => {
@@ -212,39 +229,7 @@ describe("ajax", () => {
     ).resolves.toBeNull();
   });
 
-  it("keeps the code string of the error body", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 429,
-        text: async () => JSON.stringify({ code: "rate_limited", message: "too many requests" }),
-      }),
-    );
-
-    await expect(ajax("/item", "GET")).rejects.toMatchObject({
-      message: "too many requests",
-      code: 429,
-      errorCode: "rate_limited",
-    } satisfies Partial<AjaxError>);
-  });
-
-  it("has no error code string when the error body has none", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        text: async () => JSON.stringify({ message: "bad", code: 7 }),
-      }),
-    );
-
-    await expect(ajax("/item", "GET")).rejects.toMatchObject({
-      errorCode: undefined,
-    } satisfies Partial<AjaxError>);
-  });
-
-  it("throws AjaxError when a 2xx body is not JSON", async () => {
+  it("throws ApiError when a 2xx body is not JSON", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -257,7 +242,7 @@ describe("ajax", () => {
     await expect(ajax("/item", "GET")).rejects.toMatchObject({
       message: "Unknown error",
       code: 200,
-    } satisfies Partial<AjaxError>);
+    } satisfies Partial<ApiError>);
   });
 
   it("refuses a path param that is a dot segment", async () => {

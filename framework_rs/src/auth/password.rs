@@ -3,9 +3,9 @@ use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::Argon2;
 
 use crate::exception;
-use crate::exception::error_code;
 use crate::exception::Exception;
 use crate::exception::Severity;
+use crate::http::error_code;
 
 pub(crate) const MAX_PASSWORD_BYTES: usize = 256;
 
