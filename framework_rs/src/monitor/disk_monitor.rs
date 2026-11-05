@@ -16,6 +16,13 @@ pub struct DiskMonitor {
 impl DiskMonitor {
     pub fn new(threshold_percent: f64, interval: Duration) -> Option<Self> {
         if !(threshold_percent > 0.0 && threshold_percent <= 100.0) || interval.is_zero() {
+            Logger::warn_with(
+                "DISK/invalidConfig",
+                BTreeMap::new(),
+                format!(
+                    "invalid disk monitor config: threshold_percent={threshold_percent} must be in (0, 100] and interval={interval:?} must not be zero"
+                ),
+            );
             return None;
         }
         Some(Self {
