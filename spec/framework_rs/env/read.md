@@ -8,11 +8,8 @@ The parts that apply to all of this feature are in `spec/framework_rs/env/contex
 
 | Item | Kind |
 | --- | --- |
-| `missing` | Function |
-| `invalid` | Function |
 | `required` | Async function |
 | `optional` | Async function |
-| `u64_or` | Function |
 
 ## Errors
 
@@ -22,18 +19,11 @@ The error of this feature is `ian_framework::exception::Exception`. Its definiti
 | --- | --- | --- |
 | `ENV_MISSING` | The variable is absent or blank. | `{name} is required` |
 | `ENV_NOT_UNICODE` | The value of the variable is not valid unicode. | `{name} is not valid unicode` |
-| `ENV_INVALID` | The value of the variable is not valid for the read. | `{name} is not valid` |
 | `ENV_SECRET` | The Secret Manager read for the variable fails. | `{name} cannot be read from Secret Manager` |
 
 Only the `gcp` feature gives `ENV_SECRET`. Its source is the Secret Manager exception, so the trace shows the cause.
 
-| Function | Signature | Effect |
-| --- | --- | --- |
-| `missing` | `fn missing(name: &str) -> Exception` | Makes the exception with the code `ENV_MISSING`. |
-| `invalid` | `fn invalid(name: &str) -> Exception` | Makes the exception with the code `ENV_INVALID`. |
-
-- A project uses `missing` when it reads a value with `std::env::var` and the value is not set.
-- A project uses `invalid` when its own check of a value fails.
+- Each read function makes its exceptions in its own body. The module has no public function that makes an exception.
 - The exception holds the name of the variable. It does not hold the value. Thus the `Display` output and the `Debug` output do not show the value. The value can be a secret.
 
 ## required and optional
@@ -76,14 +66,3 @@ Without the `gcp` feature, the lookup does only step 4.
 - The read removes the whitespace at the start and at the end of the value.
 - An absent variable, an empty value or a value with only whitespace gives `None`.
 - When the value is not valid unicode, the read gives the code `ENV_NOT_UNICODE`.
-
-## u64_or
-
-`pub fn u64_or(name: &str, default: u64) -> Result<u64, Exception>` reads one optional `u64` variable.
-
-- `u64_or` is not async. It reads only the environment variable. It does not read Secret Manager.
-
-- When the variable is absent, `u64_or` gives `default`.
-- `u64_or` parses the value with `str::parse::<u64>`. It does not remove whitespace.
-- When the parse fails, `u64_or` gives the code `ENV_INVALID`. Thus an empty value, a value with whitespace, a negative value and a value larger than `u64::MAX` give `ENV_INVALID`.
-- When the value is not valid unicode, `u64_or` gives the code `ENV_NOT_UNICODE`.
