@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 
-use crate::auth::session_config::*;
+use crate::auth::session::config::*;
 
 fn config_with(change: impl FnOnce(&mut SessionConfig)) -> SessionConfig {
     let mut config = SessionConfig::default();
@@ -47,9 +47,12 @@ fn cookie_carries_max_age_and_expires() {
         .unwrap()
         .with_timezone(&Utc);
     assert_eq!(
-        config.cookie("abc", now),
+        config.cookie("abc", 3600, now),
         "sid=abc; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600; Expires=Sat, 24 Oct 2026 11:00:00 GMT"
     );
+    assert!(config
+        .cookie("abc", u64::MAX, now)
+        .contains(&format!("; Max-Age={MAX_AGE_LIMIT_SECS}; ")));
 }
 
 #[test]

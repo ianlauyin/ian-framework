@@ -32,13 +32,12 @@ impl SessionConfig {
         Err(exception!(code = "AUTH_CONFIG", problem))
     }
 
-    pub(crate) fn cookie(&self, token: &str, now: DateTime<Utc>) -> String {
-        let ttl = self.ttl_secs;
-        let expires =
-            now + chrono::Duration::seconds(i64::try_from(ttl).unwrap_or(i64::MAX / 1000));
+    pub(crate) fn cookie(&self, token: &str, max_age_secs: u64, now: DateTime<Utc>) -> String {
+        let max_age = max_age_secs.min(MAX_AGE_LIMIT_SECS);
+        let expires = now + chrono::Duration::seconds(max_age as i64);
         let stamp = expires.format("%a, %d %b %Y %H:%M:%S GMT");
         format!(
-            "{}={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={ttl}; Expires={stamp}",
+            "{}={token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age={max_age}; Expires={stamp}",
             self.cookie_name
         )
     }

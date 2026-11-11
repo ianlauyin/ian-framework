@@ -9,3 +9,10 @@ pub fn hkt_now() -> DateTime<FixedOffset> {
         None => now.fixed_offset(),
     }
 }
+
+pub fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or_default()
+}

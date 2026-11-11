@@ -1,6 +1,5 @@
 mod password;
-mod session_config;
-mod session_store;
+mod session;
 
 use crate::auth::*;
 

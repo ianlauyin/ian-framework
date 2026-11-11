@@ -2,7 +2,7 @@ use axum::extract::Request;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 
-use crate::auth::SessionStore;
+use crate::auth::{Session, SessionStore};
 
 use crate::http::middleware::slide_session::*;
 use crate::test::auth::store_or_skip;
@@ -52,13 +52,37 @@ async fn a_live_session_gets_its_cookie_again() {
     let Some(store) = store_or_skip().await else {
         return;
     };
-    let token = store.create("7").await.unwrap();
+    let session = store.create("7").await.unwrap();
     let app = router(store.clone(), StatusCode::OK, false);
     let response = app
-        .oneshot(request(Some(&format!("sid={token}"))))
+        .oneshot(request(Some(&format!("sid={}", session.token))))
         .await
         .unwrap();
-    assert_eq!(set_cookies(&response), vec![store.cookie(&token)]);
+    assert_eq!(set_cookies(&response), vec![store.cookie(&session)]);
+}
+
+#[tokio::test]
+async fn the_handler_gets_the_loaded_session() {
+    let Some(store) = store_or_skip().await else {
+        return;
+    };
+    let session = store.create("7").await.unwrap();
+    let app = Router::new()
+        .route("/", get(|session: Session| async move { session.subject }))
+        .layer(from_fn_with_state(store.clone(), slide_session));
+    let response = app
+        .clone()
+        .oneshot(request(Some(&format!("sid={}", session.token))))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), 64)
+        .await
+        .unwrap();
+    assert_eq!(&body[..], b"7");
+
+    let response = app.oneshot(request(None)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -76,8 +100,8 @@ async fn no_cookie_is_sent_without_a_token_or_after_a_401() {
     let Some(store) = store_or_skip().await else {
         return;
     };
-    let token = store.create("7").await.unwrap();
-    let cookie = format!("sid={token}");
+    let session = store.create("7").await.unwrap();
+    let cookie = format!("sid={}", session.token);
     let app = router(store.clone(), StatusCode::OK, false);
     let response = app.oneshot(request(None)).await.unwrap();
     assert!(set_cookies(&response).is_empty());
@@ -91,10 +115,10 @@ async fn a_cookie_set_by_the_handler_is_kept_alone() {
     let Some(store) = store_or_skip().await else {
         return;
     };
-    let token = store.create("7").await.unwrap();
+    let session = store.create("7").await.unwrap();
     let app = router(store, StatusCode::OK, true);
     let response = app
-        .oneshot(request(Some(&format!("sid={token}"))))
+        .oneshot(request(Some(&format!("sid={}", session.token))))
         .await
         .unwrap();
     assert_eq!(set_cookies(&response), vec!["sid=other".to_string()]);
