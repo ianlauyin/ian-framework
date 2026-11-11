@@ -3,6 +3,8 @@ mod session;
 
 use crate::auth::*;
 
+pub(crate) const LIMIT: usize = 5;
+
 pub(crate) async fn store_or_skip() -> Option<SessionStore> {
     let url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
     let mut bytes = [0u8; 8];
@@ -11,7 +13,7 @@ pub(crate) async fn store_or_skip() -> Option<SessionStore> {
         prefix: format!("ian-framework-test:{}:", hex::encode(bytes)),
         cookie_name: "sid".to_string(),
         ttl_secs: 60,
-        max_age_secs: 120,
+        max_sessions_per_subject: LIMIT,
     };
     match SessionStore::connect(&url, config).await {
         Ok(store) => Some(store),

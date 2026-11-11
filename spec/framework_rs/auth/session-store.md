@@ -7,7 +7,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/auth/conte
 A session joins one random token to one subject.
 
 - A session ends when it is idle for `ttl_secs`.
-- A session also ends `max_age_secs` after `create`, even when it is in use.
+- A session has no absolute end. A session that is in use continues until `remove`, `remove_subject` or the limit of `max_sessions_per_subject` ends it.
 - The subject is one string.
 - The project owns the subject.
 - The framework does not read the user table.
@@ -21,7 +21,7 @@ A session joins one random token to one subject.
 | `prefix` | `session:` | The start of each Redis key. |
 | `cookie_name` | `session` | The name of the session cookie. |
 | `ttl_secs` | 604800 | The idle session life in seconds. |
-| `max_age_secs` | 2592000 | The longest session life in seconds, from `create`. |
+| `max_sessions_per_subject` | 100 | The most live sessions of one subject. A subject that logs in again and again does not make the Redis set grow without a bound. |
 
 ### Connect
 
@@ -32,9 +32,8 @@ A session joins one random token to one subject.
 - The URL is not a Redis URL.
 - Redis does not reply `PONG`.
 - `ttl_secs` is zero.
-- `max_age_secs` is zero.
-- `max_age_secs` is more than 400 days (34560000 seconds). Browsers limit a cookie lifetime to 400 days.
-- `ttl_secs` is more than `max_age_secs`.
+- `ttl_secs` is more than 400 days (34560000 seconds). Browsers limit a cookie lifetime to 400 days.
+- `max_sessions_per_subject` is zero.
 - `cookie_name` is not an RFC 6265 cookie name. A cookie name has one or more visible ASCII characters. It has no separator character `()<>@,;:\"/[]?={}`.
 
 The connection manager stops early when Redis is down. It uses these settings:
@@ -55,13 +54,14 @@ The connection manager stops early when Redis is down. It uses these settings:
 - The Redis key of a session is `{prefix}{hash}`.
 - `hash` is the SHA-256 of the token, in lowercase hex.
 - Redis does not hold the token. Thus a copy of Redis does not give tokens that work.
-- The value is `{deadline}:{subject}`.
-- `deadline` is the creation time plus `max_age_secs`, in Unix seconds. The time comes from the clock of the process.
+- The value is the subject.
 - The key expires after `ttl_secs`.
 - Each subject has one Redis set with the key `{prefix}subject:{hash}`. `hash` is the SHA-256 of the subject, in lowercase hex.
 - The set holds the Redis keys of the sessions of that subject.
-- Each command that writes two or more keys runs as one Lua script. Thus no other command comes between its steps, and it uses one round trip.
-- The scripts write keys that are not in the script `KEYS`. Thus the store does not support Redis Cluster.
+- The set has no expiry. A live session can continue for any time, so a set expiry could hide a live session from `remove_subject`.
+- The store does not use Lua scripts.
+- A transaction writes keys in different hash slots. Thus the store does not support Redis Cluster.
+- `load` uses `GETEX`. Thus the store needs Redis 6.2 or later.
 
 ### Session
 
@@ -71,9 +71,7 @@ The connection manager stops early when Redis is down. It uses these settings:
 | --- | --- | --- |
 | `token` | `pub` | The session token. |
 | `subject` | `pub` | The subject of the session. |
-| `expires_in_secs` | crate only | The seconds to the end of the session at the time of the call. |
 
-- A project cannot make a `Session`. Only `create`, `load` and `slide_session` make one.
 - The `Debug` output of `Session` does not show the token.
 - `Session` is an Axum extractor. Its use is in `spec/framework_rs/auth/sliding-session.md`.
 
@@ -81,8 +79,8 @@ The connection manager stops early when Redis is down. It uses these settings:
 
 | Method | Result |
 | --- | --- |
-| `create(subject)` | Makes a new token, stores the session, and returns the `Session`. `expires_in_secs` is `ttl_secs`. |
-| `load(token)` | Returns the `Session` and slides its expiry. Returns no session when the session is missing, expired, or past its deadline. |
+| `create(subject)` | Makes a new token, stores the session, and returns the `Session`. |
+| `load(token)` | Returns the `Session` and slides its expiry. Returns no session when the session is missing or expired. |
 | `remove(token)` | Removes one session. |
 | `remove_subject(subject)` | Removes each session of that subject. |
 | `remove_subject_except(subject, keep_token)` | Removes each session of that subject, but not the session of `keep_token`. |
@@ -92,28 +90,26 @@ A token is 32 random bytes from the OS random source, in lowercase hex. A token 
 
 `create` uses these rules:
 
-- It stores the session, adds its key to the set, and sets the expiry of the set to `max_age_secs`, in one script.
-- The set holds at most 100 sessions. When the new session makes the set larger, the same script first removes the keys of expired sessions from the set.
-- If the set still has more than 100 keys, the script ends the live sessions with the earliest deadline until 100 remain. It never ends the new session.
+- It stores the session, adds its key to the set, and reads the size of the set, in one transaction.
+- The set holds at most `max_sessions_per_subject` sessions. When the new session makes the set larger, `create` reads the set and the `TTL` of each key in one pipeline. Then it removes the keys of expired sessions from the set.
+- If the set still has more than `max_sessions_per_subject` keys, `create` ends the live sessions with the smallest `TTL` until `max_sessions_per_subject` remain. These are the sessions that were used least recently. It never ends the new session. It does these removals in one transaction.
+- Two `create` calls for one subject at the same time can both trim the set. Thus the set can have fewer than `max_sessions_per_subject` sessions after them.
 
 `load` uses these rules:
 
-- It reads the session and sets the new expiry in one script.
-- The new expiry is the smaller of `ttl_secs` and the time to the deadline.
-- `expires_in_secs` of the result is the new expiry.
-- A value that is not `{deadline}:{subject}` gives no session.
-- The subject can contain `:`. The deadline ends at the first `:`.
+- It reads the session and sets the expiry to `ttl_secs` with one `GETEX`. This is one round trip.
 
 `remove` uses these rules:
 
 - It deletes the session key with one `DEL`.
 - It does not take the key out of the set. The next `create` over the limit or the next `remove_subject` takes it out.
-- A session that expires on its own also stays in the set until then, or until the set expires.
+- A session that expires on its own also stays in the set until then.
 
 `remove_subject` uses these rules:
 
 - It reads the set of the subject.
-- It deletes each session key in the set and takes the keys out of the set in one script.
+- It deletes each session key in the set and takes the keys out of the set in one transaction.
+- A session that is created between the read and the transaction stays.
 - It does not scan the keys of Redis. Its cost depends on the sessions of the subject only.
 - A project does not need a prefix that only the session store uses.
 - A session that was created before the set existed is not in a set. `remove_subject` does not end it. It ends when it expires.
@@ -132,18 +128,18 @@ A token is 32 random bytes from the OS random source, in lowercase hex. A token 
 - It returns no token when no cookie has the name.
 - It returns no token when the value is not 64 lowercase hex characters. Thus a bad value does not go to Redis.
 
-`SessionStore::cookie` takes one `Session`. It returns one `Set-Cookie` value for the token of the session. The value has these attributes:
+`SessionStore::cookie` takes one token. It returns one `Set-Cookie` value for the token. The value has these attributes:
 
 - `HttpOnly`
 - `Secure`
 - `SameSite=Lax`
 - `Path=/`
-- `Max-Age={expires_in_secs}` of the session. Thus the cookie does not stay after the deadline of the session. The value is at most 400 days.
-- `Expires` at the current UTC time plus the same seconds, in the HTTP date format
+- `Max-Age={ttl_secs}`
+
+The cookie has no `Expires` attribute. All current browsers use `Max-Age`. A browser that reads only `Expires` keeps the cookie until the browser closes.
 
 `SessionStore::clear_cookie` returns one `Set-Cookie` value that removes the cookie.
 
 - It has an empty value.
 - It has `Max-Age=0`.
-- It has `Expires=Thu, 01 Jan 1970 00:00:00 GMT`.
 - Its other attributes are the same as the attributes of `SessionStore::cookie`.

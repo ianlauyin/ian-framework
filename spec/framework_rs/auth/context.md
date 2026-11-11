@@ -72,4 +72,4 @@ This feature does not include these items:
 - A user table or a user lookup.
 - Login routes, logout routes, or sign-up routes.
 - Username rules, display name rules, or password length rules.
-- One session for each user. To get this, a project removes the old sessions with `remove_subject` before `create`.
+- A rule for one session for each user. To get this, a project sets `max_sessions_per_subject` to 1. Then `create` ends the old session of the subject.

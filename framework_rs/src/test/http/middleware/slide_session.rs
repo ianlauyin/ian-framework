@@ -58,7 +58,7 @@ async fn a_live_session_gets_its_cookie_again() {
         .oneshot(request(Some(&format!("sid={}", session.token))))
         .await
         .unwrap();
-    assert_eq!(set_cookies(&response), vec![store.cookie(&session)]);
+    assert_eq!(set_cookies(&response), vec![store.cookie(&session.token)]);
 }
 
 #[tokio::test]

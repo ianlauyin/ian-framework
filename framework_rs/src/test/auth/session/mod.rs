@@ -18,7 +18,6 @@ fn session() -> Session {
     Session {
         token: "a".repeat(64),
         subject: "7".to_string(),
-        expires_in_secs: 60,
     }
 }
 
@@ -48,13 +47,4 @@ async fn no_session_is_unauthorized_only_when_required() {
     let mut empty = parts(|_| {});
     assert_eq!(required(&mut empty).await, Err("UNAUTHORIZED"));
     assert_eq!(optional(&mut empty).await, Ok(None));
-}
-
-#[tokio::test]
-async fn a_failed_load_is_a_store_error() {
-    let mut failed = parts(|parts| {
-        parts.extensions.insert(LoadFailed);
-    });
-    assert_eq!(required(&mut failed).await, Err("AUTH_STORE"));
-    assert_eq!(optional(&mut failed).await, Err("AUTH_STORE"));
 }
