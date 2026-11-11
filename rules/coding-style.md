@@ -27,6 +27,11 @@ The Rust library is the crate `ian_framework` in `framework_rs/`.
 - In a file two or more levels deep, use `crate::` paths. Do not use `super::super::`.
 - Do not use `self` in an import, neither in an import list nor at the start of an import path. To use a module and an item of that module, import only the module. Then use the module name to refer to the item.
 - Keep a helper, a constant or a type in the file that uses it. When a different file also uses it, put it in the public module of its domain. Put a time or time zone helper in the `time` module.
+- Split a module folder by responsibility. Do not split it by file size. Each file does one job.
+- Keep a type, its inherent `impl` block and its trait impls in one file. Do not write an `impl` block for a type in a different file.
+- When the sibling files of a module folder use the main type of that folder, put the type in the `mod.rs` of the folder. The sibling files import it from the parent module.
+- Do not change a private item to `pub(crate)` only to let a sibling file use the internals of a type. When a sibling file needs the internals, change the file split.
+- To stop code outside the crate from making a type, give the type one `pub(crate)` field. The other fields can be `pub` for read access.
 
 ### Tests
 
