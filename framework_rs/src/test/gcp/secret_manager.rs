@@ -244,7 +244,9 @@ fn temp_adc(name: &str, json: &str) -> std::path::PathBuf {
     path
 }
 
-fn init_from_env(path: &std::path::Path) -> Result<Option<SecretManager>, InitError> {
+fn init_from_env(
+    path: &std::path::Path,
+) -> Result<Option<SecretManager>, crate::exception::Exception> {
     crate::test::env::with_vars(
         &[
             ("GOOGLE_APPLICATION_CREDENTIALS", Some(path.as_os_str())),
@@ -264,10 +266,10 @@ fn from_adc_without_a_project_is_no_credentials() {
 #[test]
 fn from_adc_rejects_a_bad_file_and_incomplete_credentials() {
     let missing = std::env::temp_dir().join("ian-framework-test-secret-missing.json");
-    assert!(matches!(init_from_env(&missing), Err(InitError::Gcp(_))));
+    assert!(matches!(init_from_env(&missing), Err(_)));
     let json = r#"{"type":"authorized_user","client_id":"","client_secret":"secret","refresh_token":"refresh"}"#;
     let path = temp_adc("incomplete", json);
-    assert!(matches!(init_from_env(&path), Err(InitError::Gcp(_))));
+    assert!(matches!(init_from_env(&path), Err(_)));
 }
 
 #[tokio::test]
@@ -280,7 +282,7 @@ async fn resolve_project_reads_the_metadata_server_or_the_user() {
 
     let url = format!("http://{}/project", closed_addr());
     let project = resolve_project(&Credentials::Metadata, &http, &url).await;
-    assert!(matches!(project, Err(InitError::MetadataUnreachable)));
+    assert_eq!(project.unwrap_err().code(), METADATA_UNREACHABLE);
 }
 
 #[test]
@@ -302,10 +304,10 @@ fn initialized_maps_each_init_result() {
     assert!(matches!(initialized(Ok(manager)), Ok(Some(_))));
 
     let err = exception!(code = "GCP_CONFIG", "bad");
-    assert!(initialized(Err(InitError::Gcp(err))).is_err());
+    assert!(initialized(Err(err)).is_err());
 
     assert!(matches!(
-        initialized(Err(InitError::MetadataUnreachable)),
+        initialized(Err(exception!(code = METADATA_UNREACHABLE, "down"))),
         Ok(None)
     ));
     assert!(unreachable_recently());

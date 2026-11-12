@@ -14,6 +14,8 @@ use crate::gcp::{
 
 const API_ROOT: &str = "https://secretmanager.googleapis.com/v1";
 const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
+// Not an error for the caller. `initialized` maps it to no credentials and does not cache it.
+pub(crate) const METADATA_UNREACHABLE: &str = "GCP_METADATA_UNREACHABLE";
 pub(crate) const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const ACCESS_ATTEMPTS: u32 = 3;
@@ -82,7 +84,7 @@ impl SecretManager {
         }
     }
 
-    pub(crate) async fn from_adc() -> Result<Option<Self>, InitError> {
+    pub(crate) async fn from_adc() -> Result<Option<Self>, Exception> {
         let credentials = Credentials::from_adc().await?;
         credentials.validate()?;
         let http = secret_manager_http_client()?;
@@ -103,27 +105,16 @@ impl SecretManager {
     }
 }
 
-pub(crate) enum InitError {
-    Gcp(Exception),
-    MetadataUnreachable,
-}
-
-impl From<Exception> for InitError {
-    fn from(err: Exception) -> Self {
-        InitError::Gcp(err)
-    }
-}
-
 pub(crate) fn initialized(
-    result: Result<&'static Option<SecretManager>, InitError>,
+    result: Result<&'static Option<SecretManager>, Exception>,
 ) -> Result<Option<&'static SecretManager>, Exception> {
     match result {
         Ok(state) => Ok(state.as_ref()),
-        Err(InitError::Gcp(err)) => Err(err),
-        Err(InitError::MetadataUnreachable) => {
+        Err(err) if err.code() == METADATA_UNREACHABLE => {
             *lock_unreachable() = Some(Instant::now());
             Ok(None)
         }
+        Err(err) => Err(err),
     }
 }
 
@@ -131,11 +122,16 @@ pub(crate) async fn resolve_project(
     credentials: &Credentials,
     http: &reqwest::Client,
     metadata_project_url: &str,
-) -> Result<Option<String>, InitError> {
+) -> Result<Option<String>, Exception> {
     match credentials {
         Credentials::Metadata => metadata_project(http, metadata_project_url)
             .await?
-            .ok_or(InitError::MetadataUnreachable)
+            .ok_or_else(|| {
+                exception!(
+                    code = METADATA_UNREACHABLE,
+                    "metadata server is unreachable"
+                )
+            })
             .map(Some),
         Credentials::User(_) => Ok(user_project(credentials)?),
     }
