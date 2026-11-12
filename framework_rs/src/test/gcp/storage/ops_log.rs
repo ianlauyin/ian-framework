@@ -1,22 +1,21 @@
 use crate::gcp::storage::ops_log::*;
+use crate::logging::{LogLevel, LogValue};
 
 #[test]
-fn logged_error_omits_the_query() {
-    let text = logged_error(
-        &"error sending request for url (https://storage.googleapis.com/o?upload_id=secret): connection reset",
-    );
-    assert!(!text.contains("secret"));
-    assert!(!text.contains("upload_id"));
-    assert!(text.contains("connection reset"));
-}
-
-#[test]
-fn path_only_omits_the_query() {
+fn a_record_names_the_operation_and_the_bucket() {
+    let event = OpsRecord {
+        operation: "stat",
+        object: "a/b.txt",
+        latency_ms: 5,
+        error: "boom",
+    }
+    .into_event("my-bucket");
+    assert_eq!(event.action, "GCS/stat:/a/b.txt");
+    assert_eq!(event.level, LogLevel::Warn);
+    assert_eq!(event.latency_ms, 5);
     assert_eq!(
-        path_only(
-            "https://storage.googleapis.com/upload/storage/v1/b/bucket/o?uploadType=resumable&upload_id=secret"
-        ),
-        "/upload/storage/v1/b/bucket/o"
+        event.extra.get("bucket"),
+        Some(&LogValue::from("my-bucket"))
     );
-    assert_eq!(path_only("/obj?upload_id=secret"), "/obj");
+    assert_eq!(event.extra.get("error"), Some(&LogValue::from("boom")));
 }

@@ -13,17 +13,17 @@ redis = [
   "redis/tokio-rustls-comp",
 ]
 gcp = [
-  "dep:base64",
-  "reqwest/form",
-  "tokio/fs",
+  "dep:google-cloud-gax",
+  "dep:google-cloud-secretmanager-v1",
 ]
 gcs = [
   "dep:bytes",
   "dep:futures-util",
+  "dep:google-cloud-auth",
+  "dep:google-cloud-storage",
+  "dep:google-cloud-wkt",
   "gcp",
-  "reqwest/json",
-  "reqwest/stream",
-  "tokio/io-util",
+  "tokio/fs",
 ]
 monitor = ["dep:rustix"]
 
@@ -44,11 +44,15 @@ tracing = { version = "*", default-features = false, features = ["std"] }
 uuid = { version = "*", features = ["v7"] }
 
 argon2 = { version = "*", optional = true }
-base64 = { version = "*", optional = true }
 bytes = { version = "*", optional = true }
 futures-util = { version = "*", default-features = false, features = ["async-await", "std"], optional = true }
 redis = { version = "*", features = ["connection-manager", "tokio-comp"], optional = true }
 rustix = { version = "*", features = ["fs"], optional = true }
+google-cloud-auth = { version = "*", optional = true }
+google-cloud-gax = { version = "*", optional = true }
+google-cloud-secretmanager-v1 = { version = "*", optional = true }
+google-cloud-storage = { version = "*", optional = true }
+google-cloud-wkt = { version = "*", optional = true }
 
 [dev-dependencies]
 tokio = { version = "*", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }

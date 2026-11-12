@@ -26,7 +26,7 @@ pub struct PutOptions {
 }
 
 impl PutOptions {
-    pub(crate) fn content_type(&self) -> Result<&str, Exception> {
+    pub(crate) fn content_type_or_default(&self) -> Result<&str, Exception> {
         match &self.content_type {
             Some(value) => {
                 if value.is_empty() || !value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {

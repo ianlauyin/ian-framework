@@ -37,15 +37,6 @@ pub(crate) fn with_vars<T>(vars: &[(&str, Option<&OsStr>)], read: impl FnOnce() 
     result
 }
 
-#[cfg(feature = "gcp")]
-pub(crate) fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(future)
-}
-
 fn set_or_remove(name: &str, value: Option<&OsStr>) {
     match value {
         Some(value) => std::env::set_var(name, value),

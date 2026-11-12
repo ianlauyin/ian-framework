@@ -3,11 +3,14 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use futures_util::{Stream, StreamExt};
-use serde::Deserialize;
+use futures_util::stream;
+use futures_util::Stream;
+use google_cloud_storage::model::Object;
+use google_cloud_storage::read_object::ReadObjectResponse;
 
 use crate::exception;
 use crate::exception::Exception;
+use crate::gcp::error::to_exception;
 
 const READ_TO_VEC_LIMIT: u64 = 256 * 1024 * 1024;
 
@@ -20,62 +23,44 @@ pub struct ObjectMeta {
     pub metadata: BTreeMap<String, String>,
 }
 
-impl ObjectMeta {
-    pub(crate) async fn from_response(response: reqwest::Response) -> Result<Self, Exception> {
-        let bytes = response.bytes().await.map_err(|err| {
-            exception!(
-                code = "GCP_TRANSPORT",
-                "object response is not bytes",
-                source = err.without_url(),
-            )
-        })?;
-        Self::from_slice(&bytes)
-    }
-
-    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
-        let raw: RawObject = serde_json::from_slice(bytes)
-            .map_err(|err| exception!(code = "GCP_API", "object JSON is invalid", source = err))?;
-        raw.into_meta()
+impl From<Object> for ObjectMeta {
+    fn from(object: Object) -> Self {
+        Self {
+            name: object.name,
+            size: u64::try_from(object.size).unwrap_or_default(),
+            content_type: Some(object.content_type).filter(|value| !value.is_empty()),
+            updated: object.update_time.and_then(|time| {
+                DateTime::from_timestamp(
+                    time.seconds(),
+                    u32::try_from(time.nanos()).unwrap_or_default(),
+                )
+            }),
+            metadata: object.metadata.into_iter().collect(),
+        }
     }
 }
 
 pub struct ObjectReader {
-    pub(crate) response: reqwest::Response,
+    pub(crate) response: ReadObjectResponse,
 }
 
 impl ObjectReader {
     pub fn byte_stream(self) -> Pin<Box<dyn Stream<Item = Result<Bytes, Exception>> + Send>> {
-        Box::pin(self.response.bytes_stream().map(|item| {
-            item.map_err(|err| {
-                exception!(
-                    code = "GCP_TRANSPORT",
-                    "read object body failed",
-                    source = err.without_url(),
-                )
-            })
+        Box::pin(stream::unfold(self.response, |mut response| async move {
+            let item = response.next().await?;
+            Some((item.map_err(body_read_exception), response))
         }))
     }
 
-    pub(crate) async fn read_to_vec(self) -> Result<Vec<u8>, Exception> {
-        if self
-            .response
-            .content_length()
-            .is_some_and(|length| length > READ_TO_VEC_LIMIT)
-        {
-            return Err(too_large());
+    pub(crate) async fn read_to_vec(mut self) -> Result<Vec<u8>, Exception> {
+        if u64::try_from(self.response.object().size).is_ok_and(|size| size > READ_TO_VEC_LIMIT) {
+            return Err(too_large_exception());
         }
-        let mut stream = self.response.bytes_stream();
         let mut body = Vec::new();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|err| {
-                exception!(
-                    code = "GCP_TRANSPORT",
-                    "read object body failed",
-                    source = err.without_url(),
-                )
-            })?;
+        while let Some(chunk) = self.response.next().await {
+            let chunk = chunk.map_err(body_read_exception)?;
             if (body.len() + chunk.len()) as u64 > READ_TO_VEC_LIMIT {
-                return Err(too_large());
+                return Err(too_large_exception());
             }
             body.extend_from_slice(&chunk);
         }
@@ -86,44 +71,16 @@ impl ObjectReader {
 impl std::fmt::Debug for ObjectReader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ObjectReader")
-            .field("status", &self.response.status().as_u16())
-            .field("content_length", &self.response.content_length())
+            .field("size", &self.response.object().size)
             .finish_non_exhaustive()
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct RawObject {
-    name: String,
-    #[serde(default)]
-    size: Option<String>,
-    #[serde(rename = "contentType", default)]
-    content_type: Option<String>,
-    #[serde(default)]
-    updated: Option<DateTime<Utc>>,
-    #[serde(default)]
-    metadata: Option<BTreeMap<String, String>>,
+fn body_read_exception(err: google_cloud_storage::Error) -> Exception {
+    to_exception("read object body failed", err)
 }
 
-impl RawObject {
-    pub(crate) fn into_meta(self) -> Result<ObjectMeta, Exception> {
-        let size = match self.size {
-            Some(text) => text.parse().map_err(|err| {
-                exception!(code = "GCP_API", "object size is invalid", source = err)
-            })?,
-            None => 0,
-        };
-        Ok(ObjectMeta {
-            name: self.name,
-            size,
-            content_type: self.content_type,
-            updated: self.updated,
-            metadata: self.metadata.unwrap_or_default(),
-        })
-    }
-}
-
-fn too_large() -> Exception {
+fn too_large_exception() -> Exception {
     exception!(
         code = "GCP_CONFIG",
         "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream",

@@ -1,8 +1,7 @@
 use crate::gcp::storage::encode::*;
 
 #[test]
-fn segment_encodes_slashes_and_non_ascii() {
-    assert_eq!(encode_seg("photos/my cat.jpeg"), "photos%2Fmy%20cat.jpeg");
-    assert_eq!(encode_seg("é"), "%C3%A9");
-    assert_eq!(encode_seg("+"), "%2B");
+fn only_the_unreserved_characters_stay() {
+    assert_eq!(percent_encode("aZ09-._~"), "aZ09-._~");
+    assert_eq!(percent_encode("a b/\u{e9}"), "a%20b%2F%C3%A9");
 }

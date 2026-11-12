@@ -1,4 +1,4 @@
-pub(crate) fn encode_seg(segment: &str) -> String {
+pub(crate) fn percent_encode(segment: &str) -> String {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut out = String::with_capacity(segment.len());
     for byte in segment.bytes() {

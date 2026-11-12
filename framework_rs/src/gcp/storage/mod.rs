@@ -1,43 +1,36 @@
-pub(crate) mod call;
 pub(crate) mod encode;
-pub(crate) mod error;
 pub(crate) mod list;
 pub(crate) mod object;
 pub(crate) mod ops_log;
-pub(crate) mod rewrite;
+pub(crate) mod put_request;
 pub(crate) mod signed_url;
-pub(crate) mod upload;
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::Utc;
+use bytes::Bytes;
+use google_cloud_auth::credentials;
+use google_cloud_auth::signer::Signer;
+use google_cloud_storage::builder::storage::SignedUrlBuilder;
+use google_cloud_storage::client::{Storage, StorageControl};
+use google_cloud_storage::http::Method;
+use google_cloud_storage::model::Object;
+use google_cloud_wkt::FieldMask;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::storage::call::Call;
-use crate::gcp::storage::encode::encode_seg;
-use crate::gcp::storage::error::gcs_response_exception;
-use crate::gcp::storage::ops_log::{logged_error, OpsRecord};
-use crate::gcp::storage::rewrite::RewriteStep;
-use crate::gcp::storage::signed_url::{resolve_signer_email, SignedParts};
-use crate::gcp::storage::upload::{ResumableUpload, UploadSource};
-use crate::gcp::{http_client_builder, is_retryable_status, Credentials, TokenSource};
-use crate::logging::{LogLevel, Logger};
+use crate::gcp::error::to_exception;
+use crate::gcp::storage::ops_log::OpsRecord;
+use crate::gcp::storage::signed_url::{content_disposition_value, validate_lifetime};
+use crate::logging::Logger;
 
 pub use crate::gcp::storage::list::{ListPage, ListQuery};
 pub use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
-pub use crate::gcp::storage::upload::{PutBody, PutOptions, PutRequest};
+pub use crate::gcp::storage::put_request::{PutBody, PutOptions, PutRequest};
 
-pub(crate) const API_ROOT: &str = "https://storage.googleapis.com/storage/v1";
-const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
-const UPLOAD_HOST_ROOT: &str = "https://storage.googleapis.com/";
-const IAM_ROOT: &str = "https://iamcredentials.googleapis.com/v1";
-pub(crate) const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
-pub(crate) const SEND_ATTEMPTS: u32 = 4;
-const SEND_BACKOFF: Duration = Duration::from_millis(250);
 // The most rewrite calls for one object. A rewrite that needs more is a fault.
 const MAX_REWRITE_STEPS: u32 = 10_000;
 // GCS refuses a longer object name.
@@ -45,7 +38,7 @@ pub(crate) const MAX_OBJECT_NAME_BYTES: usize = 1024;
 
 #[derive(Clone)]
 pub struct GcsClient {
-    pub(crate) inner: Arc<Inner>,
+    inner: Arc<Inner>,
 }
 
 impl GcsClient {
@@ -53,15 +46,30 @@ impl GcsClient {
         &self.inner.bucket
     }
 
-    pub fn signer_email(&self) -> &str {
-        &self.inner.email
-    }
-
+    // `signer_email` is the service account that signs URLs. Without it, the signer is the
+    // account of the credentials, which must be a service account or the metadata server.
     pub async fn from_adc(
         bucket_name: impl Into<String>,
         signer_email: Option<&str>,
     ) -> Result<Self, Exception> {
-        Self::new(bucket_name, Credentials::from_adc().await?, signer_email).await
+        let bucket = bucket_name.into();
+        validate_bucket(&bucket)?;
+        let storage = Storage::builder().build().await.map_err(|err| {
+            exception!(code = "GCP_AUTH", "cannot build the client", source = err)
+        })?;
+        let control = StorageControl::builder().build().await.map_err(|err| {
+            exception!(code = "GCP_AUTH", "cannot build the client", source = err)
+        })?;
+        Ok(Self {
+            inner: Arc::new(Inner {
+                bucket_path: format!("projects/_/buckets/{bucket}"),
+                bucket,
+                storage,
+                control,
+                signer: build_signer(signer_email)?,
+                ops_log: std::sync::Mutex::new(None),
+            }),
+        })
     }
 
     pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, Exception> {
@@ -74,14 +82,17 @@ impl GcsClient {
 
     pub async fn open_object(&self, name: &str) -> Result<ObjectReader, Exception> {
         validate_object_name(name)?;
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::GET,
-                url: format!("{}?alt=media", self.object_url(name)),
-                ..Default::default()
-            })
-            .await?;
-        Ok(ObjectReader { response })
+        self.run_logged("open", name, async {
+            let response = self
+                .inner
+                .storage
+                .read_object(&self.inner.bucket_path, name)
+                .send()
+                .await
+                .map_err(|err| to_exception("open object failed", err))?;
+            Ok(ObjectReader { response })
+        })
+        .await
     }
 
     pub async fn open_object_opt(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
@@ -90,14 +101,19 @@ impl GcsClient {
 
     pub async fn stat(&self, name: &str) -> Result<ObjectMeta, Exception> {
         validate_object_name(name)?;
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::GET,
-                url: self.object_url(name),
-                ..Default::default()
-            })
-            .await?;
-        ObjectMeta::from_response(response).await
+        self.run_logged("stat", name, async {
+            let object = self
+                .inner
+                .control
+                .get_object()
+                .set_bucket(&self.inner.bucket_path)
+                .set_object(name)
+                .send()
+                .await
+                .map_err(|err| to_exception("stat object failed", err))?;
+            Ok(ObjectMeta::from(object))
+        })
+        .await
     }
 
     pub async fn stat_opt(&self, name: &str) -> Result<Option<ObjectMeta>, Exception> {
@@ -105,56 +121,109 @@ impl GcsClient {
     }
 
     pub async fn list(&self, query: &ListQuery) -> Result<ListPage, Exception> {
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::GET,
-                url: query.url(&self.inner.endpoints.api_root, self.bucket()),
-                ..Default::default()
-            })
-            .await?;
-        let bytes = response.bytes().await.map_err(|err| {
-            exception!(
-                code = "GCP_TRANSPORT",
-                "list response is not bytes",
-                source = err.without_url(),
-            )
-        })?;
-        ListPage::from_slice(&bytes)
+        let prefix = query.prefix.as_deref().unwrap_or_default();
+        self.run_logged("list", prefix, async {
+            let mut request = self
+                .inner
+                .control
+                .list_objects()
+                .set_parent(&self.inner.bucket_path);
+            if let Some(prefix) = &query.prefix {
+                request = request.set_prefix(prefix);
+            }
+            if let Some(delimiter) = &query.delimiter {
+                request = request.set_delimiter(delimiter);
+            }
+            if let Some(token) = &query.page_token {
+                request = request.set_page_token(token);
+            }
+            if let Some(max) = query.max_results {
+                request = request.set_page_size(i32::try_from(max).unwrap_or(i32::MAX));
+            }
+            let response = request
+                .send()
+                .await
+                .map_err(|err| to_exception("list objects failed", err))?;
+            Ok(ListPage::from_response(response))
+        })
+        .await
     }
 
     pub async fn put(&self, request: &PutRequest) -> Result<ObjectMeta, Exception> {
         let name = request.name.as_str();
         let options = &request.options;
         validate_object_name(name)?;
-        let content_type = options.content_type()?;
+        let content_type = options.content_type_or_default()?;
         validate_metadata(&options.metadata)?;
-        let mut source = UploadSource::open(&request.body).await?;
-        let upload =
-            ResumableUpload::start(self, name, content_type, &options.metadata, source.len())
-                .await?;
-        upload.run(&mut source).await
+        let metadata = options.metadata.clone();
+        let bucket_path = &self.inner.bucket_path;
+        self.run_logged("put", name, async {
+            let result = match &request.body {
+                PutBody::Bytes(bytes) => {
+                    self.inner
+                        .storage
+                        .write_object(bucket_path, name, Bytes::copy_from_slice(bytes))
+                        .set_content_type(content_type)
+                        .set_metadata(metadata)
+                        .send_unbuffered()
+                        .await
+                }
+                PutBody::File(path) => {
+                    let file = open_upload_file(path).await?;
+                    self.inner
+                        .storage
+                        .write_object(bucket_path, name, file)
+                        .set_content_type(content_type)
+                        .set_metadata(metadata)
+                        .send_unbuffered()
+                        .await
+                }
+            };
+            let object = result.map_err(|err| to_exception("put object failed", err))?;
+            Ok(ObjectMeta::from(object))
+        })
+        .await
     }
 
     pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
         validate_object_name(from)?;
         validate_object_name(to)?;
-        let mut token: Option<String> = None;
-        for _ in 0..MAX_REWRITE_STEPS {
-            let next = match self.rewrite_step(from, to, token.as_deref()).await? {
-                RewriteStep::Done(meta) => return Ok(meta),
-                RewriteStep::Next(next) => next,
-            };
-            if token.as_deref() == Some(next.as_str()) {
-                return Err(exception!(code = "GCP_API", "rewrite token did not change"));
+        self.run_logged("rewrite", from, async {
+            let mut token = String::new();
+            for _ in 0..MAX_REWRITE_STEPS {
+                let step = self
+                    .inner
+                    .control
+                    .rewrite_object()
+                    .set_source_bucket(&self.inner.bucket_path)
+                    .set_source_object(from)
+                    .set_destination_bucket(&self.inner.bucket_path)
+                    .set_destination_name(to)
+                    .set_rewrite_token(&token)
+                    .send()
+                    .await
+                    .map_err(|err| to_exception("rewrite object failed", err))?;
+                if !step.done {
+                    if step.rewrite_token == token {
+                        return Err(exception!(code = "GCP_API", "rewrite token did not change"));
+                    }
+                    token = step.rewrite_token;
+                    continue;
+                }
+                return match step.resource {
+                    Some(object) => Ok(ObjectMeta::from(object)),
+                    None => Err(exception!(code = "GCP_API", "rewrite gave no object")),
+                };
             }
-            token = Some(next);
-        }
-        Err(exception!(
-            code = "GCP_API",
-            "rewrite did not finish within the step limit",
-        ))
+            Err(exception!(
+                code = "GCP_API",
+                "rewrite did not finish within the step limit",
+            ))
+        })
+        .await
     }
 
+    // The new keys replace the keys with the same name. The other keys stay.
     pub async fn patch_metadata(
         &self,
         name: &str,
@@ -162,30 +231,51 @@ impl GcsClient {
     ) -> Result<ObjectMeta, Exception> {
         validate_object_name(name)?;
         validate_metadata(metadata)?;
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::PATCH,
-                url: self.object_url(name),
-                json: Some(serde_json::json!({ "metadata": metadata })),
-                ..Default::default()
-            })
-            .await?;
-        ObjectMeta::from_response(response).await
+        self.run_logged("patch", name, async {
+            let current = self
+                .inner
+                .control
+                .get_object()
+                .set_bucket(&self.inner.bucket_path)
+                .set_object(name)
+                .send()
+                .await
+                .map_err(|err| to_exception("read object metadata failed", err))?;
+            let mut merged = current.metadata;
+            merged.extend(metadata.clone());
+            let object = Object::new()
+                .set_bucket(&self.inner.bucket_path)
+                .set_name(name)
+                .set_metadata(merged);
+            let updated = self
+                .inner
+                .control
+                .update_object()
+                .set_object(object)
+                .set_update_mask(FieldMask::default().set_paths(["metadata"]))
+                .send()
+                .await
+                .map_err(|err| to_exception("patch object metadata failed", err))?;
+            Ok(ObjectMeta::from(updated))
+        })
+        .await
     }
 
     pub async fn delete_object(&self, name: &str) -> Result<(), Exception> {
         validate_object_name(name)?;
         let result = self
-            .send(&Call {
-                method: reqwest::Method::DELETE,
-                url: self.object_url(name),
-                ..Default::default()
+            .run_logged("delete", name, async {
+                self.inner
+                    .control
+                    .delete_object()
+                    .set_bucket(&self.inner.bucket_path)
+                    .set_object(name)
+                    .send()
+                    .await
+                    .map_err(|err| to_exception("delete object failed", err))
             })
             .await;
-        if let Some(response) = not_found_as_none(result)? {
-            let _ = response.bytes().await;
-        }
-        Ok(())
+        not_found_as_none(result).map(|_| ())
     }
 
     pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
@@ -198,7 +288,7 @@ impl GcsClient {
         let meta = self.rewrite_object(from, to).await?;
         match self.delete_object(from).await {
             Ok(()) => Ok(meta),
-            Err(delete_err) => Err(self.failed_move_error(from, to, delete_err).await),
+            Err(delete_err) => Err(self.cleanup_after_failed_move(from, to, delete_err).await),
         }
     }
 
@@ -209,102 +299,37 @@ impl GcsClient {
         attachment_filename: Option<&str>,
     ) -> Result<String, Exception> {
         validate_object_name(name)?;
-        let parts = SignedParts::v4_get(
-            self.bucket(),
-            name,
-            self.signer_email(),
-            Utc::now(),
-            expires_in,
-            attachment_filename,
-        )?;
-        parts.sign(self).await
+        let lifetime = validate_lifetime(expires_in)?;
+        let mut builder = SignedUrlBuilder::for_object(&self.inner.bucket_path, name)
+            .with_method(Method::GET)
+            .with_expiration(lifetime);
+        if let Some(filename) = attachment_filename {
+            builder = builder.with_query_param(
+                "response-content-disposition",
+                content_disposition_value(filename)?,
+            );
+        }
+        self.run_logged("sign", name, async {
+            builder
+                .sign_with(&self.inner.signer)
+                .await
+                .map_err(|err| exception!(code = "GCP_AUTH", "sign URL failed", source = err))
+        })
+        .await
     }
 
     pub fn attach_ops_log(&self, logger: Logger) {
-        *lock_ops(&self.inner.ops_log) = Some(logger);
-    }
-
-    pub(crate) async fn new(
-        bucket_name: impl Into<String>,
-        credentials: Credentials,
-        signer_email: Option<&str>,
-    ) -> Result<Self, Exception> {
-        let bucket_name = bucket_name.into();
-        validate_bucket(&bucket_name)?;
-        credentials.validate()?;
-        let http = storage_http_client()?;
-        let email = resolve_signer_email(&credentials, signer_email, &http).await?;
-        Ok(Self {
-            inner: Arc::new(Inner {
-                bucket: bucket_name,
-                endpoints: Endpoints::google(),
-                email,
-                http,
-                tokens: TokenSource::new(credentials),
-                ops_log: std::sync::Mutex::new(None),
-            }),
-        })
-    }
-
-    pub(crate) fn record_op(&self, op: OpsRecord<'_>) {
-        let Some(logger) = lock_ops(&self.inner.ops_log).clone() else {
-            return;
-        };
-        logger.record(op.into_event(self.bucket()));
-    }
-
-    pub(crate) async fn send(&self, call: &Call) -> Result<reqwest::Response, Exception> {
-        let mut refreshed = false;
-        let mut attempts = 0u32;
-        loop {
-            match self.try_send(call, attempts, refreshed).await? {
-                Outcome::Done(response) => return Ok(response),
-                Outcome::Retry => {
-                    attempts += 1;
-                    tokio::time::sleep(SEND_BACKOFF * attempts).await;
-                }
-                Outcome::Refresh => refreshed = true,
-            }
-        }
-    }
-
-    fn object_url(&self, name: &str) -> String {
-        object_url(&self.inner.endpoints.api_root, self.bucket(), name)
-    }
-
-    async fn rewrite_step(
-        &self,
-        from: &str,
-        to: &str,
-        token: Option<&str>,
-    ) -> Result<RewriteStep, Exception> {
-        let response = self
-            .send(&Call {
-                method: reqwest::Method::POST,
-                url: RewriteStep::url(
-                    &self.inner.endpoints.api_root,
-                    self.bucket(),
-                    from,
-                    to,
-                    token,
-                ),
-                json: Some(serde_json::json!({})),
-                ..Default::default()
-            })
-            .await?;
-        let bytes = response.bytes().await.map_err(|err| {
-            exception!(
-                code = "GCP_TRANSPORT",
-                "rewrite response is not bytes",
-                source = err.without_url(),
-            )
-        })?;
-        RewriteStep::from_slice(&bytes)
+        *lock_logger(&self.inner.ops_log) = Some(logger);
     }
 
     // A failed delete does not prove that the source still exists. Delete the copy only
     // when the source is confirmed, else the copy can be the only one.
-    async fn failed_move_error(&self, from: &str, to: &str, delete_err: Exception) -> Exception {
+    async fn cleanup_after_failed_move(
+        &self,
+        from: &str,
+        to: &str,
+        delete_err: Exception,
+    ) -> Exception {
         let kind = delete_err.code();
         let message = match self.stat_opt(from).await {
             Ok(Some(_)) => match self.delete_object(to).await {
@@ -326,106 +351,33 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    async fn try_send(
+    // A missing object is a normal result of an `_opt` call, so it writes no record.
+    async fn run_logged<T>(
         &self,
-        call: &Call,
-        attempts: u32,
-        refreshed: bool,
-    ) -> Result<Outcome, Exception> {
-        let token = self.access_token().await?;
+        operation: &str,
+        object: &str,
+        work: impl Future<Output = Result<T, Exception>>,
+    ) -> Result<T, Exception> {
         let started = Instant::now();
-        let response = match build_request(&self.inner.http, call, &token).send().await {
-            Ok(response) => response,
-            Err(err) => return self.failed_send(call, attempts, started, err),
+        let result = work.await;
+        if let Err(err) = &result {
+            if err.code() != "GCS_NOT_FOUND" {
+                self.write_ops_record(OpsRecord {
+                    operation,
+                    object,
+                    latency_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                    error: &String::from(err),
+                });
+            }
+        }
+        result
+    }
+
+    fn write_ops_record(&self, record: OpsRecord<'_>) {
+        let Some(logger) = lock_logger(&self.inner.ops_log).clone() else {
+            return;
         };
-        let status = response.status().as_u16();
-        let latency_ms = millis_since(started);
-        if status == 401 && !refreshed {
-            let _ = response.bytes().await;
-            self.inner.tokens.invalidate().await;
-            self.record_status(
-                call,
-                "gcs access token rejected",
-                LogLevel::Warn,
-                status,
-                latency_ms,
-            );
-            return Ok(Outcome::Refresh);
-        }
-        if let Some(level) = level_for_status(status) {
-            self.record_status(call, "gcs response", level, status, latency_ms);
-        }
-        if response.status().is_success() || call.extra_status.contains(&status) {
-            return Ok(Outcome::Done(response));
-        }
-        if is_retryable_status(status) && may_retry(call, attempts) {
-            let _ = response.bytes().await;
-            return Ok(Outcome::Retry);
-        }
-        Err(gcs_response_exception(response).await)
-    }
-
-    fn failed_send(
-        &self,
-        call: &Call,
-        attempts: u32,
-        started: Instant,
-        err: reqwest::Error,
-    ) -> Result<Outcome, Exception> {
-        let error_text = logged_error(&err);
-        self.record_op(OpsRecord {
-            level: LogLevel::Warn,
-            message: "gcs request failed",
-            method: call.method.as_str(),
-            url: &call.url,
-            status: None,
-            latency_ms: millis_since(started),
-            extra: &[("error", &error_text)],
-        });
-        if may_retry(call, attempts) {
-            return Ok(Outcome::Retry);
-        }
-        Err(exception!(
-            code = "GCP_TRANSPORT",
-            "gcs request failed",
-            source = err.without_url(),
-        ))
-    }
-
-    fn record_status(
-        &self,
-        call: &Call,
-        message: &str,
-        level: LogLevel,
-        status: u16,
-        latency_ms: u64,
-    ) {
-        self.record_op(OpsRecord {
-            level,
-            message,
-            method: call.method.as_str(),
-            url: &call.url,
-            status: Some(status),
-            latency_ms,
-            extra: &[],
-        });
-    }
-
-    async fn access_token(&self) -> Result<String, Exception> {
-        let token = self.inner.tokens.token(&self.inner.http).await;
-        if let Err(err) = &token {
-            let error_text = logged_error(&String::from(err));
-            self.record_op(OpsRecord {
-                level: LogLevel::Warn,
-                message: "access token request failed",
-                method: "",
-                url: "",
-                status: None,
-                latency_ms: 0,
-                extra: &[("error", &error_text)],
-            });
-        }
-        token
+        logger.record(record.into_event(self.bucket()));
     }
 }
 
@@ -433,37 +385,17 @@ impl fmt::Debug for GcsClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GcsClient")
             .field("bucket", &self.inner.bucket)
-            .field("email", &self.inner.email)
-            .field("tokens", &self.inner.tokens)
             .finish_non_exhaustive()
     }
 }
 
-pub(crate) struct Endpoints {
-    pub(crate) api_root: String,
-    pub(crate) upload_root: String,
-    pub(crate) upload_location_prefix: String,
-    pub(crate) iam_root: String,
-}
-
-impl Endpoints {
-    pub(crate) fn google() -> Self {
-        Self {
-            api_root: API_ROOT.to_string(),
-            upload_root: UPLOAD_ROOT.to_string(),
-            upload_location_prefix: UPLOAD_HOST_ROOT.to_string(),
-            iam_root: IAM_ROOT.to_string(),
-        }
-    }
-}
-
-pub(crate) struct Inner {
-    pub(crate) bucket: String,
-    pub(crate) endpoints: Endpoints,
-    pub(crate) email: String,
-    pub(crate) http: reqwest::Client,
-    pub(crate) tokens: TokenSource,
-    pub(crate) ops_log: std::sync::Mutex<Option<Logger>>,
+struct Inner {
+    bucket: String,
+    bucket_path: String,
+    storage: Storage,
+    control: StorageControl,
+    signer: Signer,
+    ops_log: std::sync::Mutex<Option<Logger>>,
 }
 
 pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
@@ -472,10 +404,6 @@ pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Optio
         Err(err) if err.code() == "GCS_NOT_FOUND" => Ok(None),
         Err(err) => Err(err),
     }
-}
-
-pub(crate) fn may_retry(call: &Call, attempts: u32) -> bool {
-    !call.no_retry && attempts + 1 < SEND_ATTEMPTS
 }
 
 pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {
@@ -505,67 +433,7 @@ pub(crate) fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(
     Ok(())
 }
 
-pub(crate) fn object_url(api_root: &str, bucket_name: &str, name: &str) -> String {
-    format!(
-        "{api_root}/b/{}/o/{}",
-        encode_seg(bucket_name),
-        encode_seg(name),
-    )
-}
-
-pub(crate) fn storage_http_client() -> Result<reqwest::Client, Exception> {
-    // A stalled read ends the call on every platform, and a long download is not cut.
-    let builder = http_client_builder().read_timeout(TRANSFER_TIMEOUT);
-    #[cfg(target_os = "linux")]
-    let builder = builder.tcp_user_timeout(TRANSFER_TIMEOUT);
-    builder.build().map_err(|err| {
-        exception!(
-            code = "GCS_LOCAL",
-            "cannot build the HTTP client",
-            source = err,
-        )
-    })
-}
-
-pub(crate) fn level_for_status(status: u16) -> Option<LogLevel> {
-    if status >= 500 {
-        Some(LogLevel::Error)
-    } else if status >= 400 {
-        Some(LogLevel::Warn)
-    } else {
-        None
-    }
-}
-
-enum Outcome {
-    Done(reqwest::Response),
-    Retry,
-    Refresh,
-}
-
-fn build_request(http: &reqwest::Client, call: &Call, token: &str) -> reqwest::RequestBuilder {
-    let mut request = http
-        .request(call.method.clone(), &call.url)
-        .bearer_auth(token);
-    for (name, value) in &call.headers {
-        request = request.header(name, value);
-    }
-    if let Some(timeout) = call.timeout {
-        request = request.timeout(timeout);
-    }
-    if let Some(json) = &call.json {
-        request = request.json(json);
-    } else if let Some(bytes) = &call.bytes {
-        request = request.body(bytes.clone());
-    }
-    request
-}
-
-fn lock_ops(slot: &std::sync::Mutex<Option<Logger>>) -> std::sync::MutexGuard<'_, Option<Logger>> {
-    slot.lock().unwrap_or_else(|err| err.into_inner())
-}
-
-fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
+pub(crate) fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
     if bucket_name.is_empty()
         || bucket_name.contains(['/', '\\', ' ', '\r', '\n'])
         || !bucket_name.is_ascii()
@@ -578,6 +446,60 @@ fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
     Ok(())
 }
 
-fn millis_since(started: Instant) -> u64 {
-    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
+fn build_signer(signer_email: Option<&str>) -> Result<Signer, Exception> {
+    let build_failed = |err| {
+        exception!(
+            code = "GCP_CONFIG",
+            "cannot build the URL signer",
+            source = err,
+        )
+    };
+    let Some(email) = signer_email else {
+        return credentials::Builder::default()
+            .build_signer()
+            .map_err(build_failed);
+    };
+    if !email.contains('@') || email.contains(char::is_whitespace) {
+        return Err(exception!(
+            code = "GCP_CONFIG",
+            "signer email is not a service account email",
+        ));
+    }
+    let source = credentials::Builder::default()
+        .build()
+        .map_err(build_failed)?;
+    credentials::impersonated::Builder::from_source_credentials(source)
+        .with_target_principal(email)
+        .build_signer()
+        .map_err(build_failed)
+}
+
+async fn open_upload_file(path: &std::path::Path) -> Result<tokio::fs::File, Exception> {
+    let file = tokio::fs::File::open(path).await.map_err(|err| {
+        exception!(
+            code = "GCS_LOCAL",
+            format!("cannot open {}", path.display()),
+            source = err,
+        )
+    })?;
+    let meta = file.metadata().await.map_err(|err| {
+        exception!(
+            code = "GCS_LOCAL",
+            format!("cannot read metadata for {}", path.display()),
+            source = err,
+        )
+    })?;
+    if !meta.is_file() {
+        return Err(exception!(
+            code = "GCP_CONFIG",
+            format!("{} is not a file", path.display()),
+        ));
+    }
+    Ok(file)
+}
+
+fn lock_logger(
+    slot: &std::sync::Mutex<Option<Logger>>,
+) -> std::sync::MutexGuard<'_, Option<Logger>> {
+    slot.lock().unwrap_or_else(|err| err.into_inner())
 }

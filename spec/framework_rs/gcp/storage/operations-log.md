@@ -13,48 +13,23 @@ Logger:
 - A client with no logger writes no operations record.
 - A logging failure does not change the storage result.
 
+When a record is written:
+
+- The client writes one record when an operation fails. The operations are `open`, `stat`, `list`, `put`, `rewrite`, `patch`, `delete` and `sign`. `get_bytes` is an `open` and a read. `move_object` is a `rewrite`, a `delete` and a `stat`.
+- The failure of an official call is final. The official client has already done the retries.
+- A `GCS_NOT_FOUND` failure writes no record, because an `_opt` call and `delete_object` use it as a normal result.
+- A success writes no record.
+- A failure of the body read of an `ObjectReader` writes no record.
+
 Record content:
 
+- The level is `warn`.
 - An operations record has no `app` field.
 - An operations record has no `project` field.
 - The client does not write product rules in these records.
-- The client does not write access tokens.
-- The record `action` is `GCS/{method}:{path}`. The path starts with `/`.
-- The path is the URL path. The client does not write the URL query.
-- A token record has an empty `action`.
+- The record `action` is `GCS/{operation}:/{object name}`. For `list`, the name is the prefix.
 - An operations record has a new UUID v7 `id`.
 - An operations record has an empty `context`.
-- Each record has `bucket` in `extra`. The value is the bucket name.
-- Each record has `message` in `extra`. The values are in the table below.
-- A record with an HTTP status has `status` in `extra`. The value is the status as text.
+- The record has `latency_ms` of the failed operation.
+- Each record has these keys in `extra`: `message` with the value `gcs operation failed`, `bucket` with the bucket name, and `error` with the log text of the exception, with every source, its code, its file and its line.
 - The record `ts` is the current HKT time, from `ian_framework::time::hkt_now()`. The time rules are in `spec/framework_rs/time/hkt.md`.
-
-| Case | Level | `extra.message` |
-| --- | --- | --- |
-| HTTP status 500 or higher | `error` | `gcs response` |
-| HTTP status 400 through 499 | `warn` | `gcs response` |
-| HTTP transport failure | `warn` | `gcs request failed` |
-| First HTTP 401 for one call | `warn` | `gcs access token rejected` |
-| Resumable chunk failure | `warn` | `gcs resumable chunk failed` |
-| Resumable probe failure | `warn` | `gcs resumable probe failed` |
-| Token request failure | `warn` | `access token request failed` |
-
-HTTP 401 rules:
-
-- The first HTTP 401 does not also write `gcs response`.
-- The client requests a new access token and sends that call again.
-- A later HTTP 401 writes `gcs response`.
-
-Failure records:
-
-- A failure record can include `error` in `extra`. When the failure is an `Exception`, the value is the log text of the exception, with every source, its code, its file and its line.
-- An `error` value does not contain a URL query.
-- An `Exception` source does not contain the request URL.
-- A resumable chunk failure record includes `attempt` and `offset` in `extra`.
-- A resumable probe failure record also includes `attempt` and `offset` in `extra`.
-
-These results write no operations record:
-
-- A response below 400.
-- A successful resumable probe.
-- A successful token request.

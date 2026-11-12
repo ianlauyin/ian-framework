@@ -1,63 +1,50 @@
 use std::env;
+use std::time::Duration;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::{metadata_get, read_limited, Credentials};
 
-pub(crate) const METADATA_PROJECT_URL: &str =
-    "http://169.254.169.254/computeMetadata/v1/project/project-id";
-pub(crate) const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
+const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
+// `GOOGLE_CLOUD_PROJECT` is a Google Cloud standard variable, not an app setting.
+const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
+const METADATA_TIMEOUT: Duration = Duration::from_secs(2);
 
-pub(crate) async fn resolve_project(
-    credentials: &Credentials,
-    http: &reqwest::Client,
-    metadata_project_url: &str,
-) -> Result<Option<String>, Exception> {
-    match credentials {
-        Credentials::Metadata => metadata_project(http, metadata_project_url).await.map(Some),
-        Credentials::User(_) => user_project(credentials),
-    }
-}
-
-pub(crate) async fn metadata_project(
-    http: &reqwest::Client,
-    url: &str,
-) -> Result<String, Exception> {
-    let response = metadata_get(http, url).await?;
-    let status = response.status().as_u16();
-    if !(200..300).contains(&status) {
+// None means that the process has no project: no variable and no metadata server.
+pub(crate) async fn resolve_project() -> Result<Option<String>, Exception> {
+    let project = match env::var(PROJECT_ENV) {
+        Ok(project) if !project.trim().is_empty() => project,
+        _ => match fetch_metadata_project().await {
+            Some(project) => project,
+            None => return Ok(None),
+        },
+    };
+    let project = project.trim();
+    if !is_safe_name(project) {
         return Err(exception!(
-            code = "GCP_AUTH",
-            format!("metadata server project status {status}"),
+            code = "GCP_CONFIG",
+            "the project id is empty or not valid",
         ));
     }
-    let body = read_limited(response, "GCP_TRANSPORT", "metadata server project").await?;
-    checked_project(String::from_utf8_lossy(&body).trim())
+    Ok(Some(project.to_string()))
 }
 
-pub(crate) fn user_project(credentials: &Credentials) -> Result<Option<String>, Exception> {
-    let from_env = env::var(PROJECT_ENV)
-        .ok()
-        .filter(|project| !project.trim().is_empty());
-    match from_env.as_deref().or(credentials.quota_project()) {
-        Some(project) => checked_project(project.trim()).map(Some),
-        None => Ok(None),
-    }
-}
-
-pub(crate) fn is_name_segment(segment: &str) -> bool {
+pub(crate) fn is_safe_name(segment: &str) -> bool {
     !segment.is_empty()
         && segment
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
-fn checked_project(project: &str) -> Result<String, Exception> {
-    if !is_name_segment(project) {
-        return Err(exception!(
-            code = "GCP_CONFIG",
-            "the project id is empty or not valid",
-        ));
+async fn fetch_metadata_project() -> Option<String> {
+    let response = reqwest::Client::new()
+        .get(METADATA_PROJECT_URL)
+        .header("Metadata-Flavor", "Google")
+        .timeout(METADATA_TIMEOUT)
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
     }
-    Ok(project.to_string())
+    response.text().await.ok()
 }
