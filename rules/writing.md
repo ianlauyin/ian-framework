@@ -18,8 +18,7 @@ Write all text in ASD-STE100 (Simplified Technical English).
 
 ## The spec folder
 
-- The `spec/` folder is only for agents to read. Write each file in it for an agent, not for a human.
-- The exception is `spec/open-behaviour.json`. A human also reads this file. Write it so that a human can understand it.
+The `spec/` folder is only for agents to read. Write each file in it for an agent, not for a human.
 
 ## Sensitive data
 
