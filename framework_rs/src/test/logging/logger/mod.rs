@@ -5,85 +5,37 @@ use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
 use crate::logging::{HttpLogShipper, LogEvent, LogLevel, LogRequest, Logger};
 use crate::shutdown::ShutdownReceiver;
-use crate::test::logging::{buffered_events, default_shipper, http_shipper, logger};
+use crate::test::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
 
 #[test]
 fn logs_without_a_shipper_and_keeps_the_first_shipper() {
     Logger::error("TEST/error", BTreeMap::new(), "failed".into());
-    if Logger::get().is_none() {
-        let first = logger(default_shipper("my-app"));
-        assert!(Logger::init(first).is_ok());
-    }
+    let first = global_logger();
     let second = logger(default_shipper("my-app"));
     assert!(Logger::init(second).is_err());
+    assert!(std::ptr::eq(Logger::get().unwrap(), first));
     Logger::warn("TEST/warn", BTreeMap::new());
     Logger::warn_with("TEST/warn", BTreeMap::new(), "slow".into());
 }
 
 #[test]
 fn error_adds_the_exception_trace_to_the_message() {
-    let messages = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let capture = Capture(std::sync::Arc::clone(&messages));
     let root = crate::exception!(code = "ENV_INVALID", "port is not a number");
     let top = crate::exception!(code = "ENV_MISSING", "app cannot start", source = root);
-    tracing::subscriber::with_default(capture, || {
-        Logger::error("TEST/exceptionTrace", BTreeMap::new(), Box::new(top));
-        Logger::error("TEST/plain", BTreeMap::new(), "slow".into());
-    });
-    let messages = messages.lock().unwrap();
-    let text = messages[0].as_str();
+    global_logger();
+    Logger::error("TEST/exceptionTrace", BTreeMap::new(), Box::new(top));
+    Logger::error("TEST/plain", BTreeMap::new(), "slow".into());
+    let message = |action: &str| {
+        buffered_events(global_logger())
+            .into_iter()
+            .find(|event| event.action == action)
+            .and_then(|event| event.error_message)
+            .unwrap()
+    };
+    let text = message("TEST/exceptionTrace");
     assert!(text.starts_with("app cannot start\n0: ERROR [ENV_MISSING] app cannot start at "));
     assert!(text.contains("\n1: ERROR [ENV_INVALID] port is not a number at "));
-    assert_eq!(messages[1], "slow");
-}
-
-struct Capture(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
-
-struct MessageVisitor<'a>(&'a mut Option<String>);
-
-impl tracing::field::Visit for MessageVisitor<'_> {
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        if field.name() == "error_message" {
-            *self.0 = Some(value.to_string());
-        }
-    }
-
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        if field.name() == "error_message" && self.0.is_none() {
-            let text = format!("{value:?}");
-            let text = text
-                .strip_prefix("Some(\"")
-                .and_then(|text| text.strip_suffix("\")"))
-                .unwrap_or(&text);
-            *self.0 = Some(text.replace("\\n", "\n").replace("\\\"", "\""));
-        }
-    }
-}
-
-impl tracing::Subscriber for Capture {
-    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
-        metadata.is_event()
-    }
-
-    fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
-        tracing::span::Id::from_u64(1)
-    }
-
-    fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
-
-    fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
-
-    fn event(&self, event: &tracing::Event<'_>) {
-        let mut message = None;
-        event.record(&mut MessageVisitor(&mut message));
-        if let Some(message) = message {
-            self.0.lock().unwrap().push(message);
-        }
-    }
-
-    fn enter(&self, _span: &tracing::span::Id) {}
-
-    fn exit(&self, _span: &tracing::span::Id) {}
+    assert_eq!(message("TEST/plain"), "slow");
 }
 
 const LIMIT: usize = CAPACITY / 5 * 4;

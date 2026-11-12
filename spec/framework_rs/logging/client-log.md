@@ -72,16 +72,16 @@ An app can keep its own HTTP handler. The client log route below is one such han
 
 ## Client log route
 
-`ian_framework::logging::client_log_router(logger)` gives an `axum::Router` with one route.
+`ian_framework::logging::client_log_router()` gives an `axum::Router` with one route.
 
-- The argument is one `Logger`.
+- The function has no argument. The route uses the global logger from `Logger::get()`. The logger rules are in `spec/framework_rs/logging/logger.md`.
 - The route is `POST /log`.
 - The project merges this router into its own router.
 - A browser sends its logs to this route on the same origin.
 
 Shared logger:
 
-- The project gives the same `Logger` to this router and to the Axum middleware.
+- This router and the Axum middleware use the same global logger.
 - The client events go to the log server at once. They do not enter the buffer.
 - The request events of the middleware still use the buffer and the ship loop.
 - When the middleware wraps this route, the `POST /log` request also records one request event in the buffer. That event does not hold the client batch.
@@ -100,9 +100,9 @@ Request handling:
 - The body size limit is 1 MiB, set with `DefaultBodyLimit`. A body that is larger than 1 MiB gets status 413.
 - A body that is not valid JSON gets status 400.
 - A body that is valid JSON but is not `{"events": [...]}` of event objects gets status 422. A bare JSON array gets status 422.
-- The route calls `ClientLog::log_events`. When that call gives no list, the status is 400 and the route records no event.
+- The route calls `ClientLog::log_events`. When that call gives no list, the route calls `Logger::warn` with the action `CLIENT_LOG/rejected` and an empty context. It sends no event. The response status is 400 with an empty body.
 - `ClientLog::log_events` sets `ip` and `user_agent` in the `context` of each kept event from the request headers, after it keeps the client `context`. The `ip` rule is the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
-- The route calls `Logger::direct_send` once with all the kept events. It does not use the buffer.
-- `Logger::direct_send` masks each event, then calls `LogShipper::ship`. The ship rules are in `spec/framework_rs/logging/shipper.md`. It gives `true` only when the log server answers with a success status.
-- When `direct_send` gives `true`, the response status is 204 with an empty body.
-- When `direct_send` gives `false`, the response status is 502 with an empty body. The route does not buffer the events and does not retry.
+- The route spawns one Tokio task that calls `Logger::direct_send` once with all the kept events. The rules are in `spec/framework_rs/logging/logger.md`.
+- When `direct_send` gives `false`, the task calls `Logger::record` with each kept event. The ship loop sends them later.
+- When `ClientLog::log_events` gives a list, the response status is always 204 with an empty body. The route does not wait for the send. The status does not show the result of the send.
+- The statuses of the `Json` extractor, the body limit and `require_same_origin` stay as above. They happen before the handler runs.

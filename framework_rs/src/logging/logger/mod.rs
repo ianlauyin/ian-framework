@@ -79,11 +79,15 @@ impl Logger {
         self.lock_buffer().push(event);
     }
 
-    pub async fn direct_send(&self, mut events: Vec<LogEvent>) -> bool {
-        for event in &mut events {
-            self.inner.masks.mask_event(event);
+    pub async fn direct_send(events: &[LogEvent]) -> bool {
+        let Some(logger) = Logger::get() else {
+            return true;
+        };
+        let mut masked = events.to_vec();
+        for event in &mut masked {
+            logger.inner.masks.mask_event(event);
         }
-        self.inner.shipper.ship(&events).await
+        logger.inner.shipper.ship(&masked).await
     }
 
     pub fn spawn_ship_loop(&self, shutdown: ShutdownReceiver) -> tokio::task::JoinHandle<()> {
@@ -145,7 +149,7 @@ impl Logger {
 
     fn log(mut log_event: LogEvent, context: BTreeMap<String, LogValue>) {
         log_event.context = context;
-        match LOGGER.get() {
+        match Logger::get() {
             Some(logger) => logger.record(log_event),
             None => trace_event(&log_event),
         }

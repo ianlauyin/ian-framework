@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Instant;
 
-use axum::extract::{FromRequestParts, Request, State};
+use axum::extract::{FromRequestParts, Request};
 use axum::http::request::Parts;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -47,11 +47,10 @@ impl<S: Send + Sync> FromRequestParts<S> for AccessLog {
     }
 }
 
-pub async fn access_log(
-    State(logger): State<Logger>,
-    mut request: Request,
-    next: Next,
-) -> Response {
+pub async fn access_log(mut request: Request, next: Next) -> Response {
+    let Some(logger) = Logger::get() else {
+        return next.run(request).await;
+    };
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
     let ip = client_ip(request.headers()).unwrap_or("-").to_string();

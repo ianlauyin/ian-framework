@@ -23,7 +23,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 | `Logger::warn_with(action, context, error)` | Records one event with the level `warn`. |
 | `Logger::error(action, context, error)` | Records one event with the level `error`. |
 | `Logger::record(event)` | Stores one event in the buffer. The rules are below. |
-| `Logger::direct_send(events)` | Masks each event and calls `LogShipper::ship` at once. It gives the `ship` result. It does not use the buffer. |
+| `Logger::direct_send(events)` | Masks a copy of each event and calls `LogShipper::ship` at once. It gives the `ship` result. It does not use the buffer. The rules are below. |
 | `Logger::spawn_ship_loop(shutdown)` | Sends the buffer to the log server. The rules are below. |
 
 - `action` is `impl Into<String>`.
@@ -37,6 +37,15 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - When a logger is set, the function calls `Logger::record` with the event. `record` masks the event and stores it in the buffer. The ship loop sends the buffer.
 - When no logger is set, the function writes one `tracing` event at the same level. The fields are `action`, `error_message` and `context`. `context` is the JSON text of the context. The function does not mask the context in this case.
 - The framework code that must log an error uses `Logger::error`. It does not use `tracing::error!`.
+
+### Direct send
+
+`Logger::direct_send(events)` is an async associated function. `events` is `&[LogEvent]`. It uses the global logger.
+
+- When no logger is set, it does nothing, writes no log and gives `true`.
+- It masks a copy of each event and calls `LogShipper::ship` with the copies. The caller keeps the original events.
+- It gives `true` only when `ship` gives `true`.
+- It does not buffer the events when `ship` gives `false`. The caller does that.
 
 ### Record
 

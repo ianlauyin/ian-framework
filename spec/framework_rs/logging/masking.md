@@ -18,7 +18,7 @@ Scope:
 
 - `Logger` masks the `context` values and the `extra` values. It does not mask the other event fields.
 - `Logger::record` masks one event before it stores that event.
-- `Logger::direct_send` masks each event before it calls `LogShipper::ship`.
+- `Logger::direct_send` masks a copy of each event before it calls `LogShipper::ship`.
 - `HttpLogShipper` does not mask.
 - The mask applies to client events from `POST /log` and to request events from the middleware.
 - The frontend logger also masks before it sends. The browser patterns and the shipper patterns are different lists. The frontend logger is in `spec/framework_fe/logger.md`.

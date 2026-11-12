@@ -4,10 +4,11 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 ## Axum middleware
 
-`ian_framework::http::middleware::access_log` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/access_log.rs`. Use it with `axum::middleware::from_fn_with_state` and one logger.
+`ian_framework::http::middleware::access_log` is the Axum middleware function. The source file is `framework_rs/src/http/middleware/access_log.rs`. Use it with `axum::middleware::from_fn`.
 
 General rules:
 
+- The middleware records the event with the global logger from `Logger::get()`. When no global logger is set, the middleware does not record the event. The logger rules are in `spec/framework_rs/logging/logger.md`.
 - The middleware does not read the header `x-request-id`.
 - The middleware does not write the header `x-request-id`.
 - The middleware does not set the event field `id`. The event constructor gives a new UUID v7 text.

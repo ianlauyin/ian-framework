@@ -1,4 +1,6 @@
-use axum::extract::{DefaultBodyLimit, State};
+use std::collections::BTreeMap;
+
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::from_fn;
 use axum::routing::post;
@@ -10,28 +12,28 @@ use crate::logging::{ClientLog, Logger};
 const CLIENT_LOG_PATH: &str = "/log";
 pub(crate) const BODY_LIMIT: usize = 1024 * 1024;
 
-pub fn client_log_router(logger: Logger) -> Router {
-    Router::new()
-        .route(
-            CLIENT_LOG_PATH,
-            post(receive)
-                .route_layer(from_fn(require_same_origin))
-                .layer(DefaultBodyLimit::max(BODY_LIMIT)),
-        )
-        .with_state(logger)
+pub fn client_log_router() -> Router {
+    Router::new().route(
+        CLIENT_LOG_PATH,
+        post(receive)
+            .route_layer(from_fn(require_same_origin))
+            .layer(DefaultBodyLimit::max(BODY_LIMIT)),
+    )
 }
 
-async fn receive(
-    State(logger): State<Logger>,
-    headers: HeaderMap,
-    Json(log): Json<ClientLog>,
-) -> StatusCode {
+async fn receive(headers: HeaderMap, Json(log): Json<ClientLog>) -> StatusCode {
     let Some(events) = log.log_events(&headers) else {
+        Logger::warn("CLIENT_LOG/rejected", BTreeMap::new());
         return StatusCode::BAD_REQUEST;
     };
-    if logger.direct_send(events).await {
-        StatusCode::NO_CONTENT
-    } else {
-        StatusCode::BAD_GATEWAY
-    }
+    tokio::spawn(async move {
+        if !Logger::direct_send(&events).await {
+            if let Some(logger) = Logger::get() {
+                for event in events {
+                    logger.record(event);
+                }
+            }
+        }
+    });
+    StatusCode::NO_CONTENT
 }
