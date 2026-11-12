@@ -81,9 +81,12 @@ fn record_keeps_the_event_and_omits_scope_keys() {
 }
 
 #[test]
-#[should_panic(expected = "is not a valid regex")]
-fn invalid_mask_pattern_panics() {
-    Logger::new(default_shipper("api"), vec!["(".to_string()]);
+fn invalid_mask_pattern_returns_an_exception() {
+    let err = Logger::new(default_shipper("api"), vec!["(".to_string()])
+        .err()
+        .unwrap();
+    assert_eq!(err.code(), "LOG_CONFIG");
+    assert!(err.message().contains("is not a valid regex"));
 }
 
 #[test]
@@ -91,7 +94,8 @@ fn record_masks_the_value_of_a_matching_key() {
     let shipper = Logger::new(
         default_shipper("api"),
         vec![r"(?i)^(password|token)$".to_string()],
-    );
+    )
+    .unwrap();
     let mut event = LogEvent::info("login");
     event.extra.insert("password".to_string(), "hunter2".into());
     event.extra.insert("TOKEN".to_string(), 1234u64.into());
@@ -111,7 +115,8 @@ fn record_masks_every_pattern_match_in_string_values() {
             r"password=\S+".to_string(),
             r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
         ],
-    );
+    )
+    .unwrap();
     let mut event = LogEvent::info("POST /login?password=x");
     event.context.insert(
         "user_agent".to_string(),
@@ -145,7 +150,7 @@ fn default_patterns_mask_the_value_of_a_name_value_pair() {
 
 #[test]
 fn record_without_mask_patterns_keeps_the_text() {
-    let shipper = Logger::new(default_shipper("api"), Vec::new());
+    let shipper = Logger::new(default_shipper("api"), Vec::new()).unwrap();
     let mut event = LogEvent::info("GET /");
     event
         .extra
@@ -248,7 +253,7 @@ async fn send_buffer_posts_json_to_the_app_path() {
 #[tokio::test]
 async fn send_buffer_sends_the_post_api_key_as_a_bearer_token() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
-    let shipper = logger(HttpLogShipper::new("api", endpoint, "log-post-key"));
+    let shipper = logger(HttpLogShipper::new("api", endpoint, "log-post-key").unwrap());
     shipper.record(LogEvent::info("one"));
     shipper.send_buffer().await;
     let captured = rx.recv().await.unwrap();

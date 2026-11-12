@@ -15,7 +15,7 @@ use tower::ServiceExt;
 const PRUNE_AT: usize = 100;
 
 fn limiter(capacity: u32, refill_per_sec: f64) -> RateLimiter {
-    RateLimiter::new(capacity, refill_per_sec, PRUNE_AT)
+    RateLimiter::new(capacity, refill_per_sec, PRUNE_AT).unwrap()
 }
 
 fn key(index: usize) -> Option<IpAddr> {
@@ -114,14 +114,17 @@ fn evicts_the_oldest_buckets_when_no_bucket_is_full() {
 
 #[test]
 fn evict_count_is_a_tenth_of_prune_at_and_at_least_one() {
-    assert_eq!(RateLimiter::new(1, 1.0, 10_000).evict_count(), 1_000);
-    assert_eq!(RateLimiter::new(1, 1.0, 9).evict_count(), 1);
-    assert_eq!(RateLimiter::new(1, 1.0, 1).evict_count(), 1);
+    assert_eq!(
+        RateLimiter::new(1, 1.0, 10_000).unwrap().evict_count(),
+        1_000
+    );
+    assert_eq!(RateLimiter::new(1, 1.0, 9).unwrap().evict_count(), 1);
+    assert_eq!(RateLimiter::new(1, 1.0, 1).unwrap().evict_count(), 1);
 }
 
 #[test]
 fn a_prune_at_of_one_keeps_only_the_newest_key() {
-    let limiter = RateLimiter::new(2, 0.001, 1);
+    let limiter = RateLimiter::new(2, 0.001, 1).unwrap();
     let now = Instant::now();
     assert!(limiter.check(key(1), now).is_ok());
     assert!(limiter.check(key(2), now).is_ok());
@@ -131,9 +134,10 @@ fn a_prune_at_of_one_keeps_only_the_newest_key() {
 }
 
 #[test]
-#[should_panic(expected = "prune_at must be above zero")]
-fn a_zero_prune_at_panics() {
-    RateLimiter::new(1, 1.0, 0);
+fn a_zero_prune_at_returns_an_exception() {
+    let err = RateLimiter::new(1, 1.0, 0).err().unwrap();
+    assert_eq!(err.code(), "RATE_LIMIT_CONFIG");
+    assert!(err.message().contains("prune_at must be above zero"));
 }
 
 async fn send(router: &Router, forwarded: &str) -> Response {

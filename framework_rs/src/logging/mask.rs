@@ -1,4 +1,6 @@
 use super::{LogEvent, LogValue};
+use crate::exception;
+use crate::exception::Exception;
 
 pub(crate) const MASK: &str = "***";
 
@@ -20,16 +22,16 @@ pub(crate) struct Masks {
 }
 
 impl Masks {
-    pub(crate) fn new(patterns: &[String]) -> Self {
+    pub(crate) fn new(patterns: &[String]) -> Result<Self, Exception> {
         let plains = patterns
             .iter()
             .map(|pattern| compile(pattern, pattern))
-            .collect();
+            .collect::<Result<_, _>>()?;
         let pairs = patterns
             .iter()
             .map(|pattern| compile(pattern, &format!(r"[\w.\-]*(?:{pattern})[\w.\-]*=[^&\s;]*")))
-            .collect();
-        Self { plains, pairs }
+            .collect::<Result<_, _>>()?;
+        Ok(Self { plains, pairs })
     }
 
     pub(crate) fn mask_event(&self, event: &mut LogEvent) {
@@ -54,7 +56,12 @@ impl Masks {
     }
 }
 
-fn compile(pattern: &str, source: &str) -> regex::Regex {
-    regex::Regex::new(source)
-        .unwrap_or_else(|err| panic!("mask pattern `{pattern}` is not a valid regex: {err}"))
+fn compile(pattern: &str, source: &str) -> Result<regex::Regex, Exception> {
+    regex::Regex::new(source).map_err(|err| {
+        exception!(
+            code = "LOG_CONFIG",
+            format!("mask pattern `{pattern}` is not a valid regex"),
+            source = err,
+        )
+    })
 }

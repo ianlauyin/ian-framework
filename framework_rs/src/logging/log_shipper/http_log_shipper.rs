@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::exception;
+use crate::exception::Exception;
 use crate::logging::log_shipper::LogShipper;
 use crate::logging::mask::MASK;
 use crate::logging::{LogEvent, LogRequest};
@@ -20,26 +22,39 @@ pub(crate) struct Inner {
 }
 
 impl HttpLogShipper {
-    pub fn new(app: &'static str, endpoint: String, post_api_key: &str) -> Self {
+    pub fn new(app: &'static str, endpoint: String, post_api_key: &str) -> Result<Self, Exception> {
         let mut post_api_key =
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", post_api_key))
-                .expect("post API key is not a valid header value");
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", post_api_key)).map_err(
+                |err| {
+                    exception!(
+                        code = "LOG_CONFIG",
+                        "post API key is not a valid header value",
+                        source = err,
+                    )
+                },
+            )?;
         post_api_key.set_sensitive(true);
         let http = reqwest::Client::builder()
             .connect_timeout(SHIP_TIMEOUT)
             .timeout(SHIP_TIMEOUT)
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .expect("log shipper HTTP client cannot be built");
+            .map_err(|err| {
+                exception!(
+                    code = "LOG_CONFIG",
+                    "log shipper HTTP client cannot be built",
+                    source = err.without_url(),
+                )
+            })?;
         tracing::info!(app = %app, "log shipping posts to the log server");
-        Self {
+        Ok(Self {
             inner: Arc::new(Inner {
                 app,
                 endpoint,
                 post_api_key,
                 http,
             }),
-        }
+        })
     }
 
     fn batch_url(&self) -> String {

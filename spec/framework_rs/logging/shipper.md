@@ -28,10 +28,12 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - The mask patterns are not an argument of the shipper. `Logger::new` takes them. The default mask patterns are in `spec/framework_rs/logging/masking.md`.
 - A clone of one `HttpLogShipper` shares the endpoint, the POST API key and the HTTP client.
 
-`HttpLogShipper::new` returns `HttpLogShipper`. It panics in these conditions:
+`HttpLogShipper::new` returns `Result<HttpLogShipper, Exception>`. It does not panic. The exception has the code `LOG_CONFIG` in these conditions:
 
 - The POST API key is not a valid HTTP header value.
 - The HTTP client cannot be built.
+
+The message and the source of the exception do not hold the POST API key.
 
 `HttpLogShipper::new` writes one `tracing` info event with the field `app` and the message `log shipping posts to the log server`.
 

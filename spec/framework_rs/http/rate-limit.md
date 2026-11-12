@@ -12,7 +12,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 | --- | --- |
 | `RateLimiter` | The buckets. `RateLimiter::new(capacity: u32, refill_per_sec: f64, prune_at: usize)` makes it. `capacity` is the size of one bucket, `refill_per_sec` is its refill speed and `prune_at` is the most keys that the limiter holds. A clone shares the same buckets. |
 
-`RateLimiter::new` panics when `prune_at` is zero.
+`RateLimiter::new` returns `Result<RateLimiter, Exception>`. When `prune_at` is zero, it returns an exception with the code `RATE_LIMIT_CONFIG`.
 
 ## Algorithm
 

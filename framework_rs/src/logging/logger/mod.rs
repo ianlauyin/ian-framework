@@ -23,15 +23,15 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn new(shipper: HttpLogShipper, mask_patterns: Vec<String>) -> Self {
-        Self {
+    pub fn new(shipper: HttpLogShipper, mask_patterns: Vec<String>) -> Result<Self, Exception> {
+        Ok(Self {
             inner: Arc::new(Inner {
                 shipper,
-                masks: Masks::new(&mask_patterns),
+                masks: Masks::new(&mask_patterns)?,
                 buffer: Mutex::new(LogBuffer::new()),
                 shipping: tokio::sync::Mutex::new(()),
             }),
-        }
+        })
     }
 
     pub fn init(logger: Logger) -> Result<(), Logger> {

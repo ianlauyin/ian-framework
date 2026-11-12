@@ -9,6 +9,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::exception;
+use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::headers::client_ip;
 use crate::logging::Logger;
@@ -29,14 +30,19 @@ pub(crate) struct Bucket {
 }
 
 impl RateLimiter {
-    pub fn new(capacity: u32, refill_per_sec: f64, prune_at: usize) -> Self {
-        assert!(prune_at > 0, "rate limiter prune_at must be above zero");
-        Self {
+    pub fn new(capacity: u32, refill_per_sec: f64, prune_at: usize) -> Result<Self, Exception> {
+        if prune_at == 0 {
+            return Err(exception!(
+                code = "RATE_LIMIT_CONFIG",
+                "rate limiter prune_at must be above zero",
+            ));
+        }
+        Ok(Self {
             capacity: f64::from(capacity),
             refill_per_sec: refill_per_sec.max(0.0),
             prune_at,
             buckets: Arc::new(Mutex::new(HashMap::new())),
-        }
+        })
     }
 
     pub(crate) fn check(&self, key: Option<IpAddr>, now: Instant) -> Result<(), Duration> {

@@ -17,7 +17,7 @@ static GLOBAL_LOGGER: Once = Once::new();
 static SHIPPED: Mutex<Vec<Vec<LogEvent>>> = Mutex::new(Vec::new());
 
 pub(crate) fn http_shipper(app: &'static str, endpoint: &str) -> HttpLogShipper {
-    HttpLogShipper::new(app, endpoint.to_string(), "APP_KEY")
+    HttpLogShipper::new(app, endpoint.to_string(), "APP_KEY").unwrap()
 }
 
 pub(crate) fn default_shipper(app: &'static str) -> HttpLogShipper {
@@ -32,7 +32,7 @@ pub(crate) fn default_mask_patterns() -> Vec<String> {
 }
 
 pub(crate) fn logger(shipper: HttpLogShipper) -> Logger {
-    Logger::new(shipper, default_mask_patterns())
+    Logger::new(shipper, default_mask_patterns()).unwrap()
 }
 
 pub(crate) fn client_log_event(event: &LogEvent) -> ClientLogEvent {
