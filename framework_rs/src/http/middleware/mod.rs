@@ -14,7 +14,7 @@ pub use body_limit::{body_limit, BodyLimit};
 pub use no_store::no_store;
 pub use rate_limit::{rate_limit, RateLimiter};
 pub use request_timeout::{request_timeout, RequestTimeout};
-pub use require_api_key::{require_api_key, ApiKeyRule, ApiKeyRules, PathMatch};
+pub use require_api_key::{require_api_key, ApiKey};
 #[cfg(feature = "auth")]
 pub use require_session::require_session;
 pub use same_origin::require_same_origin;
