@@ -35,7 +35,7 @@ The log server trusts each event of an authorized POST. Thus it stores the `cont
 
 Each build compiles this module. This module does not use the `gcp` feature.
 
-- The `gcs` feature is optional. The Google Cloud Storage client is in `spec/framework_rs/gcs/context.md`.
+- The `gcs` feature is optional. The Google Cloud Storage client is in `spec/framework_rs/gcp/storage/context.md`.
 - The `gcp` feature is optional. The `gcs` feature enables it. The Secret Manager access is in `spec/framework_rs/gcp/context.md`.
 - The `monitor` feature is optional. The CPU and disk monitors are in `spec/framework_rs/monitor/context.md`.
 

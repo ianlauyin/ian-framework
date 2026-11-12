@@ -1,3 +1,6 @@
+#[cfg(feature = "gcs")]
+pub mod storage;
+
 pub(crate) mod credentials;
 pub(crate) mod error;
 pub(crate) mod http_client;

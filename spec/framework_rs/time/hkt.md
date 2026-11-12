@@ -24,4 +24,4 @@ The parts that apply to all of this feature are in `spec/framework_rs/time/conte
 | User | Use |
 | --- | --- |
 | `spec/framework_rs/logging/event.md` | The `ts` of each event that the framework makes. |
-| `spec/framework_rs/gcs/operations-log.md` | The `ts` of each operations record. |
+| `spec/framework_rs/gcp/storage/operations-log.md` | The `ts` of each operations record. |

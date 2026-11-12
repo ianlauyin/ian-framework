@@ -1,6 +1,6 @@
 # Exception
 
-`ian_framework::exception` exports `Exception`. It is the one error type of the library. It replaces the error enums and the error structs of the `auth`, `env`, `gcp` and `gcs` modules.
+`ian_framework::exception` exports `Exception`. It is the one error type of the library. It replaces the error enums and the error structs of the `auth`, `env`, `gcp` and `gcp::storage` modules.
 
 ## Replaced types
 
@@ -56,7 +56,7 @@ The only way to make an exception is the macro `exception!`. It is exported at t
 | `REDIS_CONFIG`, `REDIS_UNREACHABLE` | The `redis` feature. See `spec/framework_rs/redis/context.md`. |
 | `AUTH_CONFIG`, `AUTH_STORE`, `AUTH_HASH_FAILED`, `AUTH_RANDOM` | The `auth` feature. See `spec/framework_rs/auth/context.md`. |
 | `GCP_AUTH`, `GCP_CONFIG`, `GCP_API`, `GCP_TRANSPORT` | The `gcp` feature. See `spec/framework_rs/gcp/context.md`. |
-| `GCS_AUTH`, `GCS_CONFIG`, `GCS_NOT_FOUND`, `GCS_API`, `GCS_UNAVAILABLE`, `GCS_TRANSPORT`, `GCS_LOCAL` | The `gcs` feature. See `spec/framework_rs/gcs/context.md`. |
+| `GCS_AUTH`, `GCS_CONFIG`, `GCS_NOT_FOUND`, `GCS_API`, `GCS_UNAVAILABLE`, `GCS_TRANSPORT`, `GCS_LOCAL` | The `gcs` feature. See `spec/framework_rs/gcp/storage/context.md`. |
 
 - A code is an upper case string that the caller writes at the call site. A project can use its own string as a code.
 - `Exception` has no HTTP status. The `exception` module does not use `axum` or `ian_framework::http`.

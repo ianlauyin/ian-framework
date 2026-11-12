@@ -17,7 +17,7 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | --- | --- |
 | Request and event logging, and the browser log route `POST /log` | `spec/framework_rs/logging/context.md` |
 | CPU and disk monitors (Cargo feature `monitor`) that make a `LogEvent` when the usage meets a threshold | `spec/framework_rs/monitor/context.md` |
-| Google Cloud Storage client | `spec/framework_rs/gcs/context.md` |
+| Google Cloud Storage client | `spec/framework_rs/gcp/storage/context.md` |
 | HTTP boundary error, request header helpers, middleware for safety and security (same-origin, rate limit, response headers, API key, timeout, body limit), the process version route, and the health route | `spec/framework_rs/http/context.md` |
 | RFC 9110 `token68` check | `spec/framework_rs/token/context.md` |
 | Redis helpers (Cargo feature `redis`): `connect` makes a checked connection manager | `spec/framework_rs/redis/context.md` |

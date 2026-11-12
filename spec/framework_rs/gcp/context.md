@@ -9,6 +9,7 @@ This code is not product business logic.
 | --- | --- |
 | Application Default Credentials and access tokens | `spec/framework_rs/gcp/credentials.md` |
 | Secret Manager secret access | `spec/framework_rs/gcp/secret-manager.md` |
+| Cloud Storage client (`gcp::storage`, feature `gcs`) | `spec/framework_rs/gcp/storage/context.md` |
 
 ## Crate
 
@@ -39,8 +40,8 @@ cargo clippy --all-features --all-targets
 
 `ian_framework::gcp` has no public items. All items are private to the crate.
 
-- The `gcs` module uses the credentials and the access tokens. The GCS client is in `spec/framework_rs/gcs/context.md`.
-- The `gcs` module and the Secret Manager access use the same HTTP client settings. The settings are in the section "HTTP client".
+- The `gcp::storage` module uses the credentials and the access tokens. The GCS client is in `spec/framework_rs/gcp/storage/context.md`.
+- The `gcp::storage` module and the Secret Manager access use the same HTTP client settings. The settings are in the section "HTTP client".
 - The `env` module uses the Secret Manager access. The lookup of `env::required` and `env::optional` is in `spec/framework_rs/env/read.md`.
 
 ## HTTP client
@@ -50,7 +51,7 @@ cargo clippy --all-features --all-targets
 - The connect time limit is 10 seconds.
 - The HTTP client does not follow redirects.
 - The user agent is `ian_framework/{crate version}`.
-- Each user builds its client from this builder. The GCS client adds more settings. They are in `spec/framework_rs/gcs/context.md`.
+- Each user builds its client from this builder. The GCS client adds more settings. They are in `spec/framework_rs/gcp/storage/context.md`.
 
 ## Error type
 
@@ -63,7 +64,7 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 | `GCP_API` | Secret Manager gives a different status that is not 2xx and not 404, or the response body is not valid. |
 | `GCP_TRANSPORT` | The HTTP request fails. |
 
-- The `gcs` module changes the code `gcp_x` to the code `gcs_x`. The message and the source stay.
+- The `gcp::storage` module changes the code `gcp_x` to the code `gcs_x`. The message and the source stay.
 
 ## Out of scope
 

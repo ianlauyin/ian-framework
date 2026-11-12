@@ -15,9 +15,6 @@ pub mod redis;
 #[cfg(feature = "gcp")]
 pub mod gcp;
 
-#[cfg(feature = "gcs")]
-pub mod gcs;
-
 #[cfg(all(feature = "monitor", target_os = "linux"))]
 pub mod monitor;
 

@@ -39,5 +39,5 @@ The `Debug` output of the credentials does not show the client ID, the client se
 
 | User | Use |
 | --- | --- |
-| GCS client | `spec/framework_rs/gcs/authentication.md`. The client adds the signer email and keeps one token cache. |
+| GCS client | `spec/framework_rs/gcp/storage/authentication.md`. The client adds the signer email and keeps one token cache. |
 | Secret Manager access | `spec/framework_rs/gcp/secret-manager.md`. The access reads the credentials and the project one time for each process, and keeps one token. |

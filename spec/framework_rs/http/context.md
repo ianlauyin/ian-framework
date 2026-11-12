@@ -104,7 +104,7 @@ Related documents:
 
 - The token68 check is in `spec/framework_rs/token/context.md`.
 - The logging module is in `spec/framework_rs/logging/context.md`.
-- The Google Cloud Storage client is in `spec/framework_rs/gcs/context.md`.
+- The Google Cloud Storage client is in `spec/framework_rs/gcp/storage/context.md`.
 - Cookie sessions and password hashes are in `spec/framework_rs/auth/context.md`.
 
 Put this block in the project `Cargo.toml`:

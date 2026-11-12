@@ -1,6 +1,8 @@
 mod credentials;
 mod error;
 mod secret_manager;
+#[cfg(feature = "gcs")]
+mod storage;
 
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
