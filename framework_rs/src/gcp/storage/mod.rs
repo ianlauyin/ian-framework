@@ -1,7 +1,11 @@
-pub(crate) mod credentials;
+pub(crate) mod call;
+pub(crate) mod encode;
+pub(crate) mod error;
+pub(crate) mod list;
 pub(crate) mod object;
-pub(crate) mod request;
-pub(crate) mod rewrite_step;
+pub(crate) mod ops_log;
+pub(crate) mod rewrite;
+pub(crate) mod signed_url;
 pub(crate) mod upload;
 
 use std::collections::BTreeMap;
@@ -11,24 +15,26 @@ use std::time::{Duration, Instant};
 
 use chrono::Utc;
 
-use crate::gcp::{http_client_builder, CachedToken, METADATA_TOKEN_URL};
-use crate::logging::{LogLevel, Logger};
-
-use crate::gcp::storage::encode::{encode_object_id, encode_seg};
-use crate::gcp::storage::{
-    gcs_response_exception, is_retryable_status, API_ROOT, IAM_ROOT, UPLOAD_HOST_ROOT, UPLOAD_ROOT,
-};
-
 use crate::exception;
 use crate::exception::Exception;
-use credentials::{Auth, SignedParts};
-use request::{logged_error, Call, OpsRecord};
-use rewrite_step::RewriteStep;
-use upload::{ResumableUpload, UploadSource};
+use crate::gcp::storage::call::Call;
+use crate::gcp::storage::encode::encode_seg;
+use crate::gcp::storage::error::gcs_response_exception;
+use crate::gcp::storage::ops_log::{logged_error, OpsRecord};
+use crate::gcp::storage::rewrite::RewriteStep;
+use crate::gcp::storage::signed_url::{resolve_signer_email, SignedParts};
+use crate::gcp::storage::upload::{ResumableUpload, UploadSource};
+use crate::gcp::{http_client_builder, is_retryable_status, Credentials, TokenSource};
+use crate::logging::{LogLevel, Logger};
 
-pub use object::{ListPage, ListQuery, ObjectMeta, ObjectReader};
-pub use upload::{PutBody, PutOptions, PutRequest};
+pub use crate::gcp::storage::list::{ListPage, ListQuery};
+pub use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
+pub use crate::gcp::storage::upload::{PutBody, PutOptions, PutRequest};
 
+pub(crate) const API_ROOT: &str = "https://storage.googleapis.com/storage/v1";
+const UPLOAD_ROOT: &str = "https://storage.googleapis.com/upload/storage/v1";
+const UPLOAD_HOST_ROOT: &str = "https://storage.googleapis.com/";
+const IAM_ROOT: &str = "https://iamcredentials.googleapis.com/v1";
 pub(crate) const TRANSFER_TIMEOUT: Duration = Duration::from_secs(180);
 pub(crate) const SEND_ATTEMPTS: u32 = 4;
 const SEND_BACKOFF: Duration = Duration::from_millis(250);
@@ -55,7 +61,7 @@ impl GcsClient {
         bucket_name: impl Into<String>,
         signer_email: Option<&str>,
     ) -> Result<Self, Exception> {
-        Self::new(bucket_name, Auth::from_adc(signer_email).await?).await
+        Self::new(bucket_name, Credentials::from_adc().await?, signer_email).await
     }
 
     pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, Exception> {
@@ -108,7 +114,7 @@ impl GcsClient {
             .await?;
         let bytes = response.bytes().await.map_err(|err| {
             exception!(
-                code = "GCS_TRANSPORT",
+                code = "GCP_TRANSPORT",
                 "list response is not bytes",
                 source = err.without_url(),
             )
@@ -124,7 +130,7 @@ impl GcsClient {
         validate_metadata(&options.metadata)?;
         let mut source = UploadSource::open(&request.body).await?;
         let upload =
-            ResumableUpload::start(self, name, &content_type, &options.metadata, source.len())
+            ResumableUpload::start(self, name, content_type, &options.metadata, source.len())
                 .await?;
         upload.run(&mut source).await
     }
@@ -139,12 +145,12 @@ impl GcsClient {
                 RewriteStep::Next(next) => next,
             };
             if token.as_deref() == Some(next.as_str()) {
-                return Err(exception!(code = "GCS_API", "rewrite token did not change"));
+                return Err(exception!(code = "GCP_API", "rewrite token did not change"));
             }
             token = Some(next);
         }
         Err(exception!(
-            code = "GCS_API",
+            code = "GCP_API",
             "rewrite did not finish within the step limit",
         ))
     }
@@ -176,19 +182,16 @@ impl GcsClient {
                 ..Default::default()
             })
             .await;
-        let response = match result {
-            Ok(response) => response,
-            Err(err) if err.code() == "GCS_NOT_FOUND" => return Ok(()),
-            Err(err) => return Err(err),
-        };
-        let _ = response.bytes().await;
+        if let Some(response) = not_found_as_none(result)? {
+            let _ = response.bytes().await;
+        }
         Ok(())
     }
 
     pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
         if from == to {
             return Err(exception!(
-                code = "GCS_CONFIG",
+                code = "GCP_CONFIG",
                 "move source and destination are the same object",
             ));
         }
@@ -202,7 +205,7 @@ impl GcsClient {
     pub async fn signed_get_url(
         &self,
         name: &str,
-        expires_in: Option<Duration>,
+        expires_in: Duration,
         attachment_filename: Option<&str>,
     ) -> Result<String, Exception> {
         validate_object_name(name)?;
@@ -219,6 +222,50 @@ impl GcsClient {
 
     pub fn attach_ops_log(&self, logger: Logger) {
         *lock_ops(&self.inner.ops_log) = Some(logger);
+    }
+
+    pub(crate) async fn new(
+        bucket_name: impl Into<String>,
+        credentials: Credentials,
+        signer_email: Option<&str>,
+    ) -> Result<Self, Exception> {
+        let bucket_name = bucket_name.into();
+        validate_bucket(&bucket_name)?;
+        credentials.validate()?;
+        let http = storage_http_client()?;
+        let email = resolve_signer_email(&credentials, signer_email, &http).await?;
+        Ok(Self {
+            inner: Arc::new(Inner {
+                bucket: bucket_name,
+                endpoints: Endpoints::google(),
+                email,
+                http,
+                tokens: TokenSource::new(credentials),
+                ops_log: std::sync::Mutex::new(None),
+            }),
+        })
+    }
+
+    pub(crate) fn record_op(&self, op: OpsRecord<'_>) {
+        let Some(logger) = lock_ops(&self.inner.ops_log).clone() else {
+            return;
+        };
+        logger.record(op.into_event(self.bucket()));
+    }
+
+    pub(crate) async fn send(&self, call: &Call) -> Result<reqwest::Response, Exception> {
+        let mut refreshed = false;
+        let mut attempts = 0u32;
+        loop {
+            match self.try_send(call, attempts, refreshed).await? {
+                Outcome::Done(response) => return Ok(response),
+                Outcome::Retry => {
+                    attempts += 1;
+                    tokio::time::sleep(SEND_BACKOFF * attempts).await;
+                }
+                Outcome::Refresh => refreshed = true,
+            }
+        }
     }
 
     fn object_url(&self, name: &str) -> String {
@@ -247,7 +294,7 @@ impl GcsClient {
             .await?;
         let bytes = response.bytes().await.map_err(|err| {
             exception!(
-                code = "GCS_TRANSPORT",
+                code = "GCP_TRANSPORT",
                 "rewrite response is not bytes",
                 source = err.without_url(),
             )
@@ -279,47 +326,6 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    pub(crate) async fn new(bucket_name: impl Into<String>, auth: Auth) -> Result<Self, Exception> {
-        let bucket_name = bucket_name.into();
-        validate_bucket(&bucket_name)?;
-        auth.validate()?;
-        let http = http_client()?;
-        let email = auth.signer_email(&http).await?;
-        Ok(Self {
-            inner: Arc::new(Inner {
-                bucket: bucket_name,
-                endpoints: Endpoints::google(),
-                email,
-                auth,
-                http,
-                token: tokio::sync::Mutex::new(None),
-                ops_log: std::sync::Mutex::new(None),
-            }),
-        })
-    }
-
-    pub(crate) fn record_op(&self, op: OpsRecord<'_>) {
-        let Some(logger) = lock_ops(&self.inner.ops_log).clone() else {
-            return;
-        };
-        logger.record(op.into_event(self.bucket()));
-    }
-
-    pub(crate) async fn send(&self, call: &Call) -> Result<reqwest::Response, Exception> {
-        let mut refreshed = false;
-        let mut attempts = 0u32;
-        loop {
-            match self.try_send(call, attempts, refreshed).await? {
-                Outcome::Done(response) => return Ok(response),
-                Outcome::Retry => {
-                    attempts += 1;
-                    tokio::time::sleep(SEND_BACKOFF * attempts).await;
-                }
-                Outcome::Refresh => refreshed = true,
-            }
-        }
-    }
-
     async fn try_send(
         &self,
         call: &Call,
@@ -336,7 +342,7 @@ impl GcsClient {
         let latency_ms = millis_since(started);
         if status == 401 && !refreshed {
             let _ = response.bytes().await;
-            self.invalidate_token().await;
+            self.inner.tokens.invalidate().await;
             self.record_status(
                 call,
                 "gcs access token rejected",
@@ -380,7 +386,7 @@ impl GcsClient {
             return Ok(Outcome::Retry);
         }
         Err(exception!(
-            code = "GCS_TRANSPORT",
+            code = "GCP_TRANSPORT",
             "gcs request failed",
             source = err.without_url(),
         ))
@@ -406,18 +412,8 @@ impl GcsClient {
     }
 
     async fn access_token(&self) -> Result<String, Exception> {
-        let mut guard = self.inner.token.lock().await;
-        if let Some(cached) = guard.as_ref() {
-            if Instant::now() < cached.expires_at {
-                return Ok(cached.value.clone());
-            }
-        }
-        let fetched = self
-            .inner
-            .auth
-            .fetch_token(&self.inner.http, &self.inner.endpoints.metadata_token_url)
-            .await;
-        if let Err(err) = &fetched {
+        let token = self.inner.tokens.token(&self.inner.http).await;
+        if let Err(err) = &token {
             let error_text = logged_error(&String::from(err));
             self.record_op(OpsRecord {
                 level: LogLevel::Warn,
@@ -429,14 +425,7 @@ impl GcsClient {
                 extra: &[("error", &error_text)],
             });
         }
-        let token = fetched?;
-        let value = token.value.clone();
-        *guard = Some(token);
-        Ok(value)
-    }
-
-    async fn invalidate_token(&self) {
-        *self.inner.token.lock().await = None;
+        token
     }
 }
 
@@ -445,7 +434,7 @@ impl fmt::Debug for GcsClient {
         f.debug_struct("GcsClient")
             .field("bucket", &self.inner.bucket)
             .field("email", &self.inner.email)
-            .field("auth", &self.inner.auth)
+            .field("tokens", &self.inner.tokens)
             .finish_non_exhaustive()
     }
 }
@@ -455,7 +444,6 @@ pub(crate) struct Endpoints {
     pub(crate) upload_root: String,
     pub(crate) upload_location_prefix: String,
     pub(crate) iam_root: String,
-    pub(crate) metadata_token_url: String,
 }
 
 impl Endpoints {
@@ -465,7 +453,6 @@ impl Endpoints {
             upload_root: UPLOAD_ROOT.to_string(),
             upload_location_prefix: UPLOAD_HOST_ROOT.to_string(),
             iam_root: IAM_ROOT.to_string(),
-            metadata_token_url: METADATA_TOKEN_URL.to_string(),
         }
     }
 }
@@ -474,10 +461,80 @@ pub(crate) struct Inner {
     pub(crate) bucket: String,
     pub(crate) endpoints: Endpoints,
     pub(crate) email: String,
-    pub(crate) auth: Auth,
     pub(crate) http: reqwest::Client,
-    pub(crate) token: tokio::sync::Mutex<Option<CachedToken>>,
+    pub(crate) tokens: TokenSource,
     pub(crate) ops_log: std::sync::Mutex<Option<Logger>>,
+}
+
+pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if err.code() == "GCS_NOT_FOUND" => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
+pub(crate) fn may_retry(call: &Call, attempts: u32) -> bool {
+    !call.no_retry && attempts + 1 < SEND_ATTEMPTS
+}
+
+pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {
+    if name.is_empty()
+        || name.len() > MAX_OBJECT_NAME_BYTES
+        || name == "."
+        || name == ".."
+        || name.contains(['\r', '\n'])
+    {
+        return Err(exception!(
+            code = "GCP_CONFIG",
+            "object name is empty, too long, `.`, `..` or contains a line break",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(), Exception> {
+    for (key, value) in metadata {
+        if key.is_empty() || key.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
+            return Err(exception!(
+                code = "GCP_CONFIG",
+                "metadata key is empty or metadata contains a line break",
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn object_url(api_root: &str, bucket_name: &str, name: &str) -> String {
+    format!(
+        "{api_root}/b/{}/o/{}",
+        encode_seg(bucket_name),
+        encode_seg(name),
+    )
+}
+
+pub(crate) fn storage_http_client() -> Result<reqwest::Client, Exception> {
+    // A stalled read ends the call on every platform, and a long download is not cut.
+    let builder = http_client_builder().read_timeout(TRANSFER_TIMEOUT);
+    #[cfg(target_os = "linux")]
+    let builder = builder.tcp_user_timeout(TRANSFER_TIMEOUT);
+    builder.build().map_err(|err| {
+        exception!(
+            code = "GCS_LOCAL",
+            "cannot build the HTTP client",
+            source = err,
+        )
+    })
+}
+
+pub(crate) fn level_for_status(status: u16) -> Option<LogLevel> {
+    if status >= 500 {
+        Some(LogLevel::Error)
+    } else if status >= 400 {
+        Some(LogLevel::Warn)
+    } else {
+        None
+    }
 }
 
 enum Outcome {
@@ -504,55 +561,8 @@ fn build_request(http: &reqwest::Client, call: &Call, token: &str) -> reqwest::R
     request
 }
 
-pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
-    match result {
-        Ok(value) => Ok(Some(value)),
-        Err(err) if err.code() == "GCS_NOT_FOUND" => Ok(None),
-        Err(err) => Err(err),
-    }
-}
-
 fn lock_ops(slot: &std::sync::Mutex<Option<Logger>>) -> std::sync::MutexGuard<'_, Option<Logger>> {
     slot.lock().unwrap_or_else(|err| err.into_inner())
-}
-
-pub(crate) fn may_retry(call: &Call, attempts: u32) -> bool {
-    !call.no_retry && attempts + 1 < SEND_ATTEMPTS
-}
-
-pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {
-    if name.is_empty()
-        || name.len() > MAX_OBJECT_NAME_BYTES
-        || name == "."
-        || name == ".."
-        || name.contains(['\r', '\n'])
-    {
-        return Err(exception!(
-            code = "GCS_CONFIG",
-            "object name is empty, too long, `.`, `..` or contains a line break",
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(), Exception> {
-    for (key, value) in metadata {
-        if key.is_empty() || key.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
-            return Err(exception!(
-                code = "GCS_CONFIG",
-                "metadata key is empty or metadata contains a line break",
-            ));
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn object_url(api_root: &str, bucket_name: &str, name: &str) -> String {
-    format!(
-        "{api_root}/b/{}/o/{}",
-        encode_seg(bucket_name),
-        encode_object_id(name),
-    )
 }
 
 fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
@@ -561,37 +571,13 @@ fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
         || !bucket_name.is_ascii()
     {
         return Err(exception!(
-            code = "GCS_CONFIG",
+            code = "GCP_CONFIG",
             "bucket name is empty or contains a forbidden character",
         ));
     }
     Ok(())
 }
 
-pub(crate) fn http_client() -> Result<reqwest::Client, Exception> {
-    // A stalled read ends the call on every platform, and a long download is not cut.
-    let builder = http_client_builder().read_timeout(TRANSFER_TIMEOUT);
-    #[cfg(target_os = "linux")]
-    let builder = builder.tcp_user_timeout(TRANSFER_TIMEOUT);
-    builder.build().map_err(|err| {
-        exception!(
-            code = "GCS_LOCAL",
-            "cannot build the HTTP client",
-            source = err,
-        )
-    })
-}
-
 fn millis_since(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
-}
-
-pub(crate) fn level_for_status(status: u16) -> Option<LogLevel> {
-    if status >= 500 {
-        Some(LogLevel::Error)
-    } else if status >= 400 {
-        Some(LogLevel::Warn)
-    } else {
-        None
-    }
 }

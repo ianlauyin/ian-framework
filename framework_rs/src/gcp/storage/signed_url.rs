@@ -6,12 +6,15 @@ use sha2::{Digest, Sha256};
 
 use crate::exception;
 use crate::exception::Exception;
+use crate::gcp::storage::call::Call;
 use crate::gcp::storage::encode::encode_seg;
-use crate::gcp::storage::gcs_client::request::Call;
-use crate::gcp::storage::gcs_client::GcsClient;
+use crate::gcp::storage::GcsClient;
+use crate::gcp::{metadata_get, read_limited, truncate, Credentials};
 
 const HOST: &str = "storage.googleapis.com";
 pub(crate) const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
+const METADATA_EMAIL_URL: &str =
+    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email";
 
 pub(crate) struct SignedParts {
     pub(crate) string_to_sign: String,
@@ -24,7 +27,7 @@ impl SignedParts {
         name: &str,
         email: &str,
         now: DateTime<Utc>,
-        expires_in: Option<Duration>,
+        expires_in: Duration,
         attachment_filename: Option<&str>,
     ) -> Result<Self, Exception> {
         let expires_secs = signed_lifetime_seconds(expires_in)?;
@@ -77,6 +80,47 @@ impl SignedParts {
     }
 }
 
+// Metadata credentials sign as the VM service account. User credentials need the caller's email.
+pub(crate) async fn resolve_signer_email(
+    credentials: &Credentials,
+    signer_email: Option<&str>,
+    http: &reqwest::Client,
+) -> Result<String, Exception> {
+    match credentials {
+        Credentials::Metadata => metadata_email(http, METADATA_EMAIL_URL).await,
+        Credentials::User(_) => {
+            let email = signer_email.ok_or_else(|| {
+                exception!(
+                    code = "GCP_CONFIG",
+                    "user application default credentials require a signer email",
+                )
+            })?;
+            validate_signer_email(email)?;
+            Ok(email.to_string())
+        }
+    }
+}
+
+pub(crate) async fn metadata_email(http: &reqwest::Client, url: &str) -> Result<String, Exception> {
+    let response = metadata_get(http, url).await?;
+    let status = response.status();
+    let body = read_limited(response, "GCP_AUTH", "metadata server email response").await?;
+    let body = String::from_utf8_lossy(&body);
+    if !status.is_success() {
+        return Err(exception!(
+            code = "GCP_AUTH",
+            format!(
+                "metadata server email status {}: {}",
+                status.as_u16(),
+                truncate(&body, 300)
+            ),
+        ));
+    }
+    let email = body.trim().to_string();
+    validate_signer_email(&email)?;
+    Ok(email)
+}
+
 pub(crate) async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<u8>, Exception> {
     let url = format!(
         "{}/projects/-/serviceAccounts/{}:signBlob",
@@ -94,7 +138,7 @@ pub(crate) async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<
         .await?;
     let bytes = response.bytes().await.map_err(|err| {
         exception!(
-            code = "GCS_TRANSPORT",
+            code = "GCP_TRANSPORT",
             "signBlob response is not bytes",
             source = err.without_url(),
         )
@@ -105,7 +149,7 @@ pub(crate) async fn sign_blob(client: &GcsClient, payload: &[u8]) -> Result<Vec<
 pub(crate) fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, Exception> {
     let parsed: SignBlobResponse = serde_json::from_slice(bytes).map_err(|err| {
         exception!(
-            code = "GCS_API",
+            code = "GCP_API",
             "signBlob response is not JSON",
             source = err,
         )
@@ -119,43 +163,31 @@ pub(crate) fn signature_from_response(bytes: &[u8]) -> Result<Vec<u8>, Exception
         .decode(cleaned)
         .map_err(|err| {
             exception!(
-                code = "GCS_API",
+                code = "GCP_API",
                 "signBlob signature is not base64",
                 source = err,
             )
         })?;
     if signature.is_empty() {
         return Err(exception!(
-            code = "GCS_API",
+            code = "GCP_API",
             "signBlob returned an empty signature",
         ));
     }
     Ok(signature)
 }
 
-#[derive(serde::Deserialize)]
-struct SignBlobResponse {
-    #[serde(rename = "signedBlob")]
-    signed_blob: String,
-}
-
-pub(crate) fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u64, Exception> {
-    let Some(expires_in) = expires_in else {
-        return Err(exception!(
-            code = "GCS_CONFIG",
-            "signed URL lifetime is missing",
-        ));
-    };
+pub(crate) fn signed_lifetime_seconds(expires_in: Duration) -> Result<u64, Exception> {
     let seconds = expires_in.as_secs();
     if seconds == 0 {
         return Err(exception!(
-            code = "GCS_CONFIG",
+            code = "GCP_CONFIG",
             "signed URL lifetime must be at least 1 second",
         ));
     }
     if seconds > MAX_SIGNED_URL_SECONDS {
         return Err(exception!(
-            code = "GCS_CONFIG",
+            code = "GCP_CONFIG",
             "signed URL lifetime must be at most 604800 seconds",
         ));
     }
@@ -165,7 +197,7 @@ pub(crate) fn signed_lifetime_seconds(expires_in: Option<Duration>) -> Result<u6
 pub(crate) fn attachment_disposition(filename: &str) -> Result<String, Exception> {
     if filename.is_empty() {
         return Err(exception!(
-            code = "GCS_CONFIG",
+            code = "GCP_CONFIG",
             "attachment filename is empty",
         ));
     }
@@ -190,4 +222,20 @@ pub(crate) fn encode_object_path(name: &str) -> String {
         .map(encode_seg)
         .collect::<Vec<_>>()
         .join("/")
+}
+
+#[derive(serde::Deserialize)]
+struct SignBlobResponse {
+    #[serde(rename = "signedBlob")]
+    signed_blob: String,
+}
+
+fn validate_signer_email(email: &str) -> Result<(), Exception> {
+    if !email.contains('@') || email.contains(char::is_whitespace) {
+        return Err(exception!(
+            code = "GCP_CONFIG",
+            "signer email is not a service account email",
+        ));
+    }
+    Ok(())
 }

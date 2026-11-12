@@ -1,7 +1,6 @@
-use crate::logging::{LogEvent, LogLevel};
-
-use crate::gcp::storage::redact_query;
+use crate::gcp::storage::error::redact_query;
 use crate::gcp::truncate;
+use crate::logging::{LogEvent, LogLevel};
 
 pub(crate) struct OpsRecord<'a> {
     pub(crate) level: LogLevel,
@@ -46,15 +45,6 @@ pub(crate) fn logged_error(err: &impl std::fmt::Display) -> String {
     truncate(&redacted, 300).to_string()
 }
 
-fn action(method: &str, url: &str) -> String {
-    if method.is_empty() {
-        return String::new();
-    }
-    let path = path_only(url);
-    let path = if path.is_empty() { "/" } else { path.as_str() };
-    format!("GCS/{method}:{path}")
-}
-
 pub(crate) fn path_only(url: &str) -> String {
     if let Ok(parsed) = reqwest::Url::parse(url) {
         return parsed.path().to_string();
@@ -63,4 +53,13 @@ pub(crate) fn path_only(url: &str) -> String {
         Some((path, _)) => path.to_string(),
         None => url.to_string(),
     }
+}
+
+fn action(method: &str, url: &str) -> String {
+    if method.is_empty() {
+        return String::new();
+    }
+    let path = path_only(url);
+    let path = if path.is_empty() { "/" } else { path.as_str() };
+    format!("GCS/{method}:{path}")
 }

@@ -1,12 +1,15 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::exception::Exception;
-use crate::gcp::storage::gcs_client::upload::upload_source::UploadSource;
-use crate::gcp::storage::gcs_client::{GcsClient, TRANSFER_TIMEOUT};
-use crate::gcp::storage::is_retryable;
+use crate::gcp::credentials::CachedToken;
+use crate::gcp::storage::error::is_retryable;
+use crate::gcp::storage::upload::resumable_upload::*;
+use crate::gcp::storage::upload::UploadSource;
+use crate::gcp::storage::{Endpoints, GcsClient, ObjectMeta, PutBody, TRANSFER_TIMEOUT};
+use crate::test::gcp::storage::{fake_client, user_credentials, SIGNER};
+use crate::test::gcp::{serve_script, Reply};
 
-use crate::test::gcp::storage::gcs_client::{fake_client, serve_script, Reply};
 #[test]
 fn the_session_url_must_stay_on_the_google_host() {
     let prefix = Endpoints::google().upload_location_prefix;
@@ -20,32 +23,11 @@ fn the_session_url_must_stay_on_the_google_host() {
     assert!(!"https://storage.googleapis.com@evil.example/".starts_with(&prefix));
 }
 
-use std::time::Instant;
-
-use crate::gcp::storage::gcs_client::credentials::Auth;
-use crate::gcp::storage::gcs_client::{Endpoints, PutBody};
-use crate::gcp::{CachedToken, UserCredentials};
-
-use crate::gcp::storage::gcs_client::upload::resumable_upload::*;
-
 #[test]
-fn probe_and_chunk_ranges_match_the_upload_shape() {
-    assert_eq!(probe_content_range(0), "bytes */0");
-    assert_eq!(probe_content_range(12), "bytes */12");
+fn chunk_ranges_match_the_upload_shape() {
     assert_eq!(chunk_content_range(0, 0, 0), "bytes */0");
     assert_eq!(chunk_content_range(8, 0, 8), "bytes */8");
     assert_eq!(chunk_content_range(0, 4, 4), "bytes 0-3/4");
-}
-
-#[test]
-fn non_final_suffix_must_be_a_multiple_of_256_kib() {
-    let align = CHUNK_ALIGN;
-    assert_eq!(chunk_suffix_len(align, 0, 0, false), Some(align));
-    assert_eq!(chunk_suffix_len(align, 0, 1, false), None);
-    assert_eq!(chunk_suffix_len(align, 0, 1, true), Some(align - 1));
-    assert_eq!(chunk_suffix_len(0, 0, 0, true), Some(0));
-    assert_eq!(chunk_suffix_len(0, 8, 8, true), Some(0));
-    assert_eq!(chunk_suffix_len(align, 0, align, false), None);
 }
 
 #[test]
@@ -56,12 +38,16 @@ fn advance_offset_rewinds_then_resets_after_progress() {
     assert_eq!(offset, 4);
     assert_eq!(rewinds, 1);
     let stalled = advance_offset(&mut offset, &mut rewinds, 4, 100).unwrap_err();
-    assert_eq!(stalled.code(), "GCS_API");
+    assert_eq!(stalled.code(), "GCP_API");
     advance_offset(&mut offset, &mut rewinds, 20, 100).unwrap();
     assert_eq!(offset, 20);
     assert_eq!(rewinds, 0);
     let past = advance_offset(&mut offset, &mut rewinds, 101, 100).unwrap_err();
-    assert_eq!(past.code(), "GCS_API");
+    assert_eq!(past.code(), "GCP_API");
+    let no_metadata = advance_offset(&mut offset, &mut rewinds, 100, 100).unwrap_err();
+    assert!(no_metadata
+        .to_string()
+        .contains("did not return object metadata"));
 }
 
 #[test]
@@ -107,17 +93,10 @@ async fn empty_final_chunk_sends_content_length_zero() {
         socket.write_all(body).await.unwrap();
         String::from_utf8(head).unwrap().to_ascii_lowercase()
     });
-    let auth = Auth::User {
-        credentials: UserCredentials {
-            client_id: "client".to_string(),
-            client_secret: "secret".to_string(),
-            refresh_token: "refresh".to_string(),
-            quota_project_id: None,
-        },
-        signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
-    };
-    let client = GcsClient::new("my-bucket", auth).await.unwrap();
-    *client.inner.token.lock().await = Some(CachedToken {
+    let client = GcsClient::new("my-bucket", user_credentials(), Some(SIGNER))
+        .await
+        .unwrap();
+    *client.inner.tokens.cached.lock().await = Some(CachedToken {
         value: "token".to_string(),
         expires_at: Instant::now() + Duration::from_secs(600),
     });
@@ -127,14 +106,12 @@ async fn empty_final_chunk_sends_content_length_zero() {
         content_type: "application/octet-stream",
         total: 0,
     };
-    upload
-        .put_chunk_retrying(b"", 0, true)
-        .await
-        .unwrap()
-        .expect_done()
-        .unwrap();
+    let body = PutBody::Bytes(Vec::new());
+    let mut source = UploadSource::open(&body).await.unwrap();
+    upload.run(&mut source).await.unwrap();
     let head = server.await.unwrap();
     assert!(head.contains("\r\ncontent-length: 0\r\n"), "{head}");
+    assert!(head.contains("\r\ncontent-range: bytes */0\r\n"), "{head}");
 }
 
 #[test]
@@ -173,6 +150,26 @@ async fn start_with(reply: Reply) -> Result<(), Exception> {
         .map(|_| ())
 }
 
+// The server must answer every request of the upload with one reply, so the script ends with the upload.
+async fn run_script(replies: Vec<Reply>) -> (Result<ObjectMeta, Exception>, Vec<String>) {
+    let (addr, server) = serve_script(replies).await;
+    let client = fake_client(addr);
+    let body = PutBody::Bytes(b"0123456789".to_vec());
+    let mut source = UploadSource::open(&body).await.unwrap();
+    let result = upload_to(&client, 10).run(&mut source).await;
+    (result, server.await.unwrap())
+}
+
+fn content_range(request: &str) -> String {
+    request
+        .to_ascii_lowercase()
+        .lines()
+        .find_map(|line| line.strip_prefix("content-range: "))
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
 #[tokio::test]
 async fn start_refuses_a_missing_or_foreign_session_url() {
     let missing = start_with(Reply::new(200, "")).await.unwrap_err();
@@ -188,16 +185,9 @@ async fn start_refuses_a_missing_or_foreign_session_url() {
 
 #[tokio::test]
 async fn run_sends_one_chunk_and_finishes() {
-    let (addr, server) = serve_script(vec![Reply::new(200, META)]).await;
-    let client = fake_client(addr);
-    let body = PutBody::Bytes(b"0123456789".to_vec());
-    let mut source = UploadSource::open(&body).await.unwrap();
-    let meta = upload_to(&client, 10).run(&mut source).await.unwrap();
-    assert_eq!(meta.size, 10);
-    let request = server.await.unwrap().remove(0);
-    assert!(request
-        .to_ascii_lowercase()
-        .contains("content-range: bytes 0-9/10"));
+    let (result, requests) = run_script(vec![Reply::new(200, META)]).await;
+    assert_eq!(result.unwrap().size, 10);
+    assert_eq!(content_range(&requests[0]), "bytes 0-9/10");
 }
 
 #[tokio::test]
@@ -214,19 +204,16 @@ async fn run_sends_a_second_chunk_after_the_range_of_the_first() {
         .await
         .unwrap();
     let requests = server.await.unwrap();
-    let second = requests[1].to_ascii_lowercase();
-    assert!(second.contains(&format!(
-        "content-range: bytes {CHUNK_SIZE}-{CHUNK_SIZE}/{total}"
-    )));
+    assert_eq!(
+        content_range(&requests[1]),
+        format!("bytes {CHUNK_SIZE}-{CHUNK_SIZE}/{total}")
+    );
 }
 
 #[tokio::test]
 async fn run_fails_when_the_last_chunk_returns_no_metadata() {
-    let (addr, _server) = serve_script(vec![range_reply("bytes=0-9")]).await;
-    let client = fake_client(addr);
-    let body = PutBody::Bytes(b"0123456789".to_vec());
-    let mut source = UploadSource::open(&body).await.unwrap();
-    let err = upload_to(&client, 10).run(&mut source).await.unwrap_err();
+    let (result, _) = run_script(vec![range_reply("bytes=0-9")]).await;
+    let err = result.unwrap_err();
     assert!(err.to_string().contains("did not return object metadata"));
 }
 
@@ -239,18 +226,6 @@ async fn run_fails_when_an_empty_object_returns_no_metadata() {
     assert!(upload_to(&client, 0).run(&mut source).await.is_err());
 }
 
-async fn put_chunk(replies: Vec<Reply>, start: u64) -> Result<UploadStep, Exception> {
-    let (addr, _server) = serve_script(replies).await;
-    let client = fake_client(addr);
-    upload_to(&client, 20)
-        .put_chunk_retrying(b"0123456789", start, true)
-        .await
-}
-
-fn is_done(step: Result<UploadStep, Exception>) -> bool {
-    matches!(step, Ok(UploadStep::Done(_)))
-}
-
 #[tokio::test]
 async fn a_failed_chunk_resumes_from_the_offset_the_session_reports() {
     let replies = vec![
@@ -258,19 +233,11 @@ async fn a_failed_chunk_resumes_from_the_offset_the_session_reports() {
         range_reply("bytes=0-7"),
         Reply::new(200, META),
     ];
-    let (addr, server) = serve_script(replies).await;
-    let client = fake_client(addr);
-    let step = upload_to(&client, 10)
-        .put_chunk_retrying(b"0123456789", 0, true)
-        .await;
-    assert!(is_done(step));
-    let requests = server.await.unwrap();
-    assert!(requests[1]
-        .to_ascii_lowercase()
-        .contains("content-range: bytes */10"));
-    assert!(requests[2]
-        .to_ascii_lowercase()
-        .contains("content-range: bytes 8-9/10"));
+    let (result, requests) = run_script(replies).await;
+    result.unwrap();
+    assert_eq!(content_range(&requests[1]), "bytes */10");
+    assert!(requests[1].ends_with("\r\n\r\n"));
+    assert_eq!(content_range(&requests[2]), "bytes 8-9/10");
     assert!(requests[2].ends_with("89"));
 }
 
@@ -281,25 +248,29 @@ async fn a_chunk_that_made_no_progress_is_sent_again() {
         Reply::new(308, ""),
         Reply::new(200, META),
     ];
-    assert!(is_done(put_chunk(replies, 0).await));
+    let (result, requests) = run_script(replies).await;
+    result.unwrap();
+    assert_eq!(content_range(&requests[2]), "bytes 0-9/10");
 }
 
 #[tokio::test]
-async fn the_session_can_move_the_offset_back_inside_the_chunk() {
+async fn the_session_can_move_the_offset_back() {
     let replies = vec![
         Reply::new(500, "{}"),
-        range_reply("bytes=0-13"),
+        range_reply("bytes=0-7"),
         Reply::new(500, "{}"),
-        range_reply("bytes=0-11"),
+        range_reply("bytes=0-5"),
         Reply::new(200, META),
     ];
-    assert!(is_done(put_chunk(replies, 10).await));
+    let (result, requests) = run_script(replies).await;
+    result.unwrap();
+    assert_eq!(content_range(&requests[4]), "bytes 6-9/10");
 }
 
 #[tokio::test]
 async fn a_probe_that_finds_the_finished_object_ends_the_upload() {
-    let replies = vec![Reply::new(500, "{}"), Reply::new(200, META)];
-    assert!(is_done(put_chunk(replies, 0).await));
+    let (result, _) = run_script(vec![Reply::new(500, "{}"), Reply::new(200, META)]).await;
+    result.unwrap();
 }
 
 #[tokio::test]
@@ -309,42 +280,60 @@ async fn a_failed_probe_is_retried_but_a_final_error_is_returned() {
         Reply::new(503, "{}"),
         Reply::new(200, META),
     ];
-    assert!(is_done(put_chunk(replies, 0).await));
+    run_script(replies).await.0.unwrap();
     let replies = vec![Reply::new(500, "{}"), Reply::new(403, "{}")];
-    let err = put_chunk(replies, 0).await.map(|_| ()).unwrap_err();
-    assert_eq!(err.code(), "GCS_AUTH");
+    let err = run_script(replies).await.0.unwrap_err();
+    assert_eq!(err.code(), "GCP_AUTH");
 }
 
 #[tokio::test]
 async fn a_chunk_error_that_cannot_be_retried_is_returned() {
-    let err = put_chunk(vec![Reply::new(403, "{}")], 0)
-        .await
-        .map(|_| ())
-        .unwrap_err();
-    assert_eq!(err.code(), "GCS_AUTH");
+    let err = run_script(vec![Reply::new(403, "{}")]).await.0.unwrap_err();
+    assert_eq!(err.code(), "GCP_AUTH");
 }
 
 #[tokio::test]
-async fn a_range_that_covers_the_chunk_ends_the_attempt() {
-    let step = put_chunk(vec![range_reply("bytes=0-19")], 10)
+async fn the_upload_stops_after_the_attempt_limit() {
+    let replies = (0..CHUNK_ATTEMPTS).map(|_| Reply::new(500, "{}")).collect();
+    let (result, requests) = run_script(replies).await;
+    assert_eq!(result.unwrap_err().code(), "GCS_UNAVAILABLE");
+    assert_eq!(requests.len() as u32, CHUNK_ATTEMPTS);
+}
+
+#[tokio::test]
+async fn a_chunk_response_that_does_not_advance_is_an_api_error() {
+    let err = run_script(vec![Reply::new(308, "")]).await.0.unwrap_err();
+    assert_eq!(err.code(), "GCP_API");
+    assert!(err.to_string().contains("did not advance"));
+}
+
+#[tokio::test]
+async fn a_response_without_a_range_means_that_no_bytes_are_kept() {
+    let total = CHUNK_SIZE + 1;
+    let first = range_reply(&format!("bytes=0-{}", CHUNK_SIZE - 1));
+    let replies = vec![first, Reply::new(308, ""), Reply::new(200, META)];
+    let (addr, server) = serve_script(replies).await;
+    let client = fake_client(addr);
+    let body = PutBody::Bytes(vec![7_u8; total]);
+    let mut source = UploadSource::open(&body).await.unwrap();
+    upload_to(&client, total as u64)
+        .run(&mut source)
         .await
         .unwrap();
-    assert!(matches!(step, UploadStep::Continue { next: 20 }));
-}
-
-#[tokio::test]
-async fn a_response_without_a_range_keeps_the_sent_offset() {
-    let step = put_chunk(vec![Reply::new(308, "")], 10).await.unwrap();
-    assert!(matches!(step, UploadStep::Continue { next: 20 }));
+    let requests = server.await.unwrap();
+    assert_eq!(
+        content_range(&requests[2]),
+        format!("bytes 0-{}/{total}", CHUNK_SIZE - 1)
+    );
 }
 
 #[tokio::test]
 async fn a_bad_range_header_is_an_api_error() {
-    let err = put_chunk(vec![range_reply("bytes=x")], 0)
+    let err = run_script(vec![range_reply("bytes=x")])
         .await
-        .map(|_| ())
+        .0
         .unwrap_err();
-    assert_eq!(err.code(), "GCS_API");
+    assert_eq!(err.code(), "GCP_API");
 }
 
 #[test]
@@ -359,13 +348,4 @@ fn a_bad_range_header_is_refused() {
         assert!(next_offset_from_range(header).is_err(), "{header}");
     }
     assert_eq!(next_offset_from_range(" bytes=0-4, 6-9 ").unwrap(), 5);
-}
-
-#[test]
-fn a_probe_answer_outside_the_chunk_ends_the_attempt() {
-    assert!(matches!(after_probe(4, 5, 15, 5), Move::Finish(_)));
-    assert!(matches!(after_probe(15, 5, 15, 5), Move::Finish(_)));
-    assert!(matches!(after_probe(9, 5, 15, 5), Move::Reset(9)));
-    assert!(matches!(after_probe(6, 5, 15, 8), Move::Set(6)));
-    assert!(matches!(after_probe(8, 5, 15, 8), Move::Stay));
 }

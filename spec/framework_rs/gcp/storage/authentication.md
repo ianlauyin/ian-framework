@@ -10,10 +10,13 @@ The client accepts only Application Default Credentials. The shared credentials 
 - The client rejects a service account JSON key.
 - The client rejects impersonated application default credentials.
 - User application default credentials need a signer email from the caller. If the caller gives `None`, `GcsClient::from_adc` returns a `Config` error. The client adds this check to the shared credentials read.
+- A signer email from the caller must have `@` and no whitespace. Another value is a `Config` error.
+- The client keeps the credentials in one `TokenSource`. Its rules are in `spec/framework_rs/gcp/credentials.md`. The client keeps the signer email in one field. It does not keep a second copy.
 - The client does not send the quota project of user credentials.
 - The signer email is the service account email that signs URLs. The project reads it from its own env variable and gives it to `GcsClient::from_adc`. The library does not read an env variable for the signer email.
 - Metadata auth does not use the signer email from the caller. It reads the email from the metadata server.
-- A failure of the metadata email request has a `gcs` code. The request failure is `GCS_AUTH`, like the other `gcp` codes that the client maps with the same meaning.
+- A failure of the metadata email request is `GCP_AUTH`. A metadata email that is not valid is `GCP_CONFIG`.
+- The client reads the metadata email response with `read_limited`. A response larger than 256 KiB is an `Auth` error.
 
 Scopes:
 

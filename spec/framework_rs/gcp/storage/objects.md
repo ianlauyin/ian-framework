@@ -86,4 +86,6 @@ These methods are on `GcsClient`:
 | `bucket` | Returns the bucket name. |
 | `signer_email` | Returns the signer email. |
 
-`ObjectReader` has one method. `byte_stream` reads the object data as a byte stream.
+`ObjectReader` has one method. `byte_stream` reads the object data as a stream of `bytes::Bytes` chunks. The stream does not copy a chunk.
+
+The `Debug` output of an `ObjectReader` shows the HTTP status and the content length. It does not show the URL.

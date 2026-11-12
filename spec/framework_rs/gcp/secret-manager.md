@@ -30,7 +30,7 @@ The steps to make the state are:
 - The whitespace at the start and at the end of the project id is removed.
 - An error does not go into the `OnceCell`. Thus the next call tries again.
 - An unreachable metadata server does not go into the `OnceCell`. `SecretManager::shared` gives no credentials for that call. For the next 30 seconds, each call gives no credentials and does not send the request. After that time, the next call tries again.
-- When the token expires, the next access gets a new token and keeps it.
+- The state keeps the token in one `TokenSource`. The rules are in `spec/framework_rs/gcp/credentials.md`. When the token expires, the next access gets a new token and keeps it.
 - The `OnceCell` is not in the public API.
 
 ## Access
@@ -46,6 +46,16 @@ Request rules:
 - The request time limit is 30 seconds.
 - The HTTP client uses the shared settings in `spec/framework_rs/gcp/context.md`. Thus the connect time limit is 10 seconds, and the client does not follow redirects.
 - A transport failure is a `Transport` error. The error source does not have the URL.
+- The access reads the response body with `read_limited`. A body larger than 256 KiB is a `Transport` error.
+
+Retry rules:
+
+- The first status 401 removes the cached token. The access gets a new token and sends the request again. This retry does not count as an attempt.
+- A later status 401 gives the response in the table below.
+- The access makes a maximum of 3 attempts. It retries a transport failure and a status 408, 429, 500, 502, 503 or 504.
+- The wait before a retry is 250 milliseconds times the number of attempts made.
+- After the last attempt, the access gives the result of that attempt.
+- A token request failure is not retried.
 
 ## Response
 

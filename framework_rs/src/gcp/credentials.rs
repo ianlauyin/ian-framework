@@ -3,18 +3,22 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
+use tokio::sync::Mutex;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::{api_detail, truncate};
+use crate::gcp::{google_error_message, read_limited, truncate};
 
 pub(crate) const METADATA_TOKEN_URL: &str =
     "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token";
-const CLOUD_PLATFORM_SCOPE: &str = "https://www.googleapis.com/auth/cloud-platform";
-const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+pub(crate) const OAUTH_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+// The `cloud-platform` scope URL, percent-encoded for the query string.
+const CLOUD_PLATFORM_SCOPE: &str = "https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform";
 const METADATA_TIMEOUT: Duration = Duration::from_secs(2);
 const TOKEN_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const TOKEN_SKEW: Duration = Duration::from_secs(60);
+// Google gives this lifetime to a token when the response has no `expires_in`.
+pub(crate) const DEFAULT_TOKEN_LIFETIME: Duration = Duration::from_secs(3600);
 pub(crate) const ADC_FILE_LIMIT: u64 = 1024 * 1024;
 
 #[derive(Clone)]
@@ -48,16 +52,6 @@ impl Credentials {
             Credentials::Metadata => None,
             Credentials::User(user) => user.quota_project_id.as_deref(),
         }
-    }
-
-    pub(crate) async fn fetch_token(
-        &self,
-        http: &reqwest::Client,
-    ) -> Result<CachedToken, Exception> {
-        if let Credentials::User(user) = self {
-            return user.fetch_token(http).await;
-        }
-        metadata_token(http, METADATA_TOKEN_URL).await
     }
 }
 
@@ -93,13 +87,6 @@ impl UserCredentials {
     }
 
     pub(crate) async fn fetch_token(
-        &self,
-        http: &reqwest::Client,
-    ) -> Result<CachedToken, Exception> {
-        self.fetch_token_at(http, TOKEN_URL).await
-    }
-
-    pub(crate) async fn fetch_token_at(
         &self,
         http: &reqwest::Client,
         url: &str,
@@ -139,12 +126,59 @@ pub(crate) struct CachedToken {
     pub(crate) expires_at: Instant,
 }
 
+// The credentials and one cached access token. Each user gives its own HTTP client.
+pub(crate) struct TokenSource {
+    pub(crate) credentials: Credentials,
+    pub(crate) metadata_token_url: String,
+    pub(crate) oauth_token_url: String,
+    pub(crate) cached: Mutex<Option<CachedToken>>,
+}
+
+impl TokenSource {
+    pub(crate) fn new(credentials: Credentials) -> Self {
+        Self {
+            credentials,
+            metadata_token_url: METADATA_TOKEN_URL.to_string(),
+            oauth_token_url: OAUTH_TOKEN_URL.to_string(),
+            cached: Mutex::new(None),
+        }
+    }
+
+    // The lock stays held during a fetch, so concurrent calls send one token request.
+    pub(crate) async fn token(&self, http: &reqwest::Client) -> Result<String, Exception> {
+        let mut cached = self.cached.lock().await;
+        if let Some(token) = cached.as_ref() {
+            if Instant::now() < token.expires_at {
+                return Ok(token.value.clone());
+            }
+        }
+        let token = match &self.credentials {
+            Credentials::Metadata => metadata_token(http, &self.metadata_token_url).await?,
+            Credentials::User(user) => user.fetch_token(http, &self.oauth_token_url).await?,
+        };
+        let value = token.value.clone();
+        *cached = Some(token);
+        Ok(value)
+    }
+
+    pub(crate) async fn invalidate(&self) {
+        *self.cached.lock().await = None;
+    }
+}
+
+impl std::fmt::Debug for TokenSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenSource")
+            .field("credentials", &self.credentials)
+            .finish_non_exhaustive()
+    }
+}
+
 pub(crate) async fn metadata_token(
     http: &reqwest::Client,
     token_url: &str,
 ) -> Result<CachedToken, Exception> {
-    let scope: String = form_urlencoded::byte_serialize(CLOUD_PLATFORM_SCOPE.as_bytes()).collect();
-    let url = format!("{token_url}?scopes={scope}");
+    let url = format!("{token_url}?scopes={CLOUD_PLATFORM_SCOPE}");
     let response = metadata_get(http, &url).await?;
     token_from_response(response).await
 }
@@ -171,15 +205,10 @@ pub(crate) async fn token_from_response(
     response: reqwest::Response,
 ) -> Result<CachedToken, Exception> {
     let status = response.status();
-    let body = response.text().await.map_err(|err| {
-        exception!(
-            code = "GCP_AUTH",
-            "token response is not text",
-            source = err.without_url(),
-        )
-    })?;
+    let body = read_limited(response, "GCP_AUTH", "token response").await?;
     if !status.is_success() {
-        let detail = api_detail(&body).unwrap_or(body);
+        let text = String::from_utf8_lossy(&body);
+        let detail = google_error_message(&text).unwrap_or_else(|| text.to_string());
         return Err(exception!(
             code = "GCP_AUTH",
             format!(
@@ -189,7 +218,7 @@ pub(crate) async fn token_from_response(
             ),
         ));
     }
-    let parsed: TokenResponse = serde_json::from_str(&body).map_err(|err| {
+    let parsed: TokenResponse = serde_json::from_slice(&body).map_err(|err| {
         exception!(
             code = "GCP_AUTH",
             "token response is not JSON",
@@ -208,33 +237,14 @@ pub(crate) async fn token_from_response(
     })
 }
 
-fn expiry(expires_in: u64) -> Instant {
-    let lifetime = Duration::from_secs(expires_in);
-    let lifetime = lifetime.saturating_sub(TOKEN_SKEW);
-    Instant::now() + lifetime
-}
-
-#[derive(serde::Deserialize)]
-struct TokenResponse {
-    access_token: String,
-    #[serde(default)]
-    expires_in: u64,
-}
-
-fn well_known_adc() -> Option<PathBuf> {
-    if let Some(home) = env::var_os("HOME") {
-        let path = PathBuf::from(home).join(".config/gcloud/application_default_credentials.json");
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Some(appdata) = env::var_os("APPDATA") {
-        let path = PathBuf::from(appdata).join("gcloud/application_default_credentials.json");
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    None
+pub(crate) fn expiry(expires_in: Option<u64>) -> Instant {
+    let lifetime = expires_in
+        .map_or(DEFAULT_TOKEN_LIFETIME, Duration::from_secs)
+        .min(DEFAULT_TOKEN_LIFETIME);
+    // A short lifetime keeps half of its time, so each call does not fetch a new token.
+    let lifetime = lifetime.saturating_sub(TOKEN_SKEW).max(lifetime / 2);
+    let now = Instant::now();
+    now.checked_add(lifetime).unwrap_or(now)
 }
 
 pub(crate) async fn read_adc_at(path: &Path) -> Result<Credentials, Exception> {
@@ -300,6 +310,29 @@ pub(crate) fn credentials_from_value(value: &Value) -> Result<Credentials, Excep
             format!("application default credentials type `{other}` is not supported"),
         )),
     }
+}
+
+#[derive(serde::Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    #[serde(default)]
+    expires_in: Option<u64>,
+}
+
+fn well_known_adc() -> Option<PathBuf> {
+    if let Some(home) = env::var_os("HOME") {
+        let path = PathBuf::from(home).join(".config/gcloud/application_default_credentials.json");
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    if let Some(appdata) = env::var_os("APPDATA") {
+        let path = PathBuf::from(appdata).join("gcloud/application_default_credentials.json");
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
 }
 
 fn string_field(value: &Value, name: &str) -> Result<String, Exception> {

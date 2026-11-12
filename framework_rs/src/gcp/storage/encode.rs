@@ -15,7 +15,3 @@ pub(crate) fn encode_seg(segment: &str) -> String {
     }
     out
 }
-
-pub(crate) fn encode_object_id(name: &str) -> String {
-    encode_seg(name)
-}

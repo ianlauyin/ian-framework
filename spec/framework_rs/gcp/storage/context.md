@@ -18,7 +18,8 @@ This client is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::gcp::storage`.
-- The client module path is `ian_framework::gcp::storage::gcs_client`.
+- The source files are in `framework_rs/src/gcp/storage/`. `mod.rs` has `GcsClient`, the send function and the name checks. Each other file has one part of the client: `call.rs`, `encode.rs`, `error.rs`, `list.rs`, `object.rs`, `ops_log.rs`, `rewrite.rs`, `signed_url.rs` and the folder `upload/`.
+- The tests are in `framework_rs/src/test/gcp/storage/`. They have the same file shape.
 
 ## Feature `gcs`
 
@@ -57,10 +58,6 @@ cargo test --features gcs
 
 `ian_framework::gcp::storage` exports only these items:
 
-- The module `gcs_client`
-
-`ian_framework::gcp::storage::gcs_client` exports only these items:
-
 - `GcsClient`
 - `ListPage` and `ListQuery`
 - `ObjectMeta` and `ObjectReader`
@@ -96,7 +93,7 @@ One `GcsClient` has one HTTP client. The storage calls, the resumable upload, th
 `GcsClient` makes each storage call, token-bound call and `signBlob` call through one send function. The send function retries a failed call.
 
 - A call has at most 4 attempts.
-- The send function retries a transport failure and a response with status 408, 429, 500, 502, 503 or 504. `is_retryable` is true for the codes `GCS_TRANSPORT` and `GCS_UNAVAILABLE`.
+- The send function retries a transport failure and a response with status 408, 429, 500, 502, 503 or 504. The status list is the shared list in `spec/framework_rs/gcp/context.md`. `is_retryable` is true for the codes `GCP_TRANSPORT` and `GCS_UNAVAILABLE`.
 - The wait before a retry is 250 milliseconds times the number of attempts made. The first wait is 250 milliseconds.
 - A retry writes the same operations log record as the first failure.
 - The resumable chunk request and the session probe make one attempt in the send function. They have their own retry loop in `spec/framework_rs/gcp/storage/upload.md`.
@@ -108,13 +105,16 @@ The client gives the exception code from the GCS response status:
 
 | GCS response status | Code |
 | --- | --- |
-| 401, 403 | `GCS_AUTH` |
+| 401, 403 | `GCP_AUTH` |
 | 404 | `GCS_NOT_FOUND` |
 | 408, 429, 500, 502, 503, 504 | `GCS_UNAVAILABLE` |
-| A different status that is not 2xx | `GCS_API` |
+| A different status that is not 2xx | `GCP_API` |
 
 - This table applies to the storage calls and to the IAM `signBlob` call.
-- A transport failure is `GCS_TRANSPORT`. This includes only a failure of the network call or of the response body.
+- The client uses the `GCP_*` codes of `spec/framework_rs/gcp/context.md` with the same meaning. Only the conditions of the storage client have a `GCS_*` code: `GCS_NOT_FOUND`, `GCS_UNAVAILABLE` and `GCS_LOCAL`.
+- A configuration error is `GCP_CONFIG`. An invalid response body is `GCP_API`.
+- A transport failure is `GCP_TRANSPORT`. This includes only a failure of the network call or of the response body.
+- The client reads an error response body with `read_limited`. The rules are in `spec/framework_rs/gcp/context.md`. When the read fails or the body is larger than 256 KiB, the error message has no API detail.
 - A failure on the local host is `GCS_LOCAL`. This includes a failure to read the upload file and a failure to build the HTTP client. The client does not retry it. An upstream session failure is not a local failure. It has the code `GCS_UNAVAILABLE`.
 - The message of a response error has the detail of the response body. The detail has no query string, no control character and at most 200 bytes. The client splits the text into tokens. A token ends at whitespace or at one of `"`, `'`, `<`, `>`, `)`, `\`, `,`, `;`, `]` and `}`. The client changes the tokens as follows:
 
@@ -122,14 +122,14 @@ The client gives the exception code from the GCS response status:
   - The value of a `key=value` pair becomes `***` when the key is `upload_id`, `access_token`, `refresh_token`, `id_token`, `token`, `signature`, `sig`, `client_secret`, `password`, `secret` or `authorization`, or starts with `X-Goog-`. The client does this also for a pair with no `?`. The comparison ignores the letter case.
   - The token after `Authorization:`, `Bearer` or `Basic` becomes `***`.
   - Other text, such as a `?` in a plain sentence, stays.
-- A token request with a status that is not 2xx is `GCS_AUTH`. This includes the metadata server.
+- A token request with a status that is not 2xx is `GCP_AUTH`. This includes the metadata server.
 - A resumable chunk response or a probe response with status 308 gives the next offset. It does not give an error code.
 
 ## HTTP error
 
 `Exception` implements `IntoResponse`, as in `spec/framework_rs/http/api-error.md`. A handler that returns `Result<T, Exception>` can use `?` on an `Exception` from this client.
 
-- No `GCS_*` code is a well-known code. Thus the status is 500 and the message is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
+- No `GCP_*` code and no `GCS_*` code is a well-known code. Thus the status is 500 and the message is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
 - The GCS response status does not change the HTTP status.
 - The message does not contain the internal message or the trace.
 

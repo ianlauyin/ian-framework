@@ -26,18 +26,18 @@ pub struct PutOptions {
 }
 
 impl PutOptions {
-    pub(crate) fn content_type(&self) -> Result<String, Exception> {
+    pub(crate) fn content_type(&self) -> Result<&str, Exception> {
         match &self.content_type {
             Some(value) => {
                 if value.is_empty() || !value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
                     return Err(exception!(
-                        code = "GCS_CONFIG",
+                        code = "GCP_CONFIG",
                         "content type is empty or is not printable ASCII",
                     ));
                 }
-                Ok(value.clone())
+                Ok(value)
             }
-            None => Ok(DEFAULT_CONTENT_TYPE.to_string()),
+            None => Ok(DEFAULT_CONTENT_TYPE),
         }
     }
 }

@@ -222,7 +222,20 @@ async fn token_from_response_reads_the_token_and_its_expiry() {
     assert!(token.expires_at > Instant::now() + Duration::from_secs(3000));
     let no_expiry = response(200, r#"{"access_token":"abc"}"#);
     let token = token_from_response(no_expiry).await.unwrap();
-    assert!(token.expires_at <= Instant::now());
+    assert!(token.expires_at > Instant::now() + Duration::from_secs(3000));
+}
+
+#[test]
+fn expiry_keeps_a_skew_and_half_of_a_short_lifetime() {
+    let within = |at: Instant, low: u64, high: u64| {
+        let left = at.saturating_duration_since(Instant::now());
+        left >= Duration::from_secs(low) && left <= Duration::from_secs(high)
+    };
+    assert!(within(expiry(Some(3600)), 3530, 3540));
+    assert!(within(expiry(None), 3530, 3540));
+    assert!(within(expiry(Some(60)), 25, 30));
+    assert!(expiry(Some(0)) <= Instant::now());
+    assert!(within(expiry(Some(u64::MAX)), 3530, 3540));
 }
 
 #[tokio::test]
@@ -247,13 +260,72 @@ async fn user_token_is_fetched_with_a_form_post() {
     let body = br#"{"access_token":"abc","expires_in":3600}"#.to_vec();
     let (addr, server) = serve(200, body).await;
     let token = user()
-        .fetch_token_at(&http, &format!("http://{addr}/token"))
+        .fetch_token(&http, &format!("http://{addr}/token"))
         .await
         .unwrap();
     assert_eq!(token.value, "abc");
     assert!(server.await.unwrap().starts_with("post /token"));
 
     let url = format!("http://{}/token", closed_addr());
-    let err = user().fetch_token_at(&http, &url).await.err().unwrap();
+    let err = user().fetch_token(&http, &url).await.err().unwrap();
     assert_eq!(err.code(), "GCP_AUTH");
+}
+
+fn empty_source(credentials: Credentials, addr: std::net::SocketAddr) -> TokenSource {
+    let source = crate::test::gcp::fake_tokens(credentials, addr, "unused");
+    *source.cached.try_lock().unwrap() = None;
+    source
+}
+
+#[tokio::test]
+async fn token_source_fetches_one_token_and_keeps_it() {
+    use crate::test::gcp::{serve_script, Reply};
+    let body = r#"{"access_token":"abc","expires_in":3600}"#;
+    let (addr, server) = serve_script(vec![Reply::new(200, body)]).await;
+    let http = crate::gcp::http_client_builder().build().unwrap();
+    let source = empty_source(Credentials::Metadata, addr);
+    assert_eq!(source.token(&http).await.unwrap(), "abc");
+    assert_eq!(source.token(&http).await.unwrap(), "abc");
+    let requests = server.await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0].starts_with("GET /token?scopes="),
+        "{}",
+        requests[0]
+    );
+    assert!(requests[0]
+        .to_ascii_lowercase()
+        .contains("metadata-flavor: google"));
+}
+
+#[tokio::test]
+async fn token_source_uses_the_oauth_url_for_a_user_and_fetches_again_after_invalidate() {
+    use crate::test::gcp::{serve_script, Reply};
+    let replies = vec![
+        Reply::new(200, r#"{"access_token":"first","expires_in":3600}"#),
+        Reply::new(200, r#"{"access_token":"second","expires_in":3600}"#),
+    ];
+    let (addr, server) = serve_script(replies).await;
+    let http = crate::gcp::http_client_builder().build().unwrap();
+    let source = empty_source(Credentials::User(user()), addr);
+    assert_eq!(source.token(&http).await.unwrap(), "first");
+    source.invalidate().await;
+    assert_eq!(source.token(&http).await.unwrap(), "second");
+    let requests = server.await.unwrap();
+    assert!(requests[0].starts_with("POST /oauth "), "{}", requests[0]);
+    assert!(requests[0].contains("grant_type=refresh_token"));
+}
+
+#[test]
+fn token_source_debug_does_not_print_the_secrets_or_the_token() {
+    let source = crate::test::gcp::fake_tokens(
+        Credentials::User(user()),
+        crate::test::gcp::closed_addr(),
+        "cached-token",
+    );
+    let text = format!("{source:?}");
+    assert!(text.contains("TokenSource"));
+    assert!(!text.contains("cached-token"));
+    assert!(!text.contains("refresh"));
+    assert!(!text.contains("secret"));
 }

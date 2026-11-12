@@ -16,8 +16,8 @@ This code is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::gcp`.
-- The source files are `framework_rs/src/gcp/mod.rs`, `framework_rs/src/gcp/error.rs`, `framework_rs/src/gcp/credentials.rs`, `framework_rs/src/gcp/http_client.rs` and `framework_rs/src/gcp/secret_manager.rs`.
-- The tests are in `framework_rs/src/test/gcp/`. The shared test helpers are in `framework_rs/src/test/gcp/mod.rs`: a one-request local test server, a closed local address and a fake `SecretManager`.
+- The source files are `framework_rs/src/gcp/mod.rs`, `framework_rs/src/gcp/response.rs`, `framework_rs/src/gcp/credentials.rs`, `framework_rs/src/gcp/http_client.rs` and `framework_rs/src/gcp/secret_manager.rs`.
+- The tests are in `framework_rs/src/test/gcp/`. The shared test helpers are in `framework_rs/src/test/gcp/mod.rs`: a one-request local test server, a scripted local test server that answers each request with the next reply, a closed local address, a fake `TokenSource` and a fake `SecretManager`.
 
 ## Build
 
@@ -53,6 +53,17 @@ cargo clippy --all-features --all-targets
 - The user agent is `ian_framework/{crate version}`.
 - Each user builds its client from this builder. The GCS client adds more settings. They are in `spec/framework_rs/gcp/storage/context.md`.
 
+## Response
+
+`framework_rs/src/gcp/response.rs` has the shared response helpers. They are private to the crate.
+
+- `read_limited` reads a response body with the `Limited` body of `http-body-util`. The limit is 256 KiB. The caller gives the error code and the name of the body.
+- A body larger than the limit is an error with the message `{name} is larger than 256 KiB`. The client stops the read at the limit.
+- A body read failure is an error with the message `{name} is not readable`. The error source is the reqwest error. The source does not have the URL.
+- Each token response, metadata response, Secret Manager response and GCS error response uses `read_limited`.
+- `is_retryable_status` is true for the status 408, 429, 500, 502, 503 and 504. Secret Manager and GCS use this list.
+- `google_error_message` gives the `error.message` field or the `error_description` field of a Google error body.
+- `truncate` cuts a text at a byte length. The cut is on a character boundary.
 ## Error type
 
 The error of this module is `ian_framework::exception::Exception`. Its definition is in `spec/framework_rs/exception.md`. The module uses only the codes in the table.
@@ -64,7 +75,7 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 | `GCP_API` | Secret Manager gives a different status that is not 2xx and not 404, or the response body is not valid. |
 | `GCP_TRANSPORT` | The HTTP request fails. |
 
-- The `gcp::storage` module changes the code `gcp_x` to the code `gcs_x`. The message and the source stay.
+- The `gcp::storage` module uses the same four codes with the same meaning. It adds the codes `GCS_NOT_FOUND`, `GCS_UNAVAILABLE` and `GCS_LOCAL`. The rules are in `spec/framework_rs/gcp/storage/context.md`.
 
 ## Out of scope
 

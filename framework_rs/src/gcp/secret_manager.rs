@@ -3,18 +3,21 @@ use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
-use tokio::sync::{Mutex, OnceCell};
+use tokio::sync::OnceCell;
 
 use crate::exception;
 use crate::exception::Exception;
 use crate::gcp::{
-    api_detail, http_client_builder, metadata_get, truncate, CachedToken, Credentials,
+    google_error_message, http_client_builder, is_retryable_status, metadata_get, read_limited,
+    truncate, Credentials, TokenSource,
 };
 
 const API_ROOT: &str = "https://secretmanager.googleapis.com/v1";
 const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
 pub(crate) const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const ACCESS_ATTEMPTS: u32 = 3;
+const ACCESS_BACKOFF: Duration = Duration::from_millis(250);
 // After a failed metadata probe, later calls skip the probe for this time.
 const UNREACHABLE_RETRY: Duration = Duration::from_secs(30);
 
@@ -24,25 +27,13 @@ pub(crate) static SECRET_MANAGER: OnceCell<Option<SecretManager>> = OnceCell::co
 // The metadata server may be down for a short time, so an unreachable server is not kept in the OnceCell.
 static UNREACHABLE_AT: StdMutex<Option<Instant>> = StdMutex::new(None);
 
-pub(crate) enum InitError {
-    Gcp(Exception),
-    MetadataUnreachable,
-}
-
-impl From<Exception> for InitError {
-    fn from(err: Exception) -> Self {
-        InitError::Gcp(err)
-    }
-}
-
 // The value is a secret. No error of this file holds the value or a parser error that can quote it.
 pub(crate) struct SecretManager {
     pub(crate) http: reqwest::Client,
     pub(crate) api_root: String,
     pub(crate) project: String,
     pub(crate) quota_project: Option<String>,
-    pub(crate) credentials: Credentials,
-    pub(crate) token: Mutex<CachedToken>,
+    pub(crate) tokens: TokenSource,
 }
 
 impl SecretManager {
@@ -68,55 +59,58 @@ impl SecretManager {
             "{}/projects/{}/secrets/{secret}/versions/latest:access",
             self.api_root, self.project
         );
-        let token = self.token().await?;
-        access_at(&self.http, &url, &token, self.quota_project.as_deref()).await
+        let mut refreshed = false;
+        let mut attempts = 0u32;
+        loop {
+            let token = self.tokens.token(&self.http).await?;
+            let reply = access_at(&self.http, &url, &token, self.quota_project.as_deref()).await;
+            let retry = match &reply {
+                Ok((401, _)) if !refreshed => {
+                    refreshed = true;
+                    self.tokens.invalidate().await;
+                    continue;
+                }
+                Ok((status, _)) => is_retryable_status(*status),
+                Err(_) => true,
+            };
+            if !retry || attempts + 1 >= ACCESS_ATTEMPTS {
+                let (status, body) = reply?;
+                return decode_access_response(status, &body);
+            }
+            attempts += 1;
+            tokio::time::sleep(ACCESS_BACKOFF * attempts).await;
+        }
     }
 
     pub(crate) async fn from_adc() -> Result<Option<Self>, InitError> {
-        let credentials = Self::validated_credentials().await?;
-        let http = http_client()?;
-        Self::manager_for(http, credentials).await
-    }
-
-    async fn validated_credentials() -> Result<Credentials, InitError> {
         let credentials = Credentials::from_adc().await?;
         credentials.validate()?;
-        Ok(credentials)
-    }
-
-    async fn manager_for(
-        http: reqwest::Client,
-        credentials: Credentials,
-    ) -> Result<Option<Self>, InitError> {
+        let http = secret_manager_http_client()?;
         let Some(project) = resolve_project(&credentials, &http, METADATA_PROJECT_URL).await?
         else {
             return Ok(None);
         };
-        Self::with_token(http, project, credentials).await.map(Some)
-    }
-
-    async fn with_token(
-        http: reqwest::Client,
-        project: String,
-        credentials: Credentials,
-    ) -> Result<Self, InitError> {
-        let token = credentials.fetch_token(&http).await?;
-        Ok(Self {
+        let quota_project = credentials.quota_project().map(str::to_string);
+        let tokens = TokenSource::new(credentials);
+        tokens.token(&http).await?;
+        Ok(Some(Self {
             http,
             api_root: API_ROOT.to_string(),
             project,
-            quota_project: credentials.quota_project().map(str::to_string),
-            credentials,
-            token: Mutex::new(token),
-        })
+            quota_project,
+            tokens,
+        }))
     }
+}
 
-    async fn token(&self) -> Result<String, Exception> {
-        let mut token = self.token.lock().await;
-        if token.expires_at <= Instant::now() {
-            *token = self.credentials.fetch_token(&self.http).await?;
-        }
-        Ok(token.value.clone())
+pub(crate) enum InitError {
+    Gcp(Exception),
+    MetadataUnreachable,
+}
+
+impl From<Exception> for InitError {
+    fn from(err: Exception) -> Self {
+        InitError::Gcp(err)
     }
 }
 
@@ -170,14 +164,8 @@ pub(crate) async fn metadata_project(
             format!("metadata server project status {status}"),
         ));
     }
-    let body = response.text().await.map_err(|err| {
-        exception!(
-            code = "GCP_TRANSPORT",
-            "metadata server project is not text",
-            source = err.without_url(),
-        )
-    })?;
-    checked_project(body.trim()).map(Some)
+    let body = read_limited(response, "GCP_TRANSPORT", "metadata server project").await?;
+    checked_project(String::from_utf8_lossy(&body).trim()).map(Some)
 }
 
 pub(crate) fn user_project(credentials: &Credentials) -> Result<Option<String>, Exception> {
@@ -190,22 +178,12 @@ pub(crate) fn user_project(credentials: &Credentials) -> Result<Option<String>, 
     }
 }
 
-fn checked_project(project: &str) -> Result<String, Exception> {
-    if !is_name_segment(project) {
-        return Err(exception!(
-            code = "GCP_CONFIG",
-            "the project id is empty or not valid",
-        ));
-    }
-    Ok(project.to_string())
-}
-
 pub(crate) async fn access_at(
     http: &reqwest::Client,
     url: &str,
     token: &str,
     quota_project: Option<&str>,
-) -> Result<Option<String>, Exception> {
+) -> Result<(u16, Vec<u8>), Exception> {
     let mut request = http.get(url).bearer_auth(token).timeout(REQUEST_TIMEOUT);
     if let Some(project) = quota_project {
         request = request.header("x-goog-user-project", project);
@@ -218,14 +196,8 @@ pub(crate) async fn access_at(
         )
     })?;
     let status = response.status().as_u16();
-    let body = response.bytes().await.map_err(|err| {
-        exception!(
-            code = "GCP_TRANSPORT",
-            "secret manager response is not readable",
-            source = err.without_url(),
-        )
-    })?;
-    decode_access_response(status, &body)
+    let body = read_limited(response, "GCP_TRANSPORT", "secret manager response").await?;
+    Ok((status, body))
 }
 
 pub(crate) fn decode_access_response(
@@ -241,8 +213,38 @@ pub(crate) fn decode_access_response(
     decode_payload(body).map(Some)
 }
 
+pub(crate) fn secret_manager_http_client() -> Result<reqwest::Client, Exception> {
+    http_client_builder().build().map_err(|err| {
+        exception!(
+            code = "GCP_TRANSPORT",
+            "cannot build the HTTP client",
+            source = err,
+        )
+    })
+}
+
+#[derive(serde::Deserialize)]
+struct AccessResponse {
+    payload: Payload,
+}
+
+#[derive(serde::Deserialize)]
+struct Payload {
+    data: String,
+}
+
+fn checked_project(project: &str) -> Result<String, Exception> {
+    if !is_name_segment(project) {
+        return Err(exception!(
+            code = "GCP_CONFIG",
+            "the project id is empty or not valid",
+        ));
+    }
+    Ok(project.to_string())
+}
+
 fn status_error(status: u16, body: &[u8]) -> Exception {
-    let detail = api_detail(&String::from_utf8_lossy(body)).unwrap_or_default();
+    let detail = google_error_message(&String::from_utf8_lossy(body)).unwrap_or_default();
     let kind = match status {
         401 | 403 => "GCP_AUTH",
         _ => "GCP_API",
@@ -277,24 +279,4 @@ fn is_name_segment(segment: &str) -> bool {
         && segment
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-}
-
-pub(crate) fn http_client() -> Result<reqwest::Client, Exception> {
-    http_client_builder().build().map_err(|err| {
-        exception!(
-            code = "GCP_TRANSPORT",
-            "cannot build the HTTP client",
-            source = err,
-        )
-    })
-}
-
-#[derive(serde::Deserialize)]
-struct AccessResponse {
-    payload: Payload,
-}
-
-#[derive(serde::Deserialize)]
-struct Payload {
-    data: String,
 }

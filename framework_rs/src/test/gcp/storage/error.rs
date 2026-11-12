@@ -1,44 +1,6 @@
 use crate::exception;
 
 use crate::gcp::storage::error::*;
-
-#[test]
-fn from_gcp_keeps_the_meaning_message_and_source() {
-    let err = exception!(
-        code = "GCP_TRANSPORT",
-        "outer",
-        source = exception!(code = "GCP_API", "inner"),
-    );
-    let err = from_gcp(err);
-    assert_eq!(err.code(), "GCS_TRANSPORT");
-    assert_eq!(err.message(), "outer");
-    let cause = err.source_exception().unwrap();
-    assert_eq!(cause.code(), "GCP_API");
-    assert_eq!(cause.message(), "inner");
-    assert_eq!(
-        from_gcp(exception!(code = "GCP_AUTH", "x")).code(),
-        "GCS_AUTH"
-    );
-    assert_eq!(
-        from_gcp(exception!(code = "GCP_CONFIG", "x")).code(),
-        "GCS_CONFIG"
-    );
-    assert_eq!(
-        from_gcp(exception!(code = "GCP_API", "x")).code(),
-        "GCS_API"
-    );
-}
-
-#[test]
-fn retryable_status_list_is_shared() {
-    for status in [408_u16, 429, 500, 502, 503, 504] {
-        assert!(is_retryable_status(status), "{status}");
-    }
-    for status in [200_u16, 400, 401, 403, 404, 501] {
-        assert!(!is_retryable_status(status), "{status}");
-    }
-}
-
 #[test]
 fn response_detail_has_no_url_query_or_control_character() {
     let body = "bad url https://storage.example/o?X-Goog-Signature=abc&token=xyz now\r\nnext";
@@ -130,9 +92,15 @@ fn redact_query_keeps_prose() {
 
 #[test]
 fn retryable_codes_match_the_upload_policy() {
-    assert!(is_retryable(&exception!(code = "GCS_TRANSPORT", "reset")));
+    assert!(is_retryable(&exception!(code = "GCP_TRANSPORT", "reset")));
     assert!(is_retryable(&exception!(code = "GCS_UNAVAILABLE", "busy")));
-    for code in ["GCS_LOCAL", "GCS_NOT_FOUND", "GCS_API", "GCS_CONFIG"] {
+    for code in [
+        "GCS_LOCAL",
+        "GCS_NOT_FOUND",
+        "GCP_API",
+        "GCP_CONFIG",
+        "GCP_AUTH",
+    ] {
         assert!(!is_retryable(&exception!(code = code, "x")), "{code}");
     }
 }

@@ -1,4 +1,4 @@
-use crate::gcp::storage::gcs_client::rewrite_step::*;
+use crate::gcp::storage::rewrite::*;
 use crate::gcp::storage::API_ROOT;
 
 #[test]

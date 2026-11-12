@@ -3,8 +3,9 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 
-use crate::gcp::storage::gcs_client::credentials::signed_parts::*;
-use crate::test::gcp::storage::gcs_client::{fake_client, serve_script, Reply};
+use crate::gcp::storage::signed_url::*;
+use crate::test::gcp::storage::{fake_client, user_credentials, SIGNER};
+use crate::test::gcp::{closed_addr, serve_script, Reply};
 
 #[test]
 fn v4_get_matches_the_canonical_request() {
@@ -16,7 +17,7 @@ fn v4_get_matches_the_canonical_request() {
         "photos/cat.jpeg",
         "signer@example-project.iam.gserviceaccount.com",
         now,
-        Some(Duration::from_secs(3600)),
+        Duration::from_secs(3600),
         None,
     )
     .unwrap();
@@ -52,7 +53,7 @@ fn v4_encodes_spaces_in_the_object_path() {
         "my cat.jpeg",
         "s@example.iam.gserviceaccount.com",
         now,
-        Some(Duration::from_secs(60)),
+        Duration::from_secs(60),
         None,
     )
     .unwrap();
@@ -86,7 +87,7 @@ fn v4_signs_the_attachment_disposition_after_the_goog_params() {
         "a.pdf",
         "s@example.iam.gserviceaccount.com",
         now,
-        Some(Duration::from_secs(60)),
+        Duration::from_secs(60),
         Some("報告 \"v2\".pdf"),
     )
     .unwrap();
@@ -98,7 +99,7 @@ fn v4_signs_the_attachment_disposition_after_the_goog_params() {
         "a.pdf",
         "s@example.iam.gserviceaccount.com",
         now,
-        Some(Duration::from_secs(60)),
+        Duration::from_secs(60),
         None,
     )
     .unwrap();
@@ -108,26 +109,22 @@ fn v4_signs_the_attachment_disposition_after_the_goog_params() {
 #[test]
 fn attachment_disposition_rejects_an_empty_filename() {
     let err = attachment_disposition("").unwrap_err();
-    assert_eq!(err.code(), "GCS_CONFIG");
+    assert_eq!(err.code(), "GCP_CONFIG");
 }
 
 #[test]
 fn signed_lifetime_never_returns_zero() {
     for bad in [
-        None,
-        Some(Duration::ZERO),
-        Some(Duration::from_millis(999)),
-        Some(Duration::from_secs(MAX_SIGNED_URL_SECONDS + 1)),
+        Duration::ZERO,
+        Duration::from_millis(999),
+        Duration::from_secs(MAX_SIGNED_URL_SECONDS + 1),
     ] {
         assert_eq!(
             signed_lifetime_seconds(bad).unwrap_err().code(),
-            "GCS_CONFIG"
+            "GCP_CONFIG"
         );
     }
-    assert_eq!(
-        signed_lifetime_seconds(Some(Duration::from_secs(1))).unwrap(),
-        1
-    );
+    assert_eq!(signed_lifetime_seconds(Duration::from_secs(1)).unwrap(), 1);
 }
 
 #[tokio::test]
@@ -150,7 +147,7 @@ async fn sign_blob_returns_the_decoded_signature() {
 async fn signed_url_ends_with_the_hex_signature() {
     let (addr, _server) = serve_script(vec![Reply::new(200, r#"{"signedBlob":"AQID"}"#)]).await;
     let url = fake_client(addr)
-        .signed_get_url("a/b.txt", Some(Duration::from_secs(60)), None)
+        .signed_get_url("a/b.txt", Duration::from_secs(60), None)
         .await
         .unwrap();
     assert!(url.ends_with("&X-Goog-Signature=010203"), "{url}");
@@ -160,7 +157,7 @@ async fn signed_url_ends_with_the_hex_signature() {
 async fn sign_blob_reports_a_failed_call() {
     let (addr, _server) = serve_script(vec![Reply::new(403, "{}")]).await;
     let err = sign_blob(&fake_client(addr), b"p").await.unwrap_err();
-    assert_eq!(err.code(), "GCS_AUTH");
+    assert_eq!(err.code(), "GCP_AUTH");
 }
 
 #[test]
@@ -171,6 +168,60 @@ fn a_bad_sign_blob_body_is_an_api_error() {
         br#"{"signedBlob":""}"#,
     ] {
         let err = signature_from_response(body).unwrap_err();
-        assert_eq!(err.code(), "GCS_API");
+        assert_eq!(err.code(), "GCP_API");
     }
+}
+
+fn http() -> reqwest::Client {
+    reqwest::Client::new()
+}
+
+#[tokio::test]
+async fn a_user_signer_email_comes_from_the_caller() {
+    let email = resolve_signer_email(&user_credentials(), Some(SIGNER), &http())
+        .await
+        .unwrap();
+    assert_eq!(email, SIGNER);
+    let err = resolve_signer_email(&user_credentials(), None, &http())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_CONFIG");
+    assert!(err
+        .to_string()
+        .contains("user application default credentials require a signer email"));
+    let err = resolve_signer_email(&user_credentials(), Some("not an email"), &http())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_CONFIG");
+}
+
+#[tokio::test]
+async fn metadata_email_reads_the_trimmed_body() {
+    let (addr, server) = serve_script(vec![Reply::new(200, " signer@example.com\n")]).await;
+    let url = format!("http://{addr}/email");
+    assert_eq!(
+        metadata_email(&http(), &url).await.unwrap(),
+        "signer@example.com"
+    );
+    let request = server.await.unwrap().remove(0).to_ascii_lowercase();
+    assert!(request.contains("metadata-flavor: google"), "{request}");
+}
+
+#[tokio::test]
+async fn metadata_email_refuses_a_failed_status_and_a_bad_email() {
+    let replies = vec![Reply::new(500, "boom"), Reply::new(200, "not an email")];
+    let (addr, _server) = serve_script(replies).await;
+    let url = format!("http://{addr}/email");
+    let err = metadata_email(&http(), &url).await.unwrap_err();
+    assert_eq!(err.code(), "GCP_AUTH");
+    assert!(err.to_string().contains("status 500: boom"), "{err}");
+    let err = metadata_email(&http(), &url).await.unwrap_err();
+    assert_eq!(err.code(), "GCP_CONFIG");
+}
+
+#[tokio::test]
+async fn metadata_email_reports_an_unreachable_server() {
+    let url = format!("http://{}/email", closed_addr());
+    let err = metadata_email(&http(), &url).await.unwrap_err();
+    assert_eq!(err.code(), "GCP_AUTH");
 }

@@ -1,4 +1,4 @@
-use crate::gcp::storage::gcs_client::upload::put_request::*;
+use crate::gcp::storage::upload::put_request::*;
 
 #[test]
 fn put_options_do_not_insert_product_keys() {

@@ -1,6 +1,6 @@
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::{api_detail, truncate};
+use crate::gcp::{google_error_message, is_retryable_status, read_limited, truncate};
 
 const RESPONSE_DETAIL_MAX_BYTES: usize = 200;
 const SIGNED_PARAM_PREFIX: &str = "x-goog-";
@@ -20,13 +20,8 @@ const SECRET_KEYS: [&str; 11] = [
 ];
 
 pub(crate) fn is_retryable(err: &Exception) -> bool {
-    matches!(err.code(), "GCS_TRANSPORT" | "GCS_UNAVAILABLE")
+    matches!(err.code(), "GCP_TRANSPORT" | "GCS_UNAVAILABLE")
 }
-
-pub(crate) fn is_retryable_status(status: u16) -> bool {
-    matches!(status, 408 | 429 | 500 | 502 | 503 | 504)
-}
-
 // A URL or a path keeps its path and loses its query. A value of a known secret key is replaced. Other text stays.
 pub(crate) fn redact_query(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -49,6 +44,32 @@ pub(crate) fn redact_query(text: &str) -> String {
         out.push_str(&redact_token(part));
     }
     out
+}
+
+pub(crate) async fn gcs_response_exception(response: reqwest::Response) -> Exception {
+    let status = response.status().as_u16();
+    let body = read_limited(response, "GCP_API", "error response")
+        .await
+        .unwrap_or_default();
+    let detail = response_detail(&String::from_utf8_lossy(&body));
+    let code = match status {
+        401 | 403 => "GCP_AUTH",
+        404 => "GCS_NOT_FOUND",
+        _ if is_retryable_status(status) => "GCS_UNAVAILABLE",
+        _ => "GCP_API",
+    };
+    exception!(code = code, format!("status {status}: {detail}"))
+}
+
+// The upstream body can hold a signed URL, so the detail has no URL query and no control character.
+pub(crate) fn response_detail(body: &str) -> String {
+    let detail = google_error_message(body).unwrap_or_else(|| body.to_string());
+    let redacted = redact_query(truncate(&detail, RESPONSE_DETAIL_MAX_BYTES * 10));
+    let clean: String = redacted
+        .chars()
+        .map(|ch| if ch.is_control() { ' ' } else { ch })
+        .collect();
+    truncate(&clean, RESPONSE_DETAIL_MAX_BYTES).to_string()
 }
 
 fn split_tokens(text: &str) -> Vec<(bool, &str)> {
@@ -101,40 +122,4 @@ fn is_token_end(ch: char) -> bool {
             ch,
             '"' | '\'' | '<' | '>' | ')' | '\\' | ',' | ';' | ']' | '}'
         )
-}
-
-// The gcp code and the gcs code have the same meaning. The message and the source stay.
-pub(crate) fn from_gcp(err: Exception) -> Exception {
-    let code = match err.code() {
-        "GCP_AUTH" => "GCS_AUTH",
-        "GCP_CONFIG" => "GCS_CONFIG",
-        "GCP_API" => "GCS_API",
-        "GCP_TRANSPORT" => "GCS_TRANSPORT",
-        _ => return err,
-    };
-    err.with_code(code)
-}
-
-pub(crate) async fn gcs_response_exception(response: reqwest::Response) -> Exception {
-    let status = response.status().as_u16();
-    let text = response.text().await.unwrap_or_default();
-    let detail = response_detail(&text);
-    let code = match status {
-        401 | 403 => "GCS_AUTH",
-        404 => "GCS_NOT_FOUND",
-        _ if is_retryable_status(status) => "GCS_UNAVAILABLE",
-        _ => "GCS_API",
-    };
-    exception!(code = code, format!("status {status}: {detail}"))
-}
-
-// The upstream body can hold a signed URL, so the detail has no URL query and no control character.
-pub(crate) fn response_detail(body: &str) -> String {
-    let detail = api_detail(body).unwrap_or_else(|| body.to_string());
-    let redacted = redact_query(truncate(&detail, RESPONSE_DETAIL_MAX_BYTES * 10));
-    let clean: String = redacted
-        .chars()
-        .map(|ch| if ch.is_control() { ' ' } else { ch })
-        .collect();
-    truncate(&clean, RESPONSE_DETAIL_MAX_BYTES).to_string()
 }

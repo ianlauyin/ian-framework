@@ -1,29 +1,29 @@
-mod credentials;
+mod encode;
+mod error;
+mod list;
 mod object;
-mod request;
-mod rewrite_step;
+mod ops_log;
+mod rewrite;
+mod signed_url;
 mod upload;
 
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::storage::gcs_client::credentials::Auth;
-use crate::gcp::storage::gcs_client::request::{Call, OpsRecord};
-use crate::gcp::storage::is_retryable_status;
-use crate::gcp::CachedToken;
+use crate::gcp::credentials::{CachedToken, UserCredentials};
+use crate::gcp::storage::call::Call;
+use crate::gcp::storage::ops_log::OpsRecord;
+use crate::gcp::storage::*;
+use crate::gcp::{is_retryable_status, Credentials};
 use crate::logging::LogLevel;
-use std::net::SocketAddr;
-
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::task::JoinHandle;
-
-use crate::gcp::UserCredentials;
-
-use crate::gcp::storage::gcs_client::*;
+use crate::test::gcp::{fake_tokens, serve_script, Reply};
 use crate::test::logging::{buffered_events, default_shipper, logger};
+
+pub(crate) const SIGNER: &str = "signer@example.iam.gserviceaccount.com";
 
 #[test]
 fn object_names_are_checked() {
@@ -54,127 +54,26 @@ fn send_retries_only_a_transient_status_and_stops_at_the_limit() {
     assert!(!may_retry(&own_loop, 0));
 }
 
-pub(crate) fn user_auth() -> Auth {
-    Auth::User {
-        credentials: UserCredentials {
-            client_id: "client".to_string(),
-            client_secret: "secret".to_string(),
-            refresh_token: "refresh".to_string(),
-            quota_project_id: None,
-        },
-        signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
-    }
+pub(crate) fn user_credentials() -> Credentials {
+    Credentials::User(UserCredentials {
+        client_id: "client".to_string(),
+        client_secret: "secret".to_string(),
+        refresh_token: "refresh".to_string(),
+        quota_project_id: None,
+    })
 }
 
-pub(crate) struct Reply {
-    status: u16,
-    headers: Vec<(String, Vec<u8>)>,
-    body: Vec<u8>,
-    declared_length: Option<usize>,
-}
-
-impl Reply {
-    pub(crate) fn new(status: u16, body: &str) -> Self {
-        Self {
-            status,
-            headers: Vec::new(),
-            body: body.as_bytes().to_vec(),
-            declared_length: None,
-        }
-    }
-
-    pub(crate) fn header(mut self, name: &str, value: impl AsRef<[u8]>) -> Self {
-        self.headers
-            .push((name.to_string(), value.as_ref().to_vec()));
-        self
-    }
-
-    pub(crate) fn declared_length(mut self, length: usize) -> Self {
-        self.declared_length = Some(length);
-        self
-    }
-
-    fn into_bytes(self, addr: SocketAddr) -> Vec<u8> {
-        let length = self.declared_length.unwrap_or(self.body.len());
-        let mut out = format!(
-            "HTTP/1.1 {} X\r\ncontent-type: application/json\r\ncontent-length: {length}\r\nconnection: close\r\n",
-            self.status
-        )
-        .into_bytes();
-        for (name, value) in self.headers {
-            out.extend_from_slice(format!("{name}: ").as_bytes());
-            out.extend_from_slice(&replace_addr(&value, addr));
-            out.extend_from_slice(b"\r\n");
-        }
-        out.extend_from_slice(b"\r\n");
-        out.extend_from_slice(&replace_addr(&self.body, addr));
-        out
-    }
-}
-
-fn replace_addr(bytes: &[u8], addr: SocketAddr) -> Vec<u8> {
-    let placeholder = b"{addr}";
-    let mut out = Vec::new();
-    let mut rest = bytes;
-    while let Some(at) = rest
-        .windows(placeholder.len())
-        .position(|window| window == placeholder)
-    {
-        out.extend_from_slice(&rest[..at]);
-        out.extend_from_slice(addr.to_string().as_bytes());
-        rest = &rest[at + placeholder.len()..];
-    }
-    out.extend_from_slice(rest);
-    out
-}
-
-async fn read_request(socket: &mut tokio::net::TcpStream) -> String {
-    let mut request = Vec::new();
-    let mut buf = vec![0_u8; 64 * 1024];
-    let mut needed = None;
-    loop {
-        if needed.is_none() {
-            if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
-                let head = String::from_utf8_lossy(&request[..end]).to_ascii_lowercase();
-                let length = head
-                    .lines()
-                    .find_map(|line| line.strip_prefix("content-length:"))
-                    .and_then(|value| value.trim().parse::<usize>().ok())
-                    .unwrap_or(0);
-                needed = Some(end + 4 + length);
-            }
-        }
-        if needed.is_some_and(|needed| request.len() >= needed) {
-            return String::from_utf8_lossy(&request).into_owned();
-        }
-        let read = socket.read(&mut buf).await.unwrap();
-        assert!(read > 0, "the client closed the connection early");
-        request.extend_from_slice(&buf[..read]);
-    }
-}
-
-// The server answers one request with each reply, in order. The placeholder `{addr}` in a
-// reply header or body is the server address. The handle gives the requests.
-pub(crate) async fn serve_script(replies: Vec<Reply>) -> (SocketAddr, JoinHandle<Vec<String>>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let server = tokio::spawn(async move {
-        let mut requests = Vec::new();
-        for reply in replies {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            requests.push(read_request(&mut socket).await);
-            socket.write_all(&reply.into_bytes(addr)).await.unwrap();
-        }
-        requests
-    });
-    (addr, server)
+pub(crate) async fn user_client() -> GcsClient {
+    GcsClient::new("my-bucket", user_credentials(), Some(SIGNER))
+        .await
+        .unwrap()
 }
 
 pub(crate) fn fake_client(addr: SocketAddr) -> GcsClient {
-    fake_client_with(addr, user_auth())
+    fake_client_with(addr, user_credentials())
 }
 
-pub(crate) fn fake_client_with(addr: SocketAddr, auth: Auth) -> GcsClient {
+pub(crate) fn fake_client_with(addr: SocketAddr, credentials: Credentials) -> GcsClient {
     GcsClient {
         inner: Arc::new(Inner {
             bucket: "my-bucket".to_string(),
@@ -183,15 +82,10 @@ pub(crate) fn fake_client_with(addr: SocketAddr, auth: Auth) -> GcsClient {
                 upload_root: format!("http://{addr}/upload/storage/v1"),
                 upload_location_prefix: format!("http://{addr}/"),
                 iam_root: format!("http://{addr}/iam"),
-                metadata_token_url: format!("http://{addr}/token"),
             },
-            email: "signer@example.iam.gserviceaccount.com".to_string(),
-            auth,
-            http: http_client().unwrap(),
-            token: tokio::sync::Mutex::new(Some(CachedToken {
-                value: "token".to_string(),
-                expires_at: Instant::now() + Duration::from_secs(600),
-            })),
+            email: SIGNER.to_string(),
+            http: storage_http_client().unwrap(),
+            tokens: fake_tokens(credentials, addr, "token"),
             ops_log: std::sync::Mutex::new(None),
         }),
     }
@@ -238,12 +132,12 @@ async fn stat_opt_turns_not_found_into_none() {
 async fn an_api_error_keeps_the_status_text_and_the_detail() {
     let (addr, _server) = serve_script(vec![error_reply(403)]).await;
     let err = fake_client(addr).stat("a").await.unwrap_err();
-    assert_eq!(err.code(), "GCS_AUTH");
+    assert_eq!(err.code(), "GCP_AUTH");
     assert!(err.to_string().contains("status 403"), "{err}");
     assert!(err.to_string().contains("nope"), "{err}");
     let (addr, _server) = serve_script(vec![error_reply(400)]).await;
     let err = fake_client(addr).stat("a").await.unwrap_err();
-    assert_eq!(err.code(), "GCS_API");
+    assert_eq!(err.code(), "GCP_API");
 }
 
 #[tokio::test]
@@ -370,7 +264,7 @@ async fn delete_ignores_a_missing_object_and_reports_other_errors() {
     client.delete_object("a").await.unwrap();
     client.delete_object("a").await.unwrap();
     let err = client.delete_object("a").await.unwrap_err();
-    assert_eq!(err.code(), "GCS_AUTH");
+    assert_eq!(err.code(), "GCP_AUTH");
     let requests = server.await.unwrap();
     assert!(requests[0].starts_with("DELETE /storage/v1/b/my-bucket/o/a "));
 }
@@ -405,7 +299,7 @@ async fn rewrite_fails_when_the_token_does_not_change() {
         .rewrite_object("a", "b")
         .await
         .unwrap_err();
-    assert_eq!(err.code(), "GCS_API");
+    assert_eq!(err.code(), "GCP_API");
     assert!(err.to_string().contains("did not change"), "{err}");
 }
 
@@ -428,7 +322,7 @@ async fn move_removes_the_copy_when_the_source_cannot_be_deleted() {
     ];
     let (addr, server) = serve_script(replies).await;
     let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
-    assert_eq!(err.code(), "GCS_AUTH");
+    assert_eq!(err.code(), "GCP_AUTH");
     let requests = server.await.unwrap();
     assert!(requests[3].starts_with("DELETE /storage/v1/b/my-bucket/o/b "));
 }
@@ -445,7 +339,7 @@ async fn move_reports_both_names_when_the_copy_cannot_be_deleted() {
     let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
     assert!(err.to_string().contains("exists at both names"), "{err}");
     let cause = err.source_exception().unwrap();
-    assert_eq!(cause.code(), "GCS_AUTH");
+    assert_eq!(cause.code(), "GCP_AUTH");
     assert!(cause.location().1 > 0);
 }
 
@@ -464,7 +358,7 @@ async fn move_keeps_the_status_of_a_retryable_delete_error() {
     let err = fake_client(addr).move_object("a", "b").await.unwrap_err();
     assert!(err.to_string().contains("exists at both names"), "{err}");
     assert_eq!(err.code(), "GCS_UNAVAILABLE");
-    assert!(crate::gcp::storage::is_retryable(&err));
+    assert!(crate::gcp::storage::error::is_retryable(&err));
 }
 
 #[tokio::test]
@@ -531,7 +425,7 @@ async fn a_rejected_token_is_dropped_and_fetched_again() {
         Reply::new(200, META),
     ])
     .await;
-    let client = fake_client_with(addr, Auth::Metadata);
+    let client = fake_client_with(addr, Credentials::Metadata);
     let meta = client.stat("a").await.unwrap();
     let requests = server.await.unwrap();
     assert_eq!(meta.name, "a/b.txt");
@@ -542,37 +436,37 @@ async fn a_rejected_token_is_dropped_and_fetched_again() {
 }
 
 #[tokio::test]
-async fn metadata_auth_fetches_a_token_from_the_metadata_server() {
-    let body = r#"{"access_token":"abc","expires_in":3600}"#;
-    let (addr, server) = serve_script(vec![Reply::new(200, body)]).await;
-    let http = http_client().unwrap();
-    let token = Auth::Metadata
-        .fetch_token(&http, &format!("http://{addr}/token"))
-        .await
-        .unwrap();
-    server.abort();
-    assert_eq!(token.value, "abc");
-}
-
-#[tokio::test]
 async fn client_rejects_an_empty_bucket() {
-    let err = GcsClient::new(" ", user_auth()).await.unwrap_err();
-    assert_eq!(err.code(), "GCS_CONFIG");
+    let err = GcsClient::new(" ", user_credentials(), Some(SIGNER))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_CONFIG");
 }
 
 #[tokio::test]
 async fn client_rejects_an_incomplete_user() {
-    let auth = Auth::User {
-        credentials: UserCredentials {
-            client_id: String::new(),
-            client_secret: "secret".to_string(),
-            refresh_token: "refresh".to_string(),
-            quota_project_id: None,
-        },
-        signer_email: "signer@example.iam.gserviceaccount.com".to_string(),
-    };
-    let err = GcsClient::new("my-bucket", auth).await.unwrap_err();
-    assert_eq!(err.code(), "GCS_CONFIG");
+    let incomplete = Credentials::User(UserCredentials {
+        client_id: String::new(),
+        client_secret: "secret".to_string(),
+        refresh_token: "refresh".to_string(),
+        quota_project_id: None,
+    });
+    let err = GcsClient::new("my-bucket", incomplete, Some(SIGNER))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_CONFIG");
+}
+
+#[tokio::test]
+async fn client_requires_a_signer_email_for_a_user() {
+    let err = GcsClient::new("my-bucket", user_credentials(), None)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_CONFIG");
+    let err = GcsClient::new("my-bucket", user_credentials(), Some("not an email"))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_CONFIG");
 }
 
 #[test]
@@ -580,42 +474,42 @@ fn not_found_becomes_none() {
     let missing: Result<(), Exception> = Err(exception!(code = "GCS_NOT_FOUND", "missing"));
     assert!(not_found_as_none(missing).unwrap().is_none());
     assert_eq!(not_found_as_none(Ok(7)).unwrap(), Some(7));
-    let denied: Result<(), Exception> = Err(exception!(code = "GCS_AUTH", "denied"));
-    assert_eq!(not_found_as_none(denied).unwrap_err().code(), "GCS_AUTH");
+    let denied: Result<(), Exception> = Err(exception!(code = "GCP_AUTH", "denied"));
+    assert_eq!(not_found_as_none(denied).unwrap_err().code(), "GCP_AUTH");
 }
 
 #[tokio::test]
 async fn move_rejects_the_same_object() {
-    let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+    let client = user_client().await;
     let err = client.move_object("a.txt", "a.txt").await.unwrap_err();
-    assert_eq!(err.code(), "GCS_CONFIG");
+    assert_eq!(err.code(), "GCP_CONFIG");
 }
 
 #[tokio::test]
 async fn signed_url_rejects_a_lifetime_over_seven_days() {
-    let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+    let client = user_client().await;
     let err = client
-        .signed_get_url("a", Some(Duration::from_secs(604_801)), None)
+        .signed_get_url("a", Duration::from_secs(604_801), None)
         .await
         .unwrap_err();
-    assert_eq!(err.code(), "GCS_CONFIG");
+    assert_eq!(err.code(), "GCP_CONFIG");
 }
 
 #[tokio::test]
-async fn signed_url_rejects_a_missing_or_zero_lifetime() {
-    let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
-    for lifetime in [None, Some(Duration::ZERO), Some(Duration::from_millis(500))] {
+async fn signed_url_rejects_a_lifetime_below_one_second() {
+    let client = user_client().await;
+    for lifetime in [Duration::ZERO, Duration::from_millis(500)] {
         let err = client
             .signed_get_url("a", lifetime, None)
             .await
             .unwrap_err();
-        assert_eq!(err.code(), "GCS_CONFIG");
+        assert_eq!(err.code(), "GCP_CONFIG");
     }
 }
 
 #[tokio::test]
 async fn ops_log_writes_the_bucket_and_omits_the_query() {
-    let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+    let client = user_client().await;
     let logger = logger(default_shipper("storage"));
     client.attach_ops_log(logger.clone());
     client.record_op(OpsRecord {
@@ -646,7 +540,7 @@ async fn ops_log_writes_the_bucket_and_omits_the_query() {
 
 #[tokio::test]
 async fn ops_log_without_a_shipper_does_not_panic() {
-    let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
+    let client = user_client().await;
     client.record_op(OpsRecord {
         level: LogLevel::Warn,
         message: "gcs request failed",
@@ -663,8 +557,8 @@ async fn send_error_source_omits_the_url() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     drop(listener);
-    let client = GcsClient::new("my-bucket", user_auth()).await.unwrap();
-    *client.inner.token.lock().await = Some(CachedToken {
+    let client = user_client().await;
+    *client.inner.tokens.cached.lock().await = Some(CachedToken {
         value: "token".to_string(),
         expires_at: Instant::now() + Duration::from_secs(600),
     });
@@ -676,7 +570,7 @@ async fn send_error_source_omits_the_url() {
         })
         .await
         .unwrap_err();
-    assert_eq!(err.code(), "GCS_TRANSPORT");
+    assert_eq!(err.code(), "GCP_TRANSPORT");
     let source = std::error::Error::source(&err).unwrap().to_string();
     assert!(!source.contains("secret"), "{source}");
     assert!(!source.contains("upload_id"), "{source}");

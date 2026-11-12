@@ -1,4 +1,4 @@
-use crate::gcp::storage::gcs_client::request::ops_record::*;
+use crate::gcp::storage::ops_log::*;
 
 #[test]
 fn logged_error_omits_the_query() {

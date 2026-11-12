@@ -32,12 +32,28 @@ The `Debug` output of the credentials does not show the client ID, the client se
 
 - A token response with a status that is not 2xx is an `Auth` error. The message has the status and the API error message.
 - A token response that is not JSON, or that has an empty access token, is an `Auth` error.
-- The token expiry is `expires_in` minus 60 seconds.
 - A user refresh token keeps the scopes from the original login.
+
+Token expiry:
+
+- The lifetime is `expires_in`. When the response has no `expires_in`, the lifetime is 3600 seconds.
+- The maximum lifetime is 3600 seconds. A longer `expires_in` gives 3600 seconds. Thus the expiry calculation does not panic.
+- The token expiry is the lifetime minus 60 seconds. When half of the lifetime is longer, the expiry is half of the lifetime. Thus a short lifetime does not cause a token request for each call.
+
+## Token source
+
+`TokenSource` keeps the credentials and one cached access token. It is private to the crate.
+
+- `TokenSource::token` gives the cached token while the token has not expired. Else it gets a new token, keeps it and gives it.
+- `TokenSource::invalidate` removes the cached token. The next `token` call gets a new token.
+- The cache lock stays held during a token request. Thus concurrent calls send one token request.
+- The caller gives the HTTP client to each `token` call.
+- `Metadata` credentials use the metadata server token URL. `User` credentials use `https://oauth2.googleapis.com/token`. The tests can change the two URLs.
+- The `Debug` output of a `TokenSource` shows the credentials. It does not show the token.
 
 ## Users
 
 | User | Use |
 | --- | --- |
-| GCS client | `spec/framework_rs/gcp/storage/authentication.md`. The client adds the signer email and keeps one token cache. |
-| Secret Manager access | `spec/framework_rs/gcp/secret-manager.md`. The access reads the credentials and the project one time for each process, and keeps one token. |
+| GCS client | `spec/framework_rs/gcp/storage/authentication.md`. The client adds the signer email and keeps one `TokenSource`. |
+| Secret Manager access | `spec/framework_rs/gcp/secret-manager.md`. The access reads the credentials and the project one time for each process, and keeps one `TokenSource`. |

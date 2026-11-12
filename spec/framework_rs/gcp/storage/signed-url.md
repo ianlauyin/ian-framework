@@ -12,9 +12,8 @@ The client builds a V4 signed GET URL.
 
 ### Lifetime
 
-`GcsClient::signed_get_url` takes an optional lifetime.
+`GcsClient::signed_get_url` takes a lifetime of type `Duration`. The lifetime is not optional.
 
-- A missing lifetime is a configuration error.
 - A lifetime of zero is a configuration error.
 - A lifetime below 1 second is a configuration error.
 - The client does not sign `X-Goog-Expires=0`.

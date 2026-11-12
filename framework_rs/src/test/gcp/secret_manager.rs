@@ -6,7 +6,7 @@ use std::ffi::OsStr;
 use crate::gcp::credentials::UserCredentials;
 use crate::gcp::secret_manager::*;
 use crate::test::env::with_var;
-use crate::test::gcp::{closed_addr, fake_secret_manager, ok_body, serve};
+use crate::test::gcp::{closed_addr, fake_secret_manager, ok_body, serve, serve_script, Reply};
 
 const SECRET: &str = "MY_SECRET";
 
@@ -103,6 +103,64 @@ async fn access_latest_gives_none_for_404() {
     assert_eq!(manager.access_latest(SECRET).await.unwrap(), None);
 }
 
+fn ok_reply(value: &[u8]) -> Reply {
+    Reply::new(200, &String::from_utf8(ok_body(value)).unwrap())
+}
+
+#[tokio::test]
+async fn access_latest_fetches_a_new_token_after_one_401() {
+    let replies = vec![
+        Reply::new(401, "{}"),
+        Reply::new(200, r#"{"access_token":"fresh","expires_in":3600}"#),
+        ok_reply(b"post-key"),
+    ];
+    let (addr, server) = serve_script(replies).await;
+    let value = fake_secret_manager(addr).access_latest(SECRET).await;
+    assert_eq!(value.unwrap().as_deref(), Some("post-key"));
+    let requests = server.await.unwrap();
+    assert!(
+        requests[1].starts_with("GET /token?scopes="),
+        "{}",
+        requests[1]
+    );
+    assert!(requests[2]
+        .to_ascii_lowercase()
+        .contains("authorization: bearer fresh"));
+}
+
+#[tokio::test]
+async fn access_latest_reports_a_second_401() {
+    let replies = vec![
+        Reply::new(401, "{}"),
+        Reply::new(200, r#"{"access_token":"fresh","expires_in":3600}"#),
+        Reply::new(401, "{}"),
+    ];
+    let (addr, _server) = serve_script(replies).await;
+    let err = fake_secret_manager(addr)
+        .access_latest(SECRET)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_AUTH");
+}
+
+#[tokio::test]
+async fn access_latest_retries_a_transient_status_up_to_the_limit() {
+    let (addr, _server) = serve_script(vec![Reply::new(503, "{}"), ok_reply(b"v")]).await;
+    let value = fake_secret_manager(addr).access_latest(SECRET).await;
+    assert_eq!(value.unwrap().as_deref(), Some("v"));
+
+    let replies = (0..ACCESS_ATTEMPTS)
+        .map(|_| Reply::new(503, "{}"))
+        .collect();
+    let (addr, server) = serve_script(replies).await;
+    let err = fake_secret_manager(addr)
+        .access_latest(SECRET)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "GCP_API");
+    assert_eq!(server.await.unwrap().len(), ACCESS_ATTEMPTS as usize);
+}
+
 #[tokio::test]
 async fn access_latest_rejects_a_secret_id_that_is_not_valid() {
     let manager = fake_secret_manager(closed_addr());
@@ -115,7 +173,7 @@ async fn access_latest_rejects_a_secret_id_that_is_not_valid() {
 #[tokio::test]
 async fn access_transport_error_omits_the_url() {
     let addr = closed_addr();
-    let http = http_client().unwrap();
+    let http = secret_manager_http_client().unwrap();
     let err = access_at(&http, &format!("http://{addr}/v1/x:access"), "token", None)
         .await
         .unwrap_err();
@@ -127,7 +185,7 @@ async fn access_transport_error_omits_the_url() {
 #[tokio::test]
 async fn metadata_project_reads_the_project_id() {
     let (addr, server) = serve(200, b"my-project\n".to_vec()).await;
-    let http = http_client().unwrap();
+    let http = secret_manager_http_client().unwrap();
     let url = format!("http://{addr}/computeMetadata/v1/project/project-id");
     let project = metadata_project(&http, &url).await.unwrap();
     assert_eq!(project.as_deref(), Some("my-project"));
@@ -137,7 +195,7 @@ async fn metadata_project_reads_the_project_id() {
 
 #[tokio::test]
 async fn no_metadata_server_is_no_credentials() {
-    let http = http_client().unwrap();
+    let http = secret_manager_http_client().unwrap();
     let url = format!("http://{}/project-id", closed_addr());
     assert!(metadata_project(&http, &url).await.unwrap().is_none());
 }
@@ -145,7 +203,7 @@ async fn no_metadata_server_is_no_credentials() {
 #[tokio::test]
 async fn a_metadata_server_failure_is_an_error() {
     let (addr, _server) = serve(500, b"down".to_vec()).await;
-    let http = http_client().unwrap();
+    let http = secret_manager_http_client().unwrap();
     let err = metadata_project(&http, &format!("http://{addr}/project-id"))
         .await
         .unwrap_err();
@@ -214,7 +272,7 @@ fn from_adc_rejects_a_bad_file_and_incomplete_credentials() {
 
 #[tokio::test]
 async fn resolve_project_reads_the_metadata_server_or_the_user() {
-    let http = http_client().unwrap();
+    let http = secret_manager_http_client().unwrap();
     let (addr, _server) = serve(200, b"my-project".to_vec()).await;
     let url = format!("http://{addr}/project");
     let project = resolve_project(&Credentials::Metadata, &http, &url).await;
@@ -229,7 +287,7 @@ async fn resolve_project_reads_the_metadata_server_or_the_user() {
 fn resolve_project_uses_the_quota_project_of_a_user() {
     let credentials = user(Some("quota-project"));
     let project = with_var(PROJECT_ENV, None, || {
-        let http = http_client().unwrap();
+        let http = secret_manager_http_client().unwrap();
         crate::test::env::block_on(resolve_project(&credentials, &http, "http://unused"))
     });
     assert_eq!(project.ok().flatten().as_deref(), Some("quota-project"));

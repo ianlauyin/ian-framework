@@ -47,28 +47,36 @@ Chunks:
 
 The client retries a chunk in these conditions:
 
-- The transport fails (the code `GCS_TRANSPORT`).
+- The transport fails (the code `GCP_TRANSPORT`).
 - The HTTP status is 408, 429, 500, 502, 503, or 504. The list is the same list that the send function uses.
 
 A failure to open, to read or to seek the upload file has the code `GCS_LOCAL`. The client does not retry it, because the file is on the local disk and the same read fails again.
 
 After one of those failures, the client probes the session:
 
-- The probe request has an empty body and `Content-Length: 0`.
+- The probe is a chunk request with an empty body and `Content-Length: 0`.
 - The probe uses `Content-Range: bytes */{total}`.
-- A probe response with status 308 can include `Range: bytes=START-END`. Then the next byte offset is `END + 1`.
-- A probe response with status 308 and no `Range` header gives offset 0.
+- A probe response that has the same offset as the failed request causes the client to send the chunk at that offset again.
+- A failed probe is followed by a new probe.
+
+Chunk and probe response:
+
+- A response with status 308 can include `Range: bytes=START-END`. Then the next byte offset is `END + 1`.
+- A response with status 308 and no `Range` header gives offset 0. GCS sends no `Range` header when it has kept no bytes of the session. The client does not think that GCS kept the bytes that it sent.
+- The client reads the next chunk from the next offset. The chunk is 8 MiB, or the rest of the object when the rest is shorter.
 
 Attempts:
 
-- The client makes a maximum of 5 attempts for one offset.
-- The client resets that count when the committed offset increases.
+- The client makes a maximum of 5 requests for one offset that fail. Chunk requests and probes both count.
+- After the fifth failed request, the client returns the error of that request.
+- The client resets that count when the offset increases.
 
 Rewinds:
 
-- A rewind occurs when a chunk step ends with a next offset that is lower than the start offset of that chunk. Then the client reads the data again from the lower offset and sends it again.
+- A rewind occurs when a response gives a next offset that is lower than the current offset. Then the client reads the data again from the lower offset and sends it again.
 - The client accepts a maximum of 5 rewinds.
-- The client resets the rewind count when a chunk step ends with a higher offset.
-- The sixth rewind before a higher offset stops the upload with an error that has the code `GCS_UNAVAILABLE`. The session is an upstream failure, so `is_retryable` is true for this error. The error does not pass through the chunk retry loop, because the loop ends before it. A caller that retries the whole upload can use `is_retryable`.
-- A chunk step that ends with a next offset equal to the start offset of that chunk stops the upload with an `Api` error.
+- The client resets the rewind count when a response gives a higher offset.
+- The sixth rewind before a higher offset stops the upload with an error that has the code `GCS_UNAVAILABLE`. The session is an upstream failure, so `is_retryable` is true for this error. The client does not retry this error. A caller that retries the whole upload can use `is_retryable`.
+- A chunk response, not a probe response, that gives a next offset equal to the current offset stops the upload with an `Api` error.
 - A next offset that is larger than the object size stops the upload with an `Api` error.
+- A next offset equal to the object size, without object metadata, stops the upload with an `Api` error.

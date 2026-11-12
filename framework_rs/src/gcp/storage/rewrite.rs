@@ -2,9 +2,9 @@ use serde::Deserialize;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::storage::encode::{encode_object_id, encode_seg};
-use crate::gcp::storage::gcs_client::object::RawObject;
-use crate::gcp::storage::gcs_client::{object_url, ObjectMeta};
+use crate::gcp::storage::encode::encode_seg;
+use crate::gcp::storage::object::RawObject;
+use crate::gcp::storage::{object_url, ObjectMeta};
 
 pub(crate) enum RewriteStep {
     Done(ObjectMeta),
@@ -23,7 +23,7 @@ impl RewriteStep {
             "{}/rewriteTo/b/{}/o/{}",
             object_url(api_root, bucket_name, from),
             encode_seg(bucket_name),
-            encode_object_id(to),
+            encode_seg(to),
         );
         if let Some(token) = token {
             url.push_str("?rewriteToken=");
@@ -34,17 +34,17 @@ impl RewriteStep {
 
     pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self, Exception> {
         let raw: RawRewrite = serde_json::from_slice(bytes)
-            .map_err(|err| exception!(code = "GCS_API", "rewrite JSON is invalid", source = err))?;
+            .map_err(|err| exception!(code = "GCP_API", "rewrite JSON is invalid", source = err))?;
         if raw.done {
             let resource = raw.resource.ok_or_else(|| {
-                exception!(code = "GCS_API", "rewrite did not return object metadata")
+                exception!(code = "GCP_API", "rewrite did not return object metadata")
             })?;
             return Ok(Self::Done(resource.into_meta()?));
         }
         match raw.rewrite_token {
             Some(token) if !token.is_empty() => Ok(Self::Next(token)),
             _ => Err(exception!(
-                code = "GCS_API",
+                code = "GCP_API",
                 "rewrite did not return a token",
             )),
         }

@@ -4,7 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::storage::gcs_client::PutBody;
+use crate::gcp::storage::PutBody;
 
 // The source must re-read any range because the session can move the offset back.
 pub(crate) enum UploadSource<'a> {
@@ -34,7 +34,7 @@ impl<'a> UploadSource<'a> {
         })?;
         if !meta.is_file() {
             return Err(exception!(
-                code = "GCS_CONFIG",
+                code = "GCP_CONFIG",
                 format!("{} is not a file", path.display()),
             ));
         }
@@ -69,7 +69,7 @@ fn bytes_chunk(bytes: &[u8], offset: u64, len: usize) -> Result<&[u8], Exception
         .and_then(|start| Some(start..start.checked_add(len)?));
     range
         .and_then(|range| bytes.get(range))
-        .ok_or_else(|| exception!(code = "GCS_API", "upload range is past the end of the data"))
+        .ok_or_else(|| exception!(code = "GCP_API", "upload range is past the end of the data"))
 }
 
 async fn file_chunk(

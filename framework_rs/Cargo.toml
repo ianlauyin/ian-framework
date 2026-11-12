@@ -18,6 +18,7 @@ gcp = [
   "tokio/fs",
 ]
 gcs = [
+  "dep:bytes",
   "dep:futures-util",
   "gcp",
   "reqwest/json",
@@ -29,7 +30,6 @@ monitor = ["dep:rustix"]
 [dependencies]
 axum = "*"
 chrono = { version = "*", default-features = false, features = ["clock", "serde", "std"] }
-form_urlencoded = "*"
 getrandom = "*"
 hex = "*"
 http-body-util = "*"
@@ -45,6 +45,7 @@ uuid = { version = "*", features = ["v7"] }
 
 argon2 = { version = "*", optional = true }
 base64 = { version = "*", optional = true }
+bytes = { version = "*", optional = true }
 futures-util = { version = "*", default-features = false, features = ["async-await", "std"], optional = true }
 redis = { version = "*", features = ["connection-manager", "tokio-comp"], optional = true }
 rustix = { version = "*", features = ["fs"], optional = true }
