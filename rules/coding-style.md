@@ -12,26 +12,20 @@
 The Rust library is the crate `ian_framework` in `framework_rs/`.
 
 - Use JSON for the request and the response. Use a different format only for a route that needs a body that is not JSON: a file upload, a stream or a webhook that has its own format.
-- Do not write doc comments. This includes `///` and `//!`.
 - Run `cargo fmt` and `cargo clippy` after you change the code. Fix all the warnings that they show.
 - When a cargo feature only adds a step to a function, write one function. Put the step in a `#[cfg(feature = "...")]` block, with an early return when the step gives the result. Do not write a second copy of the function for `#[cfg(not(feature = "..."))]`.
 
 ### Configuration
 
 - The library never reads an env variable by a name of its own for an app setting. The project reads its env variables, chooses the names and gives the values to the library. A helper that reads a variable by a name that the caller gives, such as `env::required`, is allowed.
-- A project reads a value that is not a secret, such as a bucket name, a list, a path, a URL or a log level, only from the process environment. Do not read that value from Secret Manager. When a value is not a secret, do not create a secret for it.
 
 ### Files
 
 - In a source file, put the imports and the constants first. Then put each public type, its inherent `impl` block with the public methods first, and its trait impls (`Debug`, `Display`). Put the private types, the private functions and their impl blocks after the public items.
 - In a file two or more levels deep, use `crate::` paths. Do not use `super::super::`.
 - Do not use `self` in an import, neither in an import list nor at the start of an import path. To use a module and an item of that module, import only the module. Then use the module name to refer to the item.
-- Keep a helper, a constant or a type in the file that uses it. When a different file also uses it, put it in the public module of its domain. Put a time or time zone helper in the `time` module.
-- Split a module folder by responsibility. Do not split it by file size. Each file does one job.
 - Keep a type, its inherent `impl` block and its trait impls in one file. Do not write an `impl` block for a type in a different file.
 - When the sibling files of a module folder use the main type of that folder, put the type in the `mod.rs` of the folder. The sibling files import it from the parent module.
-- Do not change a private item to `pub(crate)` only to let a sibling file use the internals of a type. When a sibling file needs the internals, change the file split.
-- To stop code outside the crate from making a type, give the type one `pub(crate)` field. The other fields can be `pub` for read access.
 
 ### Tests
 
@@ -39,7 +33,6 @@ The Rust library is the crate `ian_framework` in `framework_rs/`.
 - Put each test in `src/test/`. Do not put a test in the source file of the tested item. The `#[cfg(test)] mod test;` line in `src/lib.rs` is the only test item in the production code.
 - The folder `src/test/` has the same shape as the crate. The tests of `src/a/b.rs` are in `src/test/a/b.rs`. The tests of `src/a/mod.rs` are in `src/test/a/mod.rs`. Each test folder has a `mod.rs` that declares its child modules, with the same `#[cfg(feature = "...")]` attributes as the source.
 - A test reaches the tested item with a `crate::` path. When a test needs a private item, change the visibility of the item to `pub(crate)`. Do not use `pub` for this.
-- Keep each test helper in the test file that uses it. If the tests of two or more files use a test-only item, put the item in the `mod.rs` of the parent test folder. The other test files use it with a `crate::test::` path.
 - Keep all test-only code in a test module. This includes test constructors, test-only methods and test doubles. Do not add a `#[cfg(test)]` item to the production code.
 
 ### Safety
