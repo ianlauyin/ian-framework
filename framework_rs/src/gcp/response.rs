@@ -40,7 +40,7 @@ pub(crate) fn is_retryable_status(status: u16) -> bool {
 pub(crate) async fn read_limited(
     response: reqwest::Response,
     code: &'static str,
-    what: &str,
+    what: &'static str,
 ) -> Result<Vec<u8>, Exception> {
     let body = reqwest::Body::from(response);
     let err = match Limited::new(body, RESPONSE_BODY_LIMIT).collect().await {
