@@ -64,7 +64,7 @@ This feature is not product business logic.
 - `body_limit` and `BodyLimit`
 - `access_log`
 - `no_store`
-- `rate_limit`, `RateLimitConfig` and `RateLimiter`
+- `rate_limit` and `RateLimiter`
 - `request_timeout` and `RequestTimeout`
 - `require_api_key`, `ApiKeyRule`, `ApiKeyRules` and `PathMatch`
 - `require_same_origin`

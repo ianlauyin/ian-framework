@@ -10,8 +10,9 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 
 | Type | Meaning |
 | --- | --- |
-| `RateLimitConfig { capacity: u32, refill_per_sec: f64 }` | The size of one bucket and its refill speed. `RateLimitConfig::new` makes it. |
-| `RateLimiter` | The buckets. `RateLimiter::new(config)` makes it. A clone shares the same buckets. |
+| `RateLimiter` | The buckets. `RateLimiter::new(capacity: u32, refill_per_sec: f64, prune_at: usize)` makes it. `capacity` is the size of one bucket, `refill_per_sec` is its refill speed and `prune_at` is the most keys that the limiter holds. A clone shares the same buckets. |
+
+`RateLimiter::new` panics when `prune_at` is zero.
 
 ## Algorithm
 
@@ -23,8 +24,9 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 - Each request takes one token. The bucket gets `refill_per_sec` tokens each second, up to `capacity`.
 - A `refill_per_sec` below zero is the same as zero. With zero, a bucket never refills.
 - A request with no whole token left is refused.
-- When the map holds 10 000 keys or more, and a request has a new key, the limiter first deletes each bucket that is full again.
-- If the map still holds 10 000 keys after that, the limiter also deletes the 1 000 buckets that were used longest ago. The limiter scans the map only in this case, so the scan occurs at most one time for each 1 000 new keys. Thus the map does not grow past 10 000 keys.
+- When the map holds `prune_at` keys or more, and a request has a new key, the limiter first deletes each bucket that is full again.
+- If the map still holds `prune_at` keys after that, the limiter also deletes the buckets that were used longest ago. It deletes `prune_at / 10` buckets, with a minimum of 1. The limiter scans the map only in this case, so the scan occurs at most one time for each `prune_at / 10` new keys. Thus the map does not grow past `prune_at` keys.
+- After it deletes the buckets that were used longest ago, the limiter calls `Logger::warn` with the action `HTTP/rateLimitEvicted` and the context keys `prune_at` and `evicted`. This warning shows that `prune_at` is too small for the traffic: the deleted buckets were not full, so their clients get a full bucket again. The logger rules are in `spec/framework_rs/logging/logger.md`.
 - The state is in the memory of the process. Each limiter has its own state. A restart clears it.
 
 ## Refused request
