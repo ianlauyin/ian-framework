@@ -6,7 +6,7 @@ Do not put business logic in this repository.
 The Rust library is `framework_rs/`.
 The frontend library is `framework_fe/`.
 
-Framework structure: `spec/structure.md`
+Before you read a relevant spec file, read `spec/catalog.md`. `spec/catalog.md` is the specification index.
 
 ## Rules
 
