@@ -1,10 +1,8 @@
+use axum::http::HeaderMap;
+use redis::aio::ConnectionManager;
+use sha2::{Digest, Sha256};
 use std::fmt;
 use std::sync::Arc;
-use std::time::Duration;
-
-use axum::http::HeaderMap;
-use redis::aio::{ConnectionManager, ConnectionManagerConfig};
-use sha2::{Digest, Sha256};
 
 use crate::auth::session::config::SessionConfig;
 use crate::auth::session::{token, Session};
@@ -18,21 +16,8 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
-    pub async fn connect(url: &str, config: SessionConfig) -> Result<Self, Exception> {
+    pub fn new(conn: ConnectionManager, config: SessionConfig) -> Result<Self, Exception> {
         config.check()?;
-        let client = redis::Client::open(url).map_err(|err| {
-            exception!(code = "AUTH_CONFIG", "redis url is not valid", source = err)
-        })?;
-        let mut conn = ConnectionManager::new_with_config(client, manager_config())
-            .await
-            .map_err(unreachable)?;
-        let pong: String = redis::cmd("PING")
-            .query_async(&mut conn)
-            .await
-            .map_err(unreachable)?;
-        if pong != "PONG" {
-            return Err(exception!(code = "AUTH_STORE", "cannot reach redis"));
-        }
         Ok(Self {
             inner: Arc::new(Inner { conn, config }),
         })
@@ -237,17 +222,4 @@ fn store_err(err: redis::RedisError) -> Exception {
         "session store command failed",
         source = err,
     )
-}
-
-// Fail fast when Redis is down instead of retrying for many seconds.
-fn manager_config() -> ConnectionManagerConfig {
-    ConnectionManagerConfig::new()
-        .set_connection_timeout(Some(Duration::from_secs(2)))
-        .set_response_timeout(Some(Duration::from_secs(5)))
-        .set_number_of_retries(2)
-        .set_max_delay(Duration::from_millis(500))
-}
-
-fn unreachable(err: redis::RedisError) -> Exception {
-    exception!(code = "AUTH_STORE", "cannot reach redis", source = err)
 }

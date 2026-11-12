@@ -23,32 +23,19 @@ A session joins one random token to one subject.
 | `ttl_secs` | 604800 | The idle session life in seconds. |
 | `max_sessions_per_subject` | 100 | The most live sessions of one subject. A subject that logs in again and again does not make the Redis set grow without a bound. |
 
-### Connect
+### Create
 
-`SessionStore::connect` takes one Redis URL and one `SessionConfig`. It opens one Redis connection manager. Then it sends `PING`.
+`SessionStore::new` takes one `redis::aio::ConnectionManager` and one `SessionConfig`. The project makes the connection manager with `ian_framework::redis::connect`, which also checks the connection. `new` is not async and does not touch Redis.
 
-`SessionStore::connect` returns an error in these conditions:
+`SessionStore::new` returns an error in these conditions:
 
-- The URL is not a Redis URL.
-- Redis does not reply `PONG`.
 - `ttl_secs` is zero.
 - `ttl_secs` is more than 400 days (34560000 seconds). Browsers limit a cookie lifetime to 400 days.
 - `max_sessions_per_subject` is zero.
 - `cookie_name` is not an RFC 6265 cookie name. A cookie name has one or more visible ASCII characters. It has no separator character `()<>@,;:\"/[]?={}`.
 
-The connection manager stops early when Redis is down. It uses these settings:
-
-| Setting | Value |
-| --- | --- |
-| Connection timeout | 2 seconds |
-| Response timeout | 5 seconds |
-| Retries | 2 |
-| Maximum delay between retries | 500 milliseconds |
-
 - `SessionStore` is a handle. A clone of the handle costs little.
 - All clones use the same connection manager.
-- The error messages do not contain the Redis URL.
-
 ### Redis data
 
 - The Redis key of a session is `{prefix}{hash}`.
@@ -73,7 +60,7 @@ The connection manager stops early when Redis is down. It uses these settings:
 | `subject` | `pub` | The subject of the session. |
 
 - The `Debug` output of `Session` does not show the token.
-- `Session` is an Axum extractor. Its use is in `spec/framework_rs/auth/sliding-session.md`.
+- `Session` is an Axum extractor. Its use is in `spec/framework_rs/auth/session-middleware.md`.
 
 ### Methods
 

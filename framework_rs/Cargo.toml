@@ -6,6 +6,9 @@ edition = "2021"
 [features]
 auth = [
   "dep:argon2",
+  "redis",
+]
+redis = [
   "dep:redis",
   "redis/tokio-rustls-comp",
 ]

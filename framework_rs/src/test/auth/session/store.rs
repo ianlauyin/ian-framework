@@ -1,6 +1,6 @@
 use crate::auth::session::config::SessionConfig;
 use crate::auth::session::store::*;
-use crate::test::auth::{store_or_skip, LIMIT};
+use crate::test::auth::{connection, store_or_skip, LIMIT};
 
 async fn subject_of(store: &SessionStore, token: &str) -> Option<String> {
     store
@@ -226,18 +226,13 @@ fn tls_url_is_accepted() {
 
 #[tokio::test]
 async fn bad_config_is_refused_before_connecting() {
-    let err = SessionStore::connect("not a redis url", SessionConfig::default())
-        .await
-        .unwrap_err();
-    assert_eq!(err.code(), "AUTH_CONFIG");
-    assert!(!err.to_string().contains("not a redis url"));
-
+    let Some(conn) = connection().await else {
+        return;
+    };
     let config = SessionConfig {
         ttl_secs: 0,
         ..SessionConfig::default()
     };
-    let err = SessionStore::connect("redis://127.0.0.1:6379", config)
-        .await
-        .unwrap_err();
+    let err = SessionStore::new(conn, config).unwrap_err();
     assert_eq!(err.code(), "AUTH_CONFIG");
 }

@@ -9,6 +9,9 @@ pub mod token;
 #[cfg(feature = "auth")]
 pub mod auth;
 
+#[cfg(feature = "redis")]
+pub mod redis;
+
 #[cfg(feature = "gcp")]
 pub mod gcp;
 

@@ -69,7 +69,7 @@ This feature is not product business logic.
 - `require_api_key`, `ApiKeyRule`, `ApiKeyRules` and `PathMatch`
 - `require_same_origin`
 - `security_headers`
-- `slide_session`, only with the Cargo feature `auth`
+- `require_session`, only with the Cargo feature `auth`
 
 `ian_framework::http::headers` exports only these items:
 

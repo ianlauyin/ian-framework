@@ -8,7 +8,7 @@ This feature is not product business logic.
 | Sub-feature | Document |
 | --- | --- |
 | Session store and cookie | `spec/framework_rs/auth/session-store.md` |
-| Sliding session | `spec/framework_rs/auth/sliding-session.md` |
+| Session middleware | `spec/framework_rs/auth/session-middleware.md` |
 | Password hash | `spec/framework_rs/auth/password.md` |
 
 ## Crate
@@ -23,9 +23,7 @@ This feature is not product business logic.
 - `auth` is not a default feature.
 - The `auth` feature uses Tokio for the password hash.
 - The `auth` feature does not enable `gcs`.
-- The `auth` feature enables the `redis` feature `tokio-rustls-comp`. Thus a `rediss://` URL connects with TLS.
-- The TLS connection uses `rustls` with the system root certificates.
-- A project does not add its own `redis` dependency for TLS.
+- The `auth` feature enables the Cargo feature `redis`. The TLS rules are in `spec/framework_rs/redis/context.md`.
 - The HTTP boundary error is in `spec/framework_rs/http/api-error.md`. The cookie header helpers are in `spec/framework_rs/http/cookie.md`.
 
 Put this block in the project `Cargo.toml`:
@@ -56,8 +54,8 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 
 | Code | Cause |
 | --- | --- |
-| `AUTH_CONFIG` | Bad Redis URL or bad `SessionConfig` |
-| `AUTH_STORE` | Redis connection failure or Redis command failure |
+| `AUTH_CONFIG` | Bad `SessionConfig` |
+| `AUTH_STORE` | Redis command failure |
 | `AUTH_HASH_FAILED` | Hash failure or blocking task failure |
 | `AUTH_RANDOM` | OS random source failure |
 | `VALIDATION_ERROR` | `hash_password` gets a password that is longer than 256 bytes |
