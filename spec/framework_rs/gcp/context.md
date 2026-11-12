@@ -16,7 +16,7 @@ This code is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::gcp`.
-- The source files are `framework_rs/src/gcp/mod.rs`, `framework_rs/src/gcp/response.rs`, `framework_rs/src/gcp/credentials.rs`, `framework_rs/src/gcp/http_client.rs` and `framework_rs/src/gcp/secret_manager.rs`.
+- The source files are `framework_rs/src/gcp/mod.rs`, `framework_rs/src/gcp/response.rs`, `framework_rs/src/gcp/credentials.rs`, `framework_rs/src/gcp/http_client.rs`, `framework_rs/src/gcp/secret_manager/mod.rs` and `framework_rs/src/gcp/secret_manager/access_response.rs`.
 - The tests are in `framework_rs/src/test/gcp/`. The shared test helpers are in `framework_rs/src/test/gcp/mod.rs`: a one-request local test server, a scripted local test server that answers each request with the next reply, a closed local address, a fake `TokenSource` and a fake `SecretManager`.
 
 ## Build

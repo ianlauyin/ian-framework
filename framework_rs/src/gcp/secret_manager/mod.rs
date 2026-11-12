@@ -1,15 +1,15 @@
 use std::env;
 use std::time::Duration;
 
-use base64::Engine;
 use tokio::sync::OnceCell;
 
 use crate::exception;
 use crate::exception::Exception;
 use crate::gcp::{
-    google_error_message, http_client_builder, is_retryable_status, metadata_get, read_limited,
-    truncate, Credentials, TokenSource,
+    http_client_builder, is_retryable_status, metadata_get, read_limited, Credentials, TokenSource,
 };
+
+pub(crate) mod access_response;
 
 const API_ROOT: &str = "https://secretmanager.googleapis.com/v1";
 const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
@@ -63,7 +63,7 @@ impl SecretManager {
             };
             if !retry || attempts + 1 >= ACCESS_ATTEMPTS {
                 let (status, body) = reply?;
-                return decode_access_response(status, &body);
+                return access_response::decode_access_response(status, &body);
             }
             attempts += 1;
             tokio::time::sleep(ACCESS_BACKOFF * attempts).await;
@@ -73,7 +73,13 @@ impl SecretManager {
     pub(crate) async fn from_adc() -> Result<Option<Self>, Exception> {
         let credentials = Credentials::from_adc().await?;
         credentials.validate()?;
-        let http = secret_manager_http_client()?;
+        let http = http_client_builder().build().map_err(|err| {
+            exception!(
+                code = "GCP_TRANSPORT",
+                "cannot build the HTTP client",
+                source = err,
+            )
+        })?;
         let Some(project) = resolve_project(&credentials, &http, METADATA_PROJECT_URL).await?
         else {
             return Ok(None);
@@ -150,39 +156,6 @@ pub(crate) async fn access_at(
     Ok((status, body))
 }
 
-pub(crate) fn decode_access_response(
-    status: u16,
-    body: &[u8],
-) -> Result<Option<String>, Exception> {
-    if status == 404 {
-        return Ok(None);
-    }
-    if !(200..300).contains(&status) {
-        return Err(status_error(status, body));
-    }
-    decode_payload(body).map(Some)
-}
-
-pub(crate) fn secret_manager_http_client() -> Result<reqwest::Client, Exception> {
-    http_client_builder().build().map_err(|err| {
-        exception!(
-            code = "GCP_TRANSPORT",
-            "cannot build the HTTP client",
-            source = err,
-        )
-    })
-}
-
-#[derive(serde::Deserialize)]
-struct AccessResponse {
-    payload: Payload,
-}
-
-#[derive(serde::Deserialize)]
-struct Payload {
-    data: String,
-}
-
 fn checked_project(project: &str) -> Result<String, Exception> {
     if !is_name_segment(project) {
         return Err(exception!(
@@ -191,37 +164,6 @@ fn checked_project(project: &str) -> Result<String, Exception> {
         ));
     }
     Ok(project.to_string())
-}
-
-fn status_error(status: u16, body: &[u8]) -> Exception {
-    let detail = google_error_message(&String::from_utf8_lossy(body)).unwrap_or_default();
-    let kind = match status {
-        401 | 403 => "GCP_AUTH",
-        _ => "GCP_API",
-    };
-    exception!(
-        code = kind,
-        format!("secret manager status {status}: {}", truncate(&detail, 300)),
-    )
-}
-
-fn decode_payload(body: &[u8]) -> Result<String, Exception> {
-    let parsed: AccessResponse = serde_json::from_slice(body).map_err(|_| {
-        exception!(
-            code = "GCP_API",
-            "secret manager response has no payload data",
-        )
-    })?;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(parsed.payload.data)
-        .map_err(|_| exception!(code = "GCP_API", "secret payload is not base64"))?;
-    let value = String::from_utf8(bytes)
-        .map_err(|_| exception!(code = "GCP_CONFIG", "secret value is not UTF-8"))?;
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(exception!(code = "GCP_CONFIG", "secret value is empty"));
-    }
-    Ok(value.to_string())
 }
 
 fn is_name_segment(segment: &str) -> bool {

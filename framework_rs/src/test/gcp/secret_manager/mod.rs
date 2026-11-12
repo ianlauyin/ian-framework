@@ -1,3 +1,5 @@
+mod access_response;
+
 use crate::gcp::Credentials;
 
 use std::ffi::OsStr;
@@ -16,66 +18,6 @@ fn user(quota_project: Option<&str>) -> Credentials {
         refresh_token: "refresh".to_string(),
         quota_project_id: quota_project.map(str::to_string),
     })
-}
-
-#[test]
-fn decode_gives_the_trimmed_value() {
-    assert_eq!(
-        decode_access_response(200, &ok_body(b"post-key\n")).unwrap(),
-        Some("post-key".to_string())
-    );
-}
-
-#[test]
-fn decode_gives_none_for_404() {
-    let body = br#"{"error":{"code":404,"message":"Secret [x] not found"}}"#;
-    assert_eq!(decode_access_response(404, body).unwrap(), None);
-    assert_eq!(decode_access_response(404, b"").unwrap(), None);
-}
-
-#[test]
-fn decode_rejects_an_empty_value() {
-    for value in [&b""[..], b"  \n"] {
-        let err = decode_access_response(200, &ok_body(value)).unwrap_err();
-        assert_eq!(err.message(), "secret value is empty");
-    }
-}
-
-#[test]
-fn decode_rejects_a_value_that_is_not_utf8() {
-    let err = decode_access_response(200, &ok_body(&[0x66, 0x80, 0x6f])).unwrap_err();
-    assert_eq!(err.message(), "secret value is not UTF-8");
-}
-
-#[test]
-fn decode_rejects_a_bad_body_without_echoing_it() {
-    let cases: [&[u8]; 4] = [
-        b"not json secret-value",
-        br#"{"payload":{}}"#,
-        br#"{"payload":{"data":12}}"#,
-        br#"{"payload":{"data":"secret-value!"}}"#,
-    ];
-    for body in cases {
-        let err = decode_access_response(200, body).unwrap_err();
-        assert_eq!(err.code(), "GCP_API");
-        assert!(std::error::Error::source(&err).is_none());
-        assert!(!format!("{err} {err:?}").contains("secret-value"), "{err}");
-    }
-}
-
-#[test]
-fn decode_reads_the_api_error() {
-    let body =
-        br#"{"error":{"code":403,"message":"Permission denied","status":"PERMISSION_DENIED"}}"#;
-    let err = decode_access_response(403, body).unwrap_err();
-    assert_eq!(err.code(), "GCP_AUTH");
-    assert_eq!(
-        err.message(),
-        "secret manager status 403: Permission denied"
-    );
-    let err = decode_access_response(500, b"<html>down</html>").unwrap_err();
-    assert_eq!(err.code(), "GCP_API");
-    assert_eq!(err.message(), "secret manager status 500: ");
 }
 
 #[tokio::test]
@@ -172,7 +114,7 @@ async fn access_latest_rejects_a_secret_id_that_is_not_valid() {
 #[tokio::test]
 async fn access_transport_error_omits_the_url() {
     let addr = closed_addr();
-    let http = secret_manager_http_client().unwrap();
+    let http = crate::gcp::http_client_builder().build().unwrap();
     let err = access_at(&http, &format!("http://{addr}/v1/x:access"), "token", None)
         .await
         .unwrap_err();
@@ -184,7 +126,7 @@ async fn access_transport_error_omits_the_url() {
 #[tokio::test]
 async fn metadata_project_reads_the_project_id() {
     let (addr, server) = serve(200, b"my-project\n".to_vec()).await;
-    let http = secret_manager_http_client().unwrap();
+    let http = crate::gcp::http_client_builder().build().unwrap();
     let url = format!("http://{addr}/computeMetadata/v1/project/project-id");
     let project = metadata_project(&http, &url).await.unwrap();
     assert_eq!(project, "my-project");
@@ -194,7 +136,7 @@ async fn metadata_project_reads_the_project_id() {
 
 #[tokio::test]
 async fn an_unreachable_metadata_server_is_an_error() {
-    let http = secret_manager_http_client().unwrap();
+    let http = crate::gcp::http_client_builder().build().unwrap();
     let url = format!("http://{}/project-id", closed_addr());
     let err = metadata_project(&http, &url).await.unwrap_err();
     assert_eq!(err.code(), "GCP_AUTH");
@@ -203,7 +145,7 @@ async fn an_unreachable_metadata_server_is_an_error() {
 #[tokio::test]
 async fn a_metadata_server_failure_is_an_error() {
     let (addr, _server) = serve(500, b"down".to_vec()).await;
-    let http = secret_manager_http_client().unwrap();
+    let http = crate::gcp::http_client_builder().build().unwrap();
     let err = metadata_project(&http, &format!("http://{addr}/project-id"))
         .await
         .unwrap_err();
@@ -274,7 +216,7 @@ fn from_adc_rejects_a_bad_file_and_incomplete_credentials() {
 
 #[tokio::test]
 async fn resolve_project_reads_the_metadata_server_or_the_user() {
-    let http = secret_manager_http_client().unwrap();
+    let http = crate::gcp::http_client_builder().build().unwrap();
     let (addr, _server) = serve(200, b"my-project".to_vec()).await;
     let url = format!("http://{addr}/project");
     let project = resolve_project(&Credentials::Metadata, &http, &url).await;
@@ -289,7 +231,7 @@ async fn resolve_project_reads_the_metadata_server_or_the_user() {
 fn resolve_project_uses_the_quota_project_of_a_user() {
     let credentials = user(Some("quota-project"));
     let project = with_var(PROJECT_ENV, None, || {
-        let http = secret_manager_http_client().unwrap();
+        let http = crate::gcp::http_client_builder().build().unwrap();
         crate::test::env::block_on(resolve_project(&credentials, &http, "http://unused"))
     });
     assert_eq!(project.ok().flatten().as_deref(), Some("quota-project"));
