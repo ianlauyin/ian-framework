@@ -109,12 +109,9 @@ pub async fn require_api_key(
     let rule = rules.rules.iter().find(|rule| rule.applies(method, path));
     let allowed = match rule {
         None => !rules.deny_unmatched,
-        Some(rule) => match &rule.key {
-            None => true,
-            Some(key) => {
-                bearer_token(request.headers()).is_some_and(|token| key_matches(token, key))
-            }
-        },
+        Some(rule) => rule.key.as_ref().is_none_or(|key| {
+            bearer_token(request.headers()).is_some_and(|token| key_matches(token, key))
+        }),
     };
     if !allowed {
         Logger::warn(
