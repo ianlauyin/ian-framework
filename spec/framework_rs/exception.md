@@ -52,7 +52,7 @@ The only way to make an exception is the macro `exception!`. It is exported at t
 
 | Code | Condition |
 | --- | --- |
-| `ENV_MISSING`, `ENV_NOT_UNICODE`, `ENV_SECRET` | The `env` module. See `spec/framework_rs/env/read.md`. |
+| `ENV_MISSING`, `ENV_NOT_UNICODE` | The `env` module. See `spec/framework_rs/env/read.md`. |
 | `REDIS_CONFIG`, `REDIS_UNREACHABLE` | The `redis` feature. See `spec/framework_rs/redis/context.md`. |
 | `AUTH_CONFIG`, `AUTH_STORE`, `AUTH_HASH_FAILED`, `AUTH_RANDOM` | The `auth` feature. See `spec/framework_rs/auth/context.md`. |
 | `GCP_AUTH`, `GCP_CONFIG`, `GCP_API`, `GCP_TRANSPORT` | The `gcp` feature and the `gcs` feature. See `spec/framework_rs/gcp/context.md`. |

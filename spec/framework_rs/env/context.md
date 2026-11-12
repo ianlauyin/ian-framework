@@ -7,7 +7,7 @@ This feature is not product business logic.
 
 | Sub-feature | Document |
 | --- | --- |
-| Read functions, the Secret Manager lookup and the error type | `spec/framework_rs/env/read.md` |
+| Read functions and the error type | `spec/framework_rs/env/read.md` |
 
 ## Crate
 
@@ -20,10 +20,8 @@ This feature is not product business logic.
 
 ## Build
 
-Each build compiles this module. The public items and their signatures are the same with and without the Cargo feature `gcp`.
+Each build compiles this module. `required` and `optional` read only the environment variable.
 
-- Without the `gcp` feature, `required` and `optional` read only the environment variable.
-- With the `gcp` feature, `required` and `optional` read Secret Manager first. They use the Secret Manager access in `spec/framework_rs/gcp/secret-manager.md`.
 - The tests use `std::os::unix::ffi`. Thus the tests compile only for a Unix target.
 
 The install line for the crate is in `spec/framework_rs/logging/context.md`.
@@ -32,8 +30,7 @@ The install line for the crate is in `spec/framework_rs/logging/context.md`.
 
 - A test that sets an environment variable holds one shared lock.
 - The test restores the previous value of the variable before it releases the lock.
-- The shared test helpers are in `framework_rs/src/test/env.rs`. `with_var` sets one variable and `with_vars` sets several variables under the lock. `block_on` runs one future on a current-thread Tokio runtime. The env tests use these helpers. The Secret Manager tests use `with_var`.
-- The tests do not call Google Cloud. With the `gcp` feature, `block_on` first sets the shared Secret Manager state to "no credentials". The lookup tests use a fake Secret Manager on a local test server. The shared fake is in `framework_rs/src/test/gcp/mod.rs`.
+- The shared test helpers are in `framework_rs/src/test/env.rs`. `with_var` sets one variable and `with_vars` sets several variables under the lock. With the `gcp` feature, `block_on` runs one future on a current-thread Tokio runtime. The Secret Manager and credentials tests use these helpers.
 
 ## Out of scope
 

@@ -24,7 +24,7 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | Cookie sessions and password hashes | `spec/framework_rs/auth/context.md` |
 | Shared error type `Exception` with a boxed source and a trace for the log | `spec/framework_rs/exception.md` |
 | Shutdown signal `ShutdownReceiver` | `spec/framework_rs/shutdown/context.md` |
-| Environment variable read helpers. With the `gcp` feature, `required` and `optional` read Secret Manager first. | `spec/framework_rs/env/context.md` |
+| Environment variable read helpers. | `spec/framework_rs/env/context.md` |
 | Shared Google Cloud code (Cargo feature `gcp`): credentials, access tokens, HTTP client settings and Secret Manager access | `spec/framework_rs/gcp/context.md` |
 | Time and time zone helpers, Hong Kong time `hkt_now` | `spec/framework_rs/time/context.md` |
 

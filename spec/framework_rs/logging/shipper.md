@@ -18,7 +18,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 - The source file is `framework_rs/src/logging/log_shipper/http_log_shipper.rs`.
 - `HttpLogShipper::new` does not read an environment variable or Secret Manager.
-- The app reads `endpoint` and `post_api_key` from its own environment variables or secrets, with the names that the app chooses. Then it gives the values to `HttpLogShipper::new`. The app name is fixed in the code of the app. The app can use `ian_framework::env::optional` for this read. The lookup rules of `optional` are in `spec/framework_rs/env/read.md`.
+- The app reads `endpoint` and `post_api_key` from its own environment variables or secrets, with the names that the app chooses. Then it gives the values to `HttpLogShipper::new`. The app name is fixed in the code of the app. The app can use `ian_framework::env::optional` for this read. The rules of `optional` are in `spec/framework_rs/env/read.md`.
 - `post_api_key` is the POST API key of the log server. It is a secret.
 - `app` is `&'static str`. `endpoint` is `String`. `post_api_key` is `&str`.
 - The app is not checked. The caller gives a valid app name.

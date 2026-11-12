@@ -109,11 +109,6 @@ pub(crate) async fn serve_script(replies: Vec<Reply>) -> (SocketAddr, JoinHandle
     (addr, server)
 }
 
-// The tests must not call Google Cloud, so the shared Secret Manager is set to "no credentials".
-pub(crate) fn no_secret_manager() {
-    let _ = crate::gcp::secret_manager::SECRET_MANAGER.set(None);
-}
-
 pub(crate) fn closed_addr() -> SocketAddr {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.local_addr().unwrap()

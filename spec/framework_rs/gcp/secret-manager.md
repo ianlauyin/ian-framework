@@ -4,7 +4,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/gcp/contex
 
 ## Shared state
 
-`SecretManager` is private to the crate. One process has one shared `SecretManager` state in a Tokio `OnceCell`. The first `SecretManager::shared` call makes the state. Each later call uses the same state.
+`SecretManager` is public. Its fields are private to the crate. One process has one shared `SecretManager` state in a Tokio `OnceCell`. The first `SecretManager::shared` call makes the state. Each later call uses the same state.
 
 The state is one of these:
 
@@ -17,19 +17,18 @@ The steps to make the state are:
 
 1. Read the credentials with `Credentials::from_adc`. The rules are in `spec/framework_rs/gcp/credentials.md`. A credentials file that is not valid is an error.
 2. Find the project. The rules are in the table below.
-3. When the `User` credentials have no project, the state is "no credentials". When the metadata server is unreachable, there is no state yet.
+3. When the `User` credentials have no project, the state is "no credentials".
 4. Get one access token. A token failure is an error.
 
 | Credentials | Project |
 | --- | --- |
-| `Metadata` | `GET http://169.254.169.254/computeMetadata/v1/project/project-id` with the header `Metadata-Flavor: Google`. The time limit is 2 seconds. When the request cannot be sent, the metadata server is unreachable. |
+| `Metadata` | `GET http://169.254.169.254/computeMetadata/v1/project/project-id` with the header `Metadata-Flavor: Google`. The time limit is 2 seconds. When the request cannot be sent, the result is an `Auth` error. The project handles it. |
 | `User` | The environment variable `GOOGLE_CLOUD_PROJECT` when it is not blank. Else the `quota_project_id` of the credentials. Else there is no project. |
 
 - A metadata project status that is not 2xx is an `Auth` error.
 - A project id that is empty or has a character that is not an ASCII letter, a digit, `-`, `_` or `.` is a `Config` error.
 - The whitespace at the start and at the end of the project id is removed.
 - An error does not go into the `OnceCell`. Thus the next call tries again.
-- An unreachable metadata server does not go into the `OnceCell`. `SecretManager::shared` gives no credentials for that call. For the next 30 seconds, each call gives no credentials and does not send the request. After that time, the next call tries again.
 - The state keeps the token in one `TokenSource`. The rules are in `spec/framework_rs/gcp/credentials.md`. When the token expires, the next access gets a new token and keeps it.
 - The `OnceCell` is not in the public API.
 

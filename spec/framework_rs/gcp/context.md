@@ -42,7 +42,7 @@ cargo clippy --all-features --all-targets
 
 - The `gcp::storage` module uses the credentials and the access tokens. The GCS client is in `spec/framework_rs/gcp/storage/context.md`.
 - The `gcp::storage` module and the Secret Manager access use the same HTTP client settings. The settings are in the section "HTTP client".
-- The `env` module uses the Secret Manager access. The lookup of `env::required` and `env::optional` is in `spec/framework_rs/env/read.md`.
+- `ian_framework::gcp::SecretManager` is public. The project calls it and decides the fallback to an environment variable. The `env` module does not use it.
 
 ## HTTP client
 

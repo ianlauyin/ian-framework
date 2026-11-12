@@ -1,6 +1,5 @@
 use std::env;
-use std::sync::Mutex as StdMutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use base64::Engine;
 use tokio::sync::OnceCell;
@@ -14,23 +13,15 @@ use crate::gcp::{
 
 const API_ROOT: &str = "https://secretmanager.googleapis.com/v1";
 const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
-// Not an error for the caller. `initialized` maps it to no credentials and does not cache it.
-pub(crate) const METADATA_UNREACHABLE: &str = "GCP_METADATA_UNREACHABLE";
 pub(crate) const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const ACCESS_ATTEMPTS: u32 = 3;
 const ACCESS_BACKOFF: Duration = Duration::from_millis(250);
-// After a failed metadata probe, later calls skip the probe for this time.
-const UNREACHABLE_RETRY: Duration = Duration::from_secs(30);
-
-// None means that the process has no credentials, so each read falls back to the env var.
+// None means that the process has no credentials.
 pub(crate) static SECRET_MANAGER: OnceCell<Option<SecretManager>> = OnceCell::const_new();
 
-// The metadata server may be down for a short time, so an unreachable server is not kept in the OnceCell.
-static UNREACHABLE_AT: StdMutex<Option<Instant>> = StdMutex::new(None);
-
 // The value is a secret. No error of this file holds the value or a parser error that can quote it.
-pub(crate) struct SecretManager {
+pub struct SecretManager {
     pub(crate) http: reqwest::Client,
     pub(crate) api_root: String,
     pub(crate) project: String,
@@ -39,18 +30,13 @@ pub(crate) struct SecretManager {
 }
 
 impl SecretManager {
-    pub(crate) async fn shared() -> Result<Option<&'static SecretManager>, Exception> {
-        if let Some(state) = SECRET_MANAGER.get() {
-            return Ok(state.as_ref());
-        }
-        if unreachable_recently() {
-            return Ok(None);
-        }
-        initialized(SECRET_MANAGER.get_or_try_init(Self::from_adc).await)
+    pub async fn shared() -> Result<Option<&'static SecretManager>, Exception> {
+        let state = SECRET_MANAGER.get_or_try_init(Self::from_adc).await?;
+        Ok(state.as_ref())
     }
 
     // None means that the secret or its latest version does not exist.
-    pub(crate) async fn access_latest(&self, secret: &str) -> Result<Option<String>, Exception> {
+    pub async fn access_latest(&self, secret: &str) -> Result<Option<String>, Exception> {
         if !is_name_segment(secret) {
             return Err(exception!(
                 code = "GCP_CONFIG",
@@ -105,54 +91,22 @@ impl SecretManager {
     }
 }
 
-pub(crate) fn initialized(
-    result: Result<&'static Option<SecretManager>, Exception>,
-) -> Result<Option<&'static SecretManager>, Exception> {
-    match result {
-        Ok(state) => Ok(state.as_ref()),
-        Err(err) if err.code() == METADATA_UNREACHABLE => {
-            *lock_unreachable() = Some(Instant::now());
-            Ok(None)
-        }
-        Err(err) => Err(err),
-    }
-}
-
 pub(crate) async fn resolve_project(
     credentials: &Credentials,
     http: &reqwest::Client,
     metadata_project_url: &str,
 ) -> Result<Option<String>, Exception> {
     match credentials {
-        Credentials::Metadata => metadata_project(http, metadata_project_url)
-            .await?
-            .ok_or_else(|| {
-                exception!(
-                    code = METADATA_UNREACHABLE,
-                    "metadata server is unreachable"
-                )
-            })
-            .map(Some),
-        Credentials::User(_) => Ok(user_project(credentials)?),
+        Credentials::Metadata => metadata_project(http, metadata_project_url).await.map(Some),
+        Credentials::User(_) => user_project(credentials),
     }
 }
 
-pub(crate) fn lock_unreachable() -> std::sync::MutexGuard<'static, Option<Instant>> {
-    UNREACHABLE_AT.lock().unwrap_or_else(|err| err.into_inner())
-}
-
-pub(crate) fn unreachable_recently() -> bool {
-    lock_unreachable().is_some_and(|at| at.elapsed() < UNREACHABLE_RETRY)
-}
-
-// The metadata server is the last credentials source. When it cannot be reached, the process has no credentials.
 pub(crate) async fn metadata_project(
     http: &reqwest::Client,
     url: &str,
-) -> Result<Option<String>, Exception> {
-    let Ok(response) = metadata_get(http, url).await else {
-        return Ok(None);
-    };
+) -> Result<String, Exception> {
+    let response = metadata_get(http, url).await?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(exception!(
@@ -161,7 +115,7 @@ pub(crate) async fn metadata_project(
         ));
     }
     let body = read_limited(response, "GCP_TRANSPORT", "metadata server project").await?;
-    checked_project(String::from_utf8_lossy(&body).trim()).map(Some)
+    checked_project(String::from_utf8_lossy(&body).trim())
 }
 
 pub(crate) fn user_project(credentials: &Credentials) -> Result<Option<String>, Exception> {

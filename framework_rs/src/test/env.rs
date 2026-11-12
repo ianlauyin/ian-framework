@@ -37,9 +37,8 @@ pub(crate) fn with_vars<T>(vars: &[(&str, Option<&OsStr>)], read: impl FnOnce() 
     result
 }
 
+#[cfg(feature = "gcp")]
 pub(crate) fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
-    #[cfg(feature = "gcp")]
-    crate::test::gcp::no_secret_manager();
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -56,13 +55,13 @@ fn set_or_remove(name: &str, value: Option<&OsStr>) {
 
 fn read_optional(value: Option<&str>) -> Result<Option<String>, Exception> {
     with_var(OPTIONAL_NAME, value.map(OsStr::new), || {
-        block_on(optional(OPTIONAL_NAME))
+        optional(OPTIONAL_NAME)
     })
 }
 
 fn read_required(value: Option<&str>) -> Result<String, Exception> {
     with_var(REQUIRED_NAME, value.map(OsStr::new), || {
-        block_on(required(REQUIRED_NAME))
+        required(REQUIRED_NAME)
     })
 }
 
@@ -84,7 +83,7 @@ fn optional_gives_none_for_an_absent_or_blank_var() {
 #[test]
 fn optional_rejects_a_value_that_is_not_unicode() {
     let error = with_var(OPTIONAL_NAME, Some(not_unicode()), || {
-        block_on(optional(OPTIONAL_NAME))
+        optional(OPTIONAL_NAME)
     })
     .unwrap_err();
     assert_eq!(error.code(), "ENV_NOT_UNICODE");
@@ -92,13 +91,6 @@ fn optional_rejects_a_value_that_is_not_unicode() {
         error.message(),
         format!("{OPTIONAL_NAME} is not valid unicode")
     );
-}
-
-#[test]
-fn the_optional_future_is_send() {
-    fn assert_send<T: Send>(_: &T) {}
-    let future = optional(OPTIONAL_NAME);
-    assert_send(&future);
 }
 
 #[test]
@@ -119,35 +111,9 @@ fn required_rejects_an_absent_or_blank_var() {
 #[test]
 fn required_rejects_a_value_that_is_not_unicode() {
     let error = with_var(REQUIRED_NAME, Some(not_unicode()), || {
-        block_on(required(REQUIRED_NAME))
+        required(REQUIRED_NAME)
     })
     .unwrap_err();
     assert_eq!(error.code(), "ENV_NOT_UNICODE");
     assert!(error.message().contains(REQUIRED_NAME));
-}
-
-#[test]
-fn the_required_future_is_send() {
-    fn assert_send<T: Send>(_: &T) {}
-    let future = required(REQUIRED_NAME);
-    assert_send(&future);
-}
-
-#[cfg(feature = "gcp")]
-#[test]
-fn no_credentials_gives_no_secret_so_the_env_var_is_read() {
-    // block_on sets the shared Secret Manager state to "no credentials".
-    assert_eq!(
-        read_optional(Some(" from-env ")).unwrap().as_deref(),
-        Some("from-env")
-    );
-}
-
-#[cfg(not(feature = "gcp"))]
-#[test]
-fn without_gcp_only_the_env_var_is_read() {
-    assert_eq!(
-        read_optional(Some("from-env")).unwrap().as_deref(),
-        Some("from-env")
-    );
 }

@@ -1,4 +1,3 @@
-use crate::exception;
 use crate::gcp::Credentials;
 
 use std::ffi::OsStr;
@@ -188,16 +187,17 @@ async fn metadata_project_reads_the_project_id() {
     let http = secret_manager_http_client().unwrap();
     let url = format!("http://{addr}/computeMetadata/v1/project/project-id");
     let project = metadata_project(&http, &url).await.unwrap();
-    assert_eq!(project.as_deref(), Some("my-project"));
+    assert_eq!(project, "my-project");
     let head = server.await.unwrap();
     assert!(head.contains("metadata-flavor: google"), "{head}");
 }
 
 #[tokio::test]
-async fn no_metadata_server_is_no_credentials() {
+async fn an_unreachable_metadata_server_is_an_error() {
     let http = secret_manager_http_client().unwrap();
     let url = format!("http://{}/project-id", closed_addr());
-    assert!(metadata_project(&http, &url).await.unwrap().is_none());
+    let err = metadata_project(&http, &url).await.unwrap_err();
+    assert_eq!(err.code(), "GCP_AUTH");
 }
 
 #[tokio::test]
@@ -266,10 +266,10 @@ fn from_adc_without_a_project_is_no_credentials() {
 #[test]
 fn from_adc_rejects_a_bad_file_and_incomplete_credentials() {
     let missing = std::env::temp_dir().join("ian-framework-test-secret-missing.json");
-    assert!(matches!(init_from_env(&missing), Err(_)));
+    assert!(init_from_env(&missing).is_err());
     let json = r#"{"type":"authorized_user","client_id":"","client_secret":"secret","refresh_token":"refresh"}"#;
     let path = temp_adc("incomplete", json);
-    assert!(matches!(init_from_env(&path), Err(_)));
+    assert!(init_from_env(&path).is_err());
 }
 
 #[tokio::test]
@@ -282,7 +282,7 @@ async fn resolve_project_reads_the_metadata_server_or_the_user() {
 
     let url = format!("http://{}/project", closed_addr());
     let project = resolve_project(&Credentials::Metadata, &http, &url).await;
-    assert_eq!(project.unwrap_err().code(), METADATA_UNREACHABLE);
+    assert_eq!(project.unwrap_err().code(), "GCP_AUTH");
 }
 
 #[test]
@@ -293,23 +293,4 @@ fn resolve_project_uses_the_quota_project_of_a_user() {
         crate::test::env::block_on(resolve_project(&credentials, &http, "http://unused"))
     });
     assert_eq!(project.ok().flatten().as_deref(), Some("quota-project"));
-}
-
-#[test]
-fn initialized_maps_each_init_result() {
-    static NONE: Option<SecretManager> = None;
-    assert!(matches!(initialized(Ok(&NONE)), Ok(None)));
-
-    let manager = Box::leak(Box::new(Some(fake_secret_manager(closed_addr()))));
-    assert!(matches!(initialized(Ok(manager)), Ok(Some(_))));
-
-    let err = exception!(code = "GCP_CONFIG", "bad");
-    assert!(initialized(Err(err)).is_err());
-
-    assert!(matches!(
-        initialized(Err(exception!(code = METADATA_UNREACHABLE, "down"))),
-        Ok(None)
-    ));
-    assert!(unreachable_recently());
-    *lock_unreachable() = None;
 }
