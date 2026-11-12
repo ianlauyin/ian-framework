@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
 use axum::http::header;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
 
 use crate::exception;
+use crate::exception::Exception;
 use crate::http::error_code;
-
 async fn bytes(response: Response) -> Vec<u8> {
     axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -59,10 +61,6 @@ async fn a_well_known_code_gives_its_status_and_message() {
             exception!(code = error_code::TOO_MANY_REQUESTS, "too many requests"),
             StatusCode::TOO_MANY_REQUESTS,
         ),
-        (
-            exception!(code = error_code::INTERNAL_ERROR, "internal error"),
-            StatusCode::INTERNAL_SERVER_ERROR,
-        ),
     ] {
         let text = error.message().to_owned();
         let response = error.into_response();
@@ -81,8 +79,9 @@ async fn a_well_known_code_gives_its_status_and_message() {
 }
 
 #[tokio::test]
-async fn a_different_code_is_a_hidden_500() {
+async fn an_internal_or_different_code_is_a_hidden_500() {
     for error in [
+        exception!(code = error_code::INTERNAL_ERROR, "db pool is empty"),
         exception!(code = "MY_CODE", "db down"),
         exception!(code = "GCS_NOT_FOUND", "secret detail"),
         exception!(code = "EXTERNAL_ERROR", "external"),
@@ -109,6 +108,25 @@ async fn only_the_code_of_the_top_exception_counts() {
     let response = wrapped.into_response();
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(message(response).await, "internal server error");
+}
+
+#[tokio::test]
+async fn the_exception_goes_to_an_extension_and_not_to_the_body() {
+    let error = exception!(
+        code = "MY_CODE",
+        "db down",
+        source = exception!(code = "DB_ERROR", "secret detail"),
+    );
+    let response = error.into_response();
+    let exception = response.extensions().get::<Arc<Exception>>().unwrap();
+    assert_eq!(exception.code(), "MY_CODE");
+    assert_eq!(
+        exception.source_exception().unwrap().message(),
+        "secret detail"
+    );
+    let body = String::from_utf8(bytes(response).await).unwrap();
+    assert!(!body.contains("db down"));
+    assert!(!body.contains("secret detail"));
 }
 
 #[tokio::test]

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::body::Body;
 use axum::http::header;
 use axum::http::HeaderValue;
@@ -20,20 +22,23 @@ pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
 // Only the code of the top exception counts. A wrapped client error becomes an internal error.
 impl IntoResponse for Exception {
     fn into_response(self) -> Response {
-        let code = match self.code() {
-            VALIDATION_ERROR | BAD_REQUEST => StatusCode::BAD_REQUEST,
-            UNAUTHORIZED => StatusCode::UNAUTHORIZED,
-            FORBIDDEN => StatusCode::FORBIDDEN,
-            NOT_FOUND => StatusCode::NOT_FOUND,
-            REQUEST_TIMEOUT => StatusCode::REQUEST_TIMEOUT,
-            PAYLOAD_TOO_LARGE => StatusCode::PAYLOAD_TOO_LARGE,
-            TOO_MANY_REQUESTS => StatusCode::TOO_MANY_REQUESTS,
-            INTERNAL_ERROR => StatusCode::INTERNAL_SERVER_ERROR,
-            _ => {
-                return error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal server error");
-            }
+        let status = match self.code() {
+            VALIDATION_ERROR | BAD_REQUEST => Some(StatusCode::BAD_REQUEST),
+            UNAUTHORIZED => Some(StatusCode::UNAUTHORIZED),
+            FORBIDDEN => Some(StatusCode::FORBIDDEN),
+            NOT_FOUND => Some(StatusCode::NOT_FOUND),
+            REQUEST_TIMEOUT => Some(StatusCode::REQUEST_TIMEOUT),
+            PAYLOAD_TOO_LARGE => Some(StatusCode::PAYLOAD_TOO_LARGE),
+            TOO_MANY_REQUESTS => Some(StatusCode::TOO_MANY_REQUESTS),
+            _ => None,
         };
-        error_response(code, self.message())
+        let mut response = match status {
+            Some(status) => error_response(status, self.message()),
+            None => error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
+        };
+        // A response extension stays in the process. Hyper never writes it to the client.
+        response.extensions_mut().insert(Arc::new(self));
+        response
     }
 }
 

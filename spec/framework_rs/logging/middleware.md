@@ -22,9 +22,24 @@ General rules:
 | `action` | `API/{method}:{path}`. `method` is the request method. `path` is the request path, with no query string. An empty path is `-`. |
 | `latency_ms` | The handler time in milliseconds. |
 | `level` | From the response status. The rules are below. |
-| `error_message` | `response status {status}` when the level is `error`. Else null. |
+| `error_message` | The error detail. The rules are below. |
 | `context` | The keys that the handler adds, and the keys `ip`, `user_agent` and `request_url`. The rules are below. |
 | `extra` | The keys that the handler adds. The middleware does not read the request body. |
+
+### Error detail
+
+The error detail goes to the log. It never goes to the client.
+
+| Cause | Level | `error_message` |
+| --- | --- | --- |
+| The handler returns an `Exception` with status 500 or higher | `error` | The display text of the exception, a line break, then the trace text. This is the same text as `Logger::error`. The trace text is in `spec/framework_rs/exception.md`. |
+| The handler returns an `Exception` with status 400 through 499 | `warn` | The same text as for status 500. |
+| A different response with status 500 or higher | `error` | `response status {status}` |
+| A different response with status 400 through 499 | `warn` | Null |
+| A response with a status below 400 | `info` | Null |
+
+- `IntoResponse` for `Exception` puts the exception in the response extension `Arc<Exception>`. The rules are in `spec/framework_rs/http/api-error.md`. The middleware removes the extension from the response.
+- The logger does not mask `error_message`. The masking rules are in `spec/framework_rs/logging/masking.md`.
 
 ### Handler fields
 

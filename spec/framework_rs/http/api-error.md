@@ -20,11 +20,11 @@ The impl uses the code of the top exception.
 | `REQUEST_TIMEOUT` | 408 | The message of the exception |
 | `PAYLOAD_TOO_LARGE` | 413 | The message of the exception |
 | `TOO_MANY_REQUESTS` | 429 | The message of the exception |
-| `INTERNAL_ERROR` | 500 | The message of the exception |
+| `INTERNAL_ERROR` | 500 | `internal server error` |
 | A different code | 500 | `internal server error` |
 
 - Only the code of the top exception counts. The code of a source does not change the result. Thus a client error that a caller wraps in a different exception becomes status 500.
-- A response for a different code never holds the internal message or the trace.
+- A response for `INTERNAL_ERROR` or a different code never holds the message of the exception or the trace.
 
 ## Well-known codes
 
@@ -42,7 +42,8 @@ The module `ian_framework::http::error_code` exports one `&'static str` constant
 | `TOO_MANY_REQUESTS` | The client sent too many requests. |
 | `INTERNAL_ERROR` | The server failed. |
 
-- The message of an exception with a well-known code goes to the client. Write it for the client. It must not hold an internal detail.
+- The message of an exception with a well-known code goes to the client, except `INTERNAL_ERROR`. Write it for the client. It must not hold an internal detail.
+- The message of an `INTERNAL_ERROR` exception goes only to the log.
 - Each other code means that the cause is internal.
 
 ## JSON response
@@ -54,3 +55,10 @@ The module `ian_framework::http::error_code` exports one `&'static str` constant
 - The body is one flat JSON object.
 - The body has no `error` key.
 - The body has one key, `message`. The value is the message.
+
+## Error detail for the log
+
+`IntoResponse` for `Exception` puts the exception in a response extension, as `std::sync::Arc<Exception>`.
+
+- Hyper does not send a response extension to the client. Thus the client never gets the internal message or the trace.
+- `access_log` reads the exception into `error_message`. The rules are in `spec/framework_rs/logging/middleware.md`.

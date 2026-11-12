@@ -9,7 +9,7 @@ This document describes these items in the framework:
 - The rate limit middleware.
 - The security header middleware and the no-store middleware.
 - The API key middleware.
-- The request timeout, catch panic and body limit middleware.
+- The request timeout and body limit middleware.
 - The process version route.
 - The health route.
 
@@ -26,7 +26,7 @@ This feature is not product business logic.
 | Rate limit middleware | `spec/framework_rs/http/rate-limit.md` |
 | Security header middleware and no-store middleware | `spec/framework_rs/http/response-headers.md` |
 | API key middleware | `spec/framework_rs/http/api-key-middleware.md` |
-| Request timeout, catch panic and body limit middleware | `spec/framework_rs/http/limits.md` |
+| Request timeout and body limit middleware | `spec/framework_rs/http/limits.md` |
 | Process version route | `spec/framework_rs/http/version-route.md` |
 | Health route | `spec/framework_rs/http/health-route.md` |
 
@@ -62,7 +62,6 @@ This feature is not product business logic.
 `ian_framework::http::middleware` exports only these items:
 
 - `body_limit` and `BodyLimit`
-- `catch_panic`
 - `access_log`
 - `no_store`
 - `rate_limit`, `RateLimitConfig` and `RateLimiter`

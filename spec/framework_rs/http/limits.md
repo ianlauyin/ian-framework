@@ -24,25 +24,6 @@ Rules:
 - The limit is one total time. It is not an idle time. Do not put it on a route that receives a large upload. Use a limit that is long enough for the largest upload, or no limit.
 - A route can have its own `RequestTimeout`. Put the middleware on that route only.
 
-## Catch panic
-
-- The source file is `framework_rs/src/http/middleware/catch_panic.rs`.
-- `ian_framework::http::middleware::catch_panic` is an Axum middleware function.
-- The project adds it to a router with `axum::middleware::from_fn`.
-
-When the next handler panics, the middleware catches the panic. The response has status 500 and the message `internal error`:
-
-```json
-{"message":"internal error"}
-```
-
-Rules:
-
-- The middleware calls `Logger::error` with the action `HTTP/handlerPanicked`. The context has the keys `method` and `path`, with the request method and the request path. The event does not have the panic message. The logger rules are in `spec/framework_rs/logging/logger.md`.
-- The middleware does not spawn a task. The handler stops when the client closes the connection, as it does without the middleware.
-- Put `catch_panic` inside `access_log`. Then `access_log` records the 500 response.
-- The middleware does not catch a panic in a layer that is outside it.
-
 ## Body limit
 
 - The source file is `framework_rs/src/http/middleware/body_limit.rs`.

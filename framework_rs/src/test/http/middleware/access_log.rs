@@ -4,6 +4,9 @@ use axum::http::StatusCode;
 
 use crate::logging::Logger;
 
+use crate::exception;
+use crate::exception::Exception;
+use crate::http::error_code;
 use crate::http::middleware::access_log::*;
 use crate::logging::LogLevel;
 use crate::test::logging::buffered_events;
@@ -37,12 +40,31 @@ async fn enrich(log: AccessLog) -> StatusCode {
     StatusCode::CONFLICT
 }
 
+async fn hidden_error() -> Result<(), Exception> {
+    Err(exception!(
+        code = "MY_CODE",
+        "db down",
+        source = exception!(code = "DB_ERROR", "secret detail"),
+    ))
+}
+
+async fn client_error() -> Result<(), Exception> {
+    Err(exception!(code = error_code::NOT_FOUND, "job not found"))
+}
+
 fn app(shipper: Logger) -> Router {
     Router::new()
         .route("/status/{code}", get(status_from_path))
         .route("/echo", post(echo))
         .route("/enrich", get(enrich))
+        .route("/hidden-error", get(hidden_error))
+        .route("/client-error", get(client_error))
         .layer(from_fn_with_state(shipper, access_log))
+}
+
+async fn body_text(response: axum::response::Response) -> String {
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    String::from_utf8(bytes.to_vec()).unwrap()
 }
 
 async fn post_body(
@@ -175,6 +197,41 @@ async fn middleware_levels_follow_the_status() {
     let events = buffered_events(&shipper);
     assert_eq!(events[0].level, LogLevel::Warn);
     assert_eq!(events[1].level, LogLevel::Error);
+}
+
+#[tokio::test]
+async fn a_hidden_exception_logs_its_trace_and_not_to_the_client() {
+    let shipper = shipper();
+    let response = send(app(shipper.clone()), "/hidden-error").await;
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        body_text(response).await,
+        r#"{"message":"internal server error"}"#
+    );
+    let event = &buffered_events(&shipper)[0];
+    assert_eq!(event.level, LogLevel::Error);
+    let message = event.error_message.as_deref().unwrap();
+    assert!(message.starts_with("db down\n0: ERROR [MY_CODE] db down at "));
+    assert!(message.contains("\n1: ERROR [DB_ERROR] secret detail at "));
+}
+
+#[tokio::test]
+async fn a_client_exception_logs_a_warn_with_its_message() {
+    let shipper = shipper();
+    let response = send(app(shipper.clone()), "/client-error").await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let event = &buffered_events(&shipper)[0];
+    assert_eq!(event.level, LogLevel::Warn);
+    let message = event.error_message.as_deref().unwrap();
+    assert!(message.starts_with("job not found\n0: ERROR [NOT_FOUND] job not found at "));
+}
+
+#[tokio::test]
+async fn a_status_without_an_exception_keeps_the_status_message() {
+    let shipper = shipper();
+    send(app(shipper.clone()), "/status/503").await;
+    let event = &buffered_events(&shipper)[0];
+    assert_eq!(event.error_message.as_deref(), Some("response status 503"));
 }
 
 #[tokio::test]

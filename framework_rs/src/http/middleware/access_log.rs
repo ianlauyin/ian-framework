@@ -8,6 +8,7 @@ use axum::http::request::Parts;
 use axum::middleware::Next;
 use axum::response::Response;
 
+use crate::exception::Exception;
 use crate::http::headers::client::{client_ip, user_agent};
 use crate::logging::{LogEvent, LogValue, Logger};
 
@@ -63,9 +64,13 @@ pub async fn access_log(
     let fields = AccessLog::default();
     request.extensions_mut().insert(fields.clone());
     let started = Instant::now();
-    let response = next.run(request).await;
+    let mut response = next.run(request).await;
     let status = response.status().as_u16();
-    let mut event = new_event(action(&method, &path), status);
+    let detail = response
+        .extensions_mut()
+        .remove::<Arc<Exception>>()
+        .map(|exception| format!("{exception}\n{}", String::from(exception.as_ref())));
+    let mut event = new_event(action(&method, &path), status, detail);
     let Fields { context, extra } = fields.take();
     event.context = context;
     event.extra = extra;
@@ -104,11 +109,17 @@ fn request_path(path: &str) -> String {
     }
 }
 
-fn new_event(action: String, status: u16) -> LogEvent {
+fn new_event(action: String, status: u16, detail: Option<String>) -> LogEvent {
     if status >= 500 {
-        LogEvent::error(action, format!("response status {status}"))
+        LogEvent::error(
+            action,
+            detail.unwrap_or_else(|| format!("response status {status}")),
+        )
     } else if status >= 400 {
-        LogEvent::warn(action)
+        match detail {
+            Some(detail) => LogEvent::warn_with(action, detail),
+            None => LogEvent::warn(action),
+        }
     } else {
         LogEvent::info(action)
     }
