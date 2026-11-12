@@ -3,6 +3,7 @@ pub mod storage;
 
 pub(crate) mod credentials;
 pub(crate) mod http_client;
+pub(crate) mod project;
 pub(crate) mod response;
 pub mod secret_manager;
 

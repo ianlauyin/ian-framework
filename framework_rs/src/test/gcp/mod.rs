@@ -1,4 +1,5 @@
 mod credentials;
+mod project;
 mod response;
 mod secret_manager;
 #[cfg(feature = "gcs")]
