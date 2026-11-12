@@ -18,6 +18,7 @@ The Rust library is the crate `ian_framework` in `framework_rs/`.
 ### Configuration
 
 - The library never reads an env variable by a name of its own for an app setting. The project reads its env variables, chooses the names and gives the values to the library. A helper that reads a variable by a name that the caller gives, such as `env::required`, is allowed.
+- The `gcp` module can read the Google Cloud standard env variables `GOOGLE_APPLICATION_CREDENTIALS` and `GOOGLE_CLOUD_PROJECT`. These variables are part of the Application Default Credentials rules, not app settings.
 
 ### Files
 
