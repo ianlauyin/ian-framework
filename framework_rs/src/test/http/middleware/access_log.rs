@@ -85,8 +85,8 @@ async fn middleware_records_the_request_schema() {
     let event = &events[0];
     crate::test::logging::assert_uuid_v7(&event.id);
     assert_eq!(event.action, "API/GET:/status/204");
-    assert_eq!(event.context["ip"], "");
-    assert_eq!(event.context["user_agent"], "");
+    assert_eq!(event.context["ip"], "-");
+    assert_eq!(event.context["user_agent"], "-");
     assert_eq!(event.context["request_url"], "/status/204?***");
     assert_eq!(event.level, LogLevel::Info);
     let json = serde_json::to_string(event).unwrap();
@@ -102,16 +102,6 @@ async fn middleware_records_the_request_schema() {
 }
 
 #[tokio::test]
-async fn middleware_leaves_out_empty_fields() {
-    let shipper = shipper();
-    let body = json!({"name": "alice"}).to_string();
-    post_body(&shipper, "/echo?", "application/json", body).await;
-    let event = &buffered_events(&shipper)[0];
-    assert_eq!(event.extra.len(), 1);
-    assert_eq!(event.extra["name"], "alice");
-}
-
-#[tokio::test]
 async fn middleware_logs_the_request_url_with_its_query() {
     let shipper = shipper();
     send(app(shipper.clone()), "/status/200?a=1&b=x%20y&flag").await;
@@ -121,65 +111,24 @@ async fn middleware_logs_the_request_url_with_its_query() {
 }
 
 #[tokio::test]
-async fn middleware_logs_each_json_body_field_and_keeps_the_body() {
+async fn middleware_does_not_log_the_body_and_keeps_it() {
     let shipper = shipper();
-    let body = json!({"name": "alice", "age": 3, "ok": true}).to_string();
-    let (status, echoed) = post_body(
-        &shipper,
-        "/echo?x=1",
-        "application/json; charset=utf-8",
-        body.clone(),
-    )
-    .await;
+    let body = json!({"name": "alice", "age": 3}).to_string();
+    let (status, echoed) = post_body(&shipper, "/echo?x=1", "application/json", body.clone()).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(echoed, body);
     let event = &buffered_events(&shipper)[0];
     assert_eq!(event.action, "API/POST:/echo");
-    assert_eq!(event.extra["name"], "alice");
-    assert_eq!(event.extra["age"], json!(3));
-    assert_eq!(event.extra["ok"], json!(true));
     assert_eq!(event.context["request_url"], "/echo?x=1");
+    assert!(event.extra.is_empty());
 }
 
 #[tokio::test]
-async fn middleware_skips_a_body_it_cannot_log() {
-    let shipper = shipper();
-    let large = json!({"data": "x".repeat(BODY_LOG_LIMIT)}).to_string();
-    let cases = [
-        ("text/plain", "name=alice".to_string()),
-        (
-            "application/x-www-form-urlencoded",
-            "name=alice".to_string(),
-        ),
-        ("application/json", "[1, 2]".to_string()),
-        ("application/json", r#"{"nested": {"a": 1}}"#.to_string()),
-        ("application/json", r#"{"list": [1]}"#.to_string()),
-        ("application/json", r#"{"none": null}"#.to_string()),
-        ("application/json", "{not json".to_string()),
-        ("application/json", large),
-    ];
-    for (content_type, body) in cases {
-        let (status, echoed) = post_body(&shipper, "/echo", content_type, body.clone()).await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(echoed, body);
-    }
-    for event in buffered_events(&shipper) {
-        assert!(event.extra.is_empty());
-    }
-}
-
-#[tokio::test]
-async fn middleware_masks_request_url_and_body_fields() {
-    let shipper = Logger::new(
-        default_shipper("api"),
-        vec![r"password".to_string(), r"token=[^&]+".to_string()],
-    );
-    let body = json!({"user": "alice", "password": "hunter2"}).to_string();
-    post_body(&shipper, "/echo?token=abc&page=2", "application/json", body).await;
+async fn middleware_masks_the_request_url() {
+    let shipper = Logger::new(default_shipper("api"), vec![r"token=[^&]+".to_string()]);
+    send(app(shipper.clone()), "/status/200?token=abc&page=2").await;
     let event = &buffered_events(&shipper)[0];
-    assert_eq!(event.context["request_url"], "/echo?***&page=2");
-    assert_eq!(event.extra["user"], "alice");
-    assert_eq!(event.extra["password"], "***");
+    assert_eq!(event.context["request_url"], "/status/200?***&page=2");
 }
 
 #[tokio::test]
@@ -239,6 +188,6 @@ async fn middleware_ignores_every_source_but_cloudflare() {
         .await
         .unwrap();
     let events = buffered_events(&shipper);
-    assert_eq!(events[0].context["ip"], "");
-    assert_eq!(events[0].context["user_agent"], "");
+    assert_eq!(events[0].context["ip"], "-");
+    assert_eq!(events[0].context["user_agent"], "-");
 }

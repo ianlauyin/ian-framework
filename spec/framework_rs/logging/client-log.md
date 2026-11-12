@@ -84,8 +84,7 @@ Shared logger:
 - The project gives the same `Logger` to this router and to the Axum middleware.
 - The client events go to the log server at once. They do not enter the buffer.
 - The request events of the middleware still use the buffer and the ship loop.
-- When the middleware wraps this route, the `POST /log` request also records one request event in the buffer.
-- When that body is a maximum of 65536 bytes, the request event `body` holds the client batch.
+- When the middleware wraps this route, the `POST /log` request also records one request event in the buffer. That event does not hold the client batch.
 
 Same-origin rules:
 

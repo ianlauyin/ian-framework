@@ -9,7 +9,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - The syntax is the `regex` crate syntax.
 - For a case-insensitive match, start the pattern with `(?i)`.
 - The default patterns are `(?i)password`, `(?i)passwd`, `(?i)secret`, `(?i)token`, `(?i)authorization`, `(?i)api[_-]?key` and `(?i)cookie`.
-- The middleware logs the request URL with its query and the JSON body. The default patterns keep credential fields out of a log.
+- The middleware logs the request URL with its query. The default patterns keep credential fields out of a log.
 - A project adds its own patterns to the list.
 - A project that sets a new list drops the default patterns.
 - An empty `mask_patterns` list does not change the event.

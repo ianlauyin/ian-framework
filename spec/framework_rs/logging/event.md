@@ -84,10 +84,10 @@ One event is one `LogEvent`. One event has these fields:
 
 `action` is one string with these rules:
 
-- The shape of a request event is `API/{method}:{path}`. The path starts with `/`.
+- The shape of a request event is `API/{method}:{path}`. The path starts with `/`, except an empty path.
 - The path does not include the query string.
-- An empty path with a method is `/`.
-- An empty method gives an empty `action`.
+- An empty path with a method is `-`.
+- An empty method gives the `action` `-`.
 
 An event that the framework makes for itself, not for a request, uses the shape `{scope}/{action}`. `scope` is the feature name in upper case, such as `API`, `GCS`, `CPU`, `DISK`, `SHIPPER` or `ERROR-BOUNDARY`. `action` is a short lowercase phrase, such as `meets threshold`.
 
