@@ -23,12 +23,23 @@ General rules:
 | `latency_ms` | The handler time in milliseconds. |
 | `level` | From the response status. The rules are below. |
 | `error_message` | `response status {status}` when the level is `error`. Else null. |
-| `context` | The keys `ip`, `user_agent` and `request_url`. The rules are below. |
-| `extra` | Empty. The middleware does not read the request body. |
+| `context` | The keys that the handler adds, and the keys `ip`, `user_agent` and `request_url`. The rules are below. |
+| `extra` | The keys that the handler adds. The middleware does not read the request body. |
+
+### Handler fields
+
+`ian_framework::http::middleware::AccessLog` is an Axum extractor. A handler uses it to add keys to the event of its request.
+
+- `log.context(key, value)` adds one key to `context`. `log.extra(key, value)` adds one key to `extra`. The value is a `LogValue`, or a type that converts to one.
+- The middleware puts one `AccessLog` in the request extensions before it calls the handler. Each clone of it writes to the same event.
+- The middleware adds the keys after the handler returns. It adds them for each status, also for an error response.
+- A later call with the same key replaces the value.
+- The middleware writes `ip`, `user_agent` and `request_url` after the handler keys. A handler cannot replace them.
+- Without the middleware, the extractor gives a new `AccessLog` that no event uses. The extractor does not fail.
 
 ### Context
 
-`context` has only these keys:
+The middleware writes these keys to `context`:
 
 | Key | Value |
 | --- | --- |
@@ -59,4 +70,4 @@ Level rules:
 | 400 through 499 | `warn` |
 | Below 400 | `info` |
 
-The logger masks `context` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. The pattern rule applies to the text of `request_url`.
+The logger masks `context` and `extra` with the masking rules. The masking rules are in `spec/framework_rs/logging/masking.md`. The pattern rule applies to the text of `request_url`.

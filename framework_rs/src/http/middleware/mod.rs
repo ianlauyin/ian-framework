@@ -10,7 +10,7 @@ pub(crate) mod security_headers;
 #[cfg(feature = "auth")]
 pub(crate) mod slide_session;
 
-pub use access_log::access_log;
+pub use access_log::{access_log, AccessLog};
 pub use body_limit::{body_limit, BodyLimit};
 pub use catch_panic::catch_panic;
 pub use no_store::no_store;

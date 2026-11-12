@@ -29,10 +29,19 @@ async fn echo(body: String) -> String {
     body
 }
 
+async fn enrich(log: AccessLog) -> StatusCode {
+    log.context("user_id", "u-1");
+    log.context("ip", "198.51.100.1");
+    log.extra("order_id", "o-1");
+    log.extra("count", 2u64);
+    StatusCode::CONFLICT
+}
+
 fn app(shipper: Logger) -> Router {
     Router::new()
         .route("/status/{code}", get(status_from_path))
         .route("/echo", post(echo))
+        .route("/enrich", get(enrich))
         .layer(from_fn_with_state(shipper, access_log))
 }
 
@@ -121,6 +130,26 @@ async fn middleware_does_not_log_the_body_and_keeps_it() {
     assert_eq!(event.action, "API/POST:/echo");
     assert_eq!(event.context["request_url"], "/echo?x=1");
     assert!(event.extra.is_empty());
+}
+
+#[tokio::test]
+async fn handler_adds_context_and_extra_to_the_event() {
+    let shipper = shipper();
+    let response = send(app(shipper.clone()), "/enrich").await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let event = &buffered_events(&shipper)[0];
+    assert_eq!(event.level, LogLevel::Warn);
+    assert_eq!(event.context["user_id"], "u-1");
+    assert_eq!(event.context["ip"], "-");
+    assert_eq!(event.context["request_url"], "/enrich");
+    assert_eq!(event.extra["order_id"], "o-1");
+    assert_eq!(event.extra["count"], json!(2));
+}
+
+#[tokio::test]
+async fn handler_without_the_middleware_still_runs() {
+    let router = Router::new().route("/enrich", get(enrich));
+    assert_eq!(send(router, "/enrich").await.status(), StatusCode::CONFLICT);
 }
 
 #[tokio::test]
