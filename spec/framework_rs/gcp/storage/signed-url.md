@@ -11,7 +11,7 @@ The client builds a V4 signed GET URL with `SignedUrlBuilder` of `google-cloud-s
 
 ### Lifetime
 
-`GcsClient::signed_get_url` takes a lifetime of type `Duration`. The lifetime is not optional.
+`GcsClient::sign_download_url` takes a lifetime of type `Duration`. The lifetime is not optional.
 
 - A lifetime below 1 second is a `SIGNED_URL_LIFETIME_TOO_SHORT` error. This includes zero.
 - The maximum lifetime is 604800 seconds.
@@ -20,7 +20,7 @@ The client builds a V4 signed GET URL with `SignedUrlBuilder` of `google-cloud-s
 
 ### Attachment filename
 
-`GcsClient::signed_get_url` takes an optional attachment filename.
+`GcsClient::sign_download_url` takes an optional attachment filename.
 
 - With a filename, the URL signs the query parameter `response-content-disposition`. GCS then sends that value as the `Content-Disposition` response header.
 - The value is `attachment; filename="{fallback}"; filename*=UTF-8''{encoded}`.

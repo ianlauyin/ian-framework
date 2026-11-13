@@ -11,7 +11,7 @@ The client accepts only Application Default Credentials. The official crates rea
 
 ## URL signer
 
-`GcsClient::from_adc` builds one `Signer` of `google-cloud-auth`. The signer signs the URLs.
+`GcsClient::connect_with_adc` builds one `Signer` of `google-cloud-auth`. The signer signs the URLs.
 
 | `signer_email` | Signer |
 | --- | --- |

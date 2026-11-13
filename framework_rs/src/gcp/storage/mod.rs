@@ -6,8 +6,8 @@ pub(crate) mod signed_url;
 pub(crate) mod validate;
 
 pub use crate::gcp::storage::client::{
-    GcsClient, CLIENT_BUILD_FAILED, MOVE_SAME_OBJECT, RESOURCE_NOT_FOUND, REWRITE_NO_OBJECT,
-    REWRITE_STEP_LIMIT, REWRITE_TOKEN_STUCK, SIGN_URL_FAILED,
+    GcsClient, CLIENT_BUILD_FAILED, COPY_NO_OBJECT, COPY_STEP_LIMIT, COPY_TOKEN_STUCK,
+    MOVE_SAME_OBJECT, RESOURCE_NOT_FOUND, SIGN_URL_FAILED,
 };
 pub use crate::gcp::storage::list::{ListPage, ListQuery};
 pub use crate::gcp::storage::object::{ObjectMeta, ObjectReader};

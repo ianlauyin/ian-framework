@@ -59,7 +59,7 @@ Each item has only one public path.
 
 ## Constructors
 
-`pub async fn from_adc(bucket_name: impl Into<String>, signer_email: Option<&str>) -> Result<GcsClient, Exception>` makes a client for one bucket from Application Default Credentials.
+`pub async fn connect_with_adc(bucket_name: impl Into<String>, signer_email: Option<&str>) -> Result<GcsClient, Exception>` makes a client for one bucket from Application Default Credentials.
 
 - A bucket name that is empty, is not ASCII, or has `/`, `\`, a space or a line break is a `BUCKET_NAME_INVALID` error.
 - `signer_email` is the service account email that signs URLs. The project reads it from its own env variable. The rules are in `spec/framework_rs/gcp/storage/authentication.md`.

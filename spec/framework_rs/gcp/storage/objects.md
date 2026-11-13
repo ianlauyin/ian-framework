@@ -14,7 +14,7 @@ An `ObjectMeta` has these fields:
 
 A list page also has `prefixes` and `next_page_token`.
 
-`GcsClient::list_page` takes one `ListQuery`. A `ListQuery` has these fields:
+`GcsClient::list_objects` takes one `ListQuery`. A `ListQuery` has these fields:
 
 | Field | Type | Request field |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ A list page also has `prefixes` and `next_page_token`.
 
 ## Put
 
-`GcsClient::put_object` takes one `PutRequest`. A `PutRequest` has `name`, `body` and `options`.
+`GcsClient::write_object` takes one `PutRequest`. A `PutRequest` has `name`, `body` and `options`.
 
 | Body | Content |
 | --- | --- |
@@ -49,19 +49,19 @@ A list page also has `prefixes` and `next_page_token`.
 
 ## Patch metadata
 
-`GcsClient::merge_metadata` reads the object, adds the new keys to its metadata map, and writes the map with an `UpdateObject` call and the update mask `metadata`.
+`GcsClient::merge_object_metadata` reads the object, adds the new keys to its metadata map, and writes the map with an `UpdateObject` call and the update mask `metadata`.
 
 - A new key replaces the key with the same name. The other keys stay.
 - The two calls are not atomic. A change of the metadata between them can be lost.
 
 ## Rewrite and move
 
-`GcsClient::rewrite_object` copies an object in the same bucket with the `RewriteObject` call.
+`GcsClient::copy_object` copies an object in the same bucket with the `RewriteObject` call.
 
 - It sends the rewrite token again until `done` is true.
-- If the token does not change, it returns a `REWRITE_TOKEN_STUCK` error.
-- After 10 000 calls without `done`, it returns a `REWRITE_STEP_LIMIT` error.
-- A done response with no object is a `REWRITE_NO_OBJECT` error.
+- If the token does not change, it returns a `COPY_TOKEN_STUCK` error.
+- After 10 000 calls without `done`, it returns a `COPY_STEP_LIMIT` error.
+- A done response with no object is a `COPY_NO_OBJECT` error.
 
 `GcsClient::move_object` rewrites the source to the destination. Then it deletes the source. It does not use the `MoveObject` call, because that call needs a bucket with a hierarchical namespace.
 
@@ -84,7 +84,7 @@ When the object does not exist, the methods give these results:
 | Methods | Result |
 | --- | --- |
 | `GcsClient::delete_object` | `Ok` |
-| `open_object`, `stat` | `None` |
+| `read_object`, `get_object_meta` | `None` |
 
 ## Operations
 
@@ -92,15 +92,15 @@ These methods are on `GcsClient`:
 
 | Method | Effect |
 | --- | --- |
-| `put_object` | Puts one `PutRequest`. |
-| `open_object` | Opens the object data or returns `None`. |
-| `stat` | Reads the object metadata or returns `None`. |
-| `list_page` | Lists one page. |
+| `write_object` | Puts one `PutRequest`. |
+| `read_object` | Opens the object data or returns `None`. |
+| `get_object_meta` | Reads the object metadata or returns `None`. |
+| `list_objects` | Lists one page. |
 | `delete_object` | Deletes one object. |
-| `merge_metadata` | Adds keys to the metadata map. |
-| `rewrite_object` | Copies an object in the same bucket. |
+| `merge_object_metadata` | Adds keys to the metadata map. |
+| `copy_object` | Copies an object in the same bucket. |
 | `move_object` | Moves an object in the same bucket. |
-| `signed_get_url` | Builds a V4 signed GET URL. |
+| `sign_download_url` | Builds a V4 signed GET URL. |
 `ObjectReader` has two methods. The project chooses one of them:
 
 | Method | Effect |

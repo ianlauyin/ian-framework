@@ -26,13 +26,13 @@ use crate::gcp::storage::put_request::{PutBody, PutRequest};
 pub const CLIENT_BUILD_FAILED: &str = "CLIENT_BUILD_FAILED";
 pub const MOVE_SAME_OBJECT: &str = "MOVE_SAME_OBJECT";
 pub const RESOURCE_NOT_FOUND: &str = "RESOURCE_NOT_FOUND";
-pub const REWRITE_NO_OBJECT: &str = "REWRITE_NO_OBJECT";
-pub const REWRITE_STEP_LIMIT: &str = "REWRITE_STEP_LIMIT";
-pub const REWRITE_TOKEN_STUCK: &str = "REWRITE_TOKEN_STUCK";
+pub const COPY_NO_OBJECT: &str = "COPY_NO_OBJECT";
+pub const COPY_STEP_LIMIT: &str = "COPY_STEP_LIMIT";
+pub const COPY_TOKEN_STUCK: &str = "COPY_TOKEN_STUCK";
 pub const SIGN_URL_FAILED: &str = "SIGN_URL_FAILED";
 
 // The most rewrite calls for one object. A rewrite that needs more is a fault.
-const MAX_REWRITE_STEPS: u32 = 10_000;
+const MAX_COPY_STEPS: u32 = 10_000;
 
 #[derive(Clone)]
 pub struct GcsClient {
@@ -46,7 +46,7 @@ pub struct GcsClient {
 impl GcsClient {
     // `signer_email` is the service account that signs URLs. Without it, the signer is the
     // account of the credentials, which must be a service account or the metadata server.
-    pub async fn from_adc(
+    pub async fn connect_with_adc(
         bucket_name: impl Into<String>,
         signer_email: Option<&str>,
     ) -> Result<Self, Exception> {
@@ -73,10 +73,10 @@ impl GcsClient {
         })
     }
 
-    pub async fn open_object(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
+    pub async fn read_object(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
         validate_object_name(name)?;
         let result = self
-            .with_op_log("open", name, async {
+            .with_operation_log("read", name, async {
                 let response = self
                     .storage
                     .read_object(&self.bucket_path, name)
@@ -86,13 +86,13 @@ impl GcsClient {
                 Ok(ObjectReader { response })
             })
             .await;
-        not_found_as_none(result)
+        none_if_not_found(result)
     }
 
-    pub async fn stat(&self, name: &str) -> Result<Option<ObjectMeta>, Exception> {
+    pub async fn get_object_meta(&self, name: &str) -> Result<Option<ObjectMeta>, Exception> {
         validate_object_name(name)?;
         let result = self
-            .with_op_log("stat", name, async {
+            .with_operation_log("get_meta", name, async {
                 let object = self
                     .control
                     .get_object()
@@ -104,12 +104,12 @@ impl GcsClient {
                 Ok(ObjectMeta::from(object))
             })
             .await;
-        not_found_as_none(result)
+        none_if_not_found(result)
     }
 
-    pub async fn list_page(&self, query: &ListQuery) -> Result<ListPage, Exception> {
+    pub async fn list_objects(&self, query: &ListQuery) -> Result<ListPage, Exception> {
         let prefix = query.prefix.as_deref().unwrap_or_default();
-        self.with_op_log("list", prefix, async {
+        self.with_operation_log("list", prefix, async {
             let mut request = self.control.list_objects().set_parent(&self.bucket_path);
             if let Some(prefix) = &query.prefix {
                 request = request.set_prefix(prefix);
@@ -132,7 +132,7 @@ impl GcsClient {
         .await
     }
 
-    pub async fn put_object(&self, request: &PutRequest) -> Result<ObjectMeta, Exception> {
+    pub async fn write_object(&self, request: &PutRequest) -> Result<ObjectMeta, Exception> {
         let name = request.name.as_str();
         let options = &request.options;
         validate_object_name(name)?;
@@ -140,7 +140,7 @@ impl GcsClient {
         validate_metadata(&options.metadata)?;
         let metadata = options.metadata.clone();
         let bucket_path = &self.bucket_path;
-        self.with_op_log("put", name, async {
+        self.with_operation_log("write", name, async {
             let result = match &request.body {
                 PutBody::Bytes(bytes) => {
                     self.storage
@@ -166,12 +166,12 @@ impl GcsClient {
         .await
     }
 
-    pub async fn rewrite_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
+    pub async fn copy_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
         validate_object_name(from)?;
         validate_object_name(to)?;
-        self.with_op_log("rewrite", from, async {
+        self.with_operation_log("copy", from, async {
             let mut token = String::new();
-            for _ in 0..MAX_REWRITE_STEPS {
+            for _ in 0..MAX_COPY_STEPS {
                 let step = self
                     .control
                     .rewrite_object()
@@ -185,19 +185,19 @@ impl GcsClient {
                     .map_err(|err| to_exception("rewrite object failed", err))?;
                 if step.done {
                     return step.resource.map(ObjectMeta::from).ok_or_else(|| {
-                        exception!(code = REWRITE_NO_OBJECT, "rewrite gave no object")
+                        exception!(code = COPY_NO_OBJECT, "rewrite gave no object")
                     });
                 }
                 if step.rewrite_token == token {
                     return Err(exception!(
-                        code = REWRITE_TOKEN_STUCK,
+                        code = COPY_TOKEN_STUCK,
                         "rewrite token did not change"
                     ));
                 }
                 token = step.rewrite_token;
             }
             Err(exception!(
-                code = REWRITE_STEP_LIMIT,
+                code = COPY_STEP_LIMIT,
                 "rewrite did not finish within the step limit",
             ))
         })
@@ -205,14 +205,14 @@ impl GcsClient {
     }
 
     // The new keys replace the keys with the same name. The other keys stay.
-    pub async fn merge_metadata(
+    pub async fn merge_object_metadata(
         &self,
         name: &str,
         metadata: &BTreeMap<String, String>,
     ) -> Result<ObjectMeta, Exception> {
         validate_object_name(name)?;
         validate_metadata(metadata)?;
-        self.with_op_log("patch", name, async {
+        self.with_operation_log("merge_metadata", name, async {
             let current = self
                 .control
                 .get_object()
@@ -243,7 +243,7 @@ impl GcsClient {
     pub async fn delete_object(&self, name: &str) -> Result<(), Exception> {
         validate_object_name(name)?;
         let result = self
-            .with_op_log("delete", name, async {
+            .with_operation_log("delete", name, async {
                 self.control
                     .delete_object()
                     .set_bucket(&self.bucket_path)
@@ -253,7 +253,7 @@ impl GcsClient {
                     .map_err(|err| to_exception("delete object failed", err))
             })
             .await;
-        not_found_as_none(result).map(|_| ())
+        none_if_not_found(result).map(|_| ())
     }
 
     pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
@@ -263,14 +263,14 @@ impl GcsClient {
                 "move source and destination are the same object",
             ));
         }
-        let meta = self.rewrite_object(from, to).await?;
+        let meta = self.copy_object(from, to).await?;
         match self.delete_object(from).await {
             Ok(()) => Ok(meta),
-            Err(delete_err) => Err(self.recover_from_failed_move(from, to, delete_err).await),
+            Err(delete_err) => Err(self.rollback_failed_move(from, to, delete_err).await),
         }
     }
 
-    pub async fn signed_get_url(
+    pub async fn sign_download_url(
         &self,
         name: &str,
         expires_in: Duration,
@@ -287,7 +287,7 @@ impl GcsClient {
                 content_disposition_value(filename)?,
             );
         }
-        self.with_op_log("sign", name, async {
+        self.with_operation_log("sign", name, async {
             builder
                 .sign_with(&self.signer)
                 .await
@@ -298,14 +298,9 @@ impl GcsClient {
 
     // A failed delete does not prove that the source still exists. Delete the copy only
     // when the source is confirmed, else the copy can be the only one.
-    async fn recover_from_failed_move(
-        &self,
-        from: &str,
-        to: &str,
-        delete_err: Exception,
-    ) -> Exception {
+    async fn rollback_failed_move(&self, from: &str, to: &str, delete_err: Exception) -> Exception {
         let kind = delete_err.code();
-        let message = match self.stat(from).await {
+        let message = match self.get_object_meta(from).await {
             Ok(Some(_)) => match self.delete_object(to).await {
                 Ok(()) => return delete_err,
                 Err(cleanup_err) => format!(
@@ -325,8 +320,8 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    // A missing object is a normal result of `open_object` and `stat`, so it is an info record.
-    async fn with_op_log<T>(
+    // A missing object is a normal result of `read_object` and `get_object_meta`, so it is an info record.
+    async fn with_operation_log<T>(
         &self,
         operation: &str,
         object: &str,
@@ -364,7 +359,7 @@ impl fmt::Debug for GcsClient {
     }
 }
 
-pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
+pub(crate) fn none_if_not_found<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
     match result {
         Ok(value) => Ok(Some(value)),
         Err(err) if err.code() == RESOURCE_NOT_FOUND => Ok(None),
