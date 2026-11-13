@@ -1,4 +1,3 @@
-mod encode;
 mod list;
 mod object;
 mod ops_log;

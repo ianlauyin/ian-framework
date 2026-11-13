@@ -2,8 +2,6 @@ use std::time::Duration;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::storage::encode::percent_encode;
-
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
 
 pub(crate) fn validate_lifetime(expires_in: Duration) -> Result<Duration, Exception> {
@@ -44,4 +42,22 @@ pub(crate) fn content_disposition_value(filename: &str) -> Result<String, Except
         "attachment; filename=\"{fallback}\"; filename*=UTF-8''{}",
         percent_encode(filename)
     ))
+}
+
+pub(crate) fn percent_encode(segment: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut out = String::with_capacity(segment.len());
+    for byte in segment.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(byte as char);
+            }
+            _ => {
+                out.push('%');
+                out.push(HEX[(byte >> 4) as usize] as char);
+                out.push(HEX[(byte & 0x0f) as usize] as char);
+            }
+        }
+    }
+    out
 }

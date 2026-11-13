@@ -3,6 +3,12 @@ use std::time::Duration;
 use crate::gcp::storage::signed_url::*;
 
 #[test]
+fn only_the_unreserved_characters_stay() {
+    assert_eq!(percent_encode("aZ09-._~"), "aZ09-._~");
+    assert_eq!(percent_encode("a b/\u{e9}"), "a%20b%2F%C3%A9");
+}
+
+#[test]
 fn a_lifetime_is_between_one_second_and_seven_days() {
     assert!(validate_lifetime(Duration::ZERO).is_err());
     assert!(validate_lifetime(Duration::from_millis(999)).is_err());
