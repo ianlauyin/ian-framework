@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::Instant;
 
 use axum::extract::{FromRequestParts, Request};
 use axum::http::request::Parts;
@@ -10,7 +9,7 @@ use axum::response::Response;
 
 use crate::exception::Exception;
 use crate::http::headers::client::{client_ip, user_agent};
-use crate::logging::{LogEvent, LogValue, Logger};
+use crate::logging::{with_log, LogEvent, LogValue, Logger};
 
 #[derive(Clone, Default)]
 pub struct AccessLog {
@@ -48,9 +47,9 @@ impl<S: Send + Sync> FromRequestParts<S> for AccessLog {
 }
 
 pub async fn access_log(mut request: Request, next: Next) -> Response {
-    let Some(logger) = Logger::get() else {
+    if Logger::get().is_none() {
         return next.run(request).await;
-    };
+    }
     let method = request.method().as_str().to_string();
     let path = request_path(request.uri().path());
     let ip = client_ip(request.headers()).unwrap_or("-").to_string();
@@ -62,28 +61,27 @@ pub async fn access_log(mut request: Request, next: Next) -> Response {
 
     let fields = AccessLog::default();
     request.extensions_mut().insert(fields.clone());
-    let started = Instant::now();
-    let mut response = next.run(request).await;
-    let status = response.status().as_u16();
-    let detail = response
-        .extensions_mut()
-        .remove::<Arc<Exception>>()
-        .map(|exception| format!("{exception}\n{}", String::from(exception.as_ref())));
-    let mut event = new_event(action(&method, &path), status, detail);
-    let Fields { context, extra } = fields.take();
-    event.context = context;
-    event.extra = extra;
-    // The middleware keys go in last, so a handler cannot replace them.
-    event.context.insert("ip".to_string(), ip.into());
-    event
-        .context
-        .insert("user_agent".to_string(), user_agent.into());
-    event
-        .context
-        .insert("request_url".to_string(), request_url.into());
-    event.latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-    logger.record(event);
-    response
+    with_log(next.run(request), |response| {
+        let status = response.status().as_u16();
+        let detail = response
+            .extensions_mut()
+            .remove::<Arc<Exception>>()
+            .map(|exception| format!("{exception}\n{}", String::from(exception.as_ref())));
+        let mut event = new_event(action(&method, &path), status, detail);
+        let Fields { context, extra } = fields.take();
+        event.context = context;
+        event.extra = extra;
+        // The middleware keys go in last, so a handler cannot replace them.
+        event.context.insert("ip".to_string(), ip.into());
+        event
+            .context
+            .insert("user_agent".to_string(), user_agent.into());
+        event
+            .context
+            .insert("request_url".to_string(), request_url.into());
+        event
+    })
+    .await
 }
 
 #[derive(Default)]

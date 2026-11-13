@@ -1,7 +1,6 @@
 pub(crate) mod client;
 pub(crate) mod list;
 pub(crate) mod object;
-pub(crate) mod ops_log;
 pub(crate) mod put_request;
 pub(crate) mod signed_url;
 pub(crate) mod validate;

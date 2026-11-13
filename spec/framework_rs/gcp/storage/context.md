@@ -17,7 +17,7 @@ This client is not product business logic.
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::gcp::storage`.
-- The source files are in `framework_rs/src/gcp/storage/`. `mod.rs` declares the modules and re-exports the public items. `client.rs` has `GcsClient`. Each other file has one part of the client: `list.rs`, `object.rs`, `ops_log.rs`, `put_request.rs` (also the upload file check), `signed_url.rs` (also the signer build) and `validate.rs` (the bucket name, object name and metadata checks).
+- The source files are in `framework_rs/src/gcp/storage/`. `mod.rs` declares the modules and re-exports the public items. `client.rs` has `GcsClient`. Each other file has one part of the client: `list.rs`, `object.rs`, `put_request.rs` (also the upload file check), `signed_url.rs` (also the signer build) and `validate.rs` (the bucket name, object name and metadata checks).
 - The tests are in `framework_rs/src/test/gcp/storage/`. They have the same file shape.
 
 ## Feature `gcs`

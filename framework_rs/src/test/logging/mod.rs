@@ -2,6 +2,7 @@ mod client_log;
 mod event;
 mod log_shipper;
 mod logger;
+mod with_log;
 
 use std::sync::{Mutex, Once};
 

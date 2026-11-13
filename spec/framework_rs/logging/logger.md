@@ -38,6 +38,16 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - When no logger is set, the function writes one `tracing` event at the same level. The fields are `action`, `error_message` and `context`. `context` is the JSON text of the context. The function does not mask the context in this case.
 - The framework code that must log an error uses `Logger::error`. It does not use `tracing::error!`.
 
+### With log
+
+`ian_framework::logging::with_log(work, to_event)` is an async function. The source file is `framework_rs/src/logging/with_log.rs`. It runs one piece of work and records one event for it.
+
+- `work` is a `Future` with the output `T`. `to_event` is an `FnOnce(&mut T) -> LogEvent`.
+- It starts a timer, awaits `work`, and gives the output of `work` to the caller without a change.
+- When a logger is set, it calls `to_event` with the output. It sets `latency_ms` of the event to the time of `work` in milliseconds, after `to_event`. Thus `to_event` cannot set the latency. Then it calls `Logger::record` with the event.
+- When no logger is set, it does not call `to_event`.
+- `access_log` and `GcsClient` use it. The action name and the level rules stay in the caller.
+
 ### Direct send
 
 `Logger::direct_send(events)` is an async associated function. `events` is `&[LogEvent]`. It uses the global logger.
