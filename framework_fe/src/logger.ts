@@ -1,4 +1,4 @@
-import { hktIsoString } from "./time";
+import { hktIsoString } from "./util/time";
 
 const LOG_URL = "/log";
 const FLUSH_INTERVAL = 60_000;

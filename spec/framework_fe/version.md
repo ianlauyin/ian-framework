@@ -9,8 +9,8 @@ This feature is not product business logic.
 - The package path is `framework_fe/`.
 - The import path is `ian-framework-fe/version`.
 - The package has no root entry. A project imports each feature from its own path.
-- The source file is `framework_fe/src/util/version.ts`.
-- The test file is `framework_fe/test/util/version.test.ts`.
+- The source file is `framework_fe/src/version.ts`.
+- The test file is `framework_fe/test/version.test.ts`.
 - The package ships TypeScript source. The package has no build step.
 - The project bundler and the project TypeScript compiler read the source.
 - The checker uses only browser APIs. The checker does not use a UI library.

@@ -5,14 +5,14 @@
   "type": "module",
   "packageManager": "pnpm@10.17.1",
   "exports": {
-    "./version": "./src/util/version.ts",
+    "./version": "./src/version.ts",
     "./ajax": "./src/http/ajax.ts",
     "./exception-handler": "./src/http/exception-handler.ts",
     "./upload": "./src/http/upload.ts",
     "./download-file": "./src/http/download-file.ts",
-    "./storage": "./src/util/storage.ts",
+    "./storage": "./src/storage.ts",
     "./sleep": "./src/util/sleep.ts",
-    "./logger": "./src/util/logger.ts",
+    "./logger": "./src/logger.ts",
     "./time": "./src/util/time.ts",
     "./error-boundary": {
       "solid": "./src/error-boundary/index.tsx",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createStorage } from "../../src/util/storage";
+import { createStorage } from "../src/storage";
 
 type Schema = { user: { name: string }; count: number };
 

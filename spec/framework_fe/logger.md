@@ -7,8 +7,8 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - The import path is `ian-framework-fe/logger`.
-- The source file is `framework_fe/src/util/logger.ts`.
-- The test file is `framework_fe/test/util/logger.test.ts`.
+- The source file is `framework_fe/src/logger.ts`.
+- The test file is `framework_fe/test/logger.test.ts`.
 - The logger uses only browser APIs. The logger does not use a UI library.
 
 ## API

@@ -1,6 +1,6 @@
 import { ErrorBoundary, type JSX } from "solid-js";
 
-import { Logger } from "../util/logger";
+import { Logger } from "../logger";
 import "./index.css";
 
 export interface AppErrorBoundaryProps {

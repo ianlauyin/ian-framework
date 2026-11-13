@@ -7,7 +7,7 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - Each helper has its own import path and its own source file in `framework_fe/src/`.
-- Only `createStorage` has a test, in `framework_fe/test/util/storage.test.ts`. `sleep` is trivial.
+- Only `createStorage` has a test, in `framework_fe/test/storage.test.ts`. `sleep` is trivial.
 
 | Import path | Item | Meaning |
 | --- | --- | --- |
