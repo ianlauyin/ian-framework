@@ -102,7 +102,7 @@ Request handling:
 - A body that is valid JSON but is not `{"events": [...]}` of event objects gets status 422. A bare JSON array gets status 422.
 - The route calls `ClientLog::log_events`. When that call gives no list, the route calls `Logger::warn` with the action `CLIENT_LOG/rejected` and an empty context. It sends no event. The response status is 400 with an empty body.
 - `ClientLog::log_events` sets `ip` and `user_agent` in the `context` of each kept event from the request headers, after it keeps the client `context`. The `ip` rule is the same as in the Axum middleware. The Axum middleware is in `spec/framework_rs/logging/middleware.md`.
-- The route spawns one Tokio task that calls `Logger::direct_send` once with all the kept events. The rules are in `spec/framework_rs/logging/logger.md`.
-- When `direct_send` gives `false`, the task calls `Logger::record` with each kept event. The ship loop sends them later.
-- When `ClientLog::log_events` gives a list, the response status is always 204 with an empty body. The route does not wait for the send. The status does not show the result of the send.
+- The route awaits one call of `Logger::direct_send` with all the kept events. The rules are in `spec/framework_rs/logging/logger.md`.
+- When `direct_send` gives `true`, the response status is 204 with an empty body.
+- When `direct_send` gives `false`, the response status is 502 with an empty body. The route does not call `Logger::record`. The client can send the batch again.
 - The statuses of the `Json` extractor, the body limit and `require_same_origin` stay as above. They happen before the handler runs.

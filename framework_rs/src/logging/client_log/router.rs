@@ -26,14 +26,9 @@ async fn receive(headers: HeaderMap, Json(log): Json<ClientLog>) -> StatusCode {
         Logger::warn("CLIENT_LOG/rejected", BTreeMap::new());
         return StatusCode::BAD_REQUEST;
     };
-    tokio::spawn(async move {
-        if !Logger::direct_send(&events).await {
-            if let Some(logger) = Logger::get() {
-                for event in events {
-                    logger.record(event);
-                }
-            }
-        }
-    });
-    StatusCode::NO_CONTENT
+    if Logger::direct_send(&events).await {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::BAD_GATEWAY
+    }
 }

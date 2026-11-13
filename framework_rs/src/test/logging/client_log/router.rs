@@ -202,11 +202,11 @@ async fn rejects_a_bad_body() {
 }
 
 #[tokio::test]
-async fn buffers_the_events_when_the_log_server_refuses_the_batch() {
+async fn returns_bad_gateway_when_the_log_server_refuses_the_batch() {
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&headers, batch_body(&[REFUSED_ACTION])).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
-    wait_for(|| is_buffered(REFUSED_ACTION)).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert!(!is_buffered(REFUSED_ACTION));
 }
 
 #[tokio::test]
