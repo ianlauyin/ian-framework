@@ -7,8 +7,9 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - The import path is `ian-framework-fe`.
-- The source files are `framework_fe/src/http/ajax.ts` and the files in `framework_fe/src/http/network/`. `ajax.ts` builds the URL and the body. The `network/` files are shared by `ajax`, `upload` and `download-file`: `error.ts` holds the error classes, `hooks.ts` holds the interceptor and the unauthorized handler, `json.ts` holds the query string and the JSON parse, and `send.ts` holds the send step.
+- The source files are `framework_fe/src/http/ajax.ts`, `framework_fe/src/http/network.ts` and `framework_fe/src/http/raw-send.ts`. `ajax.ts` builds the URL and the body. `network.ts` holds the error classes and the query string. `ajax`, `upload` and `download-file` throw the same error classes. `raw-send.ts` holds the send step, the interceptor, the unauthorized handler and the JSON parse. It is shared by `ajax` and `upload`.
 - The test file is `framework_fe/test/http/ajax.test.ts`.
+- `framework_fe/src/http/index.ts` re-exports the public items of `http`, and the root entry re-exports it.
 - The root entry exports the error classes, the types and the two setter functions that are in the API table.
 - The client uses only browser APIs. The client does not use a UI library.
 

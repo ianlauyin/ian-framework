@@ -1,4 +1,4 @@
-import { networkError } from "./network/error";
+import { networkError } from "./network";
 
 // url is used as it is, with no prefix.
 export async function downloadFile(url: string, name: string): Promise<void> {

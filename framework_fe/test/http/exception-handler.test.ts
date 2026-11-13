@@ -6,7 +6,7 @@ async function setup(handler: (error: unknown) => void | Promise<void>) {
   const { setupExceptionHandler } = await import("../../src/http/exception-handler");
   setupExceptionHandler(handler);
   // The classes must come from the same module copy as the handler, after vi.resetModules
-  return import("../../src/http/ajax");
+  return import("../../src/http/network");
 }
 
 beforeEach(() => {

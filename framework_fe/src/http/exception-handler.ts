@@ -1,4 +1,4 @@
-import { ApiError, NetworkConnectionException } from "./ajax";
+import { ApiError, NetworkConnectionException } from "./network";
 
 export type ExceptionHandler = (exception: ApiError | NetworkConnectionException) => void | Promise<void>;
 

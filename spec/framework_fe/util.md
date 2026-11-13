@@ -7,6 +7,7 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - `ian-framework-fe` exports each helper. Each helper has its own source file in `framework_fe/src/`.
+- `framework_fe/src/util/index.ts` re-exports the helpers in `framework_fe/src/util/`, and the root entry re-exports it.
 - Only `createStorage` has a test, in `framework_fe/test/storage.test.ts`. `sleep` is trivial.
 
 | Source | Item | Meaning |
