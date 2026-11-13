@@ -6,13 +6,13 @@ This feature is not product business logic.
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-- Each helper has its own import path and its own source file in `framework_fe/src/`.
+- `ian-framework-fe` exports each helper. Each helper has its own source file in `framework_fe/src/`.
 - Only `createStorage` has a test, in `framework_fe/test/storage.test.ts`. `sleep` is trivial.
 
-| Import path | Item | Meaning |
+| Source | Item | Meaning |
 | --- | --- | --- |
-| `ian-framework-fe/storage` | `createStorage<Schema>(prefix, area?)` | Typed JSON values in `localStorage` (default) or `sessionStorage` (`"session"`). |
-| `ian-framework-fe/sleep` | `sleep(ms)` | A promise that resolves after `ms` milliseconds. |
+| `framework_fe/src/storage.ts` | `createStorage<Schema>(prefix, area?)` | Typed JSON values in `localStorage` (default) or `sessionStorage` (`"session"`). |
+| `framework_fe/src/util/sleep.ts` | `sleep(ms)` | A promise that resolves after `ms` milliseconds. |
 
 ## Storage
 

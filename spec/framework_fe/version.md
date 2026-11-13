@@ -7,8 +7,8 @@ This feature is not product business logic.
 
 - The package name is `ian-framework-fe`.
 - The package path is `framework_fe/`.
-- The import path is `ian-framework-fe/version`.
-- The package has no root entry. A project imports each feature from its own path.
+- The import path is `ian-framework-fe`.
+- The root entry is `framework_fe/src/index.ts`. It re-exports each feature, except the Solid components. The Solid components are re-exported by `framework_fe/src/solid/index.ts`, with the import path `ian-framework-fe/solid`, because it needs `solid-js`.
 - The source file is `framework_fe/src/version.ts`.
 - The test file is `framework_fe/test/version.test.ts`.
 - The package ships TypeScript source. The package has no build step.

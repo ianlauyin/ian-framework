@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-- The import path is `ian-framework-fe/solid/error-boundary`.
+- The import path is `ian-framework-fe/solid`.
 - The source file is `framework_fe/src/solid/error-boundary/index.tsx`.
 - The component uses SolidJS. `solid-js` is an optional peer dependency of the package.
 - A project that imports this component must have `solid-js` and `vite-plugin-solid`.
@@ -29,11 +29,11 @@ When `children` throws an error, the component logs the error and shows `fallbac
 
 ### Error log
 
-The component logs the error with `Logger.error` from `framework_fe/src/logger.ts` before it shows `fallback`. The logger is in `spec/framework_fe/logger.md`.
+The component logs the error with `Logger.error` from `framework_fe/src/logger/index.ts` before it shows `fallback`. The logger is in `spec/framework_fe/logger.md`.
 
 - The log message is `ERROR-BOUNDARY/caughtError`.
-- The log `error_message` is the `message` of the error, or the thrown value as text. The message is only in `error_message`. The `extra` has no `error_message` key. The component does not choose a fallback text. When that text is empty or has only whitespace, `Logger.error` gives the fallback text `unknown error`. The rule is in `spec/framework_fe/logger.md`.
-- The log has the `extra` fields in the table below.
+- The log `error_message` is the `message` of the error, or the thrown value as text. The message is only in `error_message`. The `context` has no `error_message` key. The component does not choose a fallback text. When that text is empty or has only whitespace, `Logger.error` gives the fallback text `unknown error`. The rule is in `spec/framework_fe/logger.md`.
+- The log has the `context` fields in the table below.
 - Each line break in these values becomes ` | `. The reason is that the log route drops a value with a line break. The log route is in `spec/framework_rs/logging/client-log.md`.
 
 | Field | Value | When |

@@ -6,9 +6,9 @@ This feature is not product business logic.
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-- The import path is `ian-framework-fe/logger`.
-- The source file is `framework_fe/src/logger.ts`.
-- The test file is `framework_fe/test/logger.test.ts`.
+- The import path is `ian-framework-fe`.
+- The source file is `framework_fe/src/logger/index.ts`.
+- The test file is `framework_fe/test/logger/index.test.ts`.
 - The logger uses only browser APIs. The logger does not use a UI library.
 
 ## API
@@ -24,19 +24,23 @@ This feature is not product business logic.
 
 | Method | Effect |
 | --- | --- |
-| `Logger.info(action, extra?)` | Records one event with the level `info`. |
-| `Logger.warn(action, extra?)` | Records one event with the level `warn`. |
-| `Logger.error(action, errorMessage, extra?)` | Records one event with the level `error`. When `errorMessage` is empty or has only whitespace, the logger uses the text `unknown error`. |
+| `Logger.info(action, context?)` | Records one event with the level `info`, with no `error_message`. |
+| `Logger.warn(action, context?, error?)` | Records one event with the level `warn`. When `error` is `undefined`, the event has no `error_message`. |
+| `Logger.error(action, context, error)` | Records one event with the level `error`. |
 | `Logger.wrapAction(name, action)` | Returns a function that logs each run of `action`. The rules are in the section "Action log". |
-| `Logger.contextWrapper(module, context)` | Returns a new object that has the keys of `context`. Each function value is wrapped with `Logger.wrapAction`. The rules are in the section "Action log". |
 | `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `bool`. A key that exists gets the new value. |
 | `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 | `Logger.setMaskPatterns(patterns)` | Sets the mask patterns. `patterns` is a `RegExp[]`. |
 | `Logger.watchWindowErrors()` | Records the window errors and the unhandled promise rejections. |
-| `Logger.watchStartupPerformance()` | Records one event for the time of the page start. The rules are in the section "Startup performance". |
 | `Logger.scope()` | Returns the scope of the wrapped action that runs. The rules are in the section "Action scope". |
 
 ## Behaviour
+
+The method shape is the same as `Logger` in `spec/framework_rs/logging/logger.md`.
+
+- `context` is `LogFields`. It holds the facts about where the event came from. The call `context` keys are put over the context of the logger. The masking rules apply to it.
+- `error` is `unknown`. The text of `error` is `message` when `error` is an `Error`, else `String(error)`. The text is the `error_message` of the event. For an `error` event, an empty or blank text becomes `unknown error`.
+- `extra` is not an argument of these methods. The logger sets `extra` for its own data: `page`, and the keys of `Logger.wrapAction`, and `Logger.scope()`.
 
 ### Record
 
@@ -50,19 +54,18 @@ The event has these fields:
 
 | Field | Value |
 | --- | --- |
-| `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe/time`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
+| `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
 | `action` | The `action` argument of the method, with no change. |
 | `latency_ms` | `null`, or the time of the action for an event from `Logger.wrapAction`. |
 | `level` | The level of the method. |
-| `error_message` | `null` for an `info` event and a `warn` event. For an `error` event, the `errorMessage` argument after the masking. An empty or blank `errorMessage` becomes `unknown error` before the masking. |
-| `context` | A copy of the context of the logger, with the key `request_url` before it. The value of `request_url` is `location.href` after the masking. A `request_url` key from `Logger.addContext` replaces it. Each value is a string, a number or a `bool`. |
-| `extra` | The `extra` values after the masking. |
+| `error_message` | `null` for `Logger.info`, and for `Logger.warn` when `error` is `undefined`. The text of `error` after the masking. For an `error` event, an empty or blank text becomes `unknown error` before the masking. |
+| `context` | A copy of the context of the logger, with the key `request_url` before it, then the call `context` after the masking. The value of `request_url` is `location.href` after the masking. A `request_url` key from `Logger.addContext` or from the call replaces it. Each value is a string, a number or a `bool`. |
+| `extra` | The data of the logger after the masking. |
 
 `extra` rules:
 
 - The logger adds the key `page`. The value is `location.pathname`.
-- A `page` key in the caller `extra` replaces that value.
-- The logger keeps the other caller keys.
+- The logger adds the other keys as the sections below say.
 
 ### Context
 
@@ -72,7 +75,7 @@ The event has these fields:
 
 ### Action log
 
-A project wraps each of its context actions with `Logger.wrapAction(name, action)`. The returned function has the same arguments and the same result as `action`.
+A project wraps each of its actions with `Logger.wrapAction(name, action)`. The returned function has the same arguments and the same result as `action`.
 
 - Each call records one event, after the wrapped function succeeds or fails. The wrapper does not record an event before the wrapped function runs.
 - The wrapper starts a timer with `performance.now()` before the wrapped function runs. `latency_ms` is the time to the end, in milliseconds, rounded to an integer.
@@ -82,12 +85,6 @@ A project wraps each of its context actions with `Logger.wrapAction(name, action
 - `extra` has the key `args`. The value is the JSON text of the array of the arguments of the call. When the arguments cannot be made into JSON text, the value is `unserializable`.
 - The masking rules apply to `args`.
 - The value of `error` is the `message` of the error when it is an `Error` and the message is not blank. Else the value is `unknown error`.
-
-`Logger.contextWrapper(module, context)` wraps the actions of a context object.
-
-- Each own key of `context` with a function value gets `Logger.wrapAction` with the name `module/key`. `key` is the name of the function in the object.
-- The other values are copied with no change.
-- `context` is not changed.
 
 ### Send
 
@@ -131,23 +128,15 @@ Send rules:
 - `Logger.scope()` outside a wrapped action returns a scope that ignores the calls. A call to `addInfo` on a scope after its action ended is also ignored. In both cases the logger writes a `console.warn`.
 - When the action throws, the event keeps the info that was added before the error.
 
-### Startup performance
-
-- `Logger.watchStartupPerformance()` waits for the `load` event of the page. When the page is already loaded, it does not wait. Then it reads the navigation entry in the next task.
-- When there is no navigation entry, or `loadEventEnd` is 0, the logger records nothing.
-- The event has the action `@@framework/startup-performance`. `latency_ms` is `loadEventEnd` minus `startTime`, rounded.
-- `extra` has `navigation_type`, and the rounded times `http_start` (`requestStart`), `http_end` (`responseEnd`), `dom_start` (`domInteractive`) and `dom_end` (`domComplete`).
-- The level is `warn` when the time is 5000 ms or more. Else the level is `info`.
-
 ### Masking
 
-The logger masks `extra` and `error_message` before it puts the event in the queue.
+The logger masks `extra`, the call `context` and `error_message` before it puts the event in the queue.
 
-- The start list of patterns is empty. With no pattern, the logger does not change `extra`.
+- The start list of patterns is empty. With no pattern, the logger does not change `extra` and the call `context`.
 - `Logger.setMaskPatterns` replaces the full list.
 - The logger adds the `g` flag to each pattern that does not have it. It keeps the other flags.
 - The masking applies to the `page` key also.
-- The masking also applies to `error_message`. The masking also applies to the value of `request_url` in `context`. The masking does not apply to `action` and to the other `context` values.
+- The masking also applies to `error_message`. The masking also applies to the value of `request_url` in `context`. The masking applies to the call `context`, with the key rule and the value rule. The masking does not apply to `action` and to the context of `Logger.addContext`.
 
 Key rule:
 

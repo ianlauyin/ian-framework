@@ -5,18 +5,10 @@
   "type": "module",
   "packageManager": "pnpm@10.17.1",
   "exports": {
-    "./version": "./src/version.ts",
-    "./ajax": "./src/http/ajax.ts",
-    "./exception-handler": "./src/http/exception-handler.ts",
-    "./upload": "./src/http/upload.ts",
-    "./download-file": "./src/http/download-file.ts",
-    "./storage": "./src/storage.ts",
-    "./sleep": "./src/util/sleep.ts",
-    "./logger": "./src/logger.ts",
-    "./time": "./src/util/time.ts",
-    "./solid/error-boundary": {
-      "solid": "./src/solid/error-boundary/index.tsx",
-      "default": "./src/solid/error-boundary/index.tsx"
+    ".": "./src/index.ts",
+    "./solid": {
+      "solid": "./src/solid/index.ts",
+      "default": "./src/solid/index.ts"
     }
   },
   "scripts": {

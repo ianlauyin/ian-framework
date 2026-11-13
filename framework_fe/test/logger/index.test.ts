@@ -21,7 +21,7 @@ function sentEvents(call: number) {
 }
 
 async function loadLogger() {
-  const { Logger } = await import("../src/logger");
+  const { Logger } = await import("../../src/logger");
   return Logger;
 }
 
@@ -51,7 +51,7 @@ describe("Logger", () => {
   it("sends the queued events as one batch on each 1 minute interval", async () => {
     const Logger = await loadLogger();
     Logger.info("started");
-    Logger.error("boom", "it broke", { code: 42, page: "/other" });
+    Logger.error("boom", { code: 42 }, "it broke");
     await vi.advanceTimersByTimeAsync(59_999);
     expect(fetchMock).not.toHaveBeenCalled();
 
@@ -78,7 +78,8 @@ describe("Logger", () => {
         level: "error",
         error_message: "it broke",
         action: "boom",
-        extra: { page: "/other", code: 42 },
+        context: { request_url: "https://app.example/home?a=1", code: 42 },
+        extra: { page: "/home" },
       }),
     ]);
 
@@ -118,7 +119,7 @@ describe("Logger", () => {
     expect(events[0].action).toBe("event 1");
   });
 
-  it("masks the value of a matching extra key and each match in a string value", async () => {
+  it("masks the value of a matching context key and each match in a string value", async () => {
     const Logger = await loadLogger();
     Logger.setMaskPatterns([/^(password|token)$/i, /secret=\S+/]);
     Logger.info("login secret=keep", {
@@ -130,8 +131,8 @@ describe("Logger", () => {
     hidePage();
     const [event] = sentEvents(0);
     expect(event.action).toBe("login secret=keep");
-    expect(event.extra).toEqual({
-      page: "/home",
+    expect(event.context).toEqual({
+      request_url: "https://app.example/home?a=1",
       password: "***",
       TOKEN: "***",
       note: "a *** and ***",
@@ -139,11 +140,14 @@ describe("Logger", () => {
     });
   });
 
-  it("keeps the extra values when no mask pattern is set", async () => {
+  it("keeps the context values when no mask pattern is set", async () => {
     const Logger = await loadLogger();
     Logger.info("login", { password: "hunter2" });
     hidePage();
-    expect(sentEvents(0)[0].extra).toEqual({ page: "/home", password: "hunter2" });
+    expect(sentEvents(0)[0].context).toEqual({
+      request_url: "https://app.example/home?a=1",
+      password: "hunter2",
+    });
   });
 
   it("sends the events again after a failed send, before the newer events", async () => {
@@ -189,13 +193,13 @@ describe("Logger", () => {
 
   it("records the same error only once in 5 seconds", async () => {
     const Logger = await loadLogger();
-    Logger.error("load", "failed");
-    Logger.error("load", "failed");
+    Logger.error("load", {}, "failed");
+    Logger.error("load", {}, "failed");
     await vi.advanceTimersByTimeAsync(5000);
-    Logger.error("load", "failed");
+    Logger.error("load", {}, "failed");
     await vi.advanceTimersByTimeAsync(1);
-    Logger.error("load", "failed");
-    Logger.error("load", "other");
+    Logger.error("load", {}, "failed");
+    Logger.error("load", {}, "other");
     Logger.info("load");
     Logger.info("load");
     hidePage();
@@ -273,67 +277,6 @@ describe("Logger", () => {
     });
   });
 
-  describe("startup performance", () => {
-    function stubNavigation(timing: object | undefined) {
-      Object.assign(fakeDocument, { readyState: "complete" });
-      vi.stubGlobal("performance", {
-        now: () => 0,
-        getEntriesByType: () => (timing ? [timing] : []),
-      });
-    }
-    const navigation = (loadEventEnd: number) => ({
-      type: "navigate",
-      startTime: 0,
-      requestStart: 10,
-      responseEnd: 50,
-      domInteractive: 100,
-      domComplete: 200,
-      loadEventEnd,
-    });
-
-    it("records the time to the end of the load", async () => {
-      stubNavigation(navigation(1234));
-      const Logger = await loadLogger();
-      Logger.watchStartupPerformance();
-      await vi.advanceTimersByTimeAsync(1);
-      hidePage();
-      expect(sentEvents(0)[0]).toMatchObject({
-        action: "@@framework/startup-performance",
-        level: "info",
-        latency_ms: 1234,
-        extra: {
-          navigation_type: "navigate",
-          http_start: 10,
-          http_end: 50,
-          dom_start: 100,
-          dom_end: 200,
-        },
-      });
-    });
-
-    it("records a warning for a slow startup", async () => {
-      stubNavigation(navigation(5000));
-      const Logger = await loadLogger();
-      Logger.watchStartupPerformance();
-      await vi.advanceTimersByTimeAsync(1);
-      hidePage();
-      expect(sentEvents(0)[0].level).toBe("warn");
-    });
-
-    it("records nothing when the load is not finished or there is no entry", async () => {
-      stubNavigation(navigation(0));
-      let Logger = await loadLogger();
-      Logger.watchStartupPerformance();
-      stubNavigation(undefined);
-      vi.resetModules();
-      Logger = await loadLogger();
-      Logger.watchStartupPerformance();
-      await vi.advanceTimersByTimeAsync(1);
-      hidePage();
-      expect(fetchMock).not.toHaveBeenCalled();
-    });
-  });
-
   it("records a window error and an unhandled rejection as error events", async () => {
     const windowListeners: Record<string, (event: unknown) => void> = {};
     vi.stubGlobal("window", {
@@ -402,10 +345,28 @@ describe("Logger", () => {
     expect(event.error_message).not.toContain("secret-42");
   });
 
+  it("records warn with the error text and masks the call context", async () => {
+    const Logger = await loadLogger();
+    Logger.setMaskPatterns([/^token$/]);
+    Logger.warn("slow", { token: "abc", step: 1 }, new Error("timeout"));
+    Logger.warn("odd", {}, "plain");
+    Logger.warn("none", {}, undefined);
+    hidePage();
+    const [first, second, third] = sentEvents(0);
+    expect(first).toMatchObject({ level: "warn", error_message: "timeout" });
+    expect(first.context).toEqual({
+      request_url: "https://app.example/home?a=1",
+      token: "***",
+      step: 1,
+    });
+    expect(second.error_message).toBe("plain");
+    expect(third.error_message).toBeNull();
+  });
+
   it("sends a fallback error message when the message is empty", async () => {
     const Logger = await loadLogger();
-    Logger.error("a", "");
-    Logger.error("b", "   ");
+    Logger.error("a", {}, "");
+    Logger.error("b", {}, "   ");
     const fail = Logger.wrapAction("c", () => {
       throw new Error("");
     });
@@ -418,25 +379,6 @@ describe("Logger", () => {
       "unknown error",
     ]);
     expect(events[2].extra.error).toBe("unknown error");
-  });
-
-  describe("contextWrapper", () => {
-    it("wraps each function with the action name module/function_name", async () => {
-      const Logger = await loadLogger();
-      const cart = Logger.contextWrapper("cart", {
-        add: (a: number, b: number) => a + b,
-        limit: 5,
-      });
-
-      expect(cart.add(1, 2)).toBe(3);
-      expect(cart.limit).toBe(5);
-      vi.advanceTimersByTime(60_000);
-
-      const events = sentEvents(0);
-      expect(events).toHaveLength(1);
-      expect(events[0].action).toBe("cart/add");
-      expect(events[0].extra.args).toBe("[1,2]");
-    });
   });
 
   describe("wrapAction", () => {

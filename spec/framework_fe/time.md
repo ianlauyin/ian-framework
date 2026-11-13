@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-- The import path is `ian-framework-fe/time`.
+- The import path is `ian-framework-fe`.
 - The source file is `framework_fe/src/util/time.ts`.
 - The test file is `framework_fe/test/util/time.test.ts`.
 - The helpers use only the JavaScript standard library.

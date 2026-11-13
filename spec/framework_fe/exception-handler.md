@@ -6,7 +6,7 @@ This feature is not product business logic.
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-- The import path is `ian-framework-fe/exception-handler`.
+- The import path is `ian-framework-fe`.
 - The source file is `framework_fe/src/http/exception-handler.ts`.
 - The test file is `framework_fe/test/http/exception-handler.test.ts`.
 - The handler uses only browser APIs.
