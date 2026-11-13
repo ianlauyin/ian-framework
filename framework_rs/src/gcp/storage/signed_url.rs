@@ -1,9 +1,14 @@
 use std::time::Duration;
 
+use google_cloud_auth::credentials;
+use google_cloud_auth::signer::Signer;
+
 use crate::exception;
 use crate::exception::Exception;
 
 pub const ATTACHMENT_FILENAME_EMPTY: &str = "ATTACHMENT_FILENAME_EMPTY";
+pub const SIGNER_EMAIL_INVALID: &str = "SIGNER_EMAIL_INVALID";
+pub const URL_SIGNER_BUILD_FAILED: &str = "URL_SIGNER_BUILD_FAILED";
 pub const SIGNED_URL_LIFETIME_TOO_LONG: &str = "SIGNED_URL_LIFETIME_TOO_LONG";
 pub const SIGNED_URL_LIFETIME_TOO_SHORT: &str = "SIGNED_URL_LIFETIME_TOO_SHORT";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
@@ -64,4 +69,32 @@ pub(crate) fn percent_encode(segment: &str) -> String {
         }
     }
     out
+}
+
+pub(crate) fn build_signer(signer_email: Option<&str>) -> Result<Signer, Exception> {
+    let build_failed = |err| {
+        exception!(
+            code = URL_SIGNER_BUILD_FAILED,
+            "cannot build the URL signer",
+            source = err,
+        )
+    };
+    let Some(email) = signer_email else {
+        return credentials::Builder::default()
+            .build_signer()
+            .map_err(build_failed);
+    };
+    if !email.contains('@') || email.contains(char::is_whitespace) {
+        return Err(exception!(
+            code = SIGNER_EMAIL_INVALID,
+            "signer email is not a service account email",
+        ));
+    }
+    let source = credentials::Builder::default()
+        .build()
+        .map_err(build_failed)?;
+    credentials::impersonated::Builder::from_source_credentials(source)
+        .with_target_principal(email)
+        .build_signer()
+        .map_err(build_failed)
 }

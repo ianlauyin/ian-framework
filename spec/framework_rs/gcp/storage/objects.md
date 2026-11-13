@@ -14,7 +14,7 @@ An `ObjectMeta` has these fields:
 
 A list page also has `prefixes` and `next_page_token`.
 
-`GcsClient::list` takes one `ListQuery`. A `ListQuery` has these fields:
+`GcsClient::list_page` takes one `ListQuery`. A `ListQuery` has these fields:
 
 | Field | Type | Request field |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ A list page also has `prefixes` and `next_page_token`.
 
 ## Put
 
-`GcsClient::put` takes one `PutRequest`. A `PutRequest` has `name`, `body` and `options`.
+`GcsClient::put_object` takes one `PutRequest`. A `PutRequest` has `name`, `body` and `options`.
 
 | Body | Content |
 | --- | --- |
@@ -49,7 +49,7 @@ A list page also has `prefixes` and `next_page_token`.
 
 ## Patch metadata
 
-`GcsClient::patch_metadata` reads the object, adds the new keys to its metadata map, and writes the map with an `UpdateObject` call and the update mask `metadata`.
+`GcsClient::merge_metadata` reads the object, adds the new keys to its metadata map, and writes the map with an `UpdateObject` call and the update mask `metadata`.
 
 - A new key replaces the key with the same name. The other keys stay.
 - The two calls are not atomic. A change of the metadata between them can be lost.
@@ -93,22 +93,19 @@ These methods are on `GcsClient`:
 
 | Method | Effect |
 | --- | --- |
-| `put` | Puts one `PutRequest`. |
+| `put_object` | Puts one `PutRequest`. |
 | `get_bytes` | Gets the object bytes. An object larger than 256 MiB is a `OBJECT_TOO_LARGE` error. Use `open_object` and `into_stream` for a large object. |
 | `get_bytes_opt` | Gets the object bytes or `None`. |
 | `open_object` | Opens the object data. |
 | `open_object_opt` | Opens the object data or returns `None`. |
 | `stat` | Reads the object metadata. |
 | `stat_opt` | Reads the object metadata or returns `None`. |
-| `list` | Lists one page. |
+| `list_page` | Lists one page. |
 | `delete_object` | Deletes one object. |
-| `patch_metadata` | Adds keys to the metadata map. |
+| `merge_metadata` | Adds keys to the metadata map. |
 | `rewrite_object` | Copies an object in the same bucket. |
 | `move_object` | Moves an object in the same bucket. |
 | `signed_get_url` | Builds a V4 signed GET URL. |
-| `bucket` | Returns the bucket name. |
-| `attach_ops_log` | Connects a logger. |
-
 `ObjectReader` has one method. `into_stream` reads the object data as a stream of `bytes::Bytes` chunks. The stream does not copy a chunk.
 
 The `Debug` output of an `ObjectReader` shows the object size.

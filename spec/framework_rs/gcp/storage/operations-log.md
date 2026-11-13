@@ -8,9 +8,8 @@ The client writes operations records through the logging module. The log route i
 
 Logger:
 
-- `GcsClient::attach_ops_log` connects one logger to one client.
-- A second call replaces that logger.
-- A client with no logger writes no operations record.
+- The client uses the global logger, `Logger::get()`. The client has no logger of its own.
+- When the global logger is not set, the client writes no operations record.
 - A logging failure does not change the storage result.
 
 When a record is written:
