@@ -1,13 +1,8 @@
-import { queryString, rawSend } from "./network";
+import { queryString } from "./network/json";
+import { rawSend } from "./network/send";
 
-export {
-  ApiError,
-  type ErrorBody,
-  NetworkConnectionException,
-  type RequestInterceptor,
-  setRequestInterceptor,
-  setUnauthorizedHandler,
-} from "./network";
+export { ApiError, type ErrorBody, NetworkConnectionException } from "./network/error";
+export { type RequestInterceptor, setRequestInterceptor, setUnauthorizedHandler } from "./network/hooks";
 
 type PathParams = Record<string, any> | null;
 type AJAXRequest = Record<string, any> | null;

@@ -21,7 +21,7 @@ function sentEvents(call: number) {
 }
 
 async function loadLogger() {
-  const { Logger } = await import("../src/logger");
+  const { Logger } = await import("../../src/util/logger");
   return Logger;
 }
 

@@ -40,7 +40,7 @@ The fallback fills the viewport height. It puts its content in the center.
 
 ### Error log
 
-When the component shows the fallback, it logs the error with `Logger.error` from `framework_fe/src/logger.ts`. The logger is in `spec/framework_fe/logger.md`.
+When the component shows the fallback, it logs the error with `Logger.error` from `framework_fe/src/util/logger.ts`. The logger is in `spec/framework_fe/logger.md`.
 
 - The log message is `ERROR-BOUNDARY/caught an error`.
 - The log `error_message` is the `message` of the error, or the thrown value as text. The message is only in `error_message`. The `extra` has no `error_message` key. The component does not choose a fallback text. When that text is empty or has only whitespace, `Logger.error` gives the fallback text `unknown error`. The rule is in `spec/framework_fe/logger.md`.

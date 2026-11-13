@@ -7,7 +7,7 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - The import paths are `ian-framework-fe/upload` and `ian-framework-fe/download-file`.
-- The source files are `framework_fe/src/upload.ts` and `framework_fe/src/download-file.ts`.
+- The source files are `framework_fe/src/http/upload.ts` and `framework_fe/src/http/download-file.ts`.
 - These helpers have no test, because each only passes its arguments to `rawSend` or to the browser. The send step is tested through `spec/framework_fe/ajax.md`.
 
 ## API

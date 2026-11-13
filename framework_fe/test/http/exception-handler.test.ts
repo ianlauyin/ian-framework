@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let listeners: Record<string, (event: any) => void>;
 
 async function setup(handler: (error: unknown) => void | Promise<void>) {
-  const { setupExceptionHandler } = await import("../src/exception-handler");
+  const { setupExceptionHandler } = await import("../../src/http/exception-handler");
   setupExceptionHandler(handler);
   // The classes must come from the same module copy as the handler, after vi.resetModules
-  return import("../src/ajax");
+  return import("../../src/http/ajax");
 }
 
 beforeEach(() => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hktIsoString } from "../src/time";
+import { hktIsoString } from "../../src/util/time";
 
 describe("hktIsoString", () => {
   it("gives the HKT time with the +08:00 offset", () => {

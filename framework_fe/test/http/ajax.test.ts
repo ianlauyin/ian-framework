@@ -6,7 +6,7 @@ import {
   NetworkConnectionException,
   setRequestInterceptor,
   setUnauthorizedHandler,
-} from "../src/ajax";
+} from "../../src/http/ajax";
 
 describe("ajax", () => {
   afterEach(() => {

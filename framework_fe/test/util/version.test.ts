@@ -25,7 +25,7 @@ async function flush(): Promise<void> {
 }
 
 async function loadChecker() {
-  const { VersionChecker } = await import("../src/version");
+  const { VersionChecker } = await import("../../src/util/version");
   return VersionChecker;
 }
 
