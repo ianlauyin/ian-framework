@@ -94,7 +94,7 @@ These methods are on `GcsClient`:
 | Method | Effect |
 | --- | --- |
 | `put` | Puts one `PutRequest`. |
-| `get_bytes` | Gets the object bytes. An object larger than 256 MiB is a `OBJECT_TOO_LARGE` error. Use `open_object` and `byte_stream` for a large object. |
+| `get_bytes` | Gets the object bytes. An object larger than 256 MiB is a `OBJECT_TOO_LARGE` error. Use `open_object` and `into_stream` for a large object. |
 | `get_bytes_opt` | Gets the object bytes or `None`. |
 | `open_object` | Opens the object data. |
 | `open_object_opt` | Opens the object data or returns `None`. |
@@ -109,6 +109,6 @@ These methods are on `GcsClient`:
 | `bucket` | Returns the bucket name. |
 | `attach_ops_log` | Connects a logger. |
 
-`ObjectReader` has one method. `byte_stream` reads the object data as a stream of `bytes::Bytes` chunks. The stream does not copy a chunk.
+`ObjectReader` has one method. `into_stream` reads the object data as a stream of `bytes::Bytes` chunks. The stream does not copy a chunk.
 
 The `Debug` output of an `ObjectReader` shows the object size.

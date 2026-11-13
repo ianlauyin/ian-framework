@@ -47,7 +47,7 @@ pub struct ObjectReader {
 }
 
 impl ObjectReader {
-    pub fn byte_stream(self) -> Pin<Box<dyn Stream<Item = Result<Bytes, Exception>> + Send>> {
+    pub fn into_stream(self) -> Pin<Box<dyn Stream<Item = Result<Bytes, Exception>> + Send>> {
         Box::pin(stream::unfold(self.response, |mut response| async move {
             let item = response.next().await?;
             Some((item.map_err(body_read_exception), response))
@@ -85,6 +85,6 @@ fn body_read_exception(err: google_cloud_storage::Error) -> Exception {
 fn too_large_exception() -> Exception {
     exception!(
         code = OBJECT_TOO_LARGE,
-        "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream",
+        "object is larger than the 256 MiB limit of get_bytes, so use open_object and into_stream",
     )
 }
