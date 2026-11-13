@@ -15,15 +15,15 @@ Logger:
 
 When a record is written:
 
-- The client writes one record when an operation fails. The operations are `open`, `stat`, `list`, `put`, `rewrite`, `patch`, `delete` and `sign`. `get_bytes` is an `open` and a read. `move_object` is a `rewrite`, a `delete` and a `stat`.
+- The client writes one record for each operation, when the operation succeeds and when it fails. The operations are `open`, `stat`, `list`, `put`, `rewrite`, `patch`, `delete` and `sign`. `get_bytes` is an `open` and a read. `move_object` is a `rewrite`, a `delete` and a `stat`.
 - The failure of an official call is final. The official client has already done the retries.
-- A `RESOURCE_NOT_FOUND` failure writes no record, because an `_opt` call and `delete_object` use it as a normal result.
-- A success writes no record.
+- A `RESOURCE_NOT_FOUND` failure is a success record, because an `_opt` call and `delete_object` use it as a normal result.
 - A failure of the body read of an `ObjectReader` writes no record.
 
 Record content:
 
-- The level is `warn`.
+- The level is `info` for a success. The level is `error` for a failure.
+- A failure record has `error_message` with the log text of the exception, with every source, its code, its file and its line. A success record has no `error_message`.
 - An operations record has no `app` field.
 - An operations record has no `project` field.
 - The client does not write product rules in these records.
@@ -31,5 +31,5 @@ Record content:
 - An operations record has a new UUID v7 `id`.
 - An operations record has an empty `context`.
 - The record has `latency_ms` of the failed operation.
-- Each record has these keys in `extra`: `message` with the value `gcs operation failed`, `bucket` with the bucket name, and `error` with the log text of the exception, with every source, its code, its file and its line.
+- Each record has these keys in `extra`: `message` with the value `gcs operation succeeded` or `gcs operation failed`, and `bucket` with the bucket name.
 - The record `ts` is the current HKT time, from `ian_framework::time::hkt_now()`. The time rules are in `spec/framework_rs/time/hkt.md`.

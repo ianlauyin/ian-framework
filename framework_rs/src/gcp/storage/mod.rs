@@ -380,7 +380,7 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    // A missing object is a normal result of an `_opt` call, so it writes no record.
+    // A missing object is a normal result of an `_opt` call, so it is an info record.
     async fn run_logged<T>(
         &self,
         operation: &str,
@@ -389,16 +389,17 @@ impl GcsClient {
     ) -> Result<T, Exception> {
         let started = Instant::now();
         let result = work.await;
-        if let Err(err) = &result {
-            if err.code() != RESOURCE_NOT_FOUND {
-                self.write_ops_record(OpsRecord {
-                    operation,
-                    object,
-                    latency_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-                    error: &String::from(err),
-                });
-            }
-        }
+        let error = match &result {
+            Ok(_) => None,
+            Err(err) if err.code() == RESOURCE_NOT_FOUND => None,
+            Err(err) => Some(String::from(err)),
+        };
+        self.write_ops_record(OpsRecord {
+            operation,
+            object,
+            latency_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            error: error.as_deref(),
+        });
         result
     }
 
