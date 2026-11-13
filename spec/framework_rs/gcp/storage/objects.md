@@ -84,8 +84,7 @@ When the object does not exist, the methods give these results:
 | Methods | Result |
 | --- | --- |
 | `GcsClient::delete_object` | `Ok` |
-| `get_bytes_opt`, `open_object_opt`, `stat_opt` | `None` |
-| `get_bytes`, `open_object`, `stat` | A `RESOURCE_NOT_FOUND` error |
+| `get_bytes`, `open_object`, `stat` | `None` |
 
 ## Operations
 
@@ -94,12 +93,9 @@ These methods are on `GcsClient`:
 | Method | Effect |
 | --- | --- |
 | `put_object` | Puts one `PutRequest`. |
-| `get_bytes` | Gets the object bytes. An object larger than 256 MiB is a `OBJECT_TOO_LARGE` error. Use `open_object` and `into_stream` for a large object. |
-| `get_bytes_opt` | Gets the object bytes or `None`. |
-| `open_object` | Opens the object data. |
-| `open_object_opt` | Opens the object data or returns `None`. |
-| `stat` | Reads the object metadata. |
-| `stat_opt` | Reads the object metadata or returns `None`. |
+| `get_bytes` | Gets the object bytes or `None`. An object larger than 256 MiB is a `OBJECT_TOO_LARGE` error. Use `open_object` and `into_stream` for a large object. |
+| `open_object` | Opens the object data or returns `None`. |
+| `stat` | Reads the object metadata or returns `None`. |
 | `list_page` | Lists one page. |
 | `delete_object` | Deletes one object. |
 | `merge_metadata` | Adds keys to the metadata map. |

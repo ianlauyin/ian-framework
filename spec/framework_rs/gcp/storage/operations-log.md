@@ -16,7 +16,7 @@ When a record is written:
 
 - The client writes one record for each operation, when the operation succeeds and when it fails. The operations are `open`, `stat`, `list`, `put`, `rewrite`, `patch`, `delete` and `sign`. `get_bytes` is an `open` and a read. `move_object` is a `rewrite`, a `delete` and a `stat`.
 - The failure of an official call is final. The official client has already done the retries.
-- A `RESOURCE_NOT_FOUND` failure is a success record, because an `_opt` call and `delete_object` use it as a normal result.
+- A `RESOURCE_NOT_FOUND` failure is a success record, because `get_bytes`, `open_object`, `stat` and `delete_object` use it as a normal result.
 - A failure of the body read of an `ObjectReader` writes no record.
 
 Record content:

@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
@@ -38,7 +37,11 @@ const MAX_REWRITE_STEPS: u32 = 10_000;
 
 #[derive(Clone)]
 pub struct GcsClient {
-    inner: Arc<Inner>,
+    bucket: String,
+    bucket_path: String,
+    storage: Storage,
+    control: StorageControl,
+    signer: Signer,
 }
 
 impl GcsClient {
@@ -50,87 +53,72 @@ impl GcsClient {
     ) -> Result<Self, Exception> {
         let bucket = bucket_name.into();
         validate_bucket(&bucket)?;
-        let storage = Storage::builder().build().await.map_err(|err| {
+        let build_failed = |err| {
             exception!(
                 code = CLIENT_BUILD_FAILED,
                 "cannot build the client",
                 source = err
             )
-        })?;
-        let control = StorageControl::builder().build().await.map_err(|err| {
-            exception!(
-                code = CLIENT_BUILD_FAILED,
-                "cannot build the client",
-                source = err
-            )
-        })?;
+        };
+        let storage = Storage::builder().build().await.map_err(build_failed)?;
+        let control = StorageControl::builder()
+            .build()
+            .await
+            .map_err(build_failed)?;
         Ok(Self {
-            inner: Arc::new(Inner {
-                bucket_path: format!("projects/_/buckets/{bucket}"),
-                bucket,
-                storage,
-                control,
-                signer: build_signer(signer_email)?,
-            }),
+            bucket_path: format!("projects/_/buckets/{bucket}"),
+            bucket,
+            storage,
+            control,
+            signer: build_signer(signer_email)?,
         })
     }
 
-    pub async fn get_bytes(&self, name: &str) -> Result<Vec<u8>, Exception> {
-        self.open_object(name).await?.read_to_vec().await
+    pub async fn get_bytes(&self, name: &str) -> Result<Option<Vec<u8>>, Exception> {
+        match self.open_object(name).await? {
+            Some(reader) => reader.read_to_vec().await.map(Some),
+            None => Ok(None),
+        }
     }
 
-    pub async fn get_bytes_opt(&self, name: &str) -> Result<Option<Vec<u8>>, Exception> {
-        not_found_as_none(self.get_bytes(name).await)
-    }
-
-    pub async fn open_object(&self, name: &str) -> Result<ObjectReader, Exception> {
+    pub async fn open_object(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
         validate_object_name(name)?;
-        self.with_ops_record("open", name, async {
-            let response = self
-                .inner
-                .storage
-                .read_object(&self.inner.bucket_path, name)
-                .send()
-                .await
-                .map_err(|err| to_exception("open object failed", err))?;
-            Ok(ObjectReader { response })
-        })
-        .await
+        let result = self
+            .with_ops_record("open", name, async {
+                let response = self
+                    .storage
+                    .read_object(&self.bucket_path, name)
+                    .send()
+                    .await
+                    .map_err(|err| to_exception("open object failed", err))?;
+                Ok(ObjectReader { response })
+            })
+            .await;
+        not_found_as_none(result)
     }
 
-    pub async fn open_object_opt(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
-        not_found_as_none(self.open_object(name).await)
-    }
-
-    pub async fn stat(&self, name: &str) -> Result<ObjectMeta, Exception> {
+    pub async fn stat(&self, name: &str) -> Result<Option<ObjectMeta>, Exception> {
         validate_object_name(name)?;
-        self.with_ops_record("stat", name, async {
-            let object = self
-                .inner
-                .control
-                .get_object()
-                .set_bucket(&self.inner.bucket_path)
-                .set_object(name)
-                .send()
-                .await
-                .map_err(|err| to_exception("stat object failed", err))?;
-            Ok(ObjectMeta::from(object))
-        })
-        .await
-    }
-
-    pub async fn stat_opt(&self, name: &str) -> Result<Option<ObjectMeta>, Exception> {
-        not_found_as_none(self.stat(name).await)
+        let result = self
+            .with_ops_record("stat", name, async {
+                let object = self
+                    .control
+                    .get_object()
+                    .set_bucket(&self.bucket_path)
+                    .set_object(name)
+                    .send()
+                    .await
+                    .map_err(|err| to_exception("stat object failed", err))?;
+                Ok(ObjectMeta::from(object))
+            })
+            .await;
+        not_found_as_none(result)
     }
 
     pub async fn list_page(&self, query: &ListQuery) -> Result<ListPage, Exception> {
         let prefix = query.prefix.as_deref().unwrap_or_default();
         self.with_ops_record("list", prefix, async {
-            let mut request = self
-                .inner
-                .control
-                .list_objects()
-                .set_parent(&self.inner.bucket_path);
+            let mut request = self.control.list_objects().set_parent(&self.bucket_path);
             if let Some(prefix) = &query.prefix {
                 request = request.set_prefix(prefix);
             }
@@ -159,12 +147,11 @@ impl GcsClient {
         let content_type = options.content_type_or_default()?;
         validate_metadata(&options.metadata)?;
         let metadata = options.metadata.clone();
-        let bucket_path = &self.inner.bucket_path;
+        let bucket_path = &self.bucket_path;
         self.with_ops_record("put", name, async {
             let result = match &request.body {
                 PutBody::Bytes(bytes) => {
-                    self.inner
-                        .storage
+                    self.storage
                         .write_object(bucket_path, name, Bytes::copy_from_slice(bytes))
                         .set_content_type(content_type)
                         .set_metadata(metadata)
@@ -173,8 +160,7 @@ impl GcsClient {
                 }
                 PutBody::File(path) => {
                     let file = open_upload_file(path).await?;
-                    self.inner
-                        .storage
+                    self.storage
                         .write_object(bucket_path, name, file)
                         .set_content_type(content_type)
                         .set_metadata(metadata)
@@ -195,34 +181,28 @@ impl GcsClient {
             let mut token = String::new();
             for _ in 0..MAX_REWRITE_STEPS {
                 let step = self
-                    .inner
                     .control
                     .rewrite_object()
-                    .set_source_bucket(&self.inner.bucket_path)
+                    .set_source_bucket(&self.bucket_path)
                     .set_source_object(from)
-                    .set_destination_bucket(&self.inner.bucket_path)
+                    .set_destination_bucket(&self.bucket_path)
                     .set_destination_name(to)
                     .set_rewrite_token(&token)
                     .send()
                     .await
                     .map_err(|err| to_exception("rewrite object failed", err))?;
-                if !step.done {
-                    if step.rewrite_token == token {
-                        return Err(exception!(
-                            code = REWRITE_TOKEN_STUCK,
-                            "rewrite token did not change"
-                        ));
-                    }
-                    token = step.rewrite_token;
-                    continue;
+                if step.done {
+                    return step.resource.map(ObjectMeta::from).ok_or_else(|| {
+                        exception!(code = REWRITE_NO_OBJECT, "rewrite gave no object")
+                    });
                 }
-                return match step.resource {
-                    Some(object) => Ok(ObjectMeta::from(object)),
-                    None => Err(exception!(
-                        code = REWRITE_NO_OBJECT,
-                        "rewrite gave no object"
-                    )),
-                };
+                if step.rewrite_token == token {
+                    return Err(exception!(
+                        code = REWRITE_TOKEN_STUCK,
+                        "rewrite token did not change"
+                    ));
+                }
+                token = step.rewrite_token;
             }
             Err(exception!(
                 code = REWRITE_STEP_LIMIT,
@@ -242,10 +222,9 @@ impl GcsClient {
         validate_metadata(metadata)?;
         self.with_ops_record("patch", name, async {
             let current = self
-                .inner
                 .control
                 .get_object()
-                .set_bucket(&self.inner.bucket_path)
+                .set_bucket(&self.bucket_path)
                 .set_object(name)
                 .send()
                 .await
@@ -253,11 +232,10 @@ impl GcsClient {
             let mut merged = current.metadata;
             merged.extend(metadata.clone());
             let object = Object::new()
-                .set_bucket(&self.inner.bucket_path)
+                .set_bucket(&self.bucket_path)
                 .set_name(name)
                 .set_metadata(merged);
             let updated = self
-                .inner
                 .control
                 .update_object()
                 .set_object(object)
@@ -274,10 +252,9 @@ impl GcsClient {
         validate_object_name(name)?;
         let result = self
             .with_ops_record("delete", name, async {
-                self.inner
-                    .control
+                self.control
                     .delete_object()
-                    .set_bucket(&self.inner.bucket_path)
+                    .set_bucket(&self.bucket_path)
                     .set_object(name)
                     .send()
                     .await
@@ -309,7 +286,7 @@ impl GcsClient {
     ) -> Result<String, Exception> {
         validate_object_name(name)?;
         let lifetime = validate_lifetime(expires_in)?;
-        let mut builder = SignedUrlBuilder::for_object(&self.inner.bucket_path, name)
+        let mut builder = SignedUrlBuilder::for_object(&self.bucket_path, name)
             .with_method(Method::GET)
             .with_expiration(lifetime);
         if let Some(filename) = attachment_filename {
@@ -320,7 +297,7 @@ impl GcsClient {
         }
         self.with_ops_record("sign", name, async {
             builder
-                .sign_with(&self.inner.signer)
+                .sign_with(&self.signer)
                 .await
                 .map_err(|err| exception!(code = SIGN_URL_FAILED, "sign URL failed", source = err))
         })
@@ -336,7 +313,7 @@ impl GcsClient {
         delete_err: Exception,
     ) -> Exception {
         let kind = delete_err.code();
-        let message = match self.stat_opt(from).await {
+        let message = match self.stat(from).await {
             Ok(Some(_)) => match self.delete_object(to).await {
                 Ok(()) => return delete_err,
                 Err(cleanup_err) => format!(
@@ -356,7 +333,7 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    // A missing object is a normal result of an `_opt` call, so it is an info record.
+    // A missing object is a normal result of `open_object`, `stat` and `get_bytes`, so it is an info record.
     async fn with_ops_record<T>(
         &self,
         operation: &str,
@@ -370,37 +347,25 @@ impl GcsClient {
             Err(err) if err.code() == RESOURCE_NOT_FOUND => None,
             Err(err) => Some(String::from(err)),
         };
-        self.write_ops_record(OpsRecord {
-            operation,
-            object,
-            latency_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-            error: error.as_deref(),
-        });
+        if let Some(logger) = Logger::get() {
+            let record = OpsRecord {
+                operation,
+                object,
+                latency_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                error: error.as_deref(),
+            };
+            logger.record(record.into_event(&self.bucket));
+        }
         result
-    }
-
-    fn write_ops_record(&self, record: OpsRecord<'_>) {
-        let Some(logger) = Logger::get() else {
-            return;
-        };
-        logger.record(record.into_event(&self.inner.bucket));
     }
 }
 
 impl fmt::Debug for GcsClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GcsClient")
-            .field("bucket", &self.inner.bucket)
+            .field("bucket", &self.bucket)
             .finish_non_exhaustive()
     }
-}
-
-struct Inner {
-    bucket: String,
-    bucket_path: String,
-    storage: Storage,
-    control: StorageControl,
-    signer: Signer,
 }
 
 pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
