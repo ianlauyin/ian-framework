@@ -7,7 +7,7 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - The import path is `ian-framework-fe`.
-- The source file is `framework_fe/src/logger/index.ts`.
+- The root source file is `framework_fe/src/logger/index.ts`. It re-exports the `Logger` class from `logger.ts`, `withLog` from `with-log.ts` and the types.
 - The test file is `framework_fe/test/logger/index.test.ts`.
 - The logger uses only browser APIs. The logger does not use a UI library.
 
@@ -18,7 +18,8 @@ This feature is not product business logic.
 | `Logger` | class | The logger. All methods are static. |
 | `LogLevel` | type | `"info"`, `"warn"` or `"error"`. |
 | `LogFields` | type | `Record<string, string \| number \| boolean>`. |
-| `LogScope` | type | `{ addInfo(key, value): void }`. `value` is a string, a number or a `bool`. |
+| `LogEvent` | type | The event that `Logger.record` and `withLog` take: `{ action, level, errorMessage?, context?, extra?, latencyMs? }`. |
+| `withLog` | function | Runs one piece of work and records one event for it. The rules are in the section "With log". |
 
 `Logger` has these methods:
 
@@ -27,12 +28,11 @@ This feature is not product business logic.
 | `Logger.info(action, context?)` | Records one event with the level `info`, with no `error_message`. |
 | `Logger.warn(action, context?, error?)` | Records one event with the level `warn`. When `error` is `undefined`, the event has no `error_message`. |
 | `Logger.error(action, context, error)` | Records one event with the level `error`. |
-| `Logger.wrapAction(name, action)` | Returns a function that logs each run of `action`. The rules are in the section "Action log". |
+| `Logger.record(event)` | Records one `LogEvent`. The rules are in the section "Record". |
 | `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `bool`. A key that exists gets the new value. |
 | `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 | `Logger.setMaskPatterns(patterns)` | Sets the mask patterns. `patterns` is a `RegExp[]`. |
 | `Logger.watchWindowErrors()` | Records the window errors and the unhandled promise rejections. |
-| `Logger.scope()` | Returns the scope of the wrapped action that runs. The rules are in the section "Action scope". |
 
 ## Behaviour
 
@@ -40,7 +40,7 @@ The method shape is the same as `Logger` in `spec/framework_rs/logging/logger.md
 
 - `context` is `LogFields`. It holds the facts about where the event came from. The call `context` keys are put over the context of the logger. The masking rules apply to it.
 - `error` is `unknown`. The text of `error` is `message` when `error` is an `Error`, else `String(error)`. The text is the `error_message` of the event. For an `error` event, an empty or blank text becomes `unknown error`.
-- `extra` is not an argument of these methods. The logger sets `extra` for its own data: `page`, and the keys of `Logger.wrapAction`, and `Logger.scope()`.
+- `extra` is not an argument of these methods. The logger sets `extra` for its own data: `page`, and the `extra` of a `LogEvent`.
 
 ### Record
 
@@ -56,7 +56,7 @@ The event has these fields:
 | --- | --- |
 | `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
 | `action` | The `action` argument of the method, with no change. |
-| `latency_ms` | `null`, or the time of the action for an event from `Logger.wrapAction`. |
+| `latency_ms` | `null`, or the rounded `latencyMs` of the `LogEvent`. `withLog` sets it. |
 | `level` | The level of the method. |
 | `error_message` | `null` for `Logger.info`, and for `Logger.warn` when `error` is `undefined`. The text of `error` after the masking. For an `error` event, an empty or blank text becomes `unknown error` before the masking. |
 | `context` | A copy of the context of the logger, with the key `request_url` before it, then the call `context` after the masking. The value of `request_url` is `location.href` after the masking. A `request_url` key from `Logger.addContext` or from the call replaces it. Each value is a string, a number or a `bool`. |
@@ -73,18 +73,14 @@ The event has these fields:
 - `Logger.addContext` and `Logger.removeContext` change the context for the events that the logger records after the call. They do not change the events that are already in the queue.
 - The Rust log route keeps the `context` of a browser event, with the same key and value rules as `extra`. It sets `ip` and `user_agent` from the request. The route rules are in `spec/framework_rs/logging/client-log.md`.
 
-### Action log
+### With log
 
-A project wraps each of its actions with `Logger.wrapAction(name, action)`. The returned function has the same arguments and the same result as `action`.
+`withLog(work, toEvent)` is an async function. The source file is `framework_fe/src/logger/with-log.ts`. It is the same as `with_log` in `spec/framework_rs/logging/logger.md`.
 
-- Each call records one event, after the wrapped function succeeds or fails. The wrapper does not record an event before the wrapped function runs.
-- The wrapper starts a timer with `performance.now()` before the wrapped function runs. `latency_ms` is the time to the end, in milliseconds, rounded to an integer.
-- When the wrapped function returns, the event has the level `info`. `action` of the event is `name`.
-- When the wrapped function throws, the event has the level `error`, and the wrapper throws the same error again. `extra` has the key `error`, and `error_message` has the same text.
-- When the wrapped function returns a promise, the wrapper records the event after the promise settles. The time includes the wait for the promise. A rejection still reaches the caller.
-- `extra` has the key `args`. The value is the JSON text of the array of the arguments of the call. When the arguments cannot be made into JSON text, the value is `unserializable`.
-- The masking rules apply to `args`.
-- The value of `error` is the `message` of the error when it is an `Error` and the message is not blank. Else the value is `unknown error`.
+- `work` is a `Promise<T>`. `toEvent` is a function from the output to a `LogEvent`.
+- It starts a timer with `performance.now()` when it is called, awaits `work`, and gives the output of `work` to the caller without a change.
+- It calls `toEvent` with the output. It sets `latencyMs` of the event to the time of `work` after `toEvent`. Thus `toEvent` cannot set the latency. Then it calls `Logger.record` with the event.
+- When `work` rejects, it does not call `toEvent`, records no event, and the rejection reaches the caller.
 
 ### Send
 
@@ -120,13 +116,6 @@ Send rules:
 | --- | --- | --- |
 | `error` | `WINDOW/error` | The event `message`. If that message is empty and `target` is a DOM element, the message is `DOM source error: <tag> source`, where `tag` is the lower case tag name and `source` is the `src` attribute, or the `href` attribute when there is no `src`. Else the message is `window error`. |
 | `unhandledrejection` | `WINDOW/unhandledrejection` | `message` of the reason when the reason is an `Error`. Else the message is `unhandled rejection`. An empty message of an `Error` becomes `unknown error`. |
-
-### Action scope
-
-- `Logger.wrapAction` makes one scope for each call. `Logger.scope()` returns the scope of the call that runs now. The call must be in the part of the action before the first `await`. The scope still works after an `await`, until the action ends.
-- `scope.addInfo(key, value)` adds a key to the `extra` of the event that the wrapper records for that call. The keys `args` and `error` of the wrapper replace a key with the same name. The masking rules apply.
-- `Logger.scope()` outside a wrapped action returns a scope that ignores the calls. A call to `addInfo` on a scope after its action ended is also ignored. In both cases the logger writes a `console.warn`.
-- When the action throws, the event keeps the info that was added before the error.
 
 ### Masking
 

@@ -11,6 +11,11 @@ export type ClientLogEvent = {
   extra: LogFields;
 };
 
-export type LogScope = {
-  addInfo(key: string, value: string | number | boolean): void;
+export type LogEvent = {
+  action: string;
+  level: LogLevel;
+  errorMessage?: string | null;
+  context?: LogFields;
+  extra?: LogFields;
+  latencyMs?: number;
 };
