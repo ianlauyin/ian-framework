@@ -1,3 +1,2 @@
-export { Logger } from "./logger";
-export type { LogEvent, LogFields, LogLevel } from "./types";
-export { withLog } from "./with-log";
+export { Logger, capture } from "./logger";
+export type { LogFields, LogLevel } from "./types";

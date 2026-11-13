@@ -6,7 +6,7 @@ let initialized = false;
 let handlerRunning = false;
 
 // Gives each ApiError and NetworkConnectionException that no code caught to one handler.
-// The handler does not see other errors: Logger.watchWindowErrors records them.
+// The handler does not see other errors: Logger.init records them.
 export function setupExceptionHandler(handler: ExceptionHandler): void {
   if (initialized) throw new Error("setupExceptionHandler() is called twice");
   initialized = true;

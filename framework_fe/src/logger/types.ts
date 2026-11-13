@@ -10,12 +10,3 @@ export type ClientLogEvent = {
   context: LogFields;
   extra: LogFields;
 };
-
-export type LogEvent = {
-  action: string;
-  level: LogLevel;
-  errorMessage?: string | null;
-  context?: LogFields;
-  extra?: LogFields;
-  latencyMs?: number;
-};

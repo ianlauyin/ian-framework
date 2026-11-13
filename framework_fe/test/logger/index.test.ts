@@ -20,11 +20,11 @@ function sentEvents(call: number) {
   return JSON.parse(fetchMock.mock.calls[call][1].body).events;
 }
 
-let withLog: typeof import("../../src/logger").withLog;
+let capture: typeof import("../../src/logger").capture;
 
 async function loadLogger() {
-  const { Logger, withLog: loadedWithLog } = await import("../../src/logger");
-  withLog = loadedWithLog;
+  const { Logger, capture: loadedCapture } = await import("../../src/logger");
+  capture = loadedCapture;
   return Logger;
 }
 
@@ -53,8 +53,9 @@ afterEach(() => {
 describe("Logger", () => {
   it("sends the queued events as one batch on each 1 minute interval", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     Logger.info("started");
-    Logger.error("boom", { code: 42 }, "it broke");
+    Logger.error("boom", { code: 42 }, new Error("it broke"));
     await vi.advanceTimersByTimeAsync(59_999);
     expect(fetchMock).not.toHaveBeenCalled();
 
@@ -97,6 +98,7 @@ describe("Logger", () => {
 
   it("sends the queue with keepalive when the page is hidden", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     Logger.warn("leaving");
     hidePage();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -108,6 +110,7 @@ describe("Logger", () => {
 
   it("skips an empty message", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     Logger.info("  ");
     await vi.advanceTimersByTimeAsync(60_000);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -115,6 +118,7 @@ describe("Logger", () => {
 
   it("keeps the newest 1000 events", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     for (let index = 0; index < 1001; index++) Logger.info(`event ${index}`);
     await vi.advanceTimersByTimeAsync(60_000);
     const events = sentEvents(0);
@@ -124,7 +128,7 @@ describe("Logger", () => {
 
   it("masks the value of a matching context key and each match in a string value", async () => {
     const Logger = await loadLogger();
-    Logger.setMaskPatterns([/^(password|token)$/i, /secret=\S+/]);
+    Logger.init([/^(password|token)$/i, /secret=\S+/]);
     Logger.info("login secret=keep", {
       password: "hunter2",
       TOKEN: 1234,
@@ -145,6 +149,7 @@ describe("Logger", () => {
 
   it("keeps the context values when no mask pattern is set", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     Logger.info("login", { password: "hunter2" });
     hidePage();
     expect(sentEvents(0)[0].context).toEqual({
@@ -155,6 +160,7 @@ describe("Logger", () => {
 
   it("sends the events again after a failed send, before the newer events", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     fetchMock.mockRejectedValueOnce(new Error("offline"));
     fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
     Logger.info("first");
@@ -173,6 +179,7 @@ describe("Logger", () => {
 
   it("drops the events when the route rejects them with the status 400 to 405", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
     Logger.info("first");
     await vi.advanceTimersByTimeAsync(60_000);
@@ -183,6 +190,7 @@ describe("Logger", () => {
 
   it("keeps the queue size limit when it puts failed events back", async () => {
     const Logger = await loadLogger();
+    Logger.init([]);
     fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
     for (let i = 0; i < 1000; i++) Logger.info(`old-${i}`);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -196,13 +204,14 @@ describe("Logger", () => {
 
   it("records the same error only once in 5 seconds", async () => {
     const Logger = await loadLogger();
-    Logger.error("load", {}, "failed");
-    Logger.error("load", {}, "failed");
+    Logger.init([]);
+    Logger.error("load", {}, new Error("failed"));
+    Logger.error("load", {}, new Error("failed"));
     await vi.advanceTimersByTimeAsync(5000);
-    Logger.error("load", {}, "failed");
+    Logger.error("load", {}, new Error("failed"));
     await vi.advanceTimersByTimeAsync(1);
-    Logger.error("load", {}, "failed");
-    Logger.error("load", {}, "other");
+    Logger.error("load", {}, new Error("failed"));
+    Logger.error("load", {}, new Error("other"));
     Logger.info("load");
     Logger.info("load");
     hidePage();
@@ -225,6 +234,7 @@ describe("Logger", () => {
       },
     });
     const Logger = await loadLogger();
+    Logger.init([]);
     Logger.info("started");
     windowListeners.pagehide();
     expect(sendBeacon).toHaveBeenCalledOnce();
@@ -242,7 +252,7 @@ describe("Logger", () => {
       },
     });
     const Logger = await loadLogger();
-    Logger.watchWindowErrors();
+    Logger.init([]);
     windowListeners.error({ message: "boom" });
     windowListeners.error({ message: "" });
     windowListeners.unhandledrejection({ reason: new Error("rejected") });
@@ -278,7 +288,7 @@ describe("Logger", () => {
       },
     });
     const Logger = await loadLogger();
-    Logger.watchWindowErrors();
+    Logger.init([]);
     windowListeners.error({ message: "", target: new FakeElement() });
     hidePage();
     expect(sentEvents(0)[0].error_message).toBe("DOM source error: <script> /assets/app.js");
@@ -292,8 +302,7 @@ describe("Logger", () => {
       },
     });
     const Logger = await loadLogger();
-    Logger.setMaskPatterns([/secret-\d+/]);
-    Logger.watchWindowErrors();
+    Logger.init([/secret-\d+/]);
     windowListeners.error({ message: `bad secret-42 ${"x".repeat(5000)}` });
     hidePage();
     const [event] = sentEvents(0);
@@ -304,9 +313,9 @@ describe("Logger", () => {
 
   it("records warn with the error text and masks the call context", async () => {
     const Logger = await loadLogger();
-    Logger.setMaskPatterns([/^token$/]);
+    Logger.init([/^token$/]);
     Logger.warn("slow", { token: "abc", step: 1 }, new Error("timeout"));
-    Logger.warn("odd", {}, "plain");
+    Logger.warn("odd", {}, new Error("plain"));
     Logger.warn("none", {}, undefined);
     hidePage();
     const [first, second, third] = sentEvents(0);
@@ -322,8 +331,9 @@ describe("Logger", () => {
 
   it("sends a fallback error message when the message is empty", async () => {
     const Logger = await loadLogger();
-    Logger.error("a", {}, "");
-    Logger.error("b", {}, "   ");
+    Logger.init([]);
+    Logger.error("a", {}, new Error(""));
+    Logger.error("b", {}, new Error("   "));
     Logger.error("c", {}, new Error(""));
     hidePage();
     const events = sentEvents(0);
@@ -334,15 +344,15 @@ describe("Logger", () => {
     ]);
   });
 
-  describe("withLog", () => {
+  describe("capture", () => {
     it("records the event of the output with the latency and returns the output", async () => {
-      await loadLogger();
+      const Logger = await loadLogger();
+      Logger.init([]);
       const work = new Promise<number>((resolve) => setTimeout(() => resolve(7), 25));
-      const pending = withLog(work, (output) => ({
-        action: "cart/count",
+      const pending = capture(work, (output) => ({
         level: "info",
+        action: "cart/count",
         context: { count: output },
-        latencyMs: 999,
       }));
       await vi.advanceTimersByTimeAsync(25);
 
@@ -350,31 +360,37 @@ describe("Logger", () => {
       hidePage();
       const events = sentEvents(0);
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({ action: "cart/count", level: "info", latency_ms: 25 });
+      expect(events[0]).toMatchObject({ action: "cart/count", level: "info", latency_ms: 25, error_message: null });
       expect(events[0].context.count).toBe(7);
     });
 
-    it("lets the event choose the level and the error message", async () => {
-      await loadLogger();
-      const output = await withLog(Promise.resolve({ status: 500 }), (response) => ({
-        action: "api/save",
-        level: response.status >= 500 ? "error" : "info",
-        errorMessage: `response status ${response.status}`,
+    it("records warn and error from the callback", async () => {
+      const Logger = await loadLogger();
+      Logger.init([]);
+      await capture(Promise.resolve("slow"), () => ({
+        level: "warn",
+        action: "save",
+        error: new Error("timeout"),
       }));
-
-      expect(output).toEqual({ status: 500 });
-      hidePage();
-      expect(sentEvents(0)[0]).toMatchObject({
+      await capture(Promise.resolve("bad"), () => ({
         level: "error",
-        error_message: "response status 500",
-      });
+        action: "save",
+        error: new Error(""),
+      }));
+      hidePage();
+      const events = sentEvents(0);
+      expect(events.map((event: { level: string; error_message: string }) => [event.level, event.error_message])).toEqual([
+        ["warn", "timeout"],
+        ["error", "unknown error"],
+      ]);
     });
 
     it("does not record an event when the work rejects", async () => {
-      await loadLogger();
-      await expect(
-        withLog(Promise.reject(new Error("denied")), () => ({ action: "x", level: "info" })),
-      ).rejects.toThrow("denied");
+      const Logger = await loadLogger();
+      Logger.init([]);
+      await expect(capture(Promise.reject(new Error("denied")), () => ({ level: "info", action: "x" }))).rejects.toThrow(
+        "denied",
+      );
       hidePage();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -383,6 +399,7 @@ describe("Logger", () => {
   describe("context", () => {
     it("puts the added context in each later event", async () => {
       const Logger = await loadLogger();
+      Logger.init([]);
       Logger.info("before");
       Logger.addContext("user", "u1");
       Logger.addContext("beta", "on");
@@ -398,6 +415,7 @@ describe("Logger", () => {
 
     it("removes the named keys", async () => {
       const Logger = await loadLogger();
+      Logger.init([]);
       Logger.addContext("user", "u1");
       Logger.addContext("beta", "on");
       Logger.removeContext("user", "missing");
@@ -412,7 +430,7 @@ describe("Logger", () => {
 
     it("masks each match in the request url", async () => {
       const Logger = await loadLogger();
-      Logger.setMaskPatterns([/a=\d+/]);
+      Logger.init([/a=\d+/]);
       Logger.info("page");
       vi.advanceTimersByTime(60_000);
 
