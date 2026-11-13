@@ -146,15 +146,192 @@ describe("Logger", () => {
     expect(sentEvents(0)[0].extra).toEqual({ page: "/home", password: "hunter2" });
   });
 
-  it("ignores a failed send", async () => {
+  it("sends the events again after a failed send, before the newer events", async () => {
     const Logger = await loadLogger();
     fetchMock.mockRejectedValueOnce(new Error("offline"));
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
     Logger.info("first");
     await vi.advanceTimersByTimeAsync(60_000);
     Logger.info("second");
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    Logger.info("third");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(sentEvents(2).map((event: { action: string }) => event.action)).toEqual([
+      "first",
+      "second",
+      "third",
+    ]);
+  });
+
+  it("drops the events when the route rejects them with the status 400 to 405", async () => {
+    const Logger = await loadLogger();
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
+    Logger.info("first");
+    await vi.advanceTimersByTimeAsync(60_000);
+    Logger.info("second");
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(sentEvents(1)).toHaveLength(1);
+  });
+
+  it("keeps the queue size limit when it puts failed events back", async () => {
+    const Logger = await loadLogger();
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+    for (let i = 0; i < 1000; i++) Logger.info(`old-${i}`);
+    await vi.advanceTimersByTimeAsync(60_000);
+    Logger.info("new");
+    hidePage();
+    const events = sentEvents(1);
+    expect(events).toHaveLength(1000);
+    expect(events[0].action).toBe("old-1");
+    expect(events[999].action).toBe("new");
+  });
+
+  it("records the same error only once in 5 seconds", async () => {
+    const Logger = await loadLogger();
+    Logger.error("load", "failed");
+    Logger.error("load", "failed");
+    await vi.advanceTimersByTimeAsync(5000);
+    Logger.error("load", "failed");
+    await vi.advanceTimersByTimeAsync(1);
+    Logger.error("load", "failed");
+    Logger.error("load", "other");
+    Logger.info("load");
+    Logger.info("load");
+    hidePage();
+    expect(sentEvents(0).map((event: { level: string }) => event.level)).toEqual([
+      "error",
+      "error",
+      "error",
+      "info",
+      "info",
+    ]);
+  });
+
+  it("sends the queue with a beacon when the page is hidden for good", async () => {
+    const sendBeacon = vi.fn().mockReturnValue(true);
+    const windowListeners: Record<string, () => void> = {};
+    vi.stubGlobal("navigator", { sendBeacon });
+    vi.stubGlobal("window", {
+      addEventListener(type: string, listener: () => void) {
+        windowListeners[type] = listener;
+      },
+    });
+    const Logger = await loadLogger();
+    Logger.info("started");
+    windowListeners.pagehide();
+    expect(sendBeacon).toHaveBeenCalledOnce();
+    expect(sendBeacon.mock.calls[0][0]).toBe("/log");
+    expect(JSON.parse(await sendBeacon.mock.calls[0][1].text()).events).toHaveLength(1);
+    windowListeners.pagehide();
+    expect(sendBeacon).toHaveBeenCalledOnce();
+  });
+
+  describe("scope", () => {
+    it("adds the info of the scope to the event of the running action", async () => {
+      const Logger = await loadLogger();
+      const run = Logger.wrapAction("job/run", async (id: number) => {
+        const scope = Logger.scope();
+        scope.addInfo("step", "a");
+        await Promise.resolve();
+        scope.addInfo("count", id);
+      });
+      await run(3);
+      hidePage();
+      expect(sentEvents(0)[0].extra).toEqual({
+        page: "/home",
+        step: "a",
+        count: 3,
+        args: "[3]",
+      });
+    });
+
+    it("keeps the scope of an action that fails", async () => {
+      const Logger = await loadLogger();
+      const run = Logger.wrapAction("job/run", () => {
+        Logger.scope().addInfo("step", "a");
+        throw new Error("bad");
+      });
+      expect(() => run()).toThrow("bad");
+      hidePage();
+      expect(sentEvents(0)[0].extra).toMatchObject({ step: "a", error: "bad" });
+    });
+
+    it("ignores the info outside of an action and after the action ends", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const Logger = await loadLogger();
+      Logger.scope().addInfo("early", "x");
+      let late: ReturnType<typeof Logger.scope> | undefined;
+      Logger.wrapAction("job/run", () => {
+        late = Logger.scope();
+      })();
+      late?.addInfo("late", "x");
+      hidePage();
+      expect(sentEvents(0)[0].extra).toEqual({ page: "/home", args: "[]" });
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+    });
+  });
+
+  describe("startup performance", () => {
+    function stubNavigation(timing: object | undefined) {
+      Object.assign(fakeDocument, { readyState: "complete" });
+      vi.stubGlobal("performance", {
+        now: () => 0,
+        getEntriesByType: () => (timing ? [timing] : []),
+      });
+    }
+    const navigation = (loadEventEnd: number) => ({
+      type: "navigate",
+      startTime: 0,
+      requestStart: 10,
+      responseEnd: 50,
+      domInteractive: 100,
+      domComplete: 200,
+      loadEventEnd,
+    });
+
+    it("records the time to the end of the load", async () => {
+      stubNavigation(navigation(1234));
+      const Logger = await loadLogger();
+      Logger.watchStartupPerformance();
+      await vi.advanceTimersByTimeAsync(1);
+      hidePage();
+      expect(sentEvents(0)[0]).toMatchObject({
+        action: "@@framework/startup-performance",
+        level: "info",
+        latency_ms: 1234,
+        extra: {
+          navigation_type: "navigate",
+          http_start: 10,
+          http_end: 50,
+          dom_start: 100,
+          dom_end: 200,
+        },
+      });
+    });
+
+    it("records a warning for a slow startup", async () => {
+      stubNavigation(navigation(5000));
+      const Logger = await loadLogger();
+      Logger.watchStartupPerformance();
+      await vi.advanceTimersByTimeAsync(1);
+      hidePage();
+      expect(sentEvents(0)[0].level).toBe("warn");
+    });
+
+    it("records nothing when the load is not finished or there is no entry", async () => {
+      stubNavigation(navigation(0));
+      let Logger = await loadLogger();
+      Logger.watchStartupPerformance();
+      stubNavigation(undefined);
+      vi.resetModules();
+      Logger = await loadLogger();
+      Logger.watchStartupPerformance();
+      await vi.advanceTimersByTimeAsync(1);
+      hidePage();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 
   it("records a window error and an unhandled rejection as error events", async () => {
@@ -184,6 +361,27 @@ describe("Logger", () => {
       ["error", "WINDOW/unhandledrejection", "rejected"],
       ["error", "WINDOW/unhandledrejection", "unhandled rejection"],
     ]);
+  });
+
+  it("records a failed resource load with the tag and the source", async () => {
+    const windowListeners: Record<string, (event: unknown) => void> = {};
+    class FakeElement {
+      tagName = "SCRIPT";
+      getAttribute(name: string) {
+        return name === "src" ? "/assets/app.js" : null;
+      }
+    }
+    vi.stubGlobal("Element", FakeElement);
+    vi.stubGlobal("window", {
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        windowListeners[type] = listener;
+      },
+    });
+    const Logger = await loadLogger();
+    Logger.watchWindowErrors();
+    windowListeners.error({ message: "", target: new FakeElement() });
+    hidePage();
+    expect(sentEvents(0)[0].error_message).toBe("DOM source error: <script> /assets/app.js");
   });
 
   it("keeps a long window error message out of the action and masks it", async () => {

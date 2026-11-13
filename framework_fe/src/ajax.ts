@@ -1,44 +1,42 @@
-export interface ErrorBody {
-  message: string;
-}
+import { queryString, rawSend } from "./network";
 
-export class ApiError extends Error {
-  public readonly code: number;
-
-  constructor(code: number, errorBody: ErrorBody | null) {
-    super(typeof errorBody?.message === "string" ? errorBody.message : "Unknown error");
-    this.code = code;
-  }
-}
-
-type UnauthorizedHandler = () => void;
-
-let unauthorizedHandler: UnauthorizedHandler | undefined;
-
-export function setUnauthorizedHandler(handler?: UnauthorizedHandler) {
-  unauthorizedHandler = handler;
-}
+export {
+  ApiError,
+  type ErrorBody,
+  NetworkConnectionException,
+  type RequestInterceptor,
+  setRequestInterceptor,
+  setUnauthorizedHandler,
+} from "./network";
 
 type PathParams = Record<string, any> | null;
 type AJAXRequest = Record<string, any> | null;
 type AJAXResponse = Record<string, any> | null;
 
+type PathParamValues<Url extends string> = Url extends `${string}{${infer Name}}${infer Rest}`
+  ? { [Key in Name | keyof PathParamValues<Rest>]: string | number | boolean }
+  : Record<never, never>;
+
+type PathParamsArgument<Url extends string> = keyof PathParamValues<Url> extends never
+  ? [pathParams?: PathParams]
+  : [pathParams: PathParamValues<Url>];
+
 export const ajax = async <
   Req extends AJAXRequest,
   Res extends AJAXResponse,
-  P extends PathParams,
+  Url extends string = string,
 >(
-  url: string,
+  url: Url,
   method: "GET" | "DELETE" | "POST" | "PUT",
   request?: Req,
-  pathParams?: P,
+  ...[pathParams]: PathParamsArgument<Url>
 ): Promise<Res> => {
   const isGetOrDelete = method === "GET" || method === "DELETE";
 
   let parsedUrl =
     "/ajax" +
     url.replace(/{(\w+)}/g, (_, key) => {
-      const value = pathParams?.[key];
+      const value = (pathParams as PathParams)?.[key];
       if (value === undefined || value === null || value === "") {
         throw new Error(`Path param ${key} is required`);
       }
@@ -49,45 +47,13 @@ export const ajax = async <
       }
       return encodeURIComponent(text);
     });
-  if (isGetOrDelete && request) {
-    const query = new URLSearchParams();
-    for (const [key, value] of Object.entries(request)) {
-      if (value !== undefined) query.append(key, String(value));
-    }
-    const queryText = query.toString();
-    if (queryText !== "") parsedUrl = `${parsedUrl}?${queryText}`;
-  }
+  if (isGetOrDelete && request) parsedUrl += queryString(request);
 
-  const response: Response = await fetch(parsedUrl, {
+  const headers = new Headers();
+  if (!isGetOrDelete) headers.set("Content-Type", "application/json");
+  return rawSend(parsedUrl, {
     method,
-    credentials: "same-origin",
+    headers,
     body: isGetOrDelete ? undefined : JSON.stringify(request),
-    headers: isGetOrDelete ? undefined : { "Content-Type": "application/json" },
   });
-
-  const body = await response.text();
-
-  if (response.status === 401) {
-    unauthorizedHandler?.();
-  }
-
-  if (!response.ok) {
-    throw new ApiError(response.status, parseErrorBody(body));
-  }
-
-  if (!body) return null as Res;
-  try {
-    return JSON.parse(body);
-  } catch {
-    throw new ApiError(response.status, null);
-  }
 };
-
-// A proxy can answer with an HTML or text error page, which must still give an ApiError.
-function parseErrorBody(body: string): ErrorBody | null {
-  try {
-    return body ? JSON.parse(body) : null;
-  } catch {
-    return null;
-  }
-}

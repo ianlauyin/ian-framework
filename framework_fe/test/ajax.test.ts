@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { type ApiError, ajax, setUnauthorizedHandler } from "../src/ajax";
+import {
+  type ApiError,
+  ajax,
+  NetworkConnectionException,
+  setRequestInterceptor,
+  setUnauthorizedHandler,
+} from "../src/ajax";
 
 describe("ajax", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     setUnauthorizedHandler();
+    setRequestInterceptor();
   });
 
   it("sends GET requests with query parameters", async () => {
@@ -67,9 +74,9 @@ describe("ajax", () => {
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ name: "Alice" }),
-        headers: { "Content-Type": "application/json" },
       }),
     );
+    expect(fetchMock.mock.calls[0][1].headers.get("Content-Type")).toBe("application/json");
   });
 
   it("puts the path param value 0 in the URL", async () => {
@@ -104,7 +111,7 @@ describe("ajax", () => {
       const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
 
-      await expect(ajax("/x/{id}", "GET", null, { id: value })).rejects.toThrow(
+      await expect(ajax("/x/{id}", "GET", null, { id: value } as any)).rejects.toThrow(
         "Path param id is required",
       );
       expect(fetchMock).not.toHaveBeenCalled();
@@ -157,13 +164,13 @@ describe("ajax", () => {
 
     fetchMock.mockResolvedValueOnce({
       ok: false,
-      status: 502,
-      text: async () => "<html><body>Bad Gateway</body></html>",
+      status: 500,
+      text: async () => "<html><body>Server error</body></html>",
     });
     await expect(ajax("/item", "GET")).rejects.toMatchObject({
       name: "Error",
       message: "Unknown error",
-      code: 502,
+      code: 500,
     } satisfies Partial<ApiError>);
 
     fetchMock.mockResolvedValueOnce({
@@ -229,7 +236,7 @@ describe("ajax", () => {
     ).resolves.toBeNull();
   });
 
-  it("throws ApiError when a 2xx body is not JSON", async () => {
+  it("throws NetworkConnectionException when a 2xx body is not JSON", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -239,10 +246,88 @@ describe("ajax", () => {
       }),
     );
 
+    await expect(ajax("/item", "GET")).rejects.toBeInstanceOf(NetworkConnectionException);
+  });
+
+  it.each([0, 502, 504])(
+    "throws NetworkConnectionException for the status %i",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status, text: async () => "" }),
+      );
+
+      await expect(ajax("/item", "GET")).rejects.toMatchObject({
+        message: `HTTP ${status}`,
+        requestURL: "/ajax/item",
+      });
+    },
+  );
+
+  it("keeps ApiError for the status 503", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => JSON.stringify({ message: "maintenance" }),
+      }),
+    );
+
+    await expect(ajax("/item", "GET")).rejects.toMatchObject({ code: 503, message: "maintenance" });
+  });
+
+  it("throws NetworkConnectionException when fetch fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
     await expect(ajax("/item", "GET")).rejects.toMatchObject({
-      message: "Unknown error",
-      code: 200,
-    } satisfies Partial<ApiError>);
+      message: "Failed to fetch",
+      requestURL: "/ajax/item",
+    });
+  });
+
+  it("lets the request interceptor change the headers", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, text: async () => "" });
+    vi.stubGlobal("fetch", fetchMock);
+    setRequestInterceptor(({ headers }) => headers.set("X-Token", "abc"));
+
+    await ajax("/item", "GET");
+
+    expect(fetchMock.mock.calls[0][1].headers.get("X-Token")).toBe("abc");
+  });
+
+  it("turns an ISO date text in the response into a Date", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            at: "2026-10-25T20:00:00+08:00",
+            day: "2026-10-25",
+            nested: [{ at: "2026-10-25T12:00:00.123Z" }],
+          }),
+      }),
+    );
+
+    const result: any = await ajax("/item", "GET");
+
+    expect(result.at).toEqual(new Date("2026-10-25T12:00:00Z"));
+    expect(result.day).toBe("2026-10-25");
+    expect(result.nested[0].at).toEqual(new Date("2026-10-25T12:00:00.123Z"));
+  });
+
+  it("sends a Date in the query as an ISO text", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, text: async () => "" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ajax("/item", "GET", { since: new Date("2026-10-25T12:00:00Z") });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/ajax/item?since=2026-10-25T12%3A00%3A00.000Z",
+      expect.anything(),
+    );
   });
 
   it("refuses a path param that is a dot segment", async () => {

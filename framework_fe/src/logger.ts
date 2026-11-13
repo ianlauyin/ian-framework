@@ -5,6 +5,8 @@ const FLUSH_INTERVAL = 60_000;
 const MAX_QUEUE = 1000;
 const MASK = "***";
 const UNKNOWN_ERROR = "unknown error";
+const DUPLICATE_ERROR_WINDOW = 5000;
+const SLOW_STARTUP_THRESHOLD = 5000;
 
 export type LogLevel = "info" | "warn" | "error";
 export type LogFields = Record<string, string | number | boolean>;
@@ -19,8 +21,35 @@ type ClientLogEvent = {
   extra: LogFields;
 };
 
+export type LogScope = {
+  addInfo(key: string, value: string | number | boolean): void;
+};
+
+class ActionScope implements LogScope {
+  private readonly info: LogFields = {};
+  private closed = false;
+
+  addInfo(key: string, value: string | number | boolean): void {
+    if (this.closed) {
+      console.warn(`scope.addInfo(${key}) is ignored, because the action is out of its scope`);
+    } else {
+      this.info[key] = value;
+    }
+  }
+
+  close(): LogFields {
+    this.closed = true;
+    return this.info;
+  }
+}
+
+const OUT_OF_SCOPE = new ActionScope();
+OUT_OF_SCOPE.close();
+
 export class Logger {
   private static queue: ClientLogEvent[] = [];
+  private static scopes: ActionScope[] = [];
+  private static sending = false;
   private static started = false;
   private static masks: RegExp[] = [];
   private static context: LogFields = {};
@@ -43,15 +72,35 @@ export class Logger {
   }
 
   public static watchWindowErrors(): void {
-    window.addEventListener("error", (event) => {
-      const message = event.message || "window error";
-      Logger.error("WINDOW/error", message);
-    });
+    // The capture phase is the only way to see a failed script, style or image load, as these events do not bubble.
+    window.addEventListener(
+      "error",
+      (event) => {
+        const message = event.message || Logger.domSourceMessage(event.target) || "window error";
+        Logger.error("WINDOW/error", message);
+      },
+      true,
+    );
     window.addEventListener("unhandledrejection", (event) => {
       const reason = event.reason;
       const message = reason instanceof Error ? reason.message : "unhandled rejection";
       Logger.error("WINDOW/unhandledrejection", message);
     });
+  }
+
+  // Returns the scope of the running wrapped action. Call it before the first `await` of the action.
+  // The scope can be used after an `await`, until the action ends.
+  public static scope(): LogScope {
+    return Logger.scopes[Logger.scopes.length - 1] ?? OUT_OF_SCOPE;
+  }
+
+  public static watchStartupPerformance(): void {
+    const log = () => setTimeout(Logger.recordStartupPerformance, 0);
+    if (document.readyState === "complete") {
+      log();
+    } else {
+      window.addEventListener("load", log, { once: true });
+    }
   }
 
   public static info(action: string, extra?: LogFields): void {
@@ -73,24 +122,29 @@ export class Logger {
     return (...args) => {
       const start = performance.now();
       const argsExtra = Logger.argsExtra(args);
-      const succeed = () => Logger.record("info", name, null, argsExtra, performance.now() - start);
+      const scope = new ActionScope();
+      const succeed = () =>
+        Logger.record("info", name, null, { ...scope.close(), ...argsExtra }, performance.now() - start);
       const fail = (error: unknown) => {
         const failure = Logger.failure(error);
         Logger.record(
           "error",
           name,
           failure.error,
-          { ...argsExtra, ...failure },
+          { ...scope.close(), ...argsExtra, ...failure },
           performance.now() - start,
         );
       };
 
       let result: Result;
+      Logger.scopes.push(scope);
       try {
         result = action(...args);
       } catch (error) {
         fail(error);
         throw error;
+      } finally {
+        Logger.scopes.pop(); // only the sync part of the action runs here
       }
       if (!(result instanceof Promise)) {
         succeed();
@@ -123,6 +177,12 @@ export class Logger {
     return wrapped as Context;
   }
 
+  private static domSourceMessage(target: EventTarget | null): string | null {
+    if (typeof Element === "undefined" || !(target instanceof Element)) return null;
+    const source = target.getAttribute("src") ?? target.getAttribute("href") ?? "";
+    return `DOM source error: <${target.tagName.toLowerCase()}> ${source}`.trim();
+  }
+
   private static argsExtra(args: unknown[]): LogFields {
     try {
       return { args: JSON.stringify(args) };
@@ -146,8 +206,7 @@ export class Logger {
     if (action.trim() === "") return;
     Logger.start();
 
-    if (Logger.queue.length >= MAX_QUEUE) Logger.queue.shift();
-    Logger.queue.push({
+    const event: ClientLogEvent = {
       ts: hktIsoString(new Date()),
       action,
       latency_ms: latencyMs === undefined ? null : Math.round(latencyMs),
@@ -155,7 +214,41 @@ export class Logger {
       error_message: Logger.errorMessage(level, errorMessage),
       context: { request_url: Logger.maskText(location.href), ...Logger.context },
       extra: Logger.mask({ page: location.pathname, ...extra }),
-    });
+    };
+    if (Logger.isRepeatedError(event)) return;
+
+    if (Logger.queue.length >= MAX_QUEUE) Logger.queue.shift();
+    Logger.queue.push(event);
+  }
+
+  // A loop can make the same error many times. The queue keeps one event for the same action and message in 5 seconds.
+  private static isRepeatedError(event: ClientLogEvent): boolean {
+    const last = Logger.queue[Logger.queue.length - 1];
+    return (
+      event.level === "error" &&
+      last !== undefined &&
+      last.level === "error" &&
+      last.action === event.action &&
+      last.error_message === event.error_message &&
+      Date.parse(event.ts) - Date.parse(last.ts) <= DUPLICATE_ERROR_WINDOW
+    );
+  }
+
+  private static recordStartupPerformance(): void {
+    const timing = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    // loadEventEnd is zero until the load handlers return
+    if (!timing || timing.loadEventEnd <= 0) return;
+
+    const elapsed = Math.round(timing.loadEventEnd - timing.startTime);
+    const extra = {
+      navigation_type: timing.type,
+      http_start: Math.round(timing.requestStart),
+      http_end: Math.round(timing.responseEnd),
+      dom_start: Math.round(timing.domInteractive),
+      dom_end: Math.round(timing.domComplete),
+    };
+    const level = elapsed >= SLOW_STARTUP_THRESHOLD ? "warn" : "info";
+    Logger.record(level, "@@framework/startup-performance", null, extra, elapsed);
   }
 
   private static errorMessage(level: LogLevel, errorMessage: string | null): string | null {
@@ -192,22 +285,49 @@ export class Logger {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") Logger.flush(true);
     });
+    if (typeof window !== "undefined") window.addEventListener("pagehide", () => Logger.beacon());
     setInterval(() => Logger.flush(false), FLUSH_INTERVAL);
   }
 
-  private static flush(keepalive: boolean): void {
+  // A beacon is sent even when the page is closing. It cannot be read back, so a failed beacon loses the events.
+  private static beacon(): void {
     if (Logger.queue.length === 0) return;
+    if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") {
+      Logger.flush(true);
+      return;
+    }
 
     const events = Logger.queue;
     Logger.queue = [];
-    fetch(LOG_URL, {
-      method: "POST",
-      credentials: "same-origin",
-      keepalive,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ events }),
-    }).catch(() => {
-      // ignore failures — logging is best-effort
-    });
+    const body = new Blob([JSON.stringify({ events })], { type: "application/json" });
+    if (!navigator.sendBeacon(LOG_URL, body)) Logger.restore(events);
+  }
+
+  private static async flush(keepalive: boolean): Promise<void> {
+    if (Logger.queue.length === 0 || Logger.sending) return;
+
+    const events = Logger.queue;
+    Logger.queue = [];
+    Logger.sending = true;
+    try {
+      const response = await fetch(LOG_URL, {
+        method: "POST",
+        credentials: "same-origin",
+        keepalive,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ events }),
+      });
+      // The status 400 to 405 fails again with the same events, so the events are dropped. Other failures send again later.
+      const isRejected = response.status >= 400 && response.status <= 405;
+      if (!response.ok && !isRejected) Logger.restore(events);
+    } catch {
+      Logger.restore(events);
+    } finally {
+      Logger.sending = false;
+    }
+  }
+
+  private static restore(events: ClientLogEvent[]): void {
+    Logger.queue = [...events, ...Logger.queue].slice(-MAX_QUEUE);
   }
 }

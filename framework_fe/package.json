@@ -7,6 +7,11 @@
   "exports": {
     "./version": "./src/version.ts",
     "./ajax": "./src/ajax.ts",
+    "./exception-handler": "./src/exception-handler.ts",
+    "./upload": "./src/upload.ts",
+    "./download-file": "./src/download-file.ts",
+    "./storage": "./src/storage.ts",
+    "./sleep": "./src/sleep.ts",
     "./logger": "./src/logger.ts",
     "./time": "./src/time.ts",
     "./error-boundary": {

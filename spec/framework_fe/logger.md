@@ -18,6 +18,7 @@ This feature is not product business logic.
 | `Logger` | class | The logger. All methods are static. |
 | `LogLevel` | type | `"info"`, `"warn"` or `"error"`. |
 | `LogFields` | type | `Record<string, string \| number \| boolean>`. |
+| `LogScope` | type | `{ addInfo(key, value): void }`. `value` is a string, a number or a `bool`. |
 
 `Logger` has these methods:
 
@@ -32,6 +33,8 @@ This feature is not product business logic.
 | `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 | `Logger.setMaskPatterns(patterns)` | Sets the mask patterns. `patterns` is a `RegExp[]`. |
 | `Logger.watchWindowErrors()` | Records the window errors and the unhandled promise rejections. |
+| `Logger.watchStartupPerformance()` | Records one event for the time of the page start. The rules are in the section "Startup performance". |
+| `Logger.scope()` | Returns the scope of the wrapped action that runs. The rules are in the section "Action scope". |
 
 ## Behaviour
 
@@ -41,6 +44,7 @@ This feature is not product business logic.
 - When `action` has only whitespace or is empty, the logger does not record the event.
 - The first recorded event starts the send timers.
 - The queue keeps a maximum of 1000 events. When the queue is full, a new event removes the oldest event.
+- An `error` event is not put in the queue when the last event in the queue is an `error` event with the same `action` and the same `error_message`, and the two `ts` values are 5 seconds or less apart. The check uses the last event only.
 
 The event has these fields:
 
@@ -93,6 +97,7 @@ The logger posts the queue to the route `POST /log` on the same origin. The rout
 | --- | --- |
 | Each 60 seconds | `false` |
 | The page becomes hidden (`visibilitychange` with `document.visibilityState` equal to `hidden`) | `true` |
+| The `pagehide` event of the window | Not used. The logger uses `navigator.sendBeacon`, with the same URL and body. Without `sendBeacon`, it sends as for a hidden page. |
 
 The request has these properties:
 
@@ -105,17 +110,34 @@ The request has these properties:
 Send rules:
 
 - An empty queue does not send a request.
-- The logger empties the queue before the request.
-- The logger ignores a failed request and the response status. It does not put the events back in the queue. It does not try again.
+- The logger empties the queue before the request. Only one request runs at a time. A send that starts while another runs is skipped.
+- When the request fails, or the status is not 2xx and not 400 to 405, the logger puts the events back in front of the newer events. The queue still keeps only the newest 1000 events. The events go out in the next send.
+- When the status is 400 to 405, the logger drops the events, because the same events would fail again.
+- A `sendBeacon` call that returns `false` puts the events back in the same way. The logger cannot read the result of the beacon later.
 
 ### Window errors
 
-`Logger.watchWindowErrors` adds two window listeners. Each listener records one `error` event. `action` is a fixed text, so the text of a window error does not become the action. The message goes only in `error_message`, which the masking applies to.
+`Logger.watchWindowErrors` adds two window listeners. The `error` listener uses the capture phase, so that it also sees a script, a style or an image that failed to load. Each listener records one `error` event. `action` is a fixed text, so the text of a window error does not become the action. The message goes only in `error_message`, which the masking applies to.
 
 | Window event | `action` | `error_message` |
 | --- | --- | --- |
-| `error` | `WINDOW/error` | The event `message`. If that message is empty, the message is `window error`. |
+| `error` | `WINDOW/error` | The event `message`. If that message is empty and `target` is a DOM element, the message is `DOM source error: <tag> source`, where `tag` is the lower case tag name and `source` is the `src` attribute, or the `href` attribute when there is no `src`. Else the message is `window error`. |
 | `unhandledrejection` | `WINDOW/unhandledrejection` | `message` of the reason when the reason is an `Error`. Else the message is `unhandled rejection`. An empty message of an `Error` becomes `unknown error`. |
+
+### Action scope
+
+- `Logger.wrapAction` makes one scope for each call. `Logger.scope()` returns the scope of the call that runs now. The call must be in the part of the action before the first `await`. The scope still works after an `await`, until the action ends.
+- `scope.addInfo(key, value)` adds a key to the `extra` of the event that the wrapper records for that call. The keys `args` and `error` of the wrapper replace a key with the same name. The masking rules apply.
+- `Logger.scope()` outside a wrapped action returns a scope that ignores the calls. A call to `addInfo` on a scope after its action ended is also ignored. In both cases the logger writes a `console.warn`.
+- When the action throws, the event keeps the info that was added before the error.
+
+### Startup performance
+
+- `Logger.watchStartupPerformance()` waits for the `load` event of the page. When the page is already loaded, it does not wait. Then it reads the navigation entry in the next task.
+- When there is no navigation entry, or `loadEventEnd` is 0, the logger records nothing.
+- The event has the action `@@framework/startup-performance`. `latency_ms` is `loadEventEnd` minus `startTime`, rounded.
+- `extra` has `navigation_type`, and the rounded times `http_start` (`requestStart`), `http_end` (`responseEnd`), `dom_start` (`domInteractive`) and `dom_end` (`domComplete`).
+- The level is `warn` when the time is 5000 ms or more. Else the level is `info`.
 
 ### Masking
 
@@ -146,6 +168,5 @@ The Rust shipper also masks the events from the log route. The browser patterns 
 This feature does not include these items:
 
 - A default mask pattern.
-- A retry of a failed send.
-- A send on a page unload other than the `visibilitychange` event.
+- A delay between retries other than the 60 second send timer.
 - Nested values in `extra`.
