@@ -73,13 +73,6 @@ impl GcsClient {
         })
     }
 
-    pub async fn get_bytes(&self, name: &str) -> Result<Option<Vec<u8>>, Exception> {
-        match self.open_object(name).await? {
-            Some(reader) => reader.read_to_vec().await.map(Some),
-            None => Ok(None),
-        }
-    }
-
     pub async fn open_object(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
         validate_object_name(name)?;
         let result = self
@@ -332,7 +325,7 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    // A missing object is a normal result of `open_object`, `stat` and `get_bytes`, so it is an info record.
+    // A missing object is a normal result of `open_object` and `stat`, so it is an info record.
     async fn with_op_log<T>(
         &self,
         operation: &str,

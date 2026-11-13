@@ -14,7 +14,7 @@ use crate::gcp::error::to_exception;
 
 pub const OBJECT_TOO_LARGE: &str = "OBJECT_TOO_LARGE";
 
-const READ_TO_VEC_LIMIT: u64 = 256 * 1024 * 1024;
+const INTO_BYTES_LIMIT: u64 = 256 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectMeta {
@@ -54,14 +54,14 @@ impl ObjectReader {
         }))
     }
 
-    pub(crate) async fn read_to_vec(mut self) -> Result<Vec<u8>, Exception> {
-        if u64::try_from(self.response.object().size).is_ok_and(|size| size > READ_TO_VEC_LIMIT) {
+    pub async fn into_bytes(mut self) -> Result<Vec<u8>, Exception> {
+        if u64::try_from(self.response.object().size).is_ok_and(|size| size > INTO_BYTES_LIMIT) {
             return Err(too_large_exception());
         }
         let mut body = Vec::new();
         while let Some(chunk) = self.response.next().await {
             let chunk = chunk.map_err(body_read_exception)?;
-            if (body.len() + chunk.len()) as u64 > READ_TO_VEC_LIMIT {
+            if (body.len() + chunk.len()) as u64 > INTO_BYTES_LIMIT {
                 return Err(too_large_exception());
             }
             body.extend_from_slice(&chunk);
@@ -85,6 +85,6 @@ fn body_read_exception(err: google_cloud_storage::Error) -> Exception {
 fn too_large_exception() -> Exception {
     exception!(
         code = OBJECT_TOO_LARGE,
-        "object is larger than the 256 MiB limit of get_bytes, so use open_object and into_stream",
+        "object is larger than the 256 MiB limit of into_bytes, so use into_stream",
     )
 }

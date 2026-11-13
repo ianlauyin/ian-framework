@@ -84,7 +84,7 @@ When the object does not exist, the methods give these results:
 | Methods | Result |
 | --- | --- |
 | `GcsClient::delete_object` | `Ok` |
-| `get_bytes`, `open_object`, `stat` | `None` |
+| `open_object`, `stat` | `None` |
 
 ## Operations
 
@@ -93,7 +93,6 @@ These methods are on `GcsClient`:
 | Method | Effect |
 | --- | --- |
 | `put_object` | Puts one `PutRequest`. |
-| `get_bytes` | Gets the object bytes or `None`. An object larger than 256 MiB is a `OBJECT_TOO_LARGE` error. Use `open_object` and `into_stream` for a large object. |
 | `open_object` | Opens the object data or returns `None`. |
 | `stat` | Reads the object metadata or returns `None`. |
 | `list_page` | Lists one page. |
@@ -102,6 +101,11 @@ These methods are on `GcsClient`:
 | `rewrite_object` | Copies an object in the same bucket. |
 | `move_object` | Moves an object in the same bucket. |
 | `signed_get_url` | Builds a V4 signed GET URL. |
-`ObjectReader` has one method. `into_stream` reads the object data as a stream of `bytes::Bytes` chunks. The stream does not copy a chunk.
+`ObjectReader` has two methods. The project chooses one of them:
+
+| Method | Effect |
+| --- | --- |
+| `into_stream` | Reads the object data as a stream of `bytes::Bytes` chunks. The stream does not copy a chunk. |
+| `into_bytes` | Reads the full object data into a `Vec<u8>`. An object larger than 256 MiB is an `OBJECT_TOO_LARGE` error. Use `into_stream` for a large object. |
 
 The `Debug` output of an `ObjectReader` shows the object size.
