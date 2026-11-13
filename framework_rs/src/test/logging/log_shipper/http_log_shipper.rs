@@ -22,7 +22,7 @@ fn invalid_post_api_key_returns_an_exception() {
     let err = HttpLogShipper::new("api", "https://logs.example".to_string(), "log\u{7f}key")
         .err()
         .unwrap();
-    assert_eq!(err.code(), "LOG_CONFIG");
+    assert_eq!(err.code(), "API_KEY_HEADER_INVALID");
     assert!(err.message().contains("not a valid header value"));
     assert!(!format!("{err:?}").contains("log\u{7f}key"));
 }

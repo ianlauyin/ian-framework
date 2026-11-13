@@ -7,6 +7,8 @@ use crate::exception::Exception;
 use crate::exception::Severity;
 use crate::http::error_code;
 
+pub const PASSWORD_HASH_FAILED: &str = "PASSWORD_HASH_FAILED";
+
 pub(crate) const MAX_PASSWORD_BYTES: usize = 256;
 
 pub async fn hash_password(password: &str) -> Result<String, Exception> {
@@ -22,7 +24,7 @@ pub async fn hash_password(password: &str) -> Result<String, Exception> {
         .map(|hash| hash.to_string())
         .map_err(|err| {
             exception!(
-                code = "AUTH_HASH_FAILED",
+                code = PASSWORD_HASH_FAILED,
                 "password hash failed",
                 source = err
             )

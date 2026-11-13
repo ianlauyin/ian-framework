@@ -30,7 +30,7 @@ This feature is not product business logic.
 
 | Code | Condition |
 | --- | --- |
-| `REDIS_CONFIG` | The URL is not a Redis URL. |
+| `REDIS_URL_INVALID` | The URL is not a Redis URL. |
 | `REDIS_UNREACHABLE` | The connection fails. The `PING` command fails. Redis does not reply `PONG`. |
 
 The error messages do not contain the Redis URL.

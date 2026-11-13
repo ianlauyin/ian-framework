@@ -12,6 +12,8 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::gcp::error::to_exception;
 
+pub const OBJECT_TOO_LARGE: &str = "OBJECT_TOO_LARGE";
+
 const READ_TO_VEC_LIMIT: u64 = 256 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,7 +84,7 @@ fn body_read_exception(err: google_cloud_storage::Error) -> Exception {
 
 fn too_large_exception() -> Exception {
     exception!(
-        code = "GCP_CONFIG",
+        code = OBJECT_TOO_LARGE,
         "object is larger than the 256 MiB limit of get_bytes, so use open_object and byte_stream",
     )
 }

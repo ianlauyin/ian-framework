@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use crate::exception;
 use crate::exception::Exception;
 
+pub const CONTENT_TYPE_INVALID: &str = "CONTENT_TYPE_INVALID";
+
 const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +33,7 @@ impl PutOptions {
             Some(value) => {
                 if value.is_empty() || !value.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
                     return Err(exception!(
-                        code = "GCP_CONFIG",
+                        code = CONTENT_TYPE_INVALID,
                         "content type is empty or is not printable ASCII",
                     ));
                 }

@@ -53,11 +53,12 @@ The only way to make an exception is the macro `exception!`. It is exported at t
 | Code | Condition |
 | --- | --- |
 | `ENV_MISSING`, `ENV_NOT_UNICODE` | The `env` module. See `spec/framework_rs/env/read.md`. |
-| `REDIS_CONFIG`, `REDIS_UNREACHABLE` | The `redis` feature. See `spec/framework_rs/redis/context.md`. |
-| `AUTH_CONFIG`, `AUTH_STORE`, `AUTH_HASH_FAILED`, `AUTH_RANDOM` | The `auth` feature. See `spec/framework_rs/auth/context.md`. |
-| `GCP_AUTH`, `GCP_CONFIG`, `GCP_API`, `GCP_TRANSPORT` | The `gcp` feature and the `gcs` feature. See `spec/framework_rs/gcp/context.md`. |
-| `GCS_NOT_FOUND`, `GCS_UNAVAILABLE`, `GCS_LOCAL` | The `gcs` feature. See `spec/framework_rs/gcp/storage/context.md`. |
+| `REDIS_URL_INVALID`, `REDIS_UNREACHABLE` | The `redis` feature. See `spec/framework_rs/redis/context.md`. |
+| `SESSION_CONFIG_INVALID`, `SESSION_STORE_COMMAND_FAILED`, `PASSWORD_HASH_FAILED`, `RANDOM_SOURCE_FAILED` | The `auth` feature. See `spec/framework_rs/auth/context.md`. |
+| `AUTH_FAILED`, `API_FAILED`, `TRANSPORT_FAILED`, `RESOURCE_NOT_FOUND`, `SERVICE_UNAVAILABLE`, and the codes of one specific error | The `gcp` feature and the `gcs` feature. See `spec/framework_rs/gcp/context.md` and `spec/framework_rs/gcp/storage/context.md`. |
+| `RATE_LIMIT_PRUNE_AT_INVALID` | `RateLimiter::new`. See `spec/framework_rs/http/rate-limit.md`. |
+| `MASK_PATTERN_INVALID`, `API_KEY_HEADER_INVALID`, `HTTP_CLIENT_BUILD_FAILED` | The `logging` module. See `spec/framework_rs/logging/`. |
 
-- A code is an upper case string that the caller writes at the call site. A project can use its own string as a code.
+- A code is an upper case string that the caller writes at the call site. It is a short name that describes the error, such as `SECRET_VALUE_EMPTY`. It is not only the scope of the error, such as `GCP_CONFIG`. A project can use its own string as a code.
 - `Exception` has no HTTP status. The `exception` module does not use `axum` or `ian_framework::http`.
 - The well-known codes are in `spec/framework_rs/http/api-error.md`.

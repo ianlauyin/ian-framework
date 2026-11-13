@@ -2,19 +2,23 @@ use std::time::Duration;
 
 use crate::exception;
 use crate::exception::Exception;
+
+pub const ATTACHMENT_FILENAME_EMPTY: &str = "ATTACHMENT_FILENAME_EMPTY";
+pub const SIGNED_URL_LIFETIME_TOO_LONG: &str = "SIGNED_URL_LIFETIME_TOO_LONG";
+pub const SIGNED_URL_LIFETIME_TOO_SHORT: &str = "SIGNED_URL_LIFETIME_TOO_SHORT";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
 
 pub(crate) fn validate_lifetime(expires_in: Duration) -> Result<Duration, Exception> {
     let seconds = expires_in.as_secs();
     if seconds == 0 {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = SIGNED_URL_LIFETIME_TOO_SHORT,
             "signed URL lifetime must be at least 1 second",
         ));
     }
     if seconds > MAX_SIGNED_URL_SECONDS {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = SIGNED_URL_LIFETIME_TOO_LONG,
             "signed URL lifetime must be at most 604800 seconds",
         ));
     }
@@ -24,7 +28,7 @@ pub(crate) fn validate_lifetime(expires_in: Duration) -> Result<Duration, Except
 pub(crate) fn content_disposition_value(filename: &str) -> Result<String, Exception> {
     if filename.is_empty() {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = ATTACHMENT_FILENAME_EMPTY,
             "attachment filename is empty",
         ));
     }

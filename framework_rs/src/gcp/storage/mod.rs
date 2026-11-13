@@ -30,6 +30,22 @@ pub use crate::gcp::storage::list::{ListPage, ListQuery};
 pub use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
 pub use crate::gcp::storage::put_request::{PutBody, PutOptions, PutRequest};
 
+pub const BUCKET_NAME_INVALID: &str = "BUCKET_NAME_INVALID";
+pub const CLIENT_BUILD_FAILED: &str = "CLIENT_BUILD_FAILED";
+pub const FILE_METADATA_FAILED: &str = "FILE_METADATA_FAILED";
+pub const FILE_OPEN_FAILED: &str = "FILE_OPEN_FAILED";
+pub const METADATA_INVALID: &str = "METADATA_INVALID";
+pub const MOVE_SAME_OBJECT: &str = "MOVE_SAME_OBJECT";
+pub const NOT_A_FILE: &str = "NOT_A_FILE";
+pub const OBJECT_NAME_INVALID: &str = "OBJECT_NAME_INVALID";
+pub const RESOURCE_NOT_FOUND: &str = "RESOURCE_NOT_FOUND";
+pub const REWRITE_NO_OBJECT: &str = "REWRITE_NO_OBJECT";
+pub const REWRITE_STEP_LIMIT: &str = "REWRITE_STEP_LIMIT";
+pub const REWRITE_TOKEN_STUCK: &str = "REWRITE_TOKEN_STUCK";
+pub const SIGNER_EMAIL_INVALID: &str = "SIGNER_EMAIL_INVALID";
+pub const SIGN_URL_FAILED: &str = "SIGN_URL_FAILED";
+pub const URL_SIGNER_BUILD_FAILED: &str = "URL_SIGNER_BUILD_FAILED";
+
 // The most rewrite calls for one object. A rewrite that needs more is a fault.
 const MAX_REWRITE_STEPS: u32 = 10_000;
 // GCS refuses a longer object name.
@@ -54,10 +70,18 @@ impl GcsClient {
         let bucket = bucket_name.into();
         validate_bucket(&bucket)?;
         let storage = Storage::builder().build().await.map_err(|err| {
-            exception!(code = "GCP_AUTH", "cannot build the client", source = err)
+            exception!(
+                code = CLIENT_BUILD_FAILED,
+                "cannot build the client",
+                source = err
+            )
         })?;
         let control = StorageControl::builder().build().await.map_err(|err| {
-            exception!(code = "GCP_AUTH", "cannot build the client", source = err)
+            exception!(
+                code = CLIENT_BUILD_FAILED,
+                "cannot build the client",
+                source = err
+            )
         })?;
         Ok(Self {
             inner: Arc::new(Inner {
@@ -204,18 +228,24 @@ impl GcsClient {
                     .map_err(|err| to_exception("rewrite object failed", err))?;
                 if !step.done {
                     if step.rewrite_token == token {
-                        return Err(exception!(code = "GCP_API", "rewrite token did not change"));
+                        return Err(exception!(
+                            code = REWRITE_TOKEN_STUCK,
+                            "rewrite token did not change"
+                        ));
                     }
                     token = step.rewrite_token;
                     continue;
                 }
                 return match step.resource {
                     Some(object) => Ok(ObjectMeta::from(object)),
-                    None => Err(exception!(code = "GCP_API", "rewrite gave no object")),
+                    None => Err(exception!(
+                        code = REWRITE_NO_OBJECT,
+                        "rewrite gave no object"
+                    )),
                 };
             }
             Err(exception!(
-                code = "GCP_API",
+                code = REWRITE_STEP_LIMIT,
                 "rewrite did not finish within the step limit",
             ))
         })
@@ -280,7 +310,7 @@ impl GcsClient {
     pub async fn move_object(&self, from: &str, to: &str) -> Result<ObjectMeta, Exception> {
         if from == to {
             return Err(exception!(
-                code = "GCP_CONFIG",
+                code = MOVE_SAME_OBJECT,
                 "move source and destination are the same object",
             ));
         }
@@ -312,7 +342,7 @@ impl GcsClient {
             builder
                 .sign_with(&self.inner.signer)
                 .await
-                .map_err(|err| exception!(code = "GCP_AUTH", "sign URL failed", source = err))
+                .map_err(|err| exception!(code = SIGN_URL_FAILED, "sign URL failed", source = err))
         })
         .await
     }
@@ -360,7 +390,7 @@ impl GcsClient {
         let started = Instant::now();
         let result = work.await;
         if let Err(err) = &result {
-            if err.code() != "GCS_NOT_FOUND" {
+            if err.code() != RESOURCE_NOT_FOUND {
                 self.write_ops_record(OpsRecord {
                     operation,
                     object,
@@ -400,7 +430,7 @@ struct Inner {
 pub(crate) fn not_found_as_none<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
     match result {
         Ok(value) => Ok(Some(value)),
-        Err(err) if err.code() == "GCS_NOT_FOUND" => Ok(None),
+        Err(err) if err.code() == RESOURCE_NOT_FOUND => Ok(None),
         Err(err) => Err(err),
     }
 }
@@ -413,7 +443,7 @@ pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {
         || name.contains(['\r', '\n'])
     {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = OBJECT_NAME_INVALID,
             "object name is empty, too long, `.`, `..` or contains a line break",
         ));
     }
@@ -424,7 +454,7 @@ pub(crate) fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(
     for (key, value) in metadata {
         if key.is_empty() || key.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
             return Err(exception!(
-                code = "GCP_CONFIG",
+                code = METADATA_INVALID,
                 "metadata key is empty or metadata contains a line break",
             ));
         }
@@ -438,7 +468,7 @@ pub(crate) fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
         || !bucket_name.is_ascii()
     {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = BUCKET_NAME_INVALID,
             "bucket name is empty or contains a forbidden character",
         ));
     }
@@ -448,7 +478,7 @@ pub(crate) fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
 fn build_signer(signer_email: Option<&str>) -> Result<Signer, Exception> {
     let build_failed = |err| {
         exception!(
-            code = "GCP_CONFIG",
+            code = URL_SIGNER_BUILD_FAILED,
             "cannot build the URL signer",
             source = err,
         )
@@ -460,7 +490,7 @@ fn build_signer(signer_email: Option<&str>) -> Result<Signer, Exception> {
     };
     if !email.contains('@') || email.contains(char::is_whitespace) {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = SIGNER_EMAIL_INVALID,
             "signer email is not a service account email",
         ));
     }
@@ -476,21 +506,21 @@ fn build_signer(signer_email: Option<&str>) -> Result<Signer, Exception> {
 async fn open_upload_file(path: &std::path::Path) -> Result<tokio::fs::File, Exception> {
     let file = tokio::fs::File::open(path).await.map_err(|err| {
         exception!(
-            code = "GCS_LOCAL",
+            code = FILE_OPEN_FAILED,
             format!("cannot open {}", path.display()),
             source = err,
         )
     })?;
     let meta = file.metadata().await.map_err(|err| {
         exception!(
-            code = "GCS_LOCAL",
+            code = FILE_METADATA_FAILED,
             format!("cannot read metadata for {}", path.display()),
             source = err,
         )
     })?;
     if !meta.is_file() {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = NOT_A_FILE,
             format!("{} is not a file", path.display()),
         ));
     }

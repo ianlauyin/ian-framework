@@ -234,5 +234,5 @@ async fn bad_config_is_refused_before_connecting() {
         ..SessionConfig::default()
     };
     let err = SessionStore::new(conn, config).unwrap_err();
-    assert_eq!(err.code(), "AUTH_CONFIG");
+    assert_eq!(err.code(), "SESSION_CONFIG_INVALID");
 }

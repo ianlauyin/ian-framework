@@ -5,10 +5,13 @@ use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use crate::exception;
 use crate::exception::Exception;
 
+pub const REDIS_UNREACHABLE: &str = "REDIS_UNREACHABLE";
+pub const REDIS_URL_INVALID: &str = "REDIS_URL_INVALID";
+
 pub async fn connect(url: &str) -> Result<ConnectionManager, Exception> {
     let client = redis::Client::open(url).map_err(|err| {
         exception!(
-            code = "REDIS_CONFIG",
+            code = REDIS_URL_INVALID,
             "redis url is not valid",
             source = err
         )
@@ -21,7 +24,7 @@ pub async fn connect(url: &str) -> Result<ConnectionManager, Exception> {
         .await
         .map_err(unreachable)?;
     if pong != "PONG" {
-        return Err(exception!(code = "REDIS_UNREACHABLE", "cannot reach redis"));
+        return Err(exception!(code = REDIS_UNREACHABLE, "cannot reach redis"));
     }
     Ok(conn)
 }
@@ -36,9 +39,5 @@ fn manager_config() -> ConnectionManagerConfig {
 }
 
 fn unreachable(err: redis::RedisError) -> Exception {
-    exception!(
-        code = "REDIS_UNREACHABLE",
-        "cannot reach redis",
-        source = err
-    )
+    exception!(code = REDIS_UNREACHABLE, "cannot reach redis", source = err)
 }

@@ -1,6 +1,8 @@
 use crate::exception;
 use crate::exception::Exception;
 
+pub const SESSION_CONFIG_INVALID: &str = "SESSION_CONFIG_INVALID";
+
 // Browsers cap a cookie lifetime at 400 days.
 pub(crate) const MAX_TTL_SECS: u64 = 400 * 24 * 60 * 60;
 
@@ -28,7 +30,7 @@ impl SessionConfig {
         } else {
             return Ok(());
         };
-        Err(exception!(code = "AUTH_CONFIG", problem))
+        Err(exception!(code = SESSION_CONFIG_INVALID, problem))
     }
 
     pub(crate) fn cookie(&self, token: &str) -> String {

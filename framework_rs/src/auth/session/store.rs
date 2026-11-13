@@ -10,6 +10,8 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::http::headers::read_cookie;
 
+pub const SESSION_STORE_COMMAND_FAILED: &str = "SESSION_STORE_COMMAND_FAILED";
+
 #[derive(Clone)]
 pub struct SessionStore {
     inner: Arc<Inner>,
@@ -218,7 +220,7 @@ struct Inner {
 
 fn store_err(err: redis::RedisError) -> Exception {
     exception!(
-        code = "AUTH_STORE",
+        code = SESSION_STORE_COMMAND_FAILED,
         "session store command failed",
         source = err,
     )

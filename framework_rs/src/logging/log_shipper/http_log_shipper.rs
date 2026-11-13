@@ -7,6 +7,9 @@ use crate::logging::log_shipper::LogShipper;
 use crate::logging::mask::MASK;
 use crate::logging::{LogEvent, LogRequest};
 
+pub const API_KEY_HEADER_INVALID: &str = "API_KEY_HEADER_INVALID";
+pub const HTTP_CLIENT_BUILD_FAILED: &str = "HTTP_CLIENT_BUILD_FAILED";
+
 pub(crate) const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone)]
@@ -27,7 +30,7 @@ impl HttpLogShipper {
             reqwest::header::HeaderValue::from_str(&format!("Bearer {}", post_api_key)).map_err(
                 |err| {
                     exception!(
-                        code = "LOG_CONFIG",
+                        code = API_KEY_HEADER_INVALID,
                         "post API key is not a valid header value",
                         source = err,
                     )
@@ -41,7 +44,7 @@ impl HttpLogShipper {
             .build()
             .map_err(|err| {
                 exception!(
-                    code = "LOG_CONFIG",
+                    code = HTTP_CLIENT_BUILD_FAILED,
                     "log shipper HTTP client cannot be built",
                     source = err.without_url(),
                 )

@@ -83,7 +83,7 @@ async fn an_internal_or_different_code_is_a_hidden_500() {
     for error in [
         exception!(code = error_code::INTERNAL_ERROR, "db pool is empty"),
         exception!(code = "MY_CODE", "db down"),
-        exception!(code = "GCS_NOT_FOUND", "secret detail"),
+        exception!(code = "RESOURCE_NOT_FOUND", "secret detail"),
         exception!(code = "EXTERNAL_ERROR", "external"),
     ] {
         let response = error.into_response();

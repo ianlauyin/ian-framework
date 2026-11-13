@@ -13,9 +13,9 @@ The client builds a V4 signed GET URL with `SignedUrlBuilder` of `google-cloud-s
 
 `GcsClient::signed_get_url` takes a lifetime of type `Duration`. The lifetime is not optional.
 
-- A lifetime below 1 second is a `GCP_CONFIG` error. This includes zero.
+- A lifetime below 1 second is a `SIGNED_URL_LIFETIME_TOO_SHORT` error. This includes zero.
 - The maximum lifetime is 604800 seconds.
-- A lifetime above that maximum is a `GCP_CONFIG` error.
+- A lifetime above that maximum is a `SIGNED_URL_LIFETIME_TOO_LONG` error.
 - The client cuts the lifetime to whole seconds.
 
 ### Attachment filename
@@ -26,7 +26,7 @@ The client builds a V4 signed GET URL with `SignedUrlBuilder` of `google-cloud-s
 - The value is `attachment; filename="{fallback}"; filename*=UTF-8''{encoded}`.
 - `{fallback}` is the filename with `_` in place of each non-ASCII character, control character, `"`, and `\`.
 - `{encoded}` is the percent-encoded UTF-8 filename. Only the RFC 3986 unreserved characters stay unencoded.
-- An empty filename is a `GCP_CONFIG` error.
+- An empty filename is a `ATTACHMENT_FILENAME_EMPTY` error.
 - Without a filename, the URL has no `response-content-disposition`.
 
-A failure to sign is a `GCP_AUTH` error.
+A failure to sign is a `SIGN_URL_FAILED` error.

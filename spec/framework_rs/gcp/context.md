@@ -50,26 +50,25 @@ The official crates read Application Default Credentials. The order is the varia
 - The project id is the variable `GOOGLE_CLOUD_PROJECT` when it is not blank.
 - Else the project id is the answer of `GET http://169.254.169.254/computeMetadata/v1/project/project-id` with the header `Metadata-Flavor: Google`. The time limit is 2 seconds.
 - When the metadata server does not answer or answers a status that is not 2xx, there is no project.
-- A project id that is empty or has a character that is not an ASCII letter, a digit, `-`, `_` or `.` is a `GCP_CONFIG` error.
+- A project id that is empty or has a character that is not an ASCII letter, a digit, `-`, `_` or `.` is a `PROJECT_ID_INVALID` error.
 - The whitespace at the start and at the end of the project id is removed.
 
 ## Error type
 
 The error of this module is `ian_framework::exception::Exception`. Its definition is in `spec/framework_rs/exception.md`.
 
-`framework_rs/src/gcp/error.rs` maps an error of an official crate to a code. The check order is the authentication error, then the HTTP status, then the gRPC status, then the kind of the error.
+`framework_rs/src/gcp/error.rs` maps an error of an official crate to a code. The other codes name one specific error, such as `BUCKET_NAME_INVALID`, `SECRET_VALUE_EMPTY` or `CLIENT_BUILD_FAILED`. They are in the feature documents. The check order is the authentication error, then the HTTP status, then the gRPC status, then the kind of the error.
 
 | Code | Condition |
 | --- | --- |
-| `GCP_AUTH` | The credentials fail, or the status is HTTP 401 or 403, or gRPC `Unauthenticated` or `PermissionDenied`. |
-| `GCS_NOT_FOUND` | The status is HTTP 404 or gRPC `NotFound`. |
-| `GCS_UNAVAILABLE` | The status is HTTP 408, 429, 500, 502, 503 or 504, or gRPC `DeadlineExceeded`, `ResourceExhausted` or `Unavailable`. |
-| `GCP_TRANSPORT` | The call has a timeout, a connection failure, an I/O failure or no retry left. |
-| `GCP_API` | A different failure, such as a different status or a response that is not valid. |
-| `GCP_CONFIG` | An input, a secret value, a project id or a signer is not valid. |
+| `AUTH_FAILED` | The credentials fail, or the status is HTTP 401 or 403, or gRPC `Unauthenticated` or `PermissionDenied`. |
+| `RESOURCE_NOT_FOUND` | The status is HTTP 404 or gRPC `NotFound`. |
+| `SERVICE_UNAVAILABLE` | The status is HTTP 408, 429, 500, 502, 503 or 504, or gRPC `DeadlineExceeded`, `ResourceExhausted` or `Unavailable`. |
+| `TRANSPORT_FAILED` | The call has a timeout, a connection failure, an I/O failure or no retry left. |
+| `API_FAILED` | A different failure, such as a different status or a response that is not valid. |
 
 - The error source is the error of the official crate.
-- `GCS_NOT_FOUND`, `GCS_UNAVAILABLE` and `GCS_LOCAL` are also used by the storage client. The rules are in `spec/framework_rs/gcp/storage/context.md`.
+- `RESOURCE_NOT_FOUND` and `SERVICE_UNAVAILABLE` are also used by the storage client. The rules are in `spec/framework_rs/gcp/storage/context.md`.
 
 ## Public items
 

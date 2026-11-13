@@ -13,7 +13,7 @@ The middleware does these steps before the inner handler runs:
 1. It reads the token with `SessionStore::token`. When the request has no token, it returns the exception with code `UNAUTHORIZED` (401). It does not call Redis.
 2. It calls `load` for the token. This is the only Redis call of the request for the session.
 3. When `load` gives no session, it returns the exception with code `UNAUTHORIZED` (401).
-4. When `load` fails, it returns the `Exception` of `load` as a response with `into_response`. The code of this exception is `AUTH_STORE`, so the client gets status 500 with the message `internal server error`. The middleware does not log the error. `access_log` logs the exception. Thus a request fails when Redis fails.
+4. When `load` fails, it returns the `Exception` of `load` as a response with `into_response`. The code of this exception is `SESSION_STORE_COMMAND_FAILED`, so the client gets status 500 with the message `internal server error`. The middleware does not log the error. `access_log` logs the exception. Thus a request fails when Redis fails.
 5. When `load` gives a `Session`, it inserts the `Session` in the request extensions.
 
 In steps 1, 3 and 4 the inner handler does not run and no cookie is added.

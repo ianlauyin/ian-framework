@@ -2,6 +2,8 @@ use super::{LogEvent, LogValue};
 use crate::exception;
 use crate::exception::Exception;
 
+pub const MASK_PATTERN_INVALID: &str = "MASK_PATTERN_INVALID";
+
 pub(crate) const MASK: &str = "***";
 
 // access_log records the query and the JSON body, so a credential field must not reach a log.
@@ -59,7 +61,7 @@ impl Masks {
 fn compile(pattern: &str, source: &str) -> Result<regex::Regex, Exception> {
     regex::Regex::new(source).map_err(|err| {
         exception!(
-            code = "LOG_CONFIG",
+            code = MASK_PATTERN_INVALID,
             format!("mask pattern `{pattern}` is not a valid regex"),
             source = err,
         )

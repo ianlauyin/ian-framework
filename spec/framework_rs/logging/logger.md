@@ -15,7 +15,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 
 | Function | Use |
 | --- | --- |
-| `Logger::new(shipper, mask_patterns)` | Builds one logger from one `HttpLogShipper` and a list of mask patterns. The buffer is empty. It returns `Result<Logger, Exception>`. When a pattern is not a valid regex, it returns an exception with the code `LOG_CONFIG`. The message names the pattern. |
+| `Logger::new(shipper, mask_patterns)` | Builds one logger from one `HttpLogShipper` and a list of mask patterns. The buffer is empty. It returns `Result<Logger, Exception>`. When a pattern is not a valid regex, it returns an exception with the code `MASK_PATTERN_INVALID`. The message names the pattern. |
 | `Logger::init(logger)` | Sets the global logger one time. It returns `Err(logger)` with the new logger when a logger is already set. The first logger stays. |
 | `Logger::get()` | Gives `Option<&'static Logger>`. It gives none before `init`. |
 | `Logger::info(action, context)` | Records one event with the level `info`. |

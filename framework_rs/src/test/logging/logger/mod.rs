@@ -85,7 +85,7 @@ fn invalid_mask_pattern_returns_an_exception() {
     let err = Logger::new(default_shipper("api"), vec!["(".to_string()])
         .err()
         .unwrap();
-    assert_eq!(err.code(), "LOG_CONFIG");
+    assert_eq!(err.code(), "MASK_PATTERN_INVALID");
     assert!(err.message().contains("is not a valid regex"));
 }
 

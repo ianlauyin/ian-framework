@@ -1,11 +1,13 @@
 use crate::exception;
 use crate::exception::Exception;
 
+pub const RANDOM_SOURCE_FAILED: &str = "RANDOM_SOURCE_FAILED";
+
 pub(crate) fn random_token() -> Result<String, Exception> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|err| {
         exception!(
-            code = "AUTH_RANDOM",
+            code = RANDOM_SOURCE_FAILED,
             format!("os random source failed: {err}"),
         )
     })?;

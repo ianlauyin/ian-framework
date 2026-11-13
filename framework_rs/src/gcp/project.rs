@@ -4,6 +4,8 @@ use std::time::Duration;
 use crate::exception;
 use crate::exception::Exception;
 
+pub const PROJECT_ID_INVALID: &str = "PROJECT_ID_INVALID";
+
 const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
 // `GOOGLE_CLOUD_PROJECT` is a Google Cloud standard variable, not an app setting.
 const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
@@ -21,7 +23,7 @@ pub(crate) async fn resolve_project() -> Result<Option<String>, Exception> {
     let project = project.trim();
     if !is_safe_name(project) {
         return Err(exception!(
-            code = "GCP_CONFIG",
+            code = PROJECT_ID_INVALID,
             "the project id is empty or not valid",
         ));
     }

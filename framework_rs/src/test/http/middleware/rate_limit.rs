@@ -136,7 +136,7 @@ fn a_prune_at_of_one_keeps_only_the_newest_key() {
 #[test]
 fn a_zero_prune_at_returns_an_exception() {
     let err = RateLimiter::new(1, 1.0, 0).err().unwrap();
-    assert_eq!(err.code(), "RATE_LIMIT_CONFIG");
+    assert_eq!(err.code(), "RATE_LIMIT_PRUNE_AT_INVALID");
     assert!(err.message().contains("prune_at must be above zero"));
 }
 

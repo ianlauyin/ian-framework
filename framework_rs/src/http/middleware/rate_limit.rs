@@ -14,6 +14,8 @@ use crate::http::error_code;
 use crate::http::headers::client_ip;
 use crate::logging::Logger;
 
+pub const RATE_LIMIT_PRUNE_AT_INVALID: &str = "RATE_LIMIT_PRUNE_AT_INVALID";
+
 pub(crate) const UNKNOWN_WAIT: Duration = Duration::from_secs(3600);
 
 #[derive(Clone)]
@@ -33,7 +35,7 @@ impl RateLimiter {
     pub fn new(capacity: u32, refill_per_sec: f64, prune_at: usize) -> Result<Self, Exception> {
         if prune_at == 0 {
             return Err(exception!(
-                code = "RATE_LIMIT_CONFIG",
+                code = RATE_LIMIT_PRUNE_AT_INVALID,
                 "rate limiter prune_at must be above zero",
             ));
         }

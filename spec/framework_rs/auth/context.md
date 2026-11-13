@@ -54,13 +54,13 @@ The error of this module is `ian_framework::exception::Exception`. Its definitio
 
 | Code | Cause |
 | --- | --- |
-| `AUTH_CONFIG` | Bad `SessionConfig` |
-| `AUTH_STORE` | Redis command failure |
-| `AUTH_HASH_FAILED` | Hash failure or blocking task failure |
-| `AUTH_RANDOM` | OS random source failure |
+| `SESSION_CONFIG_INVALID` | Bad `SessionConfig` |
+| `SESSION_STORE_COMMAND_FAILED` | Redis command failure |
+| `PASSWORD_HASH_FAILED` | Hash failure or blocking task failure |
+| `RANDOM_SOURCE_FAILED` | OS random source failure |
 | `VALIDATION_ERROR` | `hash_password` gets a password that is longer than 256 bytes |
 
-- The HTTP status of each `AUTH_*` code is 500 and the message for the client is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
+- The HTTP status of each code in this table, except `VALIDATION_ERROR`, is 500 and the message for the client is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
 - The HTTP status of `VALIDATION_ERROR` is 400. The message for the client is `password must not be longer than 256 bytes`.
 
 ## Out of scope

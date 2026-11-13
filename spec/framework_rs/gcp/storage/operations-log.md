@@ -17,7 +17,7 @@ When a record is written:
 
 - The client writes one record when an operation fails. The operations are `open`, `stat`, `list`, `put`, `rewrite`, `patch`, `delete` and `sign`. `get_bytes` is an `open` and a read. `move_object` is a `rewrite`, a `delete` and a `stat`.
 - The failure of an official call is final. The official client has already done the retries.
-- A `GCS_NOT_FOUND` failure writes no record, because an `_opt` call and `delete_object` use it as a normal result.
+- A `RESOURCE_NOT_FOUND` failure writes no record, because an `_opt` call and `delete_object` use it as a normal result.
 - A success writes no record.
 - A failure of the body read of an `ObjectReader` writes no record.
 

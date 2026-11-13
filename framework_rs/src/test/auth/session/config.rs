@@ -22,7 +22,7 @@ fn checks_the_config() {
     ];
     for config in bad {
         let err = config.check().unwrap_err();
-        assert_eq!(err.code(), "AUTH_CONFIG");
+        assert_eq!(err.code(), "SESSION_CONFIG_INVALID");
     }
     let edge = config_with(|config| {
         config.ttl_secs = MAX_TTL_SECS;

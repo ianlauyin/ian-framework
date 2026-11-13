@@ -61,7 +61,7 @@ Each item has only one public path.
 
 `pub async fn from_adc(bucket_name: impl Into<String>, signer_email: Option<&str>) -> Result<GcsClient, Exception>` makes a client for one bucket from Application Default Credentials.
 
-- A bucket name that is empty, is not ASCII, or has `/`, `\`, a space or a line break is a `GCP_CONFIG` error.
+- A bucket name that is empty, is not ASCII, or has `/`, `\`, a space or a line break is a `BUCKET_NAME_INVALID` error.
 - `signer_email` is the service account email that signs URLs. The project reads it from its own env variable. The rules are in `spec/framework_rs/gcp/storage/authentication.md`.
 
 ## Clients and retries
@@ -76,15 +76,15 @@ One `GcsClient` has one `Storage` client for the data calls and one `StorageCont
 
 The codes are in `spec/framework_rs/gcp/context.md`.
 
-- A failure on the local host is `GCS_LOCAL`. This includes a failure to open or to read the upload file. The client does not retry it.
-- A configuration error is `GCP_CONFIG`.
-- `is_retryable` is true for the codes `GCP_TRANSPORT` and `GCS_UNAVAILABLE`.
+- A failure on the local host is `FILE_OPEN_FAILED` or `FILE_METADATA_FAILED`. The client does not retry it.
+- An input that is not valid has its own code, such as `BUCKET_NAME_INVALID`, `OBJECT_NAME_INVALID` or `METADATA_INVALID`.
+- `is_retryable` is true for the codes `TRANSPORT_FAILED` and `SERVICE_UNAVAILABLE`.
 
 ## HTTP error
 
 `Exception` implements `IntoResponse`, as in `spec/framework_rs/http/api-error.md`. A handler that returns `Result<T, Exception>` can use `?` on an `Exception` from this client.
 
-- No `GCP_*` code and no `GCS_*` code is a well-known code. Thus the status is 500 and the message is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
+- No code of this client is a well-known code. Thus the status is 500 and the message is `internal server error`, as in `spec/framework_rs/http/api-error.md`.
 - The message does not contain the internal message or the trace.
 
 ## Out of scope

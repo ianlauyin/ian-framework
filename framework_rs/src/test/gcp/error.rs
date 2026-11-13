@@ -14,15 +14,15 @@ fn rpc(code: Code) -> Error {
 #[test]
 fn an_http_status_gives_its_code() {
     for (status, code) in [
-        (401, "GCP_AUTH"),
-        (403, "GCP_AUTH"),
-        (404, "GCS_NOT_FOUND"),
-        (408, "GCS_UNAVAILABLE"),
-        (429, "GCS_UNAVAILABLE"),
-        (500, "GCS_UNAVAILABLE"),
-        (503, "GCS_UNAVAILABLE"),
-        (400, "GCP_API"),
-        (412, "GCP_API"),
+        (401, "AUTH_FAILED"),
+        (403, "AUTH_FAILED"),
+        (404, "RESOURCE_NOT_FOUND"),
+        (408, "SERVICE_UNAVAILABLE"),
+        (429, "SERVICE_UNAVAILABLE"),
+        (500, "SERVICE_UNAVAILABLE"),
+        (503, "SERVICE_UNAVAILABLE"),
+        (400, "API_FAILED"),
+        (412, "API_FAILED"),
     ] {
         assert_eq!(error_code(&http(status)), code, "status {status}");
     }
@@ -31,13 +31,13 @@ fn an_http_status_gives_its_code() {
 #[test]
 fn an_rpc_status_gives_its_code() {
     for (status, code) in [
-        (Code::Unauthenticated, "GCP_AUTH"),
-        (Code::PermissionDenied, "GCP_AUTH"),
-        (Code::NotFound, "GCS_NOT_FOUND"),
-        (Code::DeadlineExceeded, "GCS_UNAVAILABLE"),
-        (Code::ResourceExhausted, "GCS_UNAVAILABLE"),
-        (Code::Unavailable, "GCS_UNAVAILABLE"),
-        (Code::InvalidArgument, "GCP_API"),
+        (Code::Unauthenticated, "AUTH_FAILED"),
+        (Code::PermissionDenied, "AUTH_FAILED"),
+        (Code::NotFound, "RESOURCE_NOT_FOUND"),
+        (Code::DeadlineExceeded, "SERVICE_UNAVAILABLE"),
+        (Code::ResourceExhausted, "SERVICE_UNAVAILABLE"),
+        (Code::Unavailable, "SERVICE_UNAVAILABLE"),
+        (Code::InvalidArgument, "API_FAILED"),
     ] {
         assert_eq!(error_code(&rpc(status)), code);
     }
@@ -45,7 +45,7 @@ fn an_rpc_status_gives_its_code() {
 
 #[test]
 fn a_network_failure_is_a_transport_error() {
-    assert_eq!(error_code(&Error::timeout("slow")), "GCP_TRANSPORT");
-    assert_eq!(error_code(&Error::io("reset")), "GCP_TRANSPORT");
-    assert_eq!(error_code(&Error::deser("bad")), "GCP_API");
+    assert_eq!(error_code(&Error::timeout("slow")), "TRANSPORT_FAILED");
+    assert_eq!(error_code(&Error::io("reset")), "TRANSPORT_FAILED");
+    assert_eq!(error_code(&Error::deser("bad")), "API_FAILED");
 }
