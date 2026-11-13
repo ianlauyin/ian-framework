@@ -6,43 +6,32 @@ This feature is not product business logic.
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-- The import path is `ian-framework-fe/error-boundary`.
-- The source files are `framework_fe/src/error-boundary/index.tsx` and `framework_fe/src/error-boundary/index.css`.
+- The import path is `ian-framework-fe/solid/error-boundary`.
+- The source file is `framework_fe/src/solid/error-boundary/index.tsx`.
 - The component uses SolidJS. `solid-js` is an optional peer dependency of the package.
 - A project that imports this component must have `solid-js` and `vite-plugin-solid`.
 - The export has the `solid` condition. `vite-plugin-solid` reads this condition and compiles the TSX source. It does not pre-bundle the package.
 
 ## API
 
-`AppErrorBoundary` is a component. All props are necessary.
+`ErrorBoundary` is a component that wraps the `ErrorBoundary` of `solid-js`. All props are necessary.
 
 | Prop | Type | Meaning |
 | --- | --- | --- |
-| `title` | `string` | The heading of the fallback. |
-| `message` | `string` | The text below the heading. |
-| `retryLabel` | `string` | The text of the retry button. |
-| `reloadLabel` | `string` | The text of the reload button. |
+| `fallback` | `(reset: () => void) => JSX.Element` | The function that the project gives. The boundary shows its result in place of `children` when `children` throws. `reset` resets the boundary. Then the boundary shows `children` again. |
 | `children` | `JSX.Element` | The content that the boundary protects. |
 
-The project gives all the text. The framework does not contain text for the user.
+The fallback function does not get the error. The boundary logs the error. The project owns the whole fallback: the markup, the style and the text for the user. The framework has no fallback markup, no CSS and no text for the user.
 
 ## Behaviour
 
-When `children` throws an error, the component shows the fallback in place of `children`.
-
-The fallback has these parts:
-
-- The root element has the id `app-error-boundary` and the class `g-app-error-boundary`.
-- The retry button resets the boundary. Then the component shows `children` again.
-- The reload button reloads the page.
-
-The fallback fills the viewport height. It puts its content in the center.
+When `children` throws an error, the component logs the error and shows `fallback` in place of `children`.
 
 ### Error log
 
-When the component shows the fallback, it logs the error with `Logger.error` from `framework_fe/src/logger.ts`. The logger is in `spec/framework_fe/logger.md`.
+The component logs the error with `Logger.error` from `framework_fe/src/logger.ts` before it shows `fallback`. The logger is in `spec/framework_fe/logger.md`.
 
-- The log message is `ERROR-BOUNDARY/caught an error`.
+- The log message is `ERROR-BOUNDARY/caughtError`.
 - The log `error_message` is the `message` of the error, or the thrown value as text. The message is only in `error_message`. The `extra` has no `error_message` key. The component does not choose a fallback text. When that text is empty or has only whitespace, `Logger.error` gives the fallback text `unknown error`. The rule is in `spec/framework_fe/logger.md`.
 - The log has the `extra` fields in the table below.
 - Each line break in these values becomes ` | `. The reason is that the log route drops a value with a line break. The log route is in `spec/framework_rs/logging/client-log.md`.
@@ -51,7 +40,3 @@ When the component shows the fallback, it logs the error with `Logger.error` fro
 | --- | --- | --- |
 | `error_name` | `name` of the error. | Only when the thrown value is an `Error`. |
 | `error_stack` | `stack` of the error, or an empty string. | Only when the thrown value is an `Error`. |
-
-## Out of scope
-
-This feature does not include a fallback that the project gives as a component.

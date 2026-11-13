@@ -14,9 +14,9 @@
     "./sleep": "./src/util/sleep.ts",
     "./logger": "./src/logger.ts",
     "./time": "./src/util/time.ts",
-    "./error-boundary": {
-      "solid": "./src/error-boundary/index.tsx",
-      "default": "./src/error-boundary/index.tsx"
+    "./solid/error-boundary": {
+      "solid": "./src/solid/error-boundary/index.tsx",
+      "default": "./src/solid/error-boundary/index.tsx"
     }
   },
   "scripts": {

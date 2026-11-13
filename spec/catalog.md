@@ -37,6 +37,6 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | Handler for the errors of the ajax client that no code caught | `spec/framework_fe/exception-handler.md` |
 | File upload and file download | `spec/framework_fe/file-transfer.md` |
 | Small helpers: typed storage and `sleep` | `spec/framework_fe/util.md` |
-| App error boundary | `spec/framework_fe/error-boundary.md` |
+| App error boundary | `spec/framework_fe/solid/error-boundary.md` |
 | Browser logger | `spec/framework_fe/logger.md` |
 | Time helpers, Hong Kong time `hktIsoString` | `spec/framework_fe/time.md` |
