@@ -127,11 +127,7 @@ impl LogEvent {
         self.error_message.as_deref()
     }
 
-    pub(crate) fn build(
-        action: String,
-        level: LogLevel,
-        error_message: Option<String>,
-    ) -> LogEvent {
+    pub fn build(action: String, level: LogLevel, error_message: Option<String>) -> LogEvent {
         LogEvent {
             ts: hkt_now(),
             id: new_id(),
