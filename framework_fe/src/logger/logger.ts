@@ -1,10 +1,9 @@
 import { hktIsoString } from "../util/time";
-import { LogBuffer } from "./log-buffer";
-import { HttpLogShipper } from "./log-shipper";
 import { Mask } from "./mask";
-import type { LogFields, LogLevel } from "./types";
+import type { ClientLogEvent, LogFields, LogLevel } from "./types";
 
-const FLUSH_INTERVAL = 60_000;
+const LOG_URL = "/log";
+const SEND_INTERVAL = 60_000;
 const UNKNOWN_ERROR = "unknown error";
 
 type CaptureCall =
@@ -13,10 +12,8 @@ type CaptureCall =
   | { level: "error"; action: string; context?: LogFields; error: Error };
 
 export class Logger {
-  private static shipper = new HttpLogShipper();
-  private static buffer = new LogBuffer();
-  private static sending = false;
   private static initialized = false;
+  private static buffer: ClientLogEvent[] = [];
   private static mask = new Mask([]);
   private static context: LogFields = {};
 
@@ -25,13 +22,13 @@ export class Logger {
     Logger.initialized = true;
     Logger.mask = new Mask(patterns);
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") Logger.flush(true);
+      if (document.visibilityState === "hidden") Logger.send();
     });
     if (typeof window !== "undefined") {
-      window.addEventListener("pagehide", () => Logger.beacon());
+      window.addEventListener("pagehide", () => Logger.send());
       Logger.watchWindowError();
     }
-    setInterval(() => Logger.flush(false), FLUSH_INTERVAL);
+    setInterval(() => Logger.send(), SEND_INTERVAL);
   }
 
   public static addContext(key: string, value: string | number | boolean): void {
@@ -119,28 +116,13 @@ export class Logger {
     return `DOM source error: <${target.tagName.toLowerCase()}> ${source}`.trim();
   }
 
-  private static beacon(): void {
-    if (Logger.buffer.len() === 0) return;
-    if (!Logger.shipper.canBeacon()) {
-      Logger.flush(true);
-      return;
-    }
+  // A beacon cannot be read back, so only a beacon that the browser refuses is put back in the buffer.
+  private static send(): void {
+    if (Logger.buffer.length === 0) return;
 
-    const events = Logger.buffer.take();
-    if (!Logger.shipper.beacon(events)) Logger.buffer.restore(events);
-  }
-
-  private static async flush(keepalive: boolean): Promise<void> {
-    if (Logger.buffer.len() === 0 || Logger.sending) return;
-
-    const events = Logger.buffer.take();
-    Logger.sending = true;
-    try {
-      if (!(await Logger.shipper.ship(events, keepalive))) Logger.buffer.restore(events);
-    } finally {
-      Logger.sending = false;
-    }
+    const events = Logger.buffer;
+    Logger.buffer = [];
+    const body = new Blob([JSON.stringify({ events })], { type: "application/json" });
+    if (!navigator.sendBeacon(LOG_URL, body)) Logger.buffer = [...events, ...Logger.buffer];
   }
 }
-
-export const capture = Logger.capture;

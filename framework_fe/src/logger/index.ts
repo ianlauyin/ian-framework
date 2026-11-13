@@ -1,2 +1,2 @@
-export { Logger, capture } from "./logger";
+export { Logger } from "./logger";
 export type { LogFields, LogLevel } from "./types";

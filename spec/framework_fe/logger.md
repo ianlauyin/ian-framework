@@ -44,8 +44,6 @@ The method shape is the same as `Logger` in `spec/framework_rs/logging/logger.md
 
 - The logger keeps one queue in memory for the page.
 - When `action` has only whitespace or is empty, the logger does not record the event.
-- The queue keeps a maximum of 1000 events. When the queue is full, a new event removes the oldest event.
-- An `error` event is not put in the queue when the last event in the queue is an `error` event with the same `action` and the same `error_message`, and the two `ts` values are 5 seconds or less apart. The check uses the last event only.
 
 The event has these fields:
 
@@ -79,31 +77,27 @@ The event has these fields:
 
 ### Send
 
-The logger posts the queue to the route `POST /log` on the same origin. The route is in `spec/framework_rs/logging/client-log.md`.
+The logger posts the queue to the route `POST /log` on the same origin, with `navigator.sendBeacon`. The route is in `spec/framework_rs/logging/client-log.md`.
 
-`Logger.init` sets the mask patterns, then starts the send timers and the window error listeners. A second call has no effect. A recorded event does not start the timers.
+`Logger.init` sets the mask patterns, then starts the send timer and the window error listeners. A second call has no effect. A recorded event does not start the timer.
 
-| Trigger | `keepalive` |
+| Trigger | Send |
 | --- | --- |
-| Each 60 seconds | `false` |
-| The page becomes hidden (`visibilitychange` with `document.visibilityState` equal to `hidden`) | `true` |
-| The `pagehide` event of the window | Not used. The logger uses `navigator.sendBeacon`, with the same URL and body. Without `sendBeacon`, it sends as for a hidden page. |
+| Each 60 seconds | `sendBeacon` |
+| The page becomes hidden (`visibilitychange` with `document.visibilityState` equal to `hidden`) | `sendBeacon` |
+| The `pagehide` event of the window | `sendBeacon` |
 
 The request has these properties:
 
-- The HTTP method is POST.
 - The URL is `/log`. The logger does not add the prefix `/ajax`.
-- The request uses `credentials: "same-origin"`.
-- The request has the header `Content-Type: application/json`.
+- The `Blob` body has the type `application/json`. The browser sends the cookies of the same origin.
 - The body is one JSON object `{"events": [...]}`. The `events` array holds each event in the queue.
 
 Send rules:
 
-- An empty queue does not send a request.
-- The logger empties the queue before the request. Only one request runs at a time. A send that starts while another runs is skipped.
-- When the request fails, or the status is not 2xx and not 400 to 405, the logger puts the events back in front of the newer events. The queue still keeps only the newest 1000 events. The events go out in the next send.
-- When the status is 400 to 405, the logger drops the events, because the same events would fail again.
-- A `sendBeacon` call that returns `false` puts the events back in the same way. The logger cannot read the result of the beacon later.
+- An empty queue does not send a request. Without `navigator.sendBeacon`, the logger does not send.
+- The logger empties the queue before the call.
+- The logger cannot read the result of a beacon later. When `sendBeacon` returns `false`, the logger puts the events back in front of the newer events. The events go out in the next send.
 
 ### Window errors
 

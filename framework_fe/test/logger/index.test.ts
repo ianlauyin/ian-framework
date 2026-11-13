@@ -7,7 +7,7 @@ type FakeDocument = {
 };
 
 let fakeDocument: FakeDocument;
-let fetchMock: ReturnType<typeof vi.fn>;
+let sendBeacon: ReturnType<typeof vi.fn>;
 
 function hidePage(): void {
   fakeDocument.visibilityState = "hidden";
@@ -17,7 +17,7 @@ function hidePage(): void {
 }
 
 function sentEvents(call: number) {
-  return JSON.parse(fetchMock.mock.calls[call][1].body).events;
+  return JSON.parse(sendBeacon.mock.calls[call][1].parts[0]).events;
 }
 
 let capture: typeof import("../../src/logger").capture;
@@ -39,10 +39,19 @@ beforeEach(() => {
       if (type === "visibilitychange") fakeDocument.listeners.push(listener);
     },
   };
-  fetchMock = vi.fn().mockResolvedValue({ ok: true });
+  sendBeacon = vi.fn().mockReturnValue(true);
   vi.stubGlobal("document", fakeDocument);
   vi.stubGlobal("location", { pathname: "/home", href: "https://app.example/home?a=1" });
-  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("navigator", { sendBeacon });
+  vi.stubGlobal(
+    "Blob",
+    class {
+      constructor(
+        public parts: string[],
+        public options: { type: string },
+      ) {}
+    },
+  );
 });
 
 afterEach(() => {
@@ -57,17 +66,12 @@ describe("Logger", () => {
     Logger.info("started");
     Logger.error("boom", { code: 42 }, new Error("it broke"));
     await vi.advanceTimersByTimeAsync(59_999);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sendBeacon).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/log");
-    expect(fetchMock.mock.calls[0][1]).toMatchObject({
-      method: "POST",
-      credentials: "same-origin",
-      keepalive: false,
-      headers: { "Content-Type": "application/json" },
-    });
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(sendBeacon.mock.calls[0][0]).toBe("/log");
+    expect(sendBeacon.mock.calls[0][1].options).toEqual({ type: "application/json" });
     expect(sentEvents(0)).toEqual([
       {
         ts: "2026-10-25T20:00:00.000+08:00",
@@ -88,24 +92,23 @@ describe("Logger", () => {
     ]);
 
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
 
     Logger.info("later");
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sendBeacon).toHaveBeenCalledTimes(2);
     expect(sentEvents(1)).toHaveLength(1);
   });
 
-  it("sends the queue with keepalive when the page is hidden", async () => {
+  it("sends the queue when the page is hidden", async () => {
     const Logger = await loadLogger();
     Logger.init([]);
     Logger.warn("leaving");
     hidePage();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][1].keepalive).toBe(true);
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
   });
 
   it("skips an empty message", async () => {
@@ -113,17 +116,7 @@ describe("Logger", () => {
     Logger.init([]);
     Logger.info("  ");
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("keeps the newest 1000 events", async () => {
-    const Logger = await loadLogger();
-    Logger.init([]);
-    for (let index = 0; index < 1001; index++) Logger.info(`event ${index}`);
-    await vi.advanceTimersByTimeAsync(60_000);
-    const events = sentEvents(0);
-    expect(events).toHaveLength(1000);
-    expect(events[0].action).toBe("event 1");
+    expect(sendBeacon).not.toHaveBeenCalled();
   });
 
   it("masks the value of a matching context key and each match in a string value", async () => {
@@ -158,76 +151,20 @@ describe("Logger", () => {
     });
   });
 
-  it("sends the events again after a failed send, before the newer events", async () => {
+  it("sends the events again after a refused beacon, before the newer events", async () => {
     const Logger = await loadLogger();
     Logger.init([]);
-    fetchMock.mockRejectedValueOnce(new Error("offline"));
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
+    sendBeacon.mockReturnValueOnce(false);
     Logger.info("first");
     await vi.advanceTimersByTimeAsync(60_000);
     Logger.info("second");
     await vi.advanceTimersByTimeAsync(60_000);
-    Logger.info("third");
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(sentEvents(2).map((event: { action: string }) => event.action)).toEqual([
-      "first",
-      "second",
-      "third",
-    ]);
+    expect(sendBeacon).toHaveBeenCalledTimes(2);
+    expect(sentEvents(1).map((event: { action: string }) => event.action)).toEqual(["first", "second"]);
   });
 
-  it("drops the events when the route rejects them with the status 400 to 405", async () => {
-    const Logger = await loadLogger();
-    Logger.init([]);
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
-    Logger.info("first");
-    await vi.advanceTimersByTimeAsync(60_000);
-    Logger.info("second");
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(sentEvents(1)).toHaveLength(1);
-  });
-
-  it("keeps the queue size limit when it puts failed events back", async () => {
-    const Logger = await loadLogger();
-    Logger.init([]);
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
-    for (let i = 0; i < 1000; i++) Logger.info(`old-${i}`);
-    await vi.advanceTimersByTimeAsync(60_000);
-    Logger.info("new");
-    hidePage();
-    const events = sentEvents(1);
-    expect(events).toHaveLength(1000);
-    expect(events[0].action).toBe("old-1");
-    expect(events[999].action).toBe("new");
-  });
-
-  it("records the same error only once in 5 seconds", async () => {
-    const Logger = await loadLogger();
-    Logger.init([]);
-    Logger.error("load", {}, new Error("failed"));
-    Logger.error("load", {}, new Error("failed"));
-    await vi.advanceTimersByTimeAsync(5000);
-    Logger.error("load", {}, new Error("failed"));
-    await vi.advanceTimersByTimeAsync(1);
-    Logger.error("load", {}, new Error("failed"));
-    Logger.error("load", {}, new Error("other"));
-    Logger.info("load");
-    Logger.info("load");
-    hidePage();
-    expect(sentEvents(0).map((event: { level: string }) => event.level)).toEqual([
-      "error",
-      "error",
-      "error",
-      "info",
-      "info",
-    ]);
-  });
-
-  it("sends the queue with a beacon when the page is hidden for good", async () => {
-    const sendBeacon = vi.fn().mockReturnValue(true);
+  it("sends the queue on pagehide", async () => {
     const windowListeners: Record<string, () => void> = {};
-    vi.stubGlobal("navigator", { sendBeacon });
     vi.stubGlobal("window", {
       addEventListener(type: string, listener: () => void) {
         windowListeners[type] = listener;
@@ -238,8 +175,7 @@ describe("Logger", () => {
     Logger.info("started");
     windowListeners.pagehide();
     expect(sendBeacon).toHaveBeenCalledOnce();
-    expect(sendBeacon.mock.calls[0][0]).toBe("/log");
-    expect(JSON.parse(await sendBeacon.mock.calls[0][1].text()).events).toHaveLength(1);
+    expect(sentEvents(0)).toHaveLength(1);
     windowListeners.pagehide();
     expect(sendBeacon).toHaveBeenCalledOnce();
   });
@@ -392,7 +328,7 @@ describe("Logger", () => {
         "denied",
       );
       hidePage();
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(sendBeacon).not.toHaveBeenCalled();
     });
   });
 
