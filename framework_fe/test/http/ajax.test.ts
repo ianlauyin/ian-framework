@@ -4,7 +4,6 @@ import {
   type ApiError,
   ajax,
   NetworkConnectionException,
-  setRequestInterceptor,
   setUnauthorizedHandler,
 } from "../../src/http";
 
@@ -12,7 +11,6 @@ describe("ajax", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     setUnauthorizedHandler();
-    setRequestInterceptor();
   });
 
   it("sends GET requests with query parameters", async () => {
@@ -284,16 +282,6 @@ describe("ajax", () => {
       message: "Failed to fetch",
       requestURL: "/ajax/item",
     });
-  });
-
-  it("lets the request interceptor change the headers", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, text: async () => "" });
-    vi.stubGlobal("fetch", fetchMock);
-    setRequestInterceptor(({ headers }) => headers.set("X-Token", "abc"));
-
-    await ajax("/item", "GET");
-
-    expect(fetchMock.mock.calls[0][1].headers.get("X-Token")).toBe("abc");
   });
 
   it("turns an ISO date text in the response into a Date", async () => {

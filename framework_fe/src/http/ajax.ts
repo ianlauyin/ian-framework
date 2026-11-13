@@ -1,4 +1,3 @@
-import { queryString } from "./network";
 import { rawSend } from "./raw-send";
 
 type PathParams = Record<string, any> | null;
@@ -49,3 +48,13 @@ export const ajax = async <
     body: isGetOrDelete ? undefined : JSON.stringify(request),
   });
 };
+
+function queryString(request: object): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(request)) {
+    if (value === undefined) continue;
+    query.append(key, value instanceof Date ? value.toISOString() : String(value));
+  }
+  const text = query.toString();
+  return text === "" ? "" : `?${text}`;
+}

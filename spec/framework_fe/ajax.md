@@ -7,10 +7,10 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - The import path is `ian-framework-fe`.
-- The source files are `framework_fe/src/http/ajax.ts`, `framework_fe/src/http/network.ts` and `framework_fe/src/http/raw-send.ts`. `ajax.ts` builds the URL and the body. `network.ts` holds the error classes and the query string. `ajax`, `upload` and `download-file` throw the same error classes. `raw-send.ts` holds the send step, the interceptor, the unauthorized handler and the JSON parse. It is shared by `ajax` and `upload`.
+- The source files are `framework_fe/src/http/ajax.ts`, `framework_fe/src/http/network.ts` and `framework_fe/src/http/raw-send.ts`. `ajax.ts` builds the URL, the query string and the body. `network.ts` holds the error classes. `ajax`, `upload` and `download-file` throw the same error classes. `raw-send.ts` holds the send step, the unauthorized handler and the JSON parse. It is shared by `ajax` and `upload`.
 - The test file is `framework_fe/test/http/ajax.test.ts`.
 - `framework_fe/src/http/index.ts` re-exports the public items of `http`, and the root entry re-exports it.
-- The root entry exports the error classes, the types and the two setter functions that are in the API table.
+- The root entry exports the error classes, the type and the setter function that are in the API table.
 - The client uses only browser APIs. The client does not use a UI library.
 
 ## API
@@ -21,9 +21,7 @@ This feature is not product business logic.
 | `ApiError` | class | The error for a response that the app gave with a status that is not 2xx. |
 | `NetworkConnectionException` | class | The error for a request that did not give a usable response. |
 | `ErrorBody` | type | The error body: `{ message: string }`. |
-| `RequestInterceptor` | type | `(request: { headers: Headers }) => void \| Promise<void>`. |
 | `setUnauthorizedHandler(handler?)` | function | Sets the handler for a 401 response. A call with no handler removes the handler. |
-| `setRequestInterceptor(interceptor?)` | function | Sets the interceptor that changes the headers of each request. A call with no interceptor removes it. |
 
 `method` is one of `GET`, `DELETE`, `POST` and `PUT`.
 
@@ -67,7 +65,7 @@ The type of `pathParams` comes from the `{name}` parts of `url`, when `url` is a
 Each request uses `credentials: "same-origin"`.
 
 - The client always sends a `Headers` object. For `POST` and `PUT`, it has `Content-Type: application/json`.
-- The client calls the request interceptor with the headers before it sends the request, and waits for it. The interceptor can add or change a header. `upload` in `spec/framework_fe/file-transfer.md` uses the same interceptor and the same unauthorized handler.
+- `upload` in `spec/framework_fe/file-transfer.md` uses the same unauthorized handler.
 - In the query string, a `Date` value is written with `toISOString()`.
 
 ### Response

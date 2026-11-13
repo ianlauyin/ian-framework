@@ -6,23 +6,14 @@ const NETWORK_ERROR_STATUS_CODES = [0, 502, 504];
 
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
-export type RequestInterceptor = (request: { readonly headers: Headers }) => void | Promise<void>;
-
 let unauthorizedHandler: (() => void) | undefined;
-let requestInterceptor: RequestInterceptor | undefined;
 
 export function setUnauthorizedHandler(handler?: () => void) {
   unauthorizedHandler = handler;
 }
 
-export function setRequestInterceptor(interceptor?: RequestInterceptor) {
-  requestInterceptor = interceptor;
-}
-
-// Sends one request with the interceptor, and returns the parsed JSON body, or null for an empty body.
-export async function rawSend(url: string, init: RequestInit & { headers: Headers }): Promise<any> {
-  await requestInterceptor?.({ headers: init.headers });
-
+// Sends one request, and returns the parsed JSON body, or null for an empty body.
+export async function rawSend(url: string, init: RequestInit): Promise<any> {
   let response: Response;
   let body: string;
   try {
