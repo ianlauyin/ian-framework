@@ -412,6 +412,35 @@ fn from_client_drops_an_error_message_on_an_info_event() {
 }
 
 #[test]
+fn snake_case_converts_camel_case_keys() {
+    use crate::logging::client_log::event::snake_case;
+    for (input, expected) in [
+        ("userId", "user_id"),
+        ("HTTPServer", "http_server"),
+        ("pageX2", "page_x2"),
+        ("already_snake", "already_snake"),
+        ("a-b.cD", "a-b.c_d"),
+        ("URL", "url"),
+        ("", ""),
+    ] {
+        assert_eq!(snake_case(input), expected, "{input}");
+    }
+}
+
+#[test]
+fn client_context_and_extra_keys_become_snake_case() {
+    let mut event = LogEvent::info("/files");
+    event
+        .context
+        .insert("tenantId".to_string(), "my-app".into());
+    event.extra.insert("retryCount".to_string(), 2u64.into());
+    let stored = event.client_checked();
+    assert_eq!(stored.context["tenant_id"], "my-app");
+    assert_eq!(stored.extra["retry_count"], json!(2));
+    assert!(!stored.extra.contains_key("retryCount"));
+}
+
+#[test]
 fn client_context_is_kept_and_the_request_ip_and_user_agent_win() {
     let mut event = LogEvent::info("/files");
     event

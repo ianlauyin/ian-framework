@@ -116,9 +116,29 @@ fn client_fields(extra: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValu
         if !extra_value_ok(value) {
             continue;
         }
-        kept.insert(key.clone(), value.clone());
+        kept.insert(snake_case(key), value.clone());
     }
     kept
+}
+
+// A client sends camelCase keys, but the log schema uses snake_case keys.
+pub(crate) fn snake_case(key: &str) -> String {
+    let chars: Vec<char> = key.chars().collect();
+    let mut result = String::with_capacity(key.len() + 4);
+    for (index, &ch) in chars.iter().enumerate() {
+        if ch.is_ascii_uppercase() && index > 0 {
+            let previous = chars[index - 1];
+            let next_is_lower = chars.get(index + 1).is_some_and(char::is_ascii_lowercase);
+            if previous.is_ascii_lowercase()
+                || previous.is_ascii_digit()
+                || (previous.is_ascii_uppercase() && next_is_lower)
+            {
+                result.push('_');
+            }
+        }
+        result.push(ch.to_ascii_lowercase());
+    }
+    result
 }
 
 fn extra_key_ok(key: &str) -> bool {

@@ -48,6 +48,8 @@ The function does not store these values:
 - Text that contains `\r`
 - Text that contains `\n`
 
+The function changes each stored key from camelCase to snake_case, after the key passes the key rule. `userId` becomes `user_id` and `HTTPServer` becomes `http_server`. A key that is already snake_case does not change. When two keys give the same snake_case key, the later key in key order replaces the earlier one. The function converts the keys of `context` before it sets `ip` and `user_agent`.
+
 The function checks a value and does not change it. A stored value has the same type as the client value: a string, a number or a `bool`. The function stores the full string.
 
 ### ClientLog::log_events
