@@ -23,6 +23,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 | `Logger::warn_with(action, context, error)` | Records one event with the level `warn`. |
 | `Logger::error(action, context, error)` | Records one event with the level `error`. |
 | `Logger::record(event)` | Stores one event in the buffer. The rules are below. |
+| `Logger::take_all_buffer()` | Takes every event out of the buffer and gives them as `Vec<LogEvent>`, oldest first. The buffer is empty after. The events are already masked. It does not call `ship`. An empty buffer gives an empty vector. The buffer length is then lower than the 80 percent limit, so `Logger::record` can store the capacity warning again. |
 | `Logger::direct_send(events)` | Masks a copy of each event and calls `LogShipper::ship` at once. It gives the `ship` result. It does not use the buffer. The rules are below. |
 | `Logger::spawn_ship_loop(shutdown)` | Sends the buffer to the log server. The rules are below. |
 
