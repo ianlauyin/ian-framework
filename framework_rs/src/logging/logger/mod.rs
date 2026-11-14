@@ -82,13 +82,6 @@ impl Logger {
         self.lock_buffer().push(event);
     }
 
-    pub fn take_all_buffer(&self) -> Vec<LogEvent> {
-        let mut buffer = self.lock_buffer();
-        let events = buffer.take_chunk(usize::MAX);
-        buffer.shipped();
-        events
-    }
-
     pub async fn direct_send(events: &[LogEvent]) -> bool {
         let Some(logger) = Logger::get() else {
             return true;
