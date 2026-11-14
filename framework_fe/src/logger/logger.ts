@@ -1,6 +1,6 @@
 import { hktIsoString } from "../util/time";
 import { Mask } from "./mask";
-import type { CaptureEvent, ClientLogEvent, LogFields, LogLevel } from "./types";
+import type { ClientLogEvent, LogFields, LogLevel } from "./types";
 
 const LOG_URL = "/log";
 const SEND_INTERVAL = 60_000;
@@ -36,75 +36,70 @@ export class Logger {
     Logger.context = kept;
   }
 
-  public static info(action: string, context: LogFields = {}): void {
-    Logger.record("info", action, context, undefined, null);
-  }
-
-  public static warn(action: string, context: LogFields = {}, error?: Error): void {
-    Logger.record("warn", action, context, error, null);
-  }
-
-  public static error(action: string, context: LogFields, error: Error): void {
-    Logger.record("error", action, context, error, null);
-  }
-
-  public static async capture<T>(
-    actionName: string,
-    work: (event: CaptureEvent) => Promise<T>,
-  ): Promise<T> {
-    const start = performance.now();
-    const captureEvent = {
+  public static info(action: string, extra: LogFields = {}): void {
+    Logger.buffer.push({
+      ts: hktIsoString(new Date()),
+      action,
+      latencyMs: null,
       level: "info",
-      extra: {},
-      errorMessage: null
-    };
+      errorMessage: null,
+      context: { ...Logger.context },
+      extra: Logger.mask.fields(extra),
+    });
+  }
+
+  public static warn(action: string, extra: LogFields = {}, error?: Error): void {
+    Logger.buffer.push({
+      ts: hktIsoString(new Date()),
+      action,
+      latencyMs: null,
+      level: "warn",
+      errorMessage: Logger.errorMessage("warn", error),
+      context: { ...Logger.context },
+      extra: Logger.mask.fields(extra),
+    });
+  }
+
+  public static error(action: string, error: Error, extra: LogFields = {}): void {
+    Logger.buffer.push({
+      ts: hktIsoString(new Date()),
+      action,
+      latencyMs: null,
+      level: "error",
+      errorMessage: Logger.errorMessage("error", error),
+      context: { ...Logger.context },
+      extra: Logger.mask.fields(extra),
+    });
+  }
+
+  public static async capture<T>(actionName: string, work: (extra: LogFields) => Promise<T>): Promise<T> {
+    const start = performance.now();
+    const extra: LogFields = {};
     try {
-      let result = await work(captureEvent);
+      const output = await work(extra);
       Logger.buffer.push({
-        ts,
+        ts: hktIsoString(new Date()),
         action: actionName,
         latencyMs: Math.round(performance.now() - start),
         level: "info",
         errorMessage: null,
-        context: { request_url: Logger.mask.text(location.href), ...Logger.context },
-        extra: Logger.mask.fields({ page: location.pathname, ...event.extra }),
-      })
-      return result
+        context: { ...Logger.context },
+        extra: Logger.mask.fields(extra),
+      });
+      return output;
     } catch (error) {
-      level = "error";
-      const message = error instanceof Error ? error.message : "";
-      errorMessage = message.trim() === "" ? UNKNOWN_ERROR : message;
+      const errorMessage = error instanceof Error ? Logger.errorMessage("error", error) : UNKNOWN_ERROR;
       Logger.buffer.push({
-        ts: event.ts,
+        ts: hktIsoString(new Date()),
         action: actionName,
         latencyMs: Math.round(performance.now() - start),
-        level,
-        errorMessage: errorMessage === null ? null : Logger.mask.text(errorMessage),
-        context: { request_url: Logger.mask.text(location.href), ...Logger.context },
-        extra: Logger.mask.fields({ page: location.pathname, ...event.extra }),
-      })
+        level: "error",
+        errorMessage,
+        context: { ...Logger.context },
+        extra: Logger.mask.fields(extra),
+      });
       throw error;
     }
-  }
-
-  private static record(
-    level: LogLevel,
-    action: string,
-    context: LogFields,
-    error: Error | undefined,
-    latencyMs: number | null,
-  ): void {
-    if (action.trim() === "") return;
-
-    Logger.buffer.push({
-      ts: hktIsoString(new Date()),
-      action,
-      latencyMs: latencyMs === null ? null : Math.round(latencyMs),
-      level,
-      errorMessage: Logger.errorMessage(level, error),
-      context: { request_url: Logger.mask.text(location.href), ...Logger.context, ...Logger.mask.fields(context) },
-      extra: Logger.mask.fields({ page: location.pathname }),
-    });
   }
 
   private static errorMessage(level: LogLevel, error: Error | undefined): string | null {
@@ -119,18 +114,18 @@ export class Logger {
       "error",
       (event) => {
         if (event.error instanceof Error) {
-          Logger.error("WINDOW/error", {}, event.error);
+          Logger.error("WINDOW/error", event.error);
           return;
         }
         const message = event.message || Logger.domSourceMessage(event.target) || "window error";
-        Logger.error("WINDOW/error", {}, new Error(message));
+        Logger.error("WINDOW/error", new Error(message));
       },
       true,
     );
     window.addEventListener("unhandledrejection", (event) => {
       const reason = event.reason;
       const error = reason instanceof Error ? reason : new Error("unhandled rejection");
-      Logger.error("WINDOW/unhandledrejection", {}, error);
+      Logger.error("WINDOW/unhandledrejection", error);
     });
   }
 

@@ -20,11 +20,8 @@ function sentEvents(call: number) {
   return JSON.parse(sendBeacon.mock.calls[call][1].parts[0]).events;
 }
 
-let capture: typeof import("../../src/logger").capture;
-
 async function loadLogger() {
-  const { Logger, capture: loadedCapture } = await import("../../src/logger");
-  capture = loadedCapture;
+  const { Logger } = await import("../../src/logger");
   return Logger;
 }
 
@@ -64,7 +61,7 @@ describe("Logger", () => {
     const Logger = await loadLogger();
     Logger.init([]);
     Logger.info("started");
-    Logger.error("boom", { code: 42 }, new Error("it broke"));
+    Logger.error("boom", new Error("it broke"), { code: 42 });
     await vi.advanceTimersByTimeAsync(59_999);
     expect(sendBeacon).not.toHaveBeenCalled();
 
@@ -76,18 +73,18 @@ describe("Logger", () => {
       {
         ts: "2026-10-25T20:00:00.000+08:00",
         action: "started",
-        latency_ms: null,
+        latencyMs: null,
         level: "info",
-        error_message: null,
-        context: { request_url: "https://app.example/home?a=1" },
-        extra: { page: "/home" },
+        errorMessage: null,
+        context: {},
+        extra: {},
       },
       expect.objectContaining({
         level: "error",
-        error_message: "it broke",
+        errorMessage: "it broke",
         action: "boom",
-        context: { request_url: "https://app.example/home?a=1", code: 42 },
-        extra: { page: "/home" },
+        context: {},
+        extra: { code: 42 },
       }),
     ]);
 
@@ -111,15 +108,7 @@ describe("Logger", () => {
     expect(sendBeacon).toHaveBeenCalledTimes(1);
   });
 
-  it("skips an empty message", async () => {
-    const Logger = await loadLogger();
-    Logger.init([]);
-    Logger.info("  ");
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(sendBeacon).not.toHaveBeenCalled();
-  });
-
-  it("masks the value of a matching context key and each match in a string value", async () => {
+  it("masks the value of a matching extra key and each match in a string value", async () => {
     const Logger = await loadLogger();
     Logger.init([/^(password|token)$/i, /secret=\S+/]);
     Logger.info("login secret=keep", {
@@ -131,8 +120,7 @@ describe("Logger", () => {
     hidePage();
     const [event] = sentEvents(0);
     expect(event.action).toBe("login secret=keep");
-    expect(event.context).toEqual({
-      request_url: "https://app.example/home?a=1",
+    expect(event.extra).toEqual({
       password: "***",
       TOKEN: "***",
       note: "a *** and ***",
@@ -140,15 +128,12 @@ describe("Logger", () => {
     });
   });
 
-  it("keeps the context values when no mask pattern is set", async () => {
+  it("keeps the extra values when no mask pattern is set", async () => {
     const Logger = await loadLogger();
     Logger.init([]);
     Logger.info("login", { password: "hunter2" });
     hidePage();
-    expect(sentEvents(0)[0].context).toEqual({
-      request_url: "https://app.example/home?a=1",
-      password: "hunter2",
-    });
+    expect(sentEvents(0)[0].extra).toEqual({ password: "hunter2" });
   });
 
   it("sends the events again after a refused beacon, before the newer events", async () => {
@@ -195,10 +180,10 @@ describe("Logger", () => {
     windowListeners.unhandledrejection({ reason: 42 });
     hidePage();
     const sent = sentEvents(0).map(
-      (event: { level: string; action: string; error_message: string }) => [
+      (event: { level: string; action: string; errorMessage: string }) => [
         event.level,
         event.action,
-        event.error_message,
+        event.errorMessage,
       ],
     );
     expect(sent).toEqual([
@@ -227,7 +212,7 @@ describe("Logger", () => {
     Logger.init([]);
     windowListeners.error({ message: "", target: new FakeElement() });
     hidePage();
-    expect(sentEvents(0)[0].error_message).toBe("DOM source error: <script> /assets/app.js");
+    expect(sentEvents(0)[0].errorMessage).toBe("DOM source error: <script> /assets/app.js");
   });
 
   it("keeps a long window error message out of the action and masks it", async () => {
@@ -243,37 +228,33 @@ describe("Logger", () => {
     hidePage();
     const [event] = sentEvents(0);
     expect(event.action).toBe("WINDOW/error");
-    expect(event.error_message).toContain("bad *** ");
-    expect(event.error_message).not.toContain("secret-42");
+    expect(event.errorMessage).toContain("bad *** ");
+    expect(event.errorMessage).not.toContain("secret-42");
   });
 
-  it("records warn with the error text and masks the call context", async () => {
+  it("records warn with the error text and masks the call extra", async () => {
     const Logger = await loadLogger();
     Logger.init([/^token$/]);
     Logger.warn("slow", { token: "abc", step: 1 }, new Error("timeout"));
     Logger.warn("odd", {}, new Error("plain"));
-    Logger.warn("none", {}, undefined);
+    Logger.warn("none");
     hidePage();
     const [first, second, third] = sentEvents(0);
-    expect(first).toMatchObject({ level: "warn", error_message: "timeout" });
-    expect(first.context).toEqual({
-      request_url: "https://app.example/home?a=1",
-      token: "***",
-      step: 1,
-    });
-    expect(second.error_message).toBe("plain");
-    expect(third.error_message).toBeNull();
+    expect(first).toMatchObject({ level: "warn", errorMessage: "timeout" });
+    expect(first.extra).toEqual({ token: "***", step: 1 });
+    expect(second.errorMessage).toBe("plain");
+    expect(third.errorMessage).toBeNull();
   });
 
   it("sends a fallback error message when the message is empty", async () => {
     const Logger = await loadLogger();
     Logger.init([]);
-    Logger.error("a", {}, new Error(""));
-    Logger.error("b", {}, new Error("   "));
-    Logger.error("c", {}, new Error(""));
+    Logger.error("a", new Error(""));
+    Logger.error("b", new Error("   "));
+    Logger.error("c", new Error(""));
     hidePage();
     const events = sentEvents(0);
-    expect(events.map((event: { error_message: string }) => event.error_message)).toEqual([
+    expect(events.map((event: { errorMessage: string }) => event.errorMessage)).toEqual([
       "unknown error",
       "unknown error",
       "unknown error",
@@ -281,54 +262,35 @@ describe("Logger", () => {
   });
 
   describe("capture", () => {
-    it("records the event of the output with the latency and returns the output", async () => {
+    it("records an info event with the latency and returns the output", async () => {
       const Logger = await loadLogger();
       Logger.init([]);
-      const work = new Promise<number>((resolve) => setTimeout(() => resolve(7), 25));
-      const pending = capture(work, (output) => ({
-        level: "info",
-        action: "cart/count",
-        context: { count: output },
-      }));
+      const pending = Logger.capture("cart/count", async (extra) => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        extra.count = 7;
+        return 7;
+      });
       await vi.advanceTimersByTimeAsync(25);
 
       expect(await pending).toBe(7);
       hidePage();
       const events = sentEvents(0);
       expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({ action: "cart/count", level: "info", latency_ms: 25, error_message: null });
-      expect(events[0].context.count).toBe(7);
+      expect(events[0]).toMatchObject({ action: "cart/count", level: "info", latencyMs: 25, errorMessage: null });
+      expect(events[0].extra).toEqual({ count: 7 });
     });
 
-    it("records warn and error from the callback", async () => {
+    it("records an error event and rethrows when the work rejects", async () => {
       const Logger = await loadLogger();
       Logger.init([]);
-      await capture(Promise.resolve("slow"), () => ({
-        level: "warn",
-        action: "save",
-        error: new Error("timeout"),
-      }));
-      await capture(Promise.resolve("bad"), () => ({
-        level: "error",
-        action: "save",
-        error: new Error(""),
-      }));
+      await expect(Logger.capture("save", () => Promise.reject(new Error("denied")))).rejects.toThrow("denied");
+      await expect(Logger.capture("save", () => Promise.reject(new Error("")))).rejects.toThrow();
       hidePage();
       const events = sentEvents(0);
-      expect(events.map((event: { level: string; error_message: string }) => [event.level, event.error_message])).toEqual([
-        ["warn", "timeout"],
+      expect(events.map((event: { level: string; errorMessage: string }) => [event.level, event.errorMessage])).toEqual([
+        ["error", "denied"],
         ["error", "unknown error"],
       ]);
-    });
-
-    it("does not record an event when the work rejects", async () => {
-      const Logger = await loadLogger();
-      Logger.init([]);
-      await expect(capture(Promise.reject(new Error("denied")), () => ({ level: "info", action: "x" }))).rejects.toThrow(
-        "denied",
-      );
-      hidePage();
-      expect(sendBeacon).not.toHaveBeenCalled();
     });
   });
 
@@ -344,9 +306,8 @@ describe("Logger", () => {
       vi.advanceTimersByTime(60_000);
 
       const events = sentEvents(0);
-      const request_url = "https://app.example/home?a=1";
-      expect(events[0].context).toEqual({ request_url });
-      expect(events[1].context).toEqual({ request_url, user: "u2", beta: "on" });
+      expect(events[0].context).toEqual({});
+      expect(events[1].context).toEqual({ user: "u2", beta: "on" });
     });
 
     it("removes the named keys", async () => {
@@ -358,19 +319,7 @@ describe("Logger", () => {
       Logger.info("after");
       vi.advanceTimersByTime(60_000);
 
-      expect(sentEvents(0)[0].context).toEqual({
-        request_url: "https://app.example/home?a=1",
-        beta: "on",
-      });
-    });
-
-    it("masks each match in the request url", async () => {
-      const Logger = await loadLogger();
-      Logger.init([/a=\d+/]);
-      Logger.info("page");
-      vi.advanceTimersByTime(60_000);
-
-      expect(sentEvents(0)[0].context).toEqual({ request_url: "https://app.example/home?***" });
+      expect(sentEvents(0)[0].context).toEqual({ beta: "on" });
     });
   });
 });

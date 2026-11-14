@@ -10,5 +10,3 @@ export type ClientLogEvent = {
   context: LogFields;
   extra: LogFields;
 };
-
-export type CaptureEvent = Omit<ClientLogEvent,  "ts"| "latencyMs" | "action" | "context">;
