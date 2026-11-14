@@ -65,7 +65,7 @@ The middleware writes these keys to `context`:
 
 Cloudflare sets the header `cf-connecting-ip` to the real client IP. It is the only source of `ip`.
 
-- `ian_framework::http::headers::client_ip(headers)` gives the client IP, `Option<&str>`. `ian_framework::http::headers::user_agent(headers)` gives the user agent, `Option<&str>`. Each function reads one header of a `HeaderMap`. The middleware, the rate limit middleware and the client log route use them. When a function gives no value, the middleware uses `-`, and the other callers use an empty string.
+- `ian_framework::http::headers::client_ip(headers)` gives the client IP, `Option<&str>`. `ian_framework::http::headers::user_agent(headers)` gives the user agent, `Option<&str>`. Each function reads one header of a `HeaderMap`. The middleware, the rate limit middleware, the allowed IP middleware and the client log route use them. When a function gives no value, the middleware uses `-`, and the other callers use an empty string.
 
 - The framework supports only one deployment: Cloudflare in front of a reverse proxy, and the reverse proxy in front of the process.
 - The middleware does not read `x-forwarded-for`, `x-real-ip` or the socket address.
