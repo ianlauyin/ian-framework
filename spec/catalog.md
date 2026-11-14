@@ -38,6 +38,6 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | File upload and file download | `spec/framework_fe/file-transfer.md` |
 | Small helpers: typed storage and `sleep` | `spec/framework_fe/util.md` |
 | App error boundary | `spec/framework_fe/solid/error-boundary.md` |
-| Route logger for the SolidJS router | `spec/framework_fe/solid/route-logger.md` |
+| Navigation logger for the SolidJS router | `spec/framework_fe/solid/navigation-logger.md` |
 | Browser logger | `spec/framework_fe/logger.md` |
 | Time helpers, Hong Kong time `hktIsoString` | `spec/framework_fe/time.md` |

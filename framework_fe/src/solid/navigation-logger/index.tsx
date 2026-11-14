@@ -3,7 +3,7 @@ import { createEffect, type JSX, on } from "solid-js";
 
 import { Logger } from "../../logger";
 
-export function RouteLogger(): JSX.Element {
+export function NavigationLogger(): JSX.Element {
   const location = useLocation();
   createEffect(() => {
     const requestUrl = `${window.location.origin}${location.pathname}${location.search}${location.hash}`;

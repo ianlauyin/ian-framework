@@ -1,19 +1,19 @@
-# Route logger
+# Navigation logger
 
-This document describes the route logger component in the frontend framework.
+This document describes the navigation logger component in the frontend framework.
 This feature is not product business logic.
 
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - The import path is `ian-framework-fe`.
-- The source file is `framework_fe/src/solid/route-logger/index.tsx`.
+- The source file is `framework_fe/src/solid/navigation-logger/index.tsx`.
 - The component uses SolidJS and the SolidJS router. `solid-js` and `@solidjs/router` are optional peer dependencies of the package.
 - A project that imports this component must have `solid-js`, `@solidjs/router` and `vite-plugin-solid`.
 
 ## API
 
-`RouteLogger` is a component with no props. It shows nothing.
+`NavigationLogger` is a component with no props. It shows nothing.
 
 The project must put the component inside the `Router` of `@solidjs/router`. The component uses `useLocation`, which works only inside the `Router`. Put one component in the root layout, so that the component stays mounted for all the pages.
 
