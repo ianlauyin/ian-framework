@@ -3,8 +3,12 @@ import { createEffect, type JSX, on } from "solid-js";
 
 import { Logger } from "../../logger";
 
-export function PageSwitchLogger(): JSX.Element {
+export function RouteLogger(): JSX.Element {
   const location = useLocation();
+  createEffect(() => {
+    const requestUrl = `${window.location.origin}${location.pathname}${location.search}${location.hash}`;
+    Logger.addContext("request_url", Logger.maskText(requestUrl));
+  });
   createEffect(
     on(
       () => location.pathname,

@@ -30,6 +30,10 @@ export class Logger {
     Logger.context = { ...Logger.context, [key]: value };
   }
 
+  public static maskText(text: string): string {
+    return Logger.mask.text(text);
+  }
+
   public static removeContext(...keys: string[]): void {
     const kept = { ...Logger.context };
     for (const key of keys) delete kept[key];

@@ -1,2 +1,2 @@
 export * from "./error-boundary";
-export * from "./page-switch-logger";
+export * from "./route-logger";

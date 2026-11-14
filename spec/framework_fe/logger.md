@@ -29,6 +29,7 @@ This feature is not product business logic.
 | `Logger.error(action, error, extra?)` | Records one event with the level `error`. `error` is an `Error`. |
 | `Logger.capture(actionName, work)` | Runs one piece of work and records one event for it. The rules are in the section "Capture". |
 | `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `bool`. A key that exists gets the new value. |
+| `Logger.maskText(text)` | Returns `text` with each match of each mask pattern replaced by `***`. It uses the value rule in the section "Masking". |
 | `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 
 ## Behaviour
