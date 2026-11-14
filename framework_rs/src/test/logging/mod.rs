@@ -37,7 +37,17 @@ pub(crate) fn logger(shipper: HttpLogShipper) -> Logger {
 }
 
 pub(crate) fn client_log_event(event: &LogEvent) -> ClientLogEvent {
-    serde_json::from_value(serde_json::to_value(event).unwrap()).unwrap()
+    let mut wire = serde_json::to_value(event).unwrap();
+    let fields = wire.as_object_mut().unwrap();
+    for (snake, camel) in [
+        ("latency_ms", "latencyMs"),
+        ("error_message", "errorMessage"),
+    ] {
+        if let Some(value) = fields.remove(snake) {
+            fields.insert(camel.to_string(), value);
+        }
+    }
+    serde_json::from_value(wire).unwrap()
 }
 
 pub(crate) fn assert_uuid_v7(id: &str) {

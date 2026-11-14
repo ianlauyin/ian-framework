@@ -10,7 +10,7 @@ The app builds each event that does not come from a client. The app does not che
 
 ### ClientLogEvent
 
-`ian_framework::logging::ClientLogEvent` is one event that a client sends. It has the same fields as `LogEvent` (`ts`, `action`, `latency_ms`, `level`, `error_message`, `context`, `extra`) except `id`. The client does not send an `id`. A client `id` in the JSON is ignored.
+`ian_framework::logging::ClientLogEvent` is one event that a client sends. It has the same fields as `LogEvent` (`ts`, `action`, `latency_ms`, `level`, `error_message`, `context`, `extra`) except `id`. In the JSON from the client, `latency_ms` is `latencyMs` and `error_message` is `errorMessage`. The client does not send an `id`. A client `id` in the JSON is ignored.
 
 ### Check of one event
 

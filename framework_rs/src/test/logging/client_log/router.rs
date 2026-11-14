@@ -20,9 +20,9 @@ fn client_event(action: &str) -> serde_json::Value {
         "ts": "2026-10-25T12:00:00Z",
         "id": "client-id",
         "action": action,
-        "latency_ms": 5,
+        "latencyMs": 5,
         "level": "error",
-        "error_message": "client failed",
+        "errorMessage": "client failed",
         "context": { "ip": "10.0.0.1", "user_agent": "fake-agent" },
         "extra": { "page": "/home" },
     })
@@ -83,7 +83,7 @@ async fn sends_a_same_origin_batch_with_the_request_ip_and_user_agent() {
 #[tokio::test]
 async fn an_error_event_without_a_message_does_not_reject_the_batch() {
     let mut bad = client_event("no-message");
-    bad.as_object_mut().unwrap().remove("error_message");
+    bad.as_object_mut().unwrap().remove("errorMessage");
     let body = json!({ "events": [bad, client_event("with-message")] }).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&headers, Body::from(body)).await;
@@ -98,7 +98,7 @@ async fn an_error_event_without_a_message_does_not_reject_the_batch() {
 #[tokio::test]
 async fn a_non_string_error_message_rejects_the_batch() {
     let mut number = client_event("number-message");
-    number["error_message"] = json!(123);
+    number["errorMessage"] = json!(123);
     let body = json!({ "events": [number, client_event("beside-number")] }).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&headers, Body::from(body)).await;

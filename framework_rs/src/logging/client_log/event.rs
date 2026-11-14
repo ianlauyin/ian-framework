@@ -38,6 +38,7 @@ impl ClientLog {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientLogEvent {
     pub(crate) ts: DateTime<FixedOffset>,
     pub(crate) action: String,

@@ -28,7 +28,7 @@ This feature is not product business logic.
 | `Logger.info(action, context?)` | Records one event with the level `info`, with no `error_message`. |
 | `Logger.warn(action, context?, error?)` | Records one event with the level `warn`. `error` is an `Error`. When `error` is `undefined`, the event has no `error_message`. |
 | `Logger.error(action, context, error)` | Records one event with the level `error`. `error` is an `Error`. |
-| `Logger.capture(work, toLog)` | Runs one piece of work and records one event for it. The rules are in the section "Capture". |
+| `Logger.capture(actionName, work)` | Runs one piece of work and records one event for it. The rules are in the section "Capture". |
 | `Logger.addContext(key, value)` | Sets one key in the context of the logger. `value` is a string, a number or a `bool`. A key that exists gets the new value. |
 | `Logger.removeContext(...keys)` | Removes each named key from the context of the logger. A key that is not there is ignored. |
 
@@ -51,9 +51,9 @@ The event has these fields:
 | --- | --- |
 | `ts` | The current Hong Kong time (HKT) in ISO 8601 text with the offset `+08:00`, from `hktIsoString` of `ian-framework-fe`. The time rules are in `spec/framework_fe/time.md`. The browser time zone does not change the value. |
 | `action` | The `action` argument of the method, with no change. |
-| `latency_ms` | `null` for `Logger.info`, `Logger.warn` and `Logger.error`. For `capture`, the rounded time in milliseconds from the start of the call to the return of `toLog`. |
+| `latencyMs` | `null` for `Logger.info`, `Logger.warn` and `Logger.error`. For `capture`, the rounded time in milliseconds from the start of the call to the end of `work`. |
 | `level` | The level of the method. |
-| `error_message` | `null` for `Logger.info`, and for `Logger.warn` when `error` is `undefined`. The text of `error` after the masking. For an `error` event, an empty or blank text becomes `unknown error` before the masking. |
+| `errorMessage` | `null` for `Logger.info`, and for `Logger.warn` when `error` is `undefined`. The text of `error` after the masking. For an `error` event, an empty or blank text becomes `unknown error` before the masking. |
 | `context` | A copy of the context of the logger, with the key `request_url` before it, then the call `context` after the masking. The value of `request_url` is `location.href` after the masking. A `request_url` key from `Logger.addContext` or from the call replaces it. Each value is a string, a number or a `bool`. |
 | `extra` | The key `page` after the masking. The value is `location.pathname`. |
 
@@ -65,15 +65,15 @@ The event has these fields:
 
 ### Capture
 
-`capture(work, toLog)` is an async function. The source is the `capture` method of `Logger` in `framework_fe/src/logger/logger.ts`. It follows `with_log` in `spec/framework_rs/logging/logger.md`.
+`capture(actionName, work)` is an async function. The source is the `capture` method of `Logger` in `framework_fe/src/logger/logger.ts`. It follows `with_log` in `spec/framework_rs/logging/logger.md`.
 
-- `work` is a `Promise<T>`. `toLog` is a function from the output to the log fields.
-- The log fields are `level`, `action` and `context`. `level` is `info`, `warn` or `error`. `context` is `LogFields`. When `toLog` gives no `context`, the call context is empty.
-- `error` is an `Error`. The `info` level has no `error`. The `warn` level can omit `error`. The `error` level requires `error`.
-- It starts a timer with `performance.now()` when it is called, awaits `work`, and gives the output of `work` to the caller without a change.
-- It calls `toLog` with the output. Then it sets `latency_ms` to the rounded time from the start of the call to the return of `toLog`. `toLog` cannot set `latency_ms`.
-- The `error_message` rules are the same as `Logger.info`, `Logger.warn` and `Logger.error`.
-- When `work` rejects, it does not call `toLog`, records no event, and the rejection reaches the caller.
+- `actionName` is a `string`. It is the `action` of the event.
+- `work` is a function `(event: CaptureEvent) => Promise<T>`. `CaptureEvent` is `Omit<ClientLogEvent, "level" | "latencyMs" | "action" | "errorMessage" | "context">`. The event has `ts` and `extra`. `extra` starts empty and `work` can set keys in it.
+- It starts a timer with `performance.now()` when it is called, then awaits `work` in a `try` block.
+- When `work` resolves, it records one event with the level `info`, and gives the output of `work` to the caller without a change.
+- When `work` rejects, it records one event with the level `error`, and throws the same rejection again. `errorMessage` is the message of the error. An empty message, or a reason that is not an `Error`, becomes `unknown error`.
+- `latencyMs` is the rounded time from the start of the call to the end of `work`. `work` cannot set `level` or `latencyMs`.
+- The `context` is the context of the logger, with `request_url`. `extra` has `page` and the keys of `work`, after the masking.
 
 ### Send
 
@@ -101,22 +101,22 @@ Send rules:
 
 ### Window errors
 
-`Logger.init` adds two window listeners. The `error` listener uses the capture phase, so that it also sees a script, a style or an image that failed to load. Each listener records one `error` event. `action` is a fixed text, so the text of a window error does not become the action. The message goes only in `error_message`, which the masking applies to.
+`Logger.init` adds two window listeners. The `error` listener uses the capture phase, so that it also sees a script, a style or an image that failed to load. Each listener records one `error` event. `action` is a fixed text, so the text of a window error does not become the action. The message goes only in `errorMessage`, which the masking applies to.
 
-| Window event | `action` | `error_message` |
+| Window event | `action` | `errorMessage` |
 | --- | --- | --- |
 | `error` | `WINDOW/error` | The event `message`. If that message is empty and `target` is a DOM element, the message is `DOM source error: <tag> source`, where `tag` is the lower case tag name and `source` is the `src` attribute, or the `href` attribute when there is no `src`. Else the message is `window error`. |
 | `unhandledrejection` | `WINDOW/unhandledrejection` | `message` of the reason when the reason is an `Error`. Else the message is `unhandled rejection`. An empty message of an `Error` becomes `unknown error`. |
 
 ### Masking
 
-The logger masks `extra`, the call `context` and `error_message` before it puts the event in the queue.
+The logger masks `extra`, the call `context` and `errorMessage` before it puts the event in the queue.
 
 - Before `Logger.init`, the pattern list is empty. With no pattern, the logger does not change `extra` and the call `context`.
 - `Logger.init` sets the full list. A second call has no effect, so it does not replace the list.
 - The logger adds the `g` flag to each pattern that does not have it. It keeps the other flags.
 - The masking applies to the `page` key also.
-- The masking also applies to `error_message`. The masking also applies to the value of `request_url` in `context`. The masking applies to the call `context`, with the key rule and the value rule. The masking does not apply to `action` and to the context of `Logger.addContext`.
+- The masking also applies to `errorMessage`. The masking also applies to the value of `request_url` in `context`. The masking applies to the call `context`, with the key rule and the value rule. The masking does not apply to `action` and to the context of `Logger.addContext`.
 
 Key rule:
 

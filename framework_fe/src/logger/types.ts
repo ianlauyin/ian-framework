@@ -4,9 +4,11 @@ export type LogFields = Record<string, string | number | boolean>;
 export type ClientLogEvent = {
   ts: string;
   action: string;
-  latency_ms: number | null;
+  latencyMs: number | null;
   level: LogLevel;
-  error_message: string | null;
+  errorMessage: string | null;
   context: LogFields;
   extra: LogFields;
 };
+
+export type CaptureEvent = Omit<ClientLogEvent,  "ts"| "latencyMs" | "action" | "context">;
