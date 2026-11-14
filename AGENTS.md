@@ -6,7 +6,7 @@ Do not put business logic in this repository.
 The Rust library is `framework_rs/`.
 The frontend library is `framework_fe/`.
 
-Before you look up framework feature, read spec/catalog.md for the specification index.
+Before you look up framework feature, read `spec/catalog.md` for the specification index.
 
 ## Rules
 
