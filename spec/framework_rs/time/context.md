@@ -8,14 +8,15 @@ This feature is not product business logic.
 | Sub-feature | Document |
 | --- | --- |
 | Hong Kong time | `spec/framework_rs/time/hkt.md` |
+| Quarter | `spec/framework_rs/time/quarter.md` |
 
 ## Crate
 
 - The package name is `ian_framework`.
 - The crate path is `framework_rs/`.
 - The module path is `ian_framework::time`.
-- The source file is `framework_rs/src/time.rs`.
-- This module has no tests.
+- The source files are `framework_rs/src/time/mod.rs`, `framework_rs/src/time/hkt.rs` and `framework_rs/src/time/quarter.rs`.
+- The test file is `framework_rs/src/test/time/quarter.rs`. `hkt.rs` has no tests.
 
 ## Build
 

@@ -9,6 +9,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/time/conte
 | Item | Kind |
 | --- | --- |
 | `hkt_now` | Function |
+| `hkt_today` | Function |
 
 ## hkt_now
 
@@ -18,6 +19,10 @@ The parts that apply to all of this feature are in `spec/framework_rs/time/conte
 - The result has the offset `+08:00`.
 - The RFC 3339 text of the result ends with `+08:00`.
 - The function does not use the time zone of the host.
+
+## hkt_today
+
+`hkt_today() -> chrono::NaiveDate` gives the date part of `hkt_now()`.
 
 ## Users in the framework
 
