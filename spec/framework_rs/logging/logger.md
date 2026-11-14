@@ -132,6 +132,7 @@ Loop task:
 - A ship failure does not stop the loop.
 - When the shutdown receiver is triggered, the loop stops and makes one final flush.
 - The final flush sends batches until the buffer is empty.
-- The final flush does not stop until the buffer is empty. After a batch that does not leave the buffer, it waits 1 second and sends again. Thus a log server that is down keeps the task, and the process, open.
-- The task ends after the buffer is empty.
-- The project awaits the task before `main` returns. Thus the logger sends the logs of the last interval.
+- After a batch that does not leave the buffer, the flush waits 1 second and sends again.
+- The flush stops after 3 batches that do not leave the buffer. The events that stay in the buffer are not sent.
+- The task ends when the flush stops.
+- The project awaits the task before `main` returns. The await gives the final flush time to send the logs of the last interval.

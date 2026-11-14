@@ -333,16 +333,43 @@ async fn shutdown_flushes_every_chunk_and_ends_the_loop() {
 }
 
 #[tokio::test]
-async fn shutdown_flush_keeps_waiting_while_the_endpoint_fails() {
-    let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
+async fn shutdown_flush_stops_after_three_failed_retries() {
+    let (endpoint, mut rx) = capture_server(StatusAction::Unavailable).await;
     let shipper = logger(http_shipper("api", &endpoint));
     shipper.record(LogEvent::info("keep"));
     let shutdown = ShutdownReceiver::new();
     shutdown.trigger();
     let handle = shipper.spawn_ship_loop(shutdown);
-    let ended = tokio::time::timeout(Duration::from_millis(1500), handle).await;
-    assert!(ended.is_err());
+    tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(buffered_events(&shipper)[0].action, "keep");
+    let mut attempts = 0;
+    while rx.try_recv().is_ok() {
+        attempts += 1;
+    }
+    assert_eq!(attempts, 3);
+}
+
+#[tokio::test]
+async fn shutdown_flush_retries_a_failed_batch_until_it_leaves() {
+    let (endpoint, mut rx) = capture_server(StatusAction::UnavailableThenOk(2)).await;
+    let shipper = logger(http_shipper("api", &endpoint));
+    shipper.record(LogEvent::info("keep"));
+    let shutdown = ShutdownReceiver::new();
+    shutdown.trigger();
+    let handle = shipper.spawn_ship_loop(shutdown);
+    tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(shipper.buffered_len(), 0);
+    let mut attempts = 0;
+    while rx.try_recv().is_ok() {
+        attempts += 1;
+    }
+    assert_eq!(attempts, 3);
 }
 
 #[tokio::test]
@@ -386,6 +413,7 @@ enum StatusAction {
     NoContent,
     Unavailable,
     Slow,
+    UnavailableThenOk(u8),
 }
 
 struct Captured {
@@ -408,12 +436,14 @@ async fn capture_server(
     struct Capture {
         tx: tokio::sync::mpsc::UnboundedSender<Captured>,
         action: u8,
+        fails_left: std::sync::Arc<std::sync::atomic::AtomicU8>,
     }
 
-    let action_code = match action {
-        StatusAction::NoContent => 0,
-        StatusAction::Unavailable => 1,
-        StatusAction::Slow => 2,
+    let (action_code, fails_left) = match action {
+        StatusAction::NoContent => (0, 0),
+        StatusAction::Unavailable => (1, 0),
+        StatusAction::Slow => (2, 0),
+        StatusAction::UnavailableThenOk(fails) => (3, fails),
     };
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let app = Router::new()
@@ -444,7 +474,17 @@ async fn capture_server(
                         authorization,
                         body,
                     });
-                    if capture.action == 1 {
+                    let fail = capture.action == 1
+                        || (capture.action == 3
+                            && capture
+                                .fails_left
+                                .try_update(
+                                    std::sync::atomic::Ordering::Relaxed,
+                                    std::sync::atomic::Ordering::Relaxed,
+                                    |left| left.checked_sub(1),
+                                )
+                                .is_ok());
+                    if fail {
                         StatusCode::SERVICE_UNAVAILABLE
                     } else {
                         StatusCode::NO_CONTENT
@@ -455,6 +495,7 @@ async fn capture_server(
         .with_state(Capture {
             tx,
             action: action_code,
+            fails_left: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(fails_left)),
         });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
