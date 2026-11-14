@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::Arc;
 
@@ -10,8 +10,6 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::headers::client_ip;
-use crate::logging::Logger;
-
 pub const ALLOWED_IPS_INVALID: &str = "ALLOWED_IPS_INVALID";
 
 #[derive(Clone, Debug)]
@@ -44,13 +42,6 @@ pub async fn require_allowed_ip(
         .and_then(|value| value.parse::<IpAddr>().ok())
         .is_some_and(|addr| allowed.0.contains(&addr));
     if !allowed {
-        Logger::warn(
-            "HTTP/ipRejected",
-            BTreeMap::from([
-                ("method".to_string(), request.method().as_str().into()),
-                ("ip".to_string(), ip.unwrap_or("-").into()),
-            ]),
-        );
         return exception!(code = error_code::FORBIDDEN, "ip not allowed").into_response();
     }
     next.run(request).await

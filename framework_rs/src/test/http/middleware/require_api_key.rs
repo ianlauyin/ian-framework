@@ -1,3 +1,6 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
 use axum::body::{to_bytes, Body};
 use axum::extract::Request;
 use axum::http::StatusCode;
@@ -52,6 +55,26 @@ async fn the_rejection_body_is_json() {
     let response = router().oneshot(request("/any", None)).await.unwrap();
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     assert_eq!(body, r#"{"message":"unauthorized"}"#);
+}
+
+#[tokio::test]
+async fn calls_on_reject_only_for_a_rejected_request() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let key = ApiKey::new(KEY).on_reject(move |_| {
+        counter.fetch_add(1, Ordering::SeqCst);
+    });
+    let router = Router::new()
+        .fallback(any(|| async { StatusCode::NO_CONTENT }))
+        .layer(from_fn_with_state(key, require_api_key));
+    router
+        .clone()
+        .oneshot(request("/any", Some(KEY)))
+        .await
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    router.oneshot(request("/any", None)).await.unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
 #[test]

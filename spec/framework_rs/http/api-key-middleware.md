@@ -15,7 +15,8 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 - The request needs the header `Authorization: Bearer <key>`. The check uses `bearer_token` and `key_matches`. `key_matches` is not an export of `ian_framework::http::headers`.
 - When the check passes, the middleware passes the request to the next handler.
 - When the check fails, the middleware does not call the next handler. The response has status 401 and the message `unauthorized`.
-- Before the 401 response, the middleware calls `Logger::warn` with the action `HTTP/apiKeyRejected` and the context key `method`. The logger rules are in `spec/framework_rs/logging/logger.md`.
+- `ApiKey::on_reject(callback)` sets a callback and returns the `ApiKey`. The callback is `Fn(&Request) + Send + Sync + 'static`. A clone shares the callback.
+- Before the 401 response, the middleware calls the callback with the request, when the project set one. The middleware does not write a log event.
 
 The 401 response body is:
 
@@ -25,6 +26,6 @@ The 401 response body is:
 
 Rules:
 
-- The middleware writes one `warn` event with the request method for each 401. The event has no key and no path.
+- The callback runs once for each 401. The callback does not run for a request that passes.
 - The `Debug` output of `ApiKey` shows `[redacted]` in place of the key.
 - An empty key never passes a request, because `key_matches` is `false` for an empty key.

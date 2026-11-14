@@ -17,7 +17,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/http/conte
 - When the client IP is in the set, the middleware passes the request to the next handler.
 - When the client IP is missing, empty, not an IP address, or not in the set, the middleware does not call the next handler. The response has status 403 and the message `ip not allowed`.
 - An empty set rejects every request.
-- Before the 403 response, the middleware calls `Logger::warn` with the action `HTTP/ipRejected` and the context keys `method` and `ip`. The `ip` value is the header text when the header holds an IP address, or `-` when it does not. The logger rules are in `spec/framework_rs/logging/logger.md`.
+- The middleware does not write a log event for a 403.
 
 The 403 response body is:
 
@@ -27,5 +27,4 @@ The 403 response body is:
 
 Rules:
 
-- The middleware writes one `warn` event with the request method and the client IP for each 403.
 - The project must make the process reachable only through Cloudflare. A client that reaches the process directly can send any `cf-connecting-ip`.

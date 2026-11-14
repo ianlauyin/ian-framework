@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -9,14 +8,26 @@ use axum::response::{IntoResponse, Response};
 use crate::exception;
 use crate::http::error_code;
 use crate::http::headers::bearer::{bearer_token, key_matches};
-use crate::logging::Logger;
+
+type OnReject = Arc<dyn Fn(&Request) + Send + Sync>;
 
 #[derive(Clone)]
-pub struct ApiKey(Arc<str>);
+pub struct ApiKey {
+    key: Arc<str>,
+    on_reject: Option<OnReject>,
+}
 
 impl ApiKey {
     pub fn new(key: impl Into<String>) -> Self {
-        Self(key.into().into())
+        Self {
+            key: key.into().into(),
+            on_reject: None,
+        }
+    }
+
+    pub fn on_reject(mut self, callback: impl Fn(&Request) + Send + Sync + 'static) -> Self {
+        self.on_reject = Some(Arc::new(callback));
+        self
     }
 }
 
@@ -27,12 +38,11 @@ impl fmt::Debug for ApiKey {
 }
 
 pub async fn require_api_key(State(key): State<ApiKey>, request: Request, next: Next) -> Response {
-    let allowed = bearer_token(request.headers()).is_some_and(|token| key_matches(token, &key.0));
+    let allowed = bearer_token(request.headers()).is_some_and(|token| key_matches(token, &key.key));
     if !allowed {
-        Logger::warn(
-            "HTTP/apiKeyRejected",
-            BTreeMap::from([("method".to_string(), request.method().as_str().into())]),
-        );
+        if let Some(on_reject) = &key.on_reject {
+            on_reject(&request);
+        }
         return exception!(code = error_code::UNAUTHORIZED, "unauthorized").into_response();
     }
     next.run(request).await
