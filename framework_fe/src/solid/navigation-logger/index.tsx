@@ -7,7 +7,7 @@ export function NavigationLogger(): JSX.Element {
   const location = useLocation();
   createEffect(() => {
     const requestUrl = `${window.location.origin}${location.pathname}${location.search}${location.hash}`;
-    Logger.addContext("request_url", Logger.maskText(requestUrl));
+    Logger.addContext("requestUrl", Logger.maskText(requestUrl));
   });
   createEffect(
     on(

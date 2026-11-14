@@ -25,7 +25,7 @@ The component has two effects. Both use the router location. The logger is in `s
 
 - The first effect builds the request URL from `window.location.origin`, then `pathname`, `search` and `hash` of the router location.
 - The effect runs when the component mounts, and again each time the URL changes. This includes a change of only the query string or the hash.
-- Each run calls `Logger.addContext` with the key `request_url` and the URL after `Logger.maskText`. Thus each later event has the current page URL in its `context`.
+- Each run calls `Logger.addContext` with the key `requestUrl` and the URL after `Logger.maskText`. Thus each later event has the current page URL in its `context`.
 
 ### Page switch
 

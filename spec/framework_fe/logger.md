@@ -59,7 +59,7 @@ The event has these fields:
 
 ### Context
 
-- The logger keeps one context object in memory for the page. It is empty at the start. The logger does not add `request_url` or `page`.
+- The logger keeps one context object in memory for the page. It is empty at the start. The logger does not add `requestUrl` or `page`.
 - `Logger.addContext` and `Logger.removeContext` change the context for the events that the logger records after the call. They do not change the events that are already in the queue.
 - The Rust log route keeps the `context` of a browser event, with the same key and value rules as `extra`, and changes each key to snake_case. It sets `ip` and `user_agent` from the request. The route rules are in `spec/framework_rs/logging/client-log.md`.
 
