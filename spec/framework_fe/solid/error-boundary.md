@@ -6,11 +6,10 @@ This feature is not product business logic.
 ## Package
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
-- The import path is `ian-framework-fe/solid`.
+- The import path is `ian-framework-fe`.
 - The source file is `framework_fe/src/solid/error-boundary/index.tsx`.
 - The component uses SolidJS. `solid-js` is an optional peer dependency of the package.
 - A project that imports this component must have `solid-js` and `vite-plugin-solid`.
-- The export has the `solid` condition. `vite-plugin-solid` reads this condition and compiles the TSX source. It does not pre-bundle the package.
 
 ## API
 
