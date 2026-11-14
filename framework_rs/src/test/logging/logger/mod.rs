@@ -333,17 +333,15 @@ async fn shutdown_flushes_every_chunk_and_ends_the_loop() {
 }
 
 #[tokio::test]
-async fn shutdown_flush_stops_when_the_endpoint_fails() {
+async fn shutdown_flush_keeps_waiting_while_the_endpoint_fails() {
     let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
     let shipper = logger(http_shipper("api", &endpoint));
     shipper.record(LogEvent::info("keep"));
     let shutdown = ShutdownReceiver::new();
     shutdown.trigger();
     let handle = shipper.spawn_ship_loop(shutdown);
-    tokio::time::timeout(Duration::from_secs(2), handle)
-        .await
-        .unwrap()
-        .unwrap();
+    let ended = tokio::time::timeout(Duration::from_millis(1500), handle).await;
+    assert!(ended.is_err());
     assert_eq!(buffered_events(&shipper)[0].action, "keep");
 }
 

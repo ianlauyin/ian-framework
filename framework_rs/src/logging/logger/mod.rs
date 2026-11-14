@@ -15,6 +15,8 @@ use crate::shutdown::ShutdownReceiver;
 
 pub(crate) const SHIP_EVERY: Duration = Duration::from_secs(60);
 
+const FLUSH_RETRY_EVERY: Duration = Duration::from_secs(1);
+
 static LOGGER: OnceLock<Logger> = OnceLock::new();
 
 #[derive(Clone)]
@@ -132,17 +134,13 @@ impl Logger {
         }
     }
 
-    // Stop at the first batch that does not leave the buffer, so a down log
-    // server does not hold the process open.
+    // Shutdown waits until the buffer is empty. A failed batch is retried after a pause.
     async fn flush(&self) {
-        loop {
+        while self.buffered_len() > 0 {
             let before = self.buffered_len();
-            if before == 0 {
-                return;
-            }
             self.send_buffer().await;
             if self.buffered_len() >= before {
-                return;
+                tokio::time::sleep(FLUSH_RETRY_EVERY).await;
             }
         }
     }
