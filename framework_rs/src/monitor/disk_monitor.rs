@@ -21,7 +21,8 @@ impl DiskMonitor {
                 BTreeMap::new(),
                 format!(
                     "invalid disk monitor config: threshold_percent={threshold_percent} must be in (0, 100] and interval={interval:?} must not be zero"
-                ),
+                )
+                .into(),
             );
             return None;
         }
