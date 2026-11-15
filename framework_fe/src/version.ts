@@ -1,14 +1,14 @@
 const VERSION_URL = "/version";
 
 export type VersionCheckerOptions = {
-  onUpdated: (onReload: () => Promise<void>) => void;
+  onUpdated: () => void;
   checkInterval?: number;
 };
 
 export class VersionChecker {
   private static currentVersion: string | null = null;
   private static initialized = false;
-  private static onUpdated: ((onReload: () => Promise<void>) => void) | undefined;
+  private static onUpdated: (() => void) | undefined;
 
   public static init(options: VersionCheckerOptions): void {
     if (VersionChecker.initialized) return;
@@ -26,6 +26,16 @@ export class VersionChecker {
     }
   }
 
+  // A plain reload can reuse a cached index.html, which still names the old assets.
+  public static async reload(): Promise<void> {
+    try {
+      await fetch(location.href, { cache: "reload" });
+    } catch {
+      // The reload below still runs when the fetch fails.
+    }
+    location.reload();
+  }
+
   private static async check(): Promise<void> {
     try {
       const response = await fetch(VERSION_URL, {
@@ -41,20 +51,10 @@ export class VersionChecker {
       }
 
       if (VersionChecker.currentVersion !== body.version) {
-        VersionChecker.onUpdated?.(reload);
+        VersionChecker.onUpdated?.();
       }
     } catch {
       // ignore network errors — version check is best-effort
     }
   }
-}
-
-// A plain reload can reuse a cached index.html, which still names the old assets.
-async function reload(): Promise<void> {
-  try {
-    await fetch(location.href, { cache: "reload" });
-  } catch {
-    // The reload below still runs when the fetch fails.
-  }
-  location.reload();
 }

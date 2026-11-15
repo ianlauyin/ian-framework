@@ -36,12 +36,13 @@ pnpm test
 | Method | Effect |
 | --- | --- |
 | `VersionChecker.init(options)` | Starts the checker. |
+| `VersionChecker.reload()` | Reloads the page without the HTTP cache. Returns a `Promise<void>`. |
 
 `options` is a `VersionCheckerOptions` object:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `onUpdated` | `(onReload: () => Promise<void>) => void` | Necessary. The checker calls it with `onReload` when the version changes. |
+| `onUpdated` | `() => void` | Necessary. The checker calls it when the version changes. |
 | `checkInterval` | `number` | Optional. The time between timer checks, in milliseconds. If it is not set, the checker does not use a timer. |
 
 - The project calls `init()` one time when the page starts.
@@ -60,15 +61,15 @@ The checker reads the route at these times:
 The checker compares the versions:
 
 - The first good response gives the current version.
-- When a later response gives a different version, the checker calls `onUpdated` with `onReload`.
+- When a later response gives a different version, the checker calls `onUpdated`.
 - The checker does not replace the current version. Thus each later different response calls `onUpdated` again.
 
-`onReload` reloads the page without the HTTP cache:
+`reload()` reloads the page without the HTTP cache:
 
 - It fetches the current page URL with `cache: "reload"`, so the browser stores the new `index.html`.
 - Then it calls `location.reload()`.
 - A failed fetch does not stop the reload.
-- It is the same function for each call. `onUpdated` decides when to call it.
+- It does not need `init()`. The project decides when to call it, for example after `onUpdated`.
 
 The checker ignores these failures:
 

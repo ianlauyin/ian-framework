@@ -136,21 +136,13 @@ describe("VersionChecker", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("passes an onReload that bypasses the cache before it reloads", async () => {
+  it("reload bypasses the cache before it reloads", async () => {
     const VersionChecker = await loadChecker();
     const reload = vi.fn();
     vi.stubGlobal("location", { href: "/folder?x=1", reload });
-    let onReload: (() => Promise<void>) | undefined;
-
-    respondWith("a");
-    VersionChecker.init({ onUpdated: (fn) => { onReload = fn; } });
-    await flush();
-    respondWith("b");
-    showPage();
-    await flush();
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    await onReload?.();
+    await VersionChecker.reload();
     expect(fetchMock).toHaveBeenLastCalledWith("/folder?x=1", { cache: "reload" });
     expect(reload).toHaveBeenCalledTimes(1);
   });
