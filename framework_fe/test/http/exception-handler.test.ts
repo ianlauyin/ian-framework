@@ -28,7 +28,7 @@ describe("setupExceptionHandler", () => {
     const handler = vi.fn();
     const { ApiError, NetworkConnectionException } = await setup(handler);
     const apiError = new ApiError(400, { message: "bad" });
-    const networkError = new NetworkConnectionException("down", "/ajax/item");
+    const networkError = new NetworkConnectionException("down", "/api/item");
 
     const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 

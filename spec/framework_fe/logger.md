@@ -89,7 +89,7 @@ The logger posts the queue to the route `POST /log` on the same origin, with `na
 
 The request has these properties:
 
-- The URL is `/log`. The logger does not add the prefix `/ajax`.
+- The URL is `/log`. The logger does not add the prefix `/api`.
 - The `Blob` body has the type `application/json`. The browser sends the cookies of the same origin.
 - The body is one JSON object `{"events": [...]}`. The `events` array holds each event in the queue.
 

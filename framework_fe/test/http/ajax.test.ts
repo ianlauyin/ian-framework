@@ -18,7 +18,7 @@ describe("ajax", () => {
     await ajax("/item", "GET");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/ajax/item",
+      "/api/item",
       expect.objectContaining({ method: "GET", credentials: "same-origin" }),
     );
   });
@@ -33,7 +33,7 @@ describe("ajax", () => {
 
     await ajax("/item", "GET", { page: 2, filter: undefined });
 
-    expect(fetchMock).toHaveBeenCalledWith("/ajax/item?page=2", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/item?page=2", expect.anything());
   });
 
   it("adds no question mark when there is no query value", async () => {
@@ -47,8 +47,8 @@ describe("ajax", () => {
     await ajax("/item", "GET", {});
     await ajax("/item", "GET", { filter: undefined });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/ajax/item", expect.anything());
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/ajax/item", expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/item", expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/item", expect.anything());
   });
 
   it("substitutes path parameters and sends JSON bodies for PUT requests", async () => {
@@ -62,7 +62,7 @@ describe("ajax", () => {
     await ajax("/item/{id}", "PUT", { name: "Alice" }, { id: "item-1" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/ajax/item/item-1",
+      "/api/item/item-1",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ name: "Alice" }),
@@ -81,7 +81,7 @@ describe("ajax", () => {
 
     await ajax("/x/{id}", "GET", null, { id: 0 });
 
-    expect(fetchMock).toHaveBeenCalledWith("/ajax/x/0", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/x/0", expect.anything());
   });
 
   it("encodes path param values", async () => {
@@ -94,7 +94,7 @@ describe("ajax", () => {
 
     await ajax("/x/{id}", "GET", null, { id: "a/b" });
 
-    expect(fetchMock).toHaveBeenCalledWith("/ajax/x/a%2Fb", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/x/a%2Fb", expect.anything());
   });
 
   it.each([undefined, null, ""])(
@@ -245,7 +245,7 @@ describe("ajax", () => {
 
       await expect(ajax("/item", "GET")).rejects.toMatchObject({
         message: `HTTP ${status}`,
-        requestURL: "/ajax/item",
+        requestURL: "/api/item",
       });
     },
   );
@@ -268,7 +268,7 @@ describe("ajax", () => {
 
     await expect(ajax("/item", "GET")).rejects.toMatchObject({
       message: "Failed to fetch",
-      requestURL: "/ajax/item",
+      requestURL: "/api/item",
     });
   });
 
@@ -301,7 +301,7 @@ describe("ajax", () => {
     await ajax("/item", "GET", { since: new Date("2026-10-25T12:00:00Z") });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/ajax/item?since=2026-10-25T12%3A00%3A00.000Z",
+      "/api/item?since=2026-10-25T12%3A00%3A00.000Z",
       expect.anything(),
     );
   });

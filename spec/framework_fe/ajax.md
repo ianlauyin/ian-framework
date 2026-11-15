@@ -30,14 +30,14 @@ This feature is not product business logic.
 | --- | --- | --- |
 | `code` | `number` | The HTTP status. |
 | `message` | `string` | `message` from the error body when it is a string. Otherwise `Unknown error`. |
-| `requestURL` | `string` | The URL of the request, with the prefix `/ajax`. |
+| `requestURL` | `string` | The URL of the request, with the prefix `/api`. |
 
 `NetworkConnectionException` has these fields:
 
 | Field | Type | Value |
 | --- | --- | --- |
 | `message` | `string` | The reason, in text. |
-| `requestURL` | `string` | The URL of the request, with the prefix `/ajax`. |
+| `requestURL` | `string` | The URL of the request, with the prefix `/api`. |
 
 Both classes extend `Error`.
 
@@ -47,7 +47,7 @@ The type of `pathParams` comes from the `{name}` parts of `url`, when `url` is a
 
 ### URL
 
-- The client adds the prefix `/ajax` to `url`. The project serves its JSON routes under `/ajax` on the same origin.
+- The client adds the prefix `/api` to `url`. The project serves its JSON routes under `/api` on the same origin.
 - The client replaces each `{name}` in `url` with `pathParams[name]`.
 - The client changes the path param value to text. Then the client encodes the text with `encodeURIComponent`. The client puts the encoded text in the URL.
 - If a path param value is `.` or `..`, the client throws an `Error`, because the encoding keeps it and the browser would change the path. The client does not send the request.

@@ -25,7 +25,7 @@ export const ajax = async <
   const isGetOrDelete = method === "GET" || method === "DELETE";
 
   let parsedUrl =
-    "/ajax" +
+    "/api" +
     url.replace(/{(\w+)}/g, (_, key) => {
       const value = (pathParams as PathParams)?.[key];
       if (value === undefined || value === null || value === "") {

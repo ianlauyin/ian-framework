@@ -19,7 +19,7 @@ This feature is not product business logic.
 
 ## Behaviour
 
-- Both functions use `url` as it is, with no `/ajax` prefix.
+- Both functions use `url` as it is, with no `/api` prefix.
 - `upload` uses the send step of `ajax`. The error classes and the date rule are the same as in `spec/framework_fe/ajax.md`. The request has the header `Accept: application/json` and no `Content-Type`, so the browser adds the boundary.
 - `downloadFile` uses `credentials: "same-origin"`.
 - `downloadFile` throws a `NetworkConnectionException` when the fetch fails or the status is not 2xx. A body of an error response is not saved.
