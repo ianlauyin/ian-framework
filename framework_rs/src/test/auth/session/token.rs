@@ -4,9 +4,11 @@ use crate::auth::session::token::*;
 fn token_is_64_lowercase_hex_characters() {
     let token = random_token().unwrap();
     assert_eq!(token.len(), 64);
-    assert!(token
-        .bytes()
-        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+    assert!(
+        token
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    );
     assert_ne!(token, random_token().unwrap());
 }
 

@@ -2,10 +2,10 @@ use axum::extract::Request;
 use axum::http::header;
 
 use crate::http::middleware::no_store::*;
+use axum::Router;
 use axum::body::Body;
 use axum::middleware::from_fn;
 use axum::routing::get;
-use axum::Router;
 use tower::ServiceExt;
 
 async fn cache_control(router: Router) -> String {

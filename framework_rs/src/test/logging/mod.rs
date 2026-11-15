@@ -6,7 +6,7 @@ mod with_log;
 
 use std::sync::{Mutex, Once};
 
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::routing::post;
 use axum::{Json, Router};
 

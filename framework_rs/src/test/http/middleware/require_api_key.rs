@@ -1,12 +1,12 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use axum::body::{to_bytes, Body};
+use axum::Router;
+use axum::body::{Body, to_bytes};
 use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::from_fn_with_state;
 use axum::routing::any;
-use axum::Router;
 use tower::ServiceExt;
 
 use crate::http::middleware::require_api_key::*;

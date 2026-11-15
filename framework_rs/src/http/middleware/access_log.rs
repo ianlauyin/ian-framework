@@ -9,7 +9,7 @@ use axum::response::Response;
 
 use crate::exception::Exception;
 use crate::http::headers::client::{client_ip, user_agent};
-use crate::logging::{with_log, LogEvent, LogValue, Logger};
+use crate::logging::{LogEvent, LogValue, Logger, with_log};
 
 #[derive(Clone, Default)]
 pub struct AccessLog {

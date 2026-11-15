@@ -3,8 +3,8 @@ use std::pin::Pin;
 
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use futures_util::stream;
 use futures_util::Stream;
+use futures_util::stream;
 use google_cloud_storage::model::Object;
 use google_cloud_storage::read_object::ReadObjectResponse;
 

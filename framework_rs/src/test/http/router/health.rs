@@ -1,5 +1,5 @@
 use crate::http::router::health::*;
-use axum::body::{to_bytes, Body};
+use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 

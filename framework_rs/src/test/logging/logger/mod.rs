@@ -427,10 +427,10 @@ struct Captured {
 async fn capture_server(
     action: StatusAction,
 ) -> (String, tokio::sync::mpsc::UnboundedReceiver<Captured>) {
+    use axum::Router;
     use axum::extract::{Path, State};
     use axum::http::{HeaderMap, StatusCode, Uri};
     use axum::routing::post;
-    use axum::Router;
 
     #[derive(Clone)]
     struct Capture {

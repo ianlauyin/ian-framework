@@ -1,5 +1,5 @@
-use axum::http::header::AUTHORIZATION;
 use axum::http::HeaderMap;
+use axum::http::header::AUTHORIZATION;
 
 use crate::http::headers::bearer::*;
 use axum::http::HeaderValue;

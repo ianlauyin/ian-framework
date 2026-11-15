@@ -72,10 +72,12 @@ fn exception_records_the_file_and_the_line_of_the_call() {
         source = std::io::Error::other("refused"),
     );
     assert!(external.source_exception().is_none());
-    assert!(std::error::Error::source(&external)
-        .unwrap()
-        .downcast_ref::<std::io::Error>()
-        .is_some());
+    assert!(
+        std::error::Error::source(&external)
+            .unwrap()
+            .downcast_ref::<std::io::Error>()
+            .is_some()
+    );
 }
 
 #[test]

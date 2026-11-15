@@ -3,10 +3,10 @@ use axum::http::header;
 use axum::response::Response;
 
 use crate::http::middleware::security_headers::*;
+use axum::Router;
 use axum::body::Body;
 use axum::middleware::from_fn;
 use axum::routing::get;
-use axum::Router;
 use tower::ServiceExt;
 
 async fn send(router: Router) -> Response {

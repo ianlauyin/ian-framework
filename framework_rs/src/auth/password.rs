@@ -1,6 +1,6 @@
+use argon2::Argon2;
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
-use argon2::Argon2;
 
 use crate::exception;
 use crate::exception::Exception;

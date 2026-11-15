@@ -3,8 +3,8 @@ mod store;
 mod token;
 
 use axum::extract::{FromRequestParts, OptionalFromRequestParts};
-use axum::http::request::Parts;
 use axum::http::Request;
+use axum::http::request::Parts;
 
 use crate::auth::session::*;
 

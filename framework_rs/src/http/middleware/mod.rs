@@ -10,13 +10,13 @@ pub(crate) mod require_session;
 pub(crate) mod same_origin;
 pub(crate) mod security_headers;
 
-pub use access_log::{access_log, AccessLog};
-pub use body_limit::{body_limit, BodyLimit};
+pub use access_log::{AccessLog, access_log};
+pub use body_limit::{BodyLimit, body_limit};
 pub use no_store::no_store;
-pub use rate_limit::{rate_limit, RateLimiter};
-pub use request_timeout::{request_timeout, RequestTimeout};
-pub use require_allowed_ip::{require_allowed_ip, AllowedIps};
-pub use require_api_key::{require_api_key, ApiKey};
+pub use rate_limit::{RateLimiter, rate_limit};
+pub use request_timeout::{RequestTimeout, request_timeout};
+pub use require_allowed_ip::{AllowedIps, require_allowed_ip};
+pub use require_api_key::{ApiKey, require_api_key};
 #[cfg(feature = "auth")]
 pub use require_session::require_session;
 pub use same_origin::require_same_origin;

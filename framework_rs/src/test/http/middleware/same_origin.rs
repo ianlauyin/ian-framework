@@ -3,10 +3,10 @@ use axum::http::StatusCode;
 use axum::response::Response;
 
 use crate::http::middleware::same_origin::*;
-use axum::body::{to_bytes, Body};
+use axum::Router;
+use axum::body::{Body, to_bytes};
 use axum::middleware::from_fn;
 use axum::routing::post;
-use axum::Router;
 use tower::ServiceExt;
 
 fn router() -> Router {

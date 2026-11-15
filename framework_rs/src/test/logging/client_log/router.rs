@@ -1,13 +1,13 @@
+use axum::Router;
 use axum::extract::Request;
 use axum::http::StatusCode;
-use axum::Router;
 
 use crate::logging::LogLevel;
 
 use crate::http::middleware::access_log;
 use crate::logging::client_log::router::*;
 use crate::test::logging::{
-    assert_uuid_v7, buffered_events, global_logger, shipped_batches, wait_for, REFUSED_ACTION,
+    REFUSED_ACTION, assert_uuid_v7, buffered_events, global_logger, shipped_batches, wait_for,
 };
 use axum::body::Body;
 use axum::middleware::from_fn;
@@ -182,9 +182,11 @@ async fn rejects_a_bad_body() {
         send(&headers, batch_body(&[])).await,
         StatusCode::BAD_REQUEST
     );
-    assert!(buffered_events(global_logger())
-        .iter()
-        .any(|event| event.action == "CLIENT_LOG/rejected"));
+    assert!(
+        buffered_events(global_logger())
+            .iter()
+            .any(|event| event.action == "CLIENT_LOG/rejected")
+    );
     assert_eq!(
         send(
             &headers,

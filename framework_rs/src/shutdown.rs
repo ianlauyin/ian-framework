@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::watch;
 
 #[derive(Clone, Debug)]

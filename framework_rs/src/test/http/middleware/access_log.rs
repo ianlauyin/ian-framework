@@ -1,4 +1,4 @@
-use axum::body::{to_bytes, Body};
+use axum::body::{Body, to_bytes};
 use axum::extract::Request;
 use axum::http::StatusCode;
 
@@ -10,10 +10,10 @@ use crate::http::error_code;
 use crate::http::middleware::access_log::*;
 use crate::logging::LogLevel;
 use crate::test::logging::{buffered_events, global_logger};
+use axum::Router;
 use axum::extract::{ConnectInfo, Path};
 use axum::middleware::from_fn;
 use axum::routing::{get, post};
-use axum::Router;
 use serde_json::json;
 use std::net::SocketAddr;
 

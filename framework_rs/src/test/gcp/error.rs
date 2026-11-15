@@ -1,5 +1,5 @@
-use google_cloud_gax::error::rpc::{Code, Status};
 use google_cloud_gax::error::Error;
+use google_cloud_gax::error::rpc::{Code, Status};
 
 use crate::gcp::error::*;
 

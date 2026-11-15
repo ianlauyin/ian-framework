@@ -4,8 +4,8 @@ use serde_json::{Map, Value};
 
 use crate::time::hkt_now;
 
-use crate::logging::event::*;
 use crate::logging::ClientLog;
+use crate::logging::event::*;
 use serde_json::json;
 
 trait ClientChecked {

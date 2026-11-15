@@ -17,7 +17,7 @@ use crate::gcp::error::to_exception;
 use crate::gcp::storage::put_request::open_upload_file;
 use crate::gcp::storage::signed_url::{build_signer, content_disposition_value, validate_lifetime};
 use crate::gcp::storage::validate::{validate_bucket, validate_metadata, validate_object_name};
-use crate::logging::{with_log, LogEvent, LogLevel};
+use crate::logging::{LogEvent, LogLevel, with_log};
 
 use crate::gcp::storage::list::{ListPage, ListQuery};
 use crate::gcp::storage::object::{ObjectMeta, ObjectReader};

@@ -1,8 +1,8 @@
-use axum::http::StatusCode;
 use axum::Router;
+use axum::http::StatusCode;
 
 use crate::http::router::version::*;
-use axum::body::{to_bytes, Body};
+use axum::body::{Body, to_bytes};
 use axum::http::Request;
 use tower::ServiceExt;
 

@@ -2,14 +2,14 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 
 use axum::extract::Request;
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::response::Response;
 
 use crate::http::middleware::rate_limit::*;
-use axum::body::{to_bytes, Body};
+use axum::Router;
+use axum::body::{Body, to_bytes};
 use axum::middleware::from_fn_with_state;
 use axum::routing::get;
-use axum::Router;
 use tower::ServiceExt;
 
 const PRUNE_AT: usize = 100;
@@ -68,9 +68,11 @@ fn a_zero_refill_never_recovers() {
     let now = Instant::now();
     assert!(limiter.check(key(1), now).is_ok());
     assert_eq!(limiter.check(key(1), now).unwrap_err(), UNKNOWN_WAIT);
-    assert!(limiter
-        .check(key(1), now + Duration::from_secs(86_400))
-        .is_err());
+    assert!(
+        limiter
+            .check(key(1), now + Duration::from_secs(86_400))
+            .is_err()
+    );
 }
 
 #[test]

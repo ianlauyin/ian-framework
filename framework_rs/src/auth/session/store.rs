@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::auth::session::config::SessionConfig;
-use crate::auth::session::{token, Session};
+use crate::auth::session::{Session, token};
 use crate::exception;
 use crate::exception::Exception;
 use crate::http::headers::read_cookie;

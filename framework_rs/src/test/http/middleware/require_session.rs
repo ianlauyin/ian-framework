@@ -1,16 +1,16 @@
 use axum::extract::Request;
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::Response;
 
 use crate::auth::{Session, SessionStore};
 
 use crate::http::middleware::require_session::*;
 use crate::test::auth::store_or_skip;
+use axum::Router;
 use axum::body::Body;
 use axum::middleware::from_fn_with_state;
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
 use tower::ServiceExt;
 
 fn router(store: SessionStore, status: StatusCode, set_cookie: bool) -> Router {

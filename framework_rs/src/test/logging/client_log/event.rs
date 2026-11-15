@@ -6,9 +6,11 @@ use crate::test::logging::{assert_uuid_v7, client_log_event};
 
 #[test]
 fn log_events_rejects_an_empty_list() {
-    assert!(ClientLog { events: vec![] }
-        .log_events(&HeaderMap::new())
-        .is_none());
+    assert!(
+        ClientLog { events: vec![] }
+            .log_events(&HeaderMap::new())
+            .is_none()
+    );
 }
 
 #[test]

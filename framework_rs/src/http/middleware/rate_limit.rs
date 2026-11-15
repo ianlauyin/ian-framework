@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::extract::{Request, State};
-use axum::http::{header, HeaderValue};
+use axum::http::{HeaderValue, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 

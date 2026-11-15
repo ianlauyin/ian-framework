@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use crate::logging::log_shipper::http_log_shipper::SHIP_TIMEOUT;
-use crate::logging::log_shipper::SHIP_CHUNK;
-use crate::logging::logger::log_buffer::CAPACITY;
-use crate::logging::logger::SHIP_EVERY;
 use crate::logging::HttpLogShipper;
+use crate::logging::log_shipper::SHIP_CHUNK;
+use crate::logging::log_shipper::http_log_shipper::SHIP_TIMEOUT;
+use crate::logging::logger::SHIP_EVERY;
+use crate::logging::logger::log_buffer::CAPACITY;
 use crate::test::logging::default_shipper;
 
 #[test]

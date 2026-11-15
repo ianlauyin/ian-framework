@@ -5,10 +5,10 @@ use axum::http::StatusCode;
 use axum::response::Response;
 
 use crate::http::middleware::request_timeout::*;
-use axum::body::{to_bytes, Body};
+use axum::Router;
+use axum::body::{Body, to_bytes};
 use axum::middleware::from_fn_with_state;
 use axum::routing::get;
-use axum::Router;
 use tower::ServiceExt;
 
 async fn send(handler_ms: u64) -> Response {

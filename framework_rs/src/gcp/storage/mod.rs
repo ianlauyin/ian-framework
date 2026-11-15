@@ -6,13 +6,13 @@ pub(crate) mod signed_url;
 pub(crate) mod validate;
 
 pub use crate::gcp::storage::client::{
-    GcsClient, CLIENT_BUILD_FAILED, COPY_NO_OBJECT, COPY_STEP_LIMIT, COPY_TOKEN_STUCK,
+    CLIENT_BUILD_FAILED, COPY_NO_OBJECT, COPY_STEP_LIMIT, COPY_TOKEN_STUCK, GcsClient,
     MOVE_SAME_OBJECT, RESOURCE_NOT_FOUND, SIGN_URL_FAILED,
 };
 pub use crate::gcp::storage::list::{ListPage, ListQuery};
 pub use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
 pub use crate::gcp::storage::put_request::{
-    PutBody, PutOptions, PutRequest, FILE_METADATA_FAILED, FILE_OPEN_FAILED, NOT_A_FILE,
+    FILE_METADATA_FAILED, FILE_OPEN_FAILED, NOT_A_FILE, PutBody, PutOptions, PutRequest,
 };
 pub use crate::gcp::storage::signed_url::{SIGNER_EMAIL_INVALID, URL_SIGNER_BUILD_FAILED};
 pub use crate::gcp::storage::validate::{
