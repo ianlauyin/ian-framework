@@ -4,10 +4,15 @@ The parts that apply to all of this feature are in `spec/framework_rs/gcp/storag
 
 ## Signed GET
 
-The client builds a V4 signed GET URL with `SignedUrlBuilder` of `google-cloud-storage`. The signer is in `spec/framework_rs/gcp/storage/authentication.md`.
+The client builds a V4 signed GET URL. The signer is in `spec/framework_rs/gcp/storage/authentication.md`.
 
-- The builder does the canonical request, the percent-encoding and the signature.
-- The library checks the object name, the lifetime and the filename before it calls the builder.
+- The client builds the canonical request, the percent-encoding and the signature.
+- The client checks the object name, the lifetime and the filename before it signs.
+- The host is `storage.googleapis.com`.
+- The credential scope ends with `/auto/storage/goog4_request`. The date in that scope is the UTC day of the signature.
+- The signed header is `host`.
+- The payload line is `UNSIGNED-PAYLOAD`.
+- A query name and a query value keep the RFC 3986 unreserved characters. Every other byte is `%HH` with uppercase hex. `*` is `%2A`. A `%` byte that is already in the value is `%25`.
 
 ### Lifetime
 

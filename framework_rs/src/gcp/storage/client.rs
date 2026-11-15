@@ -4,10 +4,9 @@ use std::future::Future;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
+use chrono::Utc;
 use google_cloud_auth::signer::Signer;
-use google_cloud_storage::builder::storage::SignedUrlBuilder;
 use google_cloud_storage::client::{Storage, StorageControl};
-use google_cloud_storage::http::Method;
 use google_cloud_storage::model::Object;
 use google_cloud_wkt::FieldMask;
 
@@ -15,7 +14,9 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::gcp::error::to_exception;
 use crate::gcp::storage::put_request::open_upload_file;
-use crate::gcp::storage::signed_url::{build_signer, content_disposition_value, validate_lifetime};
+use crate::gcp::storage::signed_url::{
+    build_signer, content_disposition_value, signed_get, validate_lifetime,
+};
 use crate::gcp::storage::validate::{validate_bucket, validate_metadata, validate_object_name};
 use crate::logging::{LogEvent, Logger};
 
@@ -278,20 +279,34 @@ impl GcsClient {
     ) -> Result<String, Exception> {
         validate_object_name(name)?;
         let lifetime = validate_lifetime(expires_in)?;
-        let mut builder = SignedUrlBuilder::for_object(&self.bucket_path, name)
-            .with_method(Method::GET)
-            .with_expiration(lifetime);
-        if let Some(filename) = attachment_filename {
-            builder = builder.with_query_param(
-                "response-content-disposition",
-                content_disposition_value(filename)?,
-            );
-        }
+        let disposition = match attachment_filename {
+            Some(filename) => Some(content_disposition_value(filename)?),
+            None => None,
+        };
         self.with_operation_log("sign", name, async {
-            builder
-                .sign_with(&self.signer)
+            let email = self.signer.client_email().await.map_err(|err| {
+                exception!(code = SIGN_URL_FAILED, "sign URL failed", source = err)
+            })?;
+            let signed = signed_get(
+                &self.bucket,
+                name,
+                &email,
+                lifetime.as_secs(),
+                Utc::now(),
+                disposition.as_deref(),
+            );
+            let raw = self
+                .signer
+                .sign(signed.string_to_sign.as_str())
                 .await
-                .map_err(|err| exception!(code = SIGN_URL_FAILED, "sign URL failed", source = err))
+                .map_err(|err| {
+                    exception!(code = SIGN_URL_FAILED, "sign URL failed", source = err)
+                })?;
+            Ok(format!(
+                "{}&X-Goog-Signature={}",
+                signed.url,
+                hex::encode(raw)
+            ))
         })
         .await
     }
