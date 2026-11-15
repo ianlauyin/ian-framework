@@ -57,9 +57,12 @@ This feature is not product business logic.
 - `FORBIDDEN`
 - `NOT_FOUND`
 - `REQUEST_TIMEOUT`
+- `CONFLICT`
 - `PAYLOAD_TOO_LARGE`
+- `RANGE_NOT_SATISFIABLE`
 - `TOO_MANY_REQUESTS`
 - `INTERNAL_ERROR`
+- `BAD_GATEWAY`
 
 `ian_framework::http::middleware` exports only these items:
 

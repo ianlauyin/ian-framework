@@ -18,9 +18,12 @@ The impl uses the code of the top exception.
 | `FORBIDDEN` | 403 | The message of the exception |
 | `NOT_FOUND` | 404 | The message of the exception |
 | `REQUEST_TIMEOUT` | 408 | The message of the exception |
+| `CONFLICT` | 409 | The message of the exception |
 | `PAYLOAD_TOO_LARGE` | 413 | The message of the exception |
+| `RANGE_NOT_SATISFIABLE` | 416 | The message of the exception |
 | `TOO_MANY_REQUESTS` | 429 | The message of the exception |
 | `INTERNAL_ERROR` | 500 | `internal server error` |
+| `BAD_GATEWAY` | 502 | The message of the exception |
 | A different code | 500 | `internal server error` |
 
 - Only the code of the top exception counts. The code of a source does not change the result. Thus a client error that a caller wraps in a different exception becomes status 500.
@@ -38,11 +41,14 @@ The module `ian_framework::http::error_code` exports one `&'static str` constant
 | `FORBIDDEN` | The client cannot do this action. |
 | `NOT_FOUND` | The item that the client asked for does not exist. |
 | `REQUEST_TIMEOUT` | The request took too long. |
+| `CONFLICT` | The request conflicts with the current state of an item, such as a name that is already in use. |
 | `PAYLOAD_TOO_LARGE` | The request body is too large. |
+| `RANGE_NOT_SATISFIABLE` | The byte range that the client asked for is outside the item. |
 | `TOO_MANY_REQUESTS` | The client sent too many requests. |
 | `INTERNAL_ERROR` | The server failed. |
+| `BAD_GATEWAY` | A service that the server calls, such as a storage provider, failed. |
 
-- The message of an exception with a well-known code goes to the client, except `INTERNAL_ERROR`. Write it for the client. It must not hold an internal detail.
+- The message of an exception with a well-known code goes to the client, except `INTERNAL_ERROR`. Write it for the client. It must not hold an internal detail. For `BAD_GATEWAY`, the message must not hold a detail from the failed service.
 - The message of an `INTERNAL_ERROR` exception goes only to the log.
 - Each other code means that the cause is internal.
 

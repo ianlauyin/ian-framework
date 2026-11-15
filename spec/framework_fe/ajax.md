@@ -7,10 +7,10 @@ This feature is not product business logic.
 
 - The package is `ian-framework-fe`. The package setup is in `spec/framework_fe/version.md`.
 - The import path is `ian-framework-fe`.
-- The source files are `framework_fe/src/http/ajax.ts`, `framework_fe/src/http/network.ts` and `framework_fe/src/http/raw-send.ts`. `ajax.ts` builds the URL, the query string and the body. `network.ts` holds the error classes. `ajax`, `upload` and `download-file` throw the same error classes. `raw-send.ts` holds the send step, the unauthorized handler and the JSON parse. It is shared by `ajax` and `upload`.
+- The source files are `framework_fe/src/http/ajax.ts`, `framework_fe/src/http/network.ts` and `framework_fe/src/http/raw-send.ts`. `ajax.ts` builds the URL, the query string and the body. `network.ts` holds the error classes. `ajax`, `upload` and `download-file` throw the same error classes. `raw-send.ts` holds the send step and the JSON parse. It is shared by `ajax` and `upload`.
 - The test file is `framework_fe/test/http/ajax.test.ts`.
 - `framework_fe/src/http/index.ts` re-exports the public items of `http`, and the root entry re-exports it.
-- The root entry exports the error classes, the type and the setter function that are in the API table.
+- The root entry exports the function, the error classes and the type that are in the API table.
 - The client uses only browser APIs. The client does not use a UI library.
 
 ## API
@@ -21,7 +21,6 @@ This feature is not product business logic.
 | `ApiError` | class | The error for a response that the app gave with a status that is not 2xx. |
 | `NetworkConnectionException` | class | The error for a request that did not give a usable response. |
 | `ErrorBody` | type | The error body: `{ message: string }`. |
-| `setUnauthorizedHandler(handler?)` | function | Sets the handler for a 401 response. A call with no handler removes the handler. |
 
 `method` is one of `GET`, `DELETE`, `POST` and `PUT`.
 
@@ -65,14 +64,12 @@ The type of `pathParams` comes from the `{name}` parts of `url`, when `url` is a
 Each request uses `credentials: "same-origin"`.
 
 - The client always sends a `Headers` object. For `POST` and `PUT`, it has `Content-Type: application/json`.
-- `upload` in `spec/framework_fe/file-transfer.md` uses the same unauthorized handler.
 - In the query string, a `Date` value is written with `toISOString()`.
 
 ### Response
 
 - When the fetch fails or the body cannot be read, the client throws `NetworkConnectionException`. `message` is the message of the cause.
-- When the status is 401, the client calls the unauthorized handler. Then the client throws `ApiError`.
-- When the status is 0, 502 or 504, the client throws `NetworkConnectionException` with the message `HTTP {status}`. A gateway or a proxy gives these statuses, so the app was not reached. The status 503 stays an `ApiError`, because the app uses it for a planned stop.
+- When the status is 0, 502 or 504, the client throws `NetworkConnectionException` with the message `HTTP {status}`. The client does not read the body, so a message in a 502 body never reaches the user. A gateway or a proxy gives these statuses, and the Rust library gives 502 for `BAD_GATEWAY`. The status 503 stays an `ApiError`, because the app uses it for a planned stop.
 - When the status is not 2xx and not one of those, the client throws `ApiError`.
 - When the status is not 2xx and the body is empty, not valid JSON, or has no string `message`, the message is `Unknown error`.
 - When the status is 2xx and the body is empty, the result is `null`.

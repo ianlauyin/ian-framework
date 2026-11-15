@@ -1,16 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  type ApiError,
-  ajax,
-  NetworkConnectionException,
-  setUnauthorizedHandler,
-} from "../../src/http";
+import { type ApiError, ajax, NetworkConnectionException } from "../../src/http";
 
 describe("ajax", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
-    setUnauthorizedHandler();
   });
 
   it("sends GET requests with query parameters", async () => {
@@ -135,9 +129,7 @@ describe("ajax", () => {
     } satisfies Partial<ApiError>);
   });
 
-  it("notifies the unauthorized handler and throws ApiError for 401 responses", async () => {
-    const onUnauthorized = vi.fn();
-    setUnauthorizedHandler(onUnauthorized);
+  it("throws ApiError for 401 responses", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -151,12 +143,9 @@ describe("ajax", () => {
       message: "Unknown error",
       code: 401,
     } satisfies Partial<ApiError>);
-    expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 
   it("throws ApiError with Unknown error when the error body is not JSON", async () => {
-    const onUnauthorized = vi.fn();
-    setUnauthorizedHandler(onUnauthorized);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -180,7 +169,6 @@ describe("ajax", () => {
       message: "Unknown error",
       code: 401,
     } satisfies Partial<ApiError>);
-    expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 
   it("parses JSON error bodies with a message field", async () => {

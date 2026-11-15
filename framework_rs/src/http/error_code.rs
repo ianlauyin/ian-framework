@@ -15,9 +15,12 @@ pub const UNAUTHORIZED: &str = "UNAUTHORIZED";
 pub const FORBIDDEN: &str = "FORBIDDEN";
 pub const NOT_FOUND: &str = "NOT_FOUND";
 pub const REQUEST_TIMEOUT: &str = "REQUEST_TIMEOUT";
+pub const CONFLICT: &str = "CONFLICT";
 pub const PAYLOAD_TOO_LARGE: &str = "PAYLOAD_TOO_LARGE";
+pub const RANGE_NOT_SATISFIABLE: &str = "RANGE_NOT_SATISFIABLE";
 pub const TOO_MANY_REQUESTS: &str = "TOO_MANY_REQUESTS";
 pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
+pub const BAD_GATEWAY: &str = "BAD_GATEWAY";
 
 // Only the code of the top exception counts. A wrapped client error becomes an internal error.
 impl IntoResponse for Exception {
@@ -28,8 +31,11 @@ impl IntoResponse for Exception {
             FORBIDDEN => Some(StatusCode::FORBIDDEN),
             NOT_FOUND => Some(StatusCode::NOT_FOUND),
             REQUEST_TIMEOUT => Some(StatusCode::REQUEST_TIMEOUT),
+            CONFLICT => Some(StatusCode::CONFLICT),
             PAYLOAD_TOO_LARGE => Some(StatusCode::PAYLOAD_TOO_LARGE),
+            RANGE_NOT_SATISFIABLE => Some(StatusCode::RANGE_NOT_SATISFIABLE),
             TOO_MANY_REQUESTS => Some(StatusCode::TOO_MANY_REQUESTS),
+            BAD_GATEWAY => Some(StatusCode::BAD_GATEWAY),
             _ => None,
         };
         let mut response = match status {

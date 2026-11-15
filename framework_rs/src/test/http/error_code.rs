@@ -58,8 +58,23 @@ async fn a_well_known_code_gives_its_status_and_message() {
             StatusCode::PAYLOAD_TOO_LARGE,
         ),
         (
+            exception!(code = error_code::CONFLICT, "name is taken"),
+            StatusCode::CONFLICT,
+        ),
+        (
+            exception!(
+                code = error_code::RANGE_NOT_SATISFIABLE,
+                "range is not valid",
+            ),
+            StatusCode::RANGE_NOT_SATISFIABLE,
+        ),
+        (
             exception!(code = error_code::TOO_MANY_REQUESTS, "too many requests"),
             StatusCode::TOO_MANY_REQUESTS,
+        ),
+        (
+            exception!(code = error_code::BAD_GATEWAY, "storage failed"),
+            StatusCode::BAD_GATEWAY,
         ),
     ] {
         let text = error.message().to_owned();

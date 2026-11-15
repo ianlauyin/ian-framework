@@ -6,12 +6,6 @@ const NETWORK_ERROR_STATUS_CODES = [0, 502, 504];
 
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
-let unauthorizedHandler: (() => void) | undefined;
-
-export function setUnauthorizedHandler(handler?: () => void) {
-  unauthorizedHandler = handler;
-}
-
 // Sends one request, and returns the parsed JSON body, or null for an empty body.
 export async function rawSend(url: string, init: RequestInit): Promise<any> {
   let response: Response;
@@ -24,7 +18,6 @@ export async function rawSend(url: string, init: RequestInit): Promise<any> {
   }
 
   if (!response.ok) {
-    if (response.status === 401) unauthorizedHandler?.();
     if (NETWORK_ERROR_STATUS_CODES.includes(response.status)) {
       throw new NetworkConnectionException(`HTTP ${response.status}`, url);
     }
