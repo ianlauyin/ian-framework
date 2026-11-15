@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::future::Future;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use google_cloud_auth::signer::Signer;
@@ -17,7 +17,7 @@ use crate::gcp::error::to_exception;
 use crate::gcp::storage::put_request::open_upload_file;
 use crate::gcp::storage::signed_url::{build_signer, content_disposition_value, validate_lifetime};
 use crate::gcp::storage::validate::{validate_bucket, validate_metadata, validate_object_name};
-use crate::logging::{LogEvent, LogLevel, with_log};
+use crate::logging::{LogEvent, Logger};
 
 use crate::gcp::storage::list::{ListPage, ListQuery};
 use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
@@ -320,27 +320,23 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    // A missing object is a normal result of `read_object` and `get_object_meta`, so it is an info record.
+    // A missing object is a normal result, so it writes no record.
     async fn with_operation_log<T>(
         &self,
         operation: &str,
         object: &str,
         work: impl Future<Output = Result<T, Exception>>,
     ) -> Result<T, Exception> {
-        with_log(work, |result| {
-            let action = format!("GCS/{operation}:/{object}");
-            let (level, error) = match result {
-                Ok(_) => (LogLevel::Info, None),
-                Err(err) if err.code() == RESOURCE_NOT_FOUND => (LogLevel::Info, None),
-                Err(err) => (LogLevel::Error, Some(String::from(&*err))),
-            };
-            let mut event = LogEvent::build(action, level, error);
-            event
-                .extra
-                .insert("bucket".to_string(), self.bucket.as_str().into());
-            event
-        })
-        .await
+        let started = Instant::now();
+        let result = work.await;
+        if let Err(err) = &result
+            && let Some(mut event) = operation_log_event(operation, object, &self.bucket, err)
+            && let Some(logger) = Logger::get()
+        {
+            event.latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            logger.record(event);
+        }
+        result
     }
 }
 
@@ -350,6 +346,20 @@ impl fmt::Debug for GcsClient {
             .field("bucket", &self.bucket)
             .finish_non_exhaustive()
     }
+}
+
+pub(crate) fn operation_log_event(
+    operation: &str,
+    object: &str,
+    bucket: &str,
+    err: &Exception,
+) -> Option<LogEvent> {
+    if err.code() == RESOURCE_NOT_FOUND {
+        return None;
+    }
+    let mut event = LogEvent::error(format!("GCS/{operation}:/{object}"), String::from(err));
+    event.extra.insert("bucket".to_string(), bucket.into());
+    Some(event)
 }
 
 pub(crate) fn none_if_not_found<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {

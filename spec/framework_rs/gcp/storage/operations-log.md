@@ -14,15 +14,15 @@ Logger:
 
 When a record is written:
 
-- The client writes one record for each operation, when the operation succeeds and when it fails. The operations are `read`, `get_meta`, `list`, `write`, `copy`, `merge_metadata`, `delete` and `sign`. `move_object` is a `copy`, a `delete` and a `get_meta`.
+- The client writes a record only when an operation fails. A success writes no record. The operations are `read`, `get_meta`, `list`, `write`, `copy`, `merge_metadata`, `delete` and `sign`. `move_object` is a `copy`, a `delete` and a `get_meta`.
 - The failure of an official call is final. The official client has already done the retries.
-- A `RESOURCE_NOT_FOUND` failure is a success record, because `read_object`, `get_object_meta` and `delete_object` use it as a normal result.
+- A `RESOURCE_NOT_FOUND` failure writes no record, because `read_object`, `get_object_meta` and `delete_object` use it as a normal result.
 - A failure of the body read of an `ObjectReader` writes no record.
 
 Record content:
 
-- The level is `info` for a success. The level is `error` for a failure.
-- A failure record has `error_message` with the log text of the exception, with every source, its code, its file and its line. A success record has no `error_message`.
+- The level is `error`.
+- The record has `error_message` with the log text of the exception, with every source, its code, its file and its line.
 - An operations record has no `app` field.
 - An operations record has no `project` field.
 - The client does not write product rules in these records.

@@ -46,7 +46,7 @@ The parts that apply to all of this feature are in `spec/framework_rs/logging/co
 - It starts a timer, awaits `work`, and gives the output of `work` to the caller without a change.
 - When a logger is set, it calls `to_event` with the output. It sets `latency_ms` of the event to the time of `work` in milliseconds, after `to_event`. Thus `to_event` cannot set the latency. Then it calls `Logger::record` with the event.
 - When no logger is set, it does not call `to_event`.
-- `access_log` and `GcsClient` use it. The action name and the level rules stay in the caller.
+- `access_log` uses it. The action name and the level rules stay in the caller. The storage client records a failure itself. The rules are in `spec/framework_rs/gcp/storage/operations-log.md`.
 
 ### Direct send
 
