@@ -22,7 +22,7 @@ This feature is not product business logic.
 | `NetworkConnectionException` | class | The error for a request that did not give a usable response. |
 | `ErrorBody` | type | The error body: `{ message: string }`. |
 
-`method` is one of `GET`, `DELETE`, `POST` and `PUT`.
+`method` is one of `GET`, `DELETE`, `POST`, `PUT` and `PATCH`.
 
 `ApiError` has these fields:
 
@@ -59,11 +59,11 @@ The type of `pathParams` comes from the `{name}` parts of `url`, when `url` is a
 | Method | Request data | Body |
 | --- | --- | --- |
 | `GET`, `DELETE` | The client adds `request` to the URL as a query string. It leaves out a key whose value is `undefined`. When no key is left, the URL has no `?`. | No body. |
-| `POST`, `PUT` | The client sends `request` as a JSON body. | JSON. The request has the header `Content-Type: application/json`. |
+| `POST`, `PUT`, `PATCH` | The client sends `request` as a JSON body. | JSON. The request has the header `Content-Type: application/json`. |
 
 Each request uses `credentials: "same-origin"`.
 
-- The client always sends a `Headers` object. For `POST` and `PUT`, it has `Content-Type: application/json`.
+- The client always sends a `Headers` object. For `POST`, `PUT` and `PATCH`, it has `Content-Type: application/json`.
 - In the query string, a `Date` value is written with `toISOString()`.
 
 ### Response

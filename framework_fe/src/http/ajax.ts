@@ -18,7 +18,7 @@ export const ajax = async <
   Url extends string = string,
 >(
   url: Url,
-  method: "GET" | "DELETE" | "POST" | "PUT",
+  method: "GET" | "DELETE" | "POST" | "PUT" | "PATCH",
   request?: Req,
   ...[pathParams]: PathParamsArgument<Url>
 ): Promise<Res> => {

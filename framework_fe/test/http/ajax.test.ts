@@ -71,6 +71,23 @@ describe("ajax", () => {
     expect(fetchMock.mock.calls[0][1].headers.get("Content-Type")).toBe("application/json");
   });
 
+  it("sends a JSON body for PATCH requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      text: async () => "",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await ajax("/item", "PATCH", { name: "Alice" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/item",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "Alice" }) }),
+    );
+    expect(fetchMock.mock.calls[0][1].headers.get("Content-Type")).toBe("application/json");
+  });
+
   it("puts the path param value 0 in the URL", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
