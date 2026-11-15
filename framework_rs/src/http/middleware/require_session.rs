@@ -1,5 +1,5 @@
 use axum::extract::{Request, State};
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
@@ -25,10 +25,8 @@ pub async fn require_session(
     let mut response = next.run(request).await;
     let keep = response.status() == StatusCode::UNAUTHORIZED
         || sets_cookie(response.headers(), store.cookie_name());
-    if !keep {
-        if let Ok(value) = HeaderValue::from_str(&store.cookie(&session.token)) {
-            response.headers_mut().append(header::SET_COOKIE, value);
-        }
+    if !keep && let Ok(value) = HeaderValue::from_str(&store.cookie(&session.token)) {
+        response.headers_mut().append(header::SET_COOKIE, value);
     }
     response
 }
