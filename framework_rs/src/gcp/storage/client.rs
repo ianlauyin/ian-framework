@@ -329,19 +329,12 @@ impl GcsClient {
     ) -> Result<T, Exception> {
         with_log(work, |result| {
             let action = format!("GCS/{operation}:/{object}");
-            let (level, message, error) = match result {
-                Ok(_) => (LogLevel::Info, "gcs operation succeeded", None),
-                Err(err) if err.code() == RESOURCE_NOT_FOUND => {
-                    (LogLevel::Info, "gcs operation succeeded", None)
-                }
-                Err(err) => (
-                    LogLevel::Error,
-                    "gcs operation failed",
-                    Some(String::from(&*err)),
-                ),
+            let (level, error) = match result {
+                Ok(_) => (LogLevel::Info, None),
+                Err(err) if err.code() == RESOURCE_NOT_FOUND => (LogLevel::Info, None),
+                Err(err) => (LogLevel::Error, Some(String::from(&*err))),
             };
             let mut event = LogEvent::build(action, level, error);
-            event.extra.insert("message".to_string(), message.into());
             event
                 .extra
                 .insert("bucket".to_string(), self.bucket.as_str().into());

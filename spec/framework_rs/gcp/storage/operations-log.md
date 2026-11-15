@@ -29,6 +29,6 @@ Record content:
 - The record `action` is `GCS/{operation}:/{object name}`. For `list`, the name is the prefix.
 - An operations record has a new UUID v7 `id`.
 - An operations record has an empty `context`.
-- The record has `latency_ms` of the failed operation.
-- Each record has these keys in `extra`: `message` with the value `gcs operation succeeded` or `gcs operation failed`, and `bucket` with the bucket name.
+- The record has `latency_ms` of the operation.
+- Each record has one key in `extra`: `bucket` with the bucket name. The record has no `message` key.
 - The record `ts` is the current HKT time, from `ian_framework::time::hkt_now()`. The time rules are in `spec/framework_rs/time/hkt.md`.
