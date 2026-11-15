@@ -41,7 +41,7 @@ pnpm test
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `onUpdated` | `() => void` | Necessary. The checker calls it when the version changes. |
+| `onUpdated` | `(onReload: () => Promise<void>) => void` | Necessary. The checker calls it with `onReload` when the version changes. |
 | `checkInterval` | `number` | Optional. The time between timer checks, in milliseconds. If it is not set, the checker does not use a timer. |
 
 - The project calls `init()` one time when the page starts.
@@ -60,8 +60,15 @@ The checker reads the route at these times:
 The checker compares the versions:
 
 - The first good response gives the current version.
-- When a later response gives a different version, the checker calls `onUpdated`.
+- When a later response gives a different version, the checker calls `onUpdated` with `onReload`.
 - The checker does not replace the current version. Thus each later different response calls `onUpdated` again.
+
+`onReload` reloads the page without the HTTP cache:
+
+- It fetches the current page URL with `cache: "reload"`, so the browser stores the new `index.html`.
+- Then it calls `location.reload()`.
+- A failed fetch does not stop the reload.
+- It is the same function for each call. `onUpdated` decides when to call it.
 
 The checker ignores these failures:
 
