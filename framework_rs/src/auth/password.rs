@@ -9,16 +9,11 @@ use crate::http::error_code;
 
 pub const PASSWORD_HASH_FAILED: &str = "PASSWORD_HASH_FAILED";
 
+pub(crate) const MIN_PASSWORD_BYTES: usize = 8;
 pub(crate) const MAX_PASSWORD_BYTES: usize = 256;
 
 pub async fn hash_password(password: &str) -> Result<String, Exception> {
-    if password.len() > MAX_PASSWORD_BYTES {
-        return Err(exception!(
-            severity = Severity::Warn,
-            code = error_code::VALIDATION_ERROR,
-            format!("password must not be longer than {MAX_PASSWORD_BYTES} bytes"),
-        ));
-    }
+    validate_password(password)?;
     Argon2::default()
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
@@ -32,7 +27,7 @@ pub async fn hash_password(password: &str) -> Result<String, Exception> {
 }
 
 pub async fn verify_password(password: &str, hash: &str) -> bool {
-    if password.len() > MAX_PASSWORD_BYTES {
+    if validate_password(password).is_err() {
         return false;
     }
     let Ok(parsed) = PasswordHash::new(hash) else {
@@ -41,4 +36,31 @@ pub async fn verify_password(password: &str, hash: &str) -> bool {
     Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
         .is_ok()
+}
+
+pub(crate) fn validate_password(password: &str) -> Result<(), Exception> {
+    if password.len() < MIN_PASSWORD_BYTES {
+        return Err(exception!(
+            severity = Severity::Warn,
+            code = error_code::VALIDATION_ERROR,
+            format!("password must not be shorter than {MIN_PASSWORD_BYTES} bytes"),
+        ));
+    }
+    if password.len() > MAX_PASSWORD_BYTES {
+        return Err(exception!(
+            severity = Severity::Warn,
+            code = error_code::VALIDATION_ERROR,
+            format!("password must not be longer than {MAX_PASSWORD_BYTES} bytes"),
+        ));
+    }
+    let has_letter = password.chars().any(|c| c.is_ascii_alphabetic());
+    let has_digit = password.chars().any(|c| c.is_ascii_digit());
+    if !has_letter || !has_digit {
+        return Err(exception!(
+            severity = Severity::Warn,
+            code = error_code::VALIDATION_ERROR,
+            "password must mix english letters with digits",
+        ));
+    }
+    Ok(())
 }

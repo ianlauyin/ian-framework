@@ -1,6 +1,5 @@
 mod password;
 mod session;
-
 use crate::auth::*;
 
 pub(crate) const LIMIT: usize = 5;
