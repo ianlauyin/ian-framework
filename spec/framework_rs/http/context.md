@@ -13,6 +13,7 @@ This document describes these items in the framework:
 - The request timeout and body limit middleware.
 - The process version route.
 - The health route.
+- The SPA route.
 
 This feature is not product business logic.
 
@@ -31,6 +32,7 @@ This feature is not product business logic.
 | Request timeout and body limit middleware | `spec/framework_rs/http/limits.md` |
 | Process version route | `spec/framework_rs/http/version-route.md` |
 | Health route | `spec/framework_rs/http/health-route.md` |
+| SPA route | `spec/framework_rs/http/spa-route.md` |
 
 ## Crate
 
@@ -87,6 +89,7 @@ This feature is not product business logic.
 `ian_framework::http::router` exports only these items:
 
 - `health_router`
+- `spa_router`
 - `version_router`
 
 Each item has only one public path.

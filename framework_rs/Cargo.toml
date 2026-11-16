@@ -39,7 +39,7 @@ serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 sha2 = "*"
 subtle = "*"
-tokio = { version = "*", default-features = false, features = ["macros", "rt", "signal", "sync", "time"] }
+tokio = { version = "*", default-features = false, features = ["fs", "macros", "rt", "signal", "sync", "time"] }
 tracing = { version = "*", default-features = false, features = ["std"] }
 uuid = { version = "*", features = ["v7"] }
 
