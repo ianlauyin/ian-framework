@@ -1,20 +1,17 @@
 # Framework
 
-This repository is the framework. A project contains the business logic.
+This repository is the framework.
 Do not put business logic in this repository.
 
-The Rust library is `framework_rs/`.
-The frontend library is `framework_fe/`.
-
-Before you look up framework feature, read `spec/catalog.md` for the specification index.
+Before you read or change a file in `framework_rs/`, read `spec/framework_rs.md`.
+Before you read or change a file in `framework_fe/`, read `spec/framework_fe.md`.
 
 ## Rules
 
 | File | When to read |
 | --- | --- |
-| `rules/coding-style-rs.md` | Before the first edit in `framework_rs/` |
-| `rules/coding-style-fe.md` | Before the first edit in `framework_fe/` |
+| `rules/coding-style/framework_rs.md` | Before the first edit in `framework_rs/` |
+| `rules/coding-style/framework_fe.md` | Before the first edit in `framework_fe/` |
 | `rules/debugging.md` | Before you fix a bug or find the cause of an error |
 | `rules/git-convention.md` | Before you make a git commit |
-| `rules/spec-update.md` | After you change the code |
 | `rules/writing.md` | Before you write or update a markdown file |

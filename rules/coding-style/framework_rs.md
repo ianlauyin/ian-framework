@@ -1,4 +1,4 @@
-# Coding style (Rust)
+# framework_rs coding style
 
 The Rust library is the crate `ian_framework` in `framework_rs/`.
 

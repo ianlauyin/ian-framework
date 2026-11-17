@@ -1,6 +1,4 @@
-# Coding style (frontend, SolidJS + TypeScript)
-
-The frontend library is `framework_fe/`. It is not an application. It has no `src/module/` tree and no application context.
+ # framework_fe coding style
 
 ## General
 
