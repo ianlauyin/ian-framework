@@ -41,3 +41,4 @@ Each feature has one folder. The `context.md` file of each folder gives the part
 | Navigation logger for the SolidJS router | `spec/framework_fe/solid/navigation-logger.md` |
 | Browser logger | `spec/framework_fe/logger.md` |
 | Time helpers, Hong Kong time `hktIsoString` | `spec/framework_fe/time.md` |
+| Locale helper: `Locales` type and `createLocale` with `changeLocale` | `spec/framework_fe/locale.md` |
