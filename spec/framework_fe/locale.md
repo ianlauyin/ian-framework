@@ -15,12 +15,12 @@ This feature is not product business logic. The project gives the locales and th
 | --- | --- | --- |
 | `Locales<Locale, Dictionary>` | type | A `Record` from each locale to its dictionary. |
 | `createLocale(locales, initial)` | function | Makes a `LocaleState` that starts with the locale `initial`. |
-| `LocaleState.current()` | method | Gives the current locale. |
-| `LocaleState.dictionary()` | method | Gives the dictionary of the current locale. |
-| `LocaleState.changeLocale(locale)` | method | Changes the current locale. |
+| `LocaleState.locale()` | method | Gives the current locale. |
+| `LocaleState.dict()` | method | Gives the dictionary of the current locale. |
+| `LocaleState.setLocale(locale)` | method | Changes the current locale. |
 
 ## Behaviour
 
-- `changeLocale` does nothing when `locales` has no dictionary for the new locale.
-- The state is reactive. The current locale is a Solid signal, so `current()` and `dictionary()` track the locale inside an effect or a component.
+- `setLocale` does nothing when `locales` has no dictionary for the new locale.
+- The state is reactive. The current locale is a Solid signal, so `locale()` and `dict()` track the locale inside an effect or a component.
 - The helper needs `solid-js`, which is an optional peer dependency of the package.

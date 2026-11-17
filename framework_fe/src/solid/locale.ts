@@ -3,9 +3,9 @@ import { createSignal } from "solid-js";
 export type Locales<Locale extends string, Dictionary extends object> = Record<Locale, Dictionary>;
 
 export interface LocaleState<Locale extends string, Dictionary extends object> {
-  current(): Locale;
-  dictionary(): Dictionary;
-  changeLocale(locale: Locale): void;
+  locale(): Locale;
+  dict(): Dictionary;
+  setLocale(locale: Locale): void;
 }
 
 export function createLocale<Locale extends string, Dictionary extends object>(
@@ -14,9 +14,9 @@ export function createLocale<Locale extends string, Dictionary extends object>(
 ): LocaleState<Locale, Dictionary> {
   const [current, setCurrent] = createSignal<Locale>(initial);
   return {
-    current,
-    dictionary: () => locales[current()],
-    changeLocale(locale) {
+    locale: current,
+    dict: () => locales[current()],
+    setLocale(locale) {
       if (!(locale in locales)) return;
       setCurrent(() => locale);
     },
