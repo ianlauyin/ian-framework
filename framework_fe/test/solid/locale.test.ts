@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createLocale, type Locales } from "../../src/util/locale";
+import { createLocale, type Locales } from "../../src/solid/locale";
 
 type TestDictionary = { action: { save: string; cancel: string }; state: { loading: string } };
 

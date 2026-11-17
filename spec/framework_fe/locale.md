@@ -6,8 +6,8 @@ This feature is not product business logic. The project gives the locales and th
 ## Package
 
 - The import path is `ian-framework-fe`.
-- The source file is `framework_fe/src/util/locale.ts`.
-- The test file is `framework_fe/test/util/locale.test.ts`.
+- The source file is `framework_fe/src/solid/locale.ts`.
+- The test file is `framework_fe/test/solid/locale.test.ts`.
 
 ## API
 
@@ -22,4 +22,5 @@ This feature is not product business logic. The project gives the locales and th
 ## Behaviour
 
 - `changeLocale` does nothing when `locales` has no dictionary for the new locale.
-- The state is not reactive. A project that needs reactivity keeps its own signal or store and calls `changeLocale` when the value changes.
+- The state is reactive. The current locale is a Solid signal, so `current()` and `dictionary()` track the locale inside an effect or a component.
+- The helper needs `solid-js`, which is an optional peer dependency of the package.
