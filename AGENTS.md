@@ -3,8 +3,8 @@
 This repository is the framework.
 Do not put business logic in this repository.
 
-Before you read or change a file in `framework_rs/`, read `spec/framework_rs.md`.
-Before you read or change a file in `framework_fe/`, read `spec/framework_fe.md`.
+Before you read or change a file in `framework_rs/`, read `catalog/framework_rs.md`.
+Before you read or change a file in `framework_fe/`, read `catalog/framework_fe.md`.
 
 ## Rules
 

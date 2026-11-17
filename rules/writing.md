@@ -16,9 +16,9 @@ Write all text in ASD-STE100 (Simplified Technical English).
 - Do not add a `[label](path)` link.
 - Do not write a home path or an absolute path of the user's computer. To refer to a file in a different repo, write the repo name and the path from the root of that repo.
 
-## The spec folder
+## The catalog folder
 
-The `spec/` folder is only for agents to read. Write each file in it for an agent, not for a human.
+The `catalog/` folder is only for agents to read. Write each file in it for an agent, not for a human.
 
 ## Sensitive data
 
