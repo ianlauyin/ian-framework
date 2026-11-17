@@ -12,7 +12,8 @@ Before you look up framework feature, read `spec/catalog.md` for the specificati
 
 | File | When to read |
 | --- | --- |
-| `rules/coding-style.md` | Before the first edit |
+| `rules/coding-style-rs.md` | Before the first edit in `framework_rs/` |
+| `rules/coding-style-fe.md` | Before the first edit in `framework_fe/` |
 | `rules/debugging.md` | Before you fix a bug or find the cause of an error |
 | `rules/git-convention.md` | Before you make a git commit |
 | `rules/spec-update.md` | After you change the code |
