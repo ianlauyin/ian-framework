@@ -8,7 +8,8 @@ The linter is the crate `ian-lint` in `lint/`.
   1. `cargo fmt`
   2. `cargo test`
 - Readability is more important than strict DRY. Do not add a helper, a generic type, or an abstraction only to remove duplication.
-- Write a comment only when the code cannot show the reason. Write the comment as one complete sentence.
+- Do not write a comment in the code. Put a decision in `catalog/lint.md`.
+- When the text is a reason and not a decision, write a test that prevents that reason.
 - Return early when a check fails. Keep the success path at the end of the function.
 - The library does not read a configuration file.
 - Do not put a name of a project in the code or in a test. Use a generic name.

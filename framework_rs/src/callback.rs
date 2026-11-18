@@ -50,7 +50,6 @@ impl<T, R> Clone for Callback<T, R> {
     }
 }
 
-// These markers keep the sync function implementation distinct from the async function implementation.
 pub enum SyncKind {}
 pub enum AsyncKind {}
 
