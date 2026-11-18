@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use axum::Router;
 use axum::body::{Body, to_bytes};
@@ -61,7 +61,7 @@ async fn the_rejection_body_is_json() {
 async fn calls_on_reject_only_for_a_rejected_request() {
     let calls = Arc::new(AtomicUsize::new(0));
     let counter = calls.clone();
-    let key = ApiKey::new(KEY).on_reject(move |_| {
+    let key = ApiKey::new(KEY).on_reject(move |_: Request| {
         counter.fetch_add(1, Ordering::SeqCst);
     });
     let router = Router::new()
@@ -75,6 +75,25 @@ async fn calls_on_reject_only_for_a_rejected_request() {
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     router.oneshot(request("/any", None)).await.unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn awaits_on_reject_before_the_unauthorized_response() {
+    let done = Arc::new(AtomicBool::new(false));
+    let flag = done.clone();
+    let key = ApiKey::new(KEY).on_reject(move |_: Request| {
+        let flag = flag.clone();
+        async move {
+            tokio::task::yield_now().await;
+            flag.store(true, Ordering::SeqCst);
+        }
+    });
+    let router = Router::new()
+        .fallback(any(|| async { StatusCode::NO_CONTENT }))
+        .layer(from_fn_with_state(key, require_api_key));
+    let response = router.oneshot(request("/any", None)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert!(done.load(Ordering::SeqCst));
 }
 
 #[test]

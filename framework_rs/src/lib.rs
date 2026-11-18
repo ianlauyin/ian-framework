@@ -1,3 +1,4 @@
+pub mod callback;
 pub mod env;
 pub mod exception;
 pub mod http;

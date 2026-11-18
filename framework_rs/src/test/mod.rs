@@ -1,5 +1,6 @@
 #[cfg(feature = "auth")]
 mod auth;
+mod callback;
 mod env;
 mod exception;
 #[cfg(feature = "gcp")]
