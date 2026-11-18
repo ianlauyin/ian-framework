@@ -14,8 +14,7 @@ pub struct FileSet {
 
 impl FileSet {
     /// The walk obeys `.gitignore`, also when the root is not in a git repository.
-    /// The second value is the errors of the walk, for example a folder that it cannot read: the files in it are not in the set.
-    #[allow(clippy::filetype_is_file, reason = "A symbolic link is not a file of the project, and the walk does not follow it.")]
+    /// The second value is the errors of the walk. A folder that it cannot read is not in the set.
     pub fn walk(root: &Path) -> (Self, Vec<String>) {
         let mut errors = Vec::new();
         let mut paths = Vec::new();
@@ -23,7 +22,11 @@ impl FileSet {
             match entry {
                 Ok(entry) if entry.file_type().is_some_and(|kind| kind.is_file()) => {
                     let path = entry.into_path();
-                    paths.push(path.strip_prefix("./").map(Path::to_path_buf).unwrap_or(path));
+                    paths.push(
+                        path.strip_prefix("./")
+                            .map(Path::to_path_buf)
+                            .unwrap_or(path),
+                    );
                 }
                 Ok(_) => {}
                 Err(error) => errors.push(error.to_string()),
@@ -59,7 +62,11 @@ impl FileSet {
 
     /// The module that owns `path`: the name of the nearest folder that has a `module.tsx`.
     pub fn module_name<'a>(&self, path: &'a Path) -> Option<&'a str> {
-        path.ancestors().skip(1).find(|dir| self.has_file(&dir.join("module.tsx")))?.file_name()?.to_str()
+        path.ancestors()
+            .skip(1)
+            .find(|dir| self.has_file(&dir.join("module.tsx")))?
+            .file_name()?
+            .to_str()
     }
 }
 
@@ -72,12 +79,18 @@ pub enum Scope {
 }
 
 pub fn scope(path: &Path) -> Option<Scope> {
-    let parts: Vec<_> = path.components().map(std::path::Component::as_os_str).collect();
-    parts.iter().zip(parts.iter().skip(1)).find_map(|(first, second)| match (first.to_str(), second.to_str()) {
-        (Some("src"), Some("component")) => Some(Scope::Component),
-        (Some("src"), Some("module")) => Some(Scope::Module),
-        _ => None,
-    })
+    let parts: Vec<_> = path
+        .components()
+        .map(std::path::Component::as_os_str)
+        .collect();
+    parts
+        .iter()
+        .zip(parts.iter().skip(1))
+        .find_map(|(first, second)| match (first.to_str(), second.to_str()) {
+            (Some("src"), Some("component")) => Some(Scope::Component),
+            (Some("src"), Some("module")) => Some(Scope::Module),
+            _ => None,
+        })
 }
 
 pub fn in_src(path: &Path) -> bool {
@@ -85,7 +98,9 @@ pub fn in_src(path: &Path) -> bool {
 }
 
 pub fn file_name(path: &Path) -> &str {
-    path.file_name().and_then(|name| name.to_str()).unwrap_or("")
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
 }
 
 /// The `index.css` of a component: `**/src/component/**/index.css` or `**/src/module/**/index.css`.
@@ -101,4 +116,14 @@ pub fn is_ts_name(name: &str) -> bool {
 pub fn is_ts_source(path: &Path) -> bool {
     let name = file_name(path);
     in_src(path) && is_ts_name(name) && !name.ends_with(".d.ts")
+}
+
+/// A `.ts`, `.tsx`, or `.css` file below a `src` directory. A `.d.ts` file is not one.
+pub fn is_frontend_source(path: &Path) -> bool {
+    is_ts_source(path) || (in_src(path) && file_name(path).ends_with(".css"))
+}
+
+/// A `.rs` file below a `src` directory.
+pub fn is_rust_source(path: &Path) -> bool {
+    in_src(path) && file_name(path).ends_with(".rs")
 }

@@ -32,7 +32,7 @@ pub fn lint(root: &Path) -> Report {
     };
     if !walk_errors.is_empty() {
         report.failures.push(Failure {
-            tool: Tool::CodeStyle,
+            tool: Tool::IanLint,
             output: walk_errors.join("\n"),
         });
     }
@@ -40,9 +40,15 @@ pub fn lint(root: &Path) -> Report {
     report
 }
 
-/// The rules of this program for the files in `files`.
-#[allow(clippy::missing_const_for_fn, reason = "A rule that is added later reads the files.")]
+/// Sends each file to the rule set for its kind.
 pub fn check_files(files: &FileSet) -> Vec<Diagnostic> {
-    let _: &FileSet = files;
-    Vec::new()
+    let mut diagnostics = Vec::new();
+    for path in files.files() {
+        if files::is_frontend_source(path) {
+            diagnostics.extend(rule::fe::check(path, files));
+        } else if files::is_rust_source(path) {
+            diagnostics.extend(rule::rs::check(path, files));
+        }
+    }
+    diagnostics
 }

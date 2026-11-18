@@ -1,11 +1,9 @@
-#![allow(clippy::print_stdout, clippy::print_stderr, reason = "This program writes the lint report to the terminal.")]
-
 use std::env;
 use std::io::{IsTerminal as _, stderr, stdout};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use fe_lint::diagnostic::Diagnostic;
+use ian_lint::diagnostic::Diagnostic;
 
 const RED: &str = "38;2;220;107;106";
 const YELLOW: &str = "38;2;255;215;1";
@@ -24,15 +22,21 @@ fn use_color(is_terminal: bool) -> bool {
 }
 
 fn paint(text: &str, code: &str, color: bool) -> String {
-    if color { format!("\x1b[{code}m{text}\x1b[0m") } else { text.to_owned() }
+    if color {
+        format!("\x1b[{code}m{text}\x1b[0m")
+    } else {
+        text.to_owned()
+    }
 }
 
-/// Paints the names in backticks, like `home`, yellow. A backtick with no pair stays as it is.
+/// Paints the names in backticks yellow. A backtick with no pair stays as it is.
 fn highlight(text: &str, color: bool) -> String {
     let mut out = String::new();
     let mut rest = text;
     while let Some((before, after)) = rest.split_once('`') {
-        let Some((quoted, tail)) = after.split_once('`') else { break };
+        let Some((quoted, tail)) = after.split_once('`') else {
+            break;
+        };
         out += before;
         out += &paint(&format!("`{quoted}`"), YELLOW, color);
         rest = tail;
@@ -41,31 +45,65 @@ fn highlight(text: &str, color: bool) -> String {
 }
 
 fn render(diagnostic: &Diagnostic, color: bool) -> String {
-    let location = format!("{}:{}:{}", diagnostic.path.display(), diagnostic.line, diagnostic.column);
+    let location = format!(
+        "{}:{}:{}",
+        diagnostic.path.display(),
+        diagnostic.line,
+        diagnostic.column
+    );
     let rule = format!("{}/{}", diagnostic.tool, diagnostic.rule);
-    let text = format!("{} {}: {}", paint(&location, CYAN, color), paint(&rule, RED, color), highlight(&diagnostic.problem, color));
-    format!("{text}\n    {} {}", paint("fix:", GREEN, color), highlight(&diagnostic.fix, color))
+    let text = format!(
+        "{} {}: {}",
+        paint(&location, CYAN, color),
+        paint(&rule, RED, color),
+        highlight(&diagnostic.problem, color)
+    );
+    format!(
+        "{text}\n    {} {}",
+        paint("fix:", GREEN, color),
+        highlight(&diagnostic.fix, color)
+    )
 }
 
-/// Usage: `fe-lint [root]`. The default root is the current folder.
+/// Usage: `ian-lint [root]`. The default root is the current folder.
 /// Exit code: 0 for no errors, 1 for lint errors, 2 when the file walk did not finish.
 fn main() -> ExitCode {
-    let root = env::args_os().nth(1).map_or_else(|| PathBuf::from("."), PathBuf::from);
+    let root = env::args_os()
+        .nth(1)
+        .map_or_else(|| PathBuf::from("."), PathBuf::from);
     let out_color = use_color(stdout().is_terminal());
     let err_color = use_color(stderr().is_terminal());
 
-    let report = fe_lint::lint(&root);
+    let report = ian_lint::lint(&root);
     for diagnostic in &report.diagnostics {
         println!("{}", render(diagnostic, out_color));
     }
     for failure in &report.failures {
-        let title = paint(&format!("{} did not run correctly. This is not a lint error.", failure.tool), YELLOW, err_color);
-        eprintln!("{title} {}\n{}", paint("Its output:", DIM, err_color), failure.output);
+        let title = paint(
+            &format!(
+                "{} did not run correctly. This is not a lint error.",
+                failure.tool
+            ),
+            YELLOW,
+            err_color,
+        );
+        eprintln!(
+            "{title} {}\n{}",
+            paint("Its output:", DIM, err_color),
+            failure.output
+        );
     }
 
     let has_errors = !report.diagnostics.is_empty();
     if has_errors {
-        eprintln!("{}", paint("lint failed. Correct each error, then run the command again.", RED, err_color));
+        eprintln!(
+            "{}",
+            paint(
+                "lint failed. Correct each error, then run the command again.",
+                RED,
+                err_color
+            )
+        );
     }
     if !report.failures.is_empty() {
         ExitCode::from(2)

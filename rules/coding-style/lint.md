@@ -1,10 +1,10 @@
-# fe-lint coding style
+# lint coding style
 
-The linter is the crate `fe-lint` in `fe-lint/`.
+The linter is the crate `ian-lint` in `lint/`.
 
 ## General
 
-- After a change, run these commands in `fe-lint/`. All must pass with no warnings:
+- After a change, run these commands in `lint/`. All must pass with no warnings:
   1. `cargo fmt`
   2. `cargo clippy --all-targets`
   3. `cargo test`
@@ -16,15 +16,16 @@ The linter is the crate `fe-lint` in `fe-lint/`.
 
 ## Rules
 
-- Put each rule in one file in `fe-lint/src/rule/`. The folder has no rules until you add one.
+- Put a frontend rule in one file in `lint/src/rule/fe/`. Put a Rust rule in one file in `lint/src/rule/rs/`. Both folders have no rules until you add one.
 - The rule id in kebab-case is the file name in snake_case.
 - The comment at the top of the file is the text of the rule. It has a line that starts with `Why a lint rule:`.
-- Call the rule from the function in `fe-lint/src/lib.rs` for its file kind.
+- Call a frontend rule from `check` in `lint/src/rule/fe/mod.rs`. Call a Rust rule from `check` in `lint/src/rule/rs/mod.rs`.
+- `check_files` in `lint/src/lib.rs` calls the set for the file kind.
 - A diagnostic of a rule has a fix.
 
 ## Tests
 
-- Put a test of public behavior in `fe-lint/tests/`.
+- Put a test of public behavior in `lint/tests/`.
 - A test that reads a private item of a rule stays in that rule file.
 - Name each test by the behavior that it checks.
 - For each rule, test a case that passes and a case that fails.

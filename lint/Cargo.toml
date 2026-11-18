@@ -1,0 +1,8 @@
+[package]
+name = "ian-lint"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+ignore = "0.4.34"
