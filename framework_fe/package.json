@@ -17,7 +17,7 @@
     "@solidjs/router": "2.0.0",
     "@solidjs/web": "2.0.0",
     "solid-js": "2.0.0",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vitest": "5.0.3"
   },
   "peerDependencies": {
