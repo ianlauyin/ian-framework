@@ -1,6 +1,6 @@
-use std::env;
 use std::time::Duration;
 
+use crate::env;
 use crate::exception;
 use crate::exception::Exception;
 
@@ -13,9 +13,9 @@ const METADATA_TIMEOUT: Duration = Duration::from_secs(2);
 
 // None means that the process has no project: no variable and no metadata server.
 pub(crate) async fn resolve_project() -> Result<Option<String>, Exception> {
-    let project = match env::var(PROJECT_ENV) {
-        Ok(project) if !project.trim().is_empty() => project,
-        _ => match fetch_metadata_project().await {
+    let project = match env::optional(PROJECT_ENV)? {
+        Some(project) => project,
+        None => match fetch_metadata_project().await {
             Some(project) => project,
             None => return Ok(None),
         },
