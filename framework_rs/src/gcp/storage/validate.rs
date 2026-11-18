@@ -7,7 +7,6 @@ pub const BUCKET_NAME_INVALID: &str = "BUCKET_NAME_INVALID";
 pub const METADATA_INVALID: &str = "METADATA_INVALID";
 pub const OBJECT_NAME_INVALID: &str = "OBJECT_NAME_INVALID";
 
-// GCS refuses a longer object name.
 pub(crate) const MAX_OBJECT_NAME_BYTES: usize = 1024;
 
 pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {

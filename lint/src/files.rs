@@ -1,11 +1,8 @@
-//! The file tree, and the meaning of a path in the project structure.
-
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
 
-/// All files below the root, and all their folders.
 #[derive(Default)]
 pub struct FileSet {
     files: BTreeSet<PathBuf>,
@@ -13,8 +10,6 @@ pub struct FileSet {
 }
 
 impl FileSet {
-    /// The walk obeys `.gitignore`, also when the root is not in a git repository.
-    /// The second value is the errors of the walk. A folder that it cannot read is not in the set.
     pub fn walk(root: &Path) -> (Self, Vec<String>) {
         let mut errors = Vec::new();
         let mut paths = Vec::new();
@@ -60,7 +55,6 @@ impl FileSet {
         self.dirs.contains(path)
     }
 
-    /// The module that owns `path`: the name of the nearest folder that has a `module.tsx`.
     pub fn module_name<'a>(&self, path: &'a Path) -> Option<&'a str> {
         path.ancestors()
             .skip(1)
@@ -72,9 +66,7 @@ impl FileSet {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
-    /// Below `src/component`.
     Component,
-    /// Below `src/module`.
     Module,
 }
 
@@ -103,7 +95,6 @@ pub fn file_name(path: &Path) -> &str {
         .unwrap_or("")
 }
 
-/// The `index.css` of a component: `**/src/component/**/index.css` or `**/src/module/**/index.css`.
 pub fn is_component_css(path: &Path) -> bool {
     file_name(path) == "index.css" && scope(path).is_some()
 }
@@ -112,18 +103,15 @@ pub fn is_ts_name(name: &str) -> bool {
     name.ends_with(".ts") || name.ends_with(".tsx")
 }
 
-/// A `.ts` or `.tsx` source file below a `src` folder. A `.d.ts` file is not one.
 pub fn is_ts_source(path: &Path) -> bool {
     let name = file_name(path);
     in_src(path) && is_ts_name(name) && !name.ends_with(".d.ts")
 }
 
-/// A `.ts`, `.tsx`, or `.css` file below a `src` directory. A `.d.ts` file is not one.
 pub fn is_frontend_source(path: &Path) -> bool {
     is_ts_source(path) || (in_src(path) && file_name(path).ends_with(".css"))
 }
 
-/// A `.rs` file below a `src` directory.
 pub fn is_rust_source(path: &Path) -> bool {
     in_src(path) && file_name(path).ends_with(".rs")
 }

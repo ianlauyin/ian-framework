@@ -32,7 +32,6 @@ pub const COPY_STEP_LIMIT: &str = "COPY_STEP_LIMIT";
 pub const COPY_TOKEN_STUCK: &str = "COPY_TOKEN_STUCK";
 pub const SIGN_URL_FAILED: &str = "SIGN_URL_FAILED";
 
-// The most rewrite calls for one object. A rewrite that needs more is a fault.
 const MAX_COPY_STEPS: u32 = 10_000;
 
 #[derive(Clone)]
@@ -45,8 +44,6 @@ pub struct GcsClient {
 }
 
 impl GcsClient {
-    // `signer_email` is the service account that signs URLs. Without it, the signer is the
-    // account of the credentials, which must be a service account or the metadata server.
     pub async fn connect_with_adc(
         bucket_name: impl Into<String>,
         signer_email: Option<&str>,
@@ -205,7 +202,6 @@ impl GcsClient {
         .await
     }
 
-    // The new keys replace the keys with the same name. The other keys stay.
     pub async fn merge_object_metadata(
         &self,
         name: &str,
@@ -311,8 +307,6 @@ impl GcsClient {
         .await
     }
 
-    // A failed delete does not prove that the source still exists. Delete the copy only
-    // when the source is confirmed, else the copy can be the only one.
     async fn rollback_failed_move(&self, from: &str, to: &str, delete_err: Exception) -> Exception {
         let kind = delete_err.code();
         let message = match self.get_object_meta(from).await {
@@ -335,7 +329,6 @@ impl GcsClient {
         exception!(code = kind, message, source = delete_err)
     }
 
-    // A missing object is a normal result, so it writes no record.
     async fn with_operation_log<T>(
         &self,
         operation: &str,

@@ -14,7 +14,6 @@ pub(crate) fn random_token() -> Result<String, Exception> {
     Ok(hex::encode(bytes))
 }
 
-// A token from `create` is 64 lowercase hex characters. Other values skip the Redis call.
 pub(crate) fn is_token(value: &str) -> bool {
     value.len() == 64
         && value

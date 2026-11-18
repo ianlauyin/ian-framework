@@ -62,6 +62,22 @@ fn an_attachment_query_encodes_the_asterisk() {
 }
 
 #[test]
+fn a_query_value_encodes_an_asterisk() {
+    assert_eq!(percent_encode("*"), "%2A");
+    let disposition = content_disposition_value("a*.txt").unwrap();
+    let signed = signed_get(
+        "bucket",
+        "o",
+        "signer@example.com",
+        1,
+        fixed_stamp(),
+        Some(&disposition),
+    );
+    assert!(signed.url.contains("a%252A.txt"));
+    assert!(!signed.url.contains("a*.txt"));
+}
+
+#[test]
 fn a_percent_in_the_disposition_is_encoded_again() {
     let disposition = content_disposition_value("a\"b\u{e9}.txt").unwrap();
     let signed = signed_get(

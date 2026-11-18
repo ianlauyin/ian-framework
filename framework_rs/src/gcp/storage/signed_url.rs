@@ -62,7 +62,6 @@ pub(crate) struct SignedGet {
     pub url: String,
 }
 
-// GCS encodes `*` in a query value as `%2A`, and the storage crate leaves that byte as `*`.
 pub(crate) fn signed_get(
     bucket: &str,
     object: &str,

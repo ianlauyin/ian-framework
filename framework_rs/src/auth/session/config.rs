@@ -3,10 +3,8 @@ use crate::exception::Exception;
 
 pub const SESSION_CONFIG_INVALID: &str = "SESSION_CONFIG_INVALID";
 
-// Browsers cap a cookie lifetime at 400 days.
 pub(crate) const MAX_TTL_SECS: u64 = 400 * 24 * 60 * 60;
 
-// A browser removes the cookie only when these attributes match the attributes of the cookie that it holds.
 const COOKIE_ATTRIBUTES: &str = "HttpOnly; Secure; SameSite=Lax; Path=/";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +54,6 @@ impl Default for SessionConfig {
     }
 }
 
-// RFC 6265 cookie-name: one or more visible ASCII characters with no separator.
 fn is_cookie_name(name: &str) -> bool {
     !name.is_empty()
         && name

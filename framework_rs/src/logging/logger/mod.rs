@@ -135,7 +135,6 @@ impl Logger {
         }
     }
 
-    // Three failed batches end the flush so a down log server does not keep the process open.
     async fn flush(&self) {
         let mut failed = 0u8;
         while self.buffered_len() > 0 {

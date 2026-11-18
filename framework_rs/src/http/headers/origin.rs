@@ -1,7 +1,6 @@
 use axum::http::HeaderMap;
 use axum::http::header::{HOST, ORIGIN};
 
-// A browser that does not send Sec-Fetch-Site still sends Origin on a POST.
 pub fn is_same_origin(headers: &HeaderMap) -> bool {
     if let Some(site) = headers.get("sec-fetch-site") {
         return site.as_bytes() == b"same-origin";

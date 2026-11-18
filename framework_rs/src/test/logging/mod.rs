@@ -59,8 +59,6 @@ pub(crate) fn buffered_events(logger: &Logger) -> Vec<LogEvent> {
     logger.lock_buffer().events.iter().cloned().collect()
 }
 
-// All tests share the one global logger, so a test finds its own events by a unique action or URL.
-// The log server refuses a batch that holds the action `REFUSED_ACTION`.
 pub(crate) fn global_logger() -> &'static Logger {
     GLOBAL_LOGGER.call_once(|| {
         let endpoint = start_log_server();
@@ -69,7 +67,6 @@ pub(crate) fn global_logger() -> &'static Logger {
     Logger::get().unwrap()
 }
 
-// `Logger::direct_send` ships in a spawned task, so a test waits for the result.
 pub(crate) async fn wait_for(done: impl Fn() -> bool) {
     for _ in 0..200 {
         if done() {
@@ -90,7 +87,6 @@ pub(crate) fn shipped_batches(action: &str) -> Vec<Vec<LogEvent>> {
         .collect()
 }
 
-// The server runs on its own thread and runtime, because the runtime of one test ends with that test.
 fn start_log_server() -> String {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -109,7 +105,6 @@ fn start_log_server() -> String {
     endpoint
 }
 
-// `connection: close` stops the shipper from reusing a connection of a runtime that has ended.
 async fn receive_batch(
     Json(log): Json<LogRequest>,
 ) -> (StatusCode, [(header::HeaderName, &'static str); 1]) {

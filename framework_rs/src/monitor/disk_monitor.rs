@@ -69,7 +69,6 @@ impl DiskMonitor {
 
 pub(crate) fn read_usage() -> Option<f64> {
     let stat = rustix::fs::statvfs("/").ok()?;
-    // Same as df: the blocks that root cannot use are not free, and the blocks that only root can use are not counted.
     let used = stat.f_blocks.checked_sub(stat.f_bfree)?;
     let total = used.checked_add(stat.f_bavail)?;
     if total == 0 {

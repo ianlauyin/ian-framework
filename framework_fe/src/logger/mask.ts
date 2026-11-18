@@ -5,7 +5,6 @@ const MASK = "***";
 export class Mask {
   private readonly patterns: RegExp[];
 
-  // The `g` flag makes `replace` change each match, not only the first.
   constructor(patterns: RegExp[]) {
     this.patterns = patterns.map(
       (pattern) =>

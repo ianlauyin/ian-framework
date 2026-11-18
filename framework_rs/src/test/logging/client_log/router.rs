@@ -14,7 +14,6 @@ use axum::middleware::from_fn;
 use serde_json::json;
 use tower::ServiceExt;
 
-// All tests share the global logger, so each test uses event actions that no other test uses.
 fn client_event(action: &str) -> serde_json::Value {
     json!({
         "ts": "2026-10-25T12:00:00Z",

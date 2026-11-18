@@ -71,7 +71,6 @@ impl Exception {
         &self.message
     }
 
-    // The file and the line of the `exception!` call.
     pub fn location(&self) -> (&'static str, u32) {
         (self.location.file, self.location.line)
     }
@@ -88,7 +87,6 @@ impl Exception {
         Self { code, ..self }
     }
 
-    // The trace starts at this exception and follows each source that is an Exception.
     pub fn trace(&self) -> impl Iterator<Item = &Exception> {
         std::iter::successors(Some(self), |exception| exception.source_exception())
     }

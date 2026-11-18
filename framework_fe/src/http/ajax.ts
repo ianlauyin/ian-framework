@@ -32,7 +32,6 @@ export const ajax = async <
         throw new Error(`Path param ${key} is required`);
       }
       const text = String(value);
-      // "." and ".." stay as they are after encoding, and the browser would then change the path.
       if (text === "." || text === "..") {
         throw new Error(`Path param ${key} is not valid`);
       }

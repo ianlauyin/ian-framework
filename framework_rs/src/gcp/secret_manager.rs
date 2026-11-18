@@ -12,7 +12,6 @@ pub const SECRET_ID_INVALID: &str = "SECRET_ID_INVALID";
 pub const SECRET_VALUE_EMPTY: &str = "SECRET_VALUE_EMPTY";
 pub const SECRET_VALUE_NOT_UTF8: &str = "SECRET_VALUE_NOT_UTF8";
 
-// None means that the process has no project.
 static SECRET_MANAGER: OnceCell<Option<SecretManager>> = OnceCell::const_new();
 
 pub struct SecretManager {
@@ -26,7 +25,6 @@ impl SecretManager {
         Ok(state.as_ref())
     }
 
-    // None means that the secret or its latest version does not exist.
     pub async fn access_latest(&self, secret: &str) -> Result<Option<String>, Exception> {
         if !is_safe_name(secret) {
             return Err(exception!(
@@ -68,7 +66,6 @@ impl SecretManager {
     }
 }
 
-// The value is a secret, so no error holds the value or a parser error that can quote it.
 pub(crate) fn parse_secret_value(data: &[u8]) -> Result<String, Exception> {
     let value = std::str::from_utf8(data)
         .map_err(|_| exception!(code = SECRET_VALUE_NOT_UTF8, "secret value is not UTF-8"))?

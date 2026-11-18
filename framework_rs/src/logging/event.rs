@@ -15,7 +15,6 @@ pub enum LogLevel {
     Error,
 }
 
-// An untagged enum, so deserialize rejects null, an array and an object.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum LogValue {

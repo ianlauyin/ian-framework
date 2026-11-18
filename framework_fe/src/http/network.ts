@@ -13,7 +13,6 @@ export class ApiError extends Error {
   }
 }
 
-// The request did not give a usable response: the connection failed, a gateway answered, or the body is not JSON.
 export class NetworkConnectionException extends Error {
   public readonly requestURL: string;
 

@@ -25,6 +25,12 @@ fn new_rejects_a_bad_threshold_or_interval() {
 }
 
 #[test]
+fn parse_sample_counts_guest_time_inside_user_and_nice() {
+    let stat = "cpu  100 10 50 800 40 5 5 0 7 3\n";
+    assert_eq!(parse_sample(stat), Some(sample(840, 1010)));
+}
+
+#[test]
 fn parse_sample_reads_the_total_cpu_line() {
     let stat = "cpu  100 10 50 800 40 5 5 0 0 0\ncpu0 50 5 25 400 20 2 3 0 0 0\nintr 1\n";
     assert_eq!(parse_sample(stat), Some(sample(840, 1010)));

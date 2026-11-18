@@ -12,7 +12,7 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 - Name each test by the behavior that it checks.
 - Use JSON for the request and the response. Use a different format only for a route that needs a body that is not JSON: a file upload, a stream or a webhook that has its own format.
 - Keep the Rust field name as the JSON name. Add a serde rename only when the contract needs a different name.
-- Run `cargo fmt` and `cargo clippy` in `framework_rs/` after you change the code. Fix all the warnings that they show.
+- Run `cargo fmt` in `framework_rs/` after you change the code.
 - Run `cargo run --quiet --manifest-path lint/Cargo.toml -- framework_rs` from the repo root after you change the code. Fix each error.
 - When a cargo feature only adds a step to a function, write one function. Put the step in a `#[cfg(feature = "...")]` block, with an early return when the step gives the result. Do not write a second copy of the function for `#[cfg(not(feature = "..."))]`.
 

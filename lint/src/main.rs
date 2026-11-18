@@ -11,8 +11,6 @@ const GREEN: &str = "32";
 const CYAN: &str = "36";
 const DIM: &str = "2";
 
-/// `NO_COLOR` turns the color off and `FORCE_COLOR` turns it on.
-/// Without them, the color is on when the stream is a terminal.
 fn use_color(is_terminal: bool) -> bool {
     let set = |name: &str| env::var(name).is_ok_and(|value| !value.is_empty() && value != "0");
     if env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
@@ -29,7 +27,6 @@ fn paint(text: &str, code: &str, color: bool) -> String {
     }
 }
 
-/// Paints the names in backticks yellow. A backtick with no pair stays as it is.
 fn highlight(text: &str, color: bool) -> String {
     let mut out = String::new();
     let mut rest = text;
@@ -65,8 +62,6 @@ fn render(diagnostic: &Diagnostic, color: bool) -> String {
     )
 }
 
-/// Usage: `ian-lint [root]`. The default root is the current folder.
-/// Exit code: 0 for no errors, 1 for lint errors, 2 when the file walk did not finish.
 fn main() -> ExitCode {
     let root = env::args_os()
         .nth(1)

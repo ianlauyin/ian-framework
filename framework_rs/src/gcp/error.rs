@@ -9,7 +9,6 @@ pub const RESOURCE_NOT_FOUND: &str = "RESOURCE_NOT_FOUND";
 pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
 pub const TRANSPORT_FAILED: &str = "TRANSPORT_FAILED";
 
-// The gRPC status codes that the control client can give in place of an HTTP status.
 const RPC_NOT_FOUND: i32 = 5;
 const RPC_PERMISSION_DENIED: i32 = 7;
 const RPC_UNAUTHENTICATED: i32 = 16;

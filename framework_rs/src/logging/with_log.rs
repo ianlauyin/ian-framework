@@ -3,7 +3,6 @@ use std::time::Instant;
 
 use crate::logging::{LogEvent, Logger};
 
-// `to_event` makes the event from the output. The latency is set after it, so it cannot replace the latency.
 pub async fn with_log<T>(
     work: impl Future<Output = T>,
     to_event: impl FnOnce(&mut T) -> LogEvent,

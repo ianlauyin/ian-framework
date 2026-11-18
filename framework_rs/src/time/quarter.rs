@@ -14,7 +14,6 @@ impl Quarter {
         }
     }
 
-    // The stored day is text as YYYY-MM-DD, so the bounds are text too.
     pub fn first_day(self) -> String {
         format!("{:04}-{:02}-01", self.year, (self.number - 1) * 3 + 1)
     }

@@ -22,7 +22,6 @@ export function createLocale<Locale extends string, Dictionary extends object>(
       setCurrent((state) => {
         state.locale = locale;
       });
-      // Solid 2 shows a store write after the batch flushes, so flush here before the caller reads the locale.
       flush();
     },
   };

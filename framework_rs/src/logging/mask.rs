@@ -6,7 +6,6 @@ pub const MASK_PATTERN_INVALID: &str = "MASK_PATTERN_INVALID";
 
 pub(crate) const MASK: &str = "***";
 
-// access_log records the query and the JSON body, so a credential field must not reach a log.
 pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
     r"(?i)password",
     r"(?i)passwd",
@@ -17,7 +16,6 @@ pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
     r"(?i)cookie",
 ];
 
-// `pairs` match a `name=value` pair whose name holds a match of a pattern, so the value is masked too.
 pub(crate) struct Masks {
     plains: Vec<regex::Regex>,
     pairs: Vec<regex::Regex>,

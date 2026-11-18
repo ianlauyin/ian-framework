@@ -1,12 +1,9 @@
 import { ApiError, type ErrorBody, NetworkConnectionException, networkError } from "./network";
 
-// A gateway or a proxy answers with these statuses when the app is not reached.
-// 503 is not in the list, because the app uses it for a planned stop.
 const NETWORK_ERROR_STATUS_CODES = [0, 502, 504];
 
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
-// Sends one request, and returns the parsed JSON body, or null for an empty body.
 export async function rawSend(url: string, init: RequestInit): Promise<any> {
   let response: Response;
   let body: string;
@@ -31,7 +28,6 @@ export async function rawSend(url: string, init: RequestInit): Promise<any> {
   }
 }
 
-// A proxy can answer with an HTML or text error page, which must still give an ApiError.
 function parseErrorBody(body: string): ErrorBody | null {
   try {
     return body ? JSON.parse(body) : null;

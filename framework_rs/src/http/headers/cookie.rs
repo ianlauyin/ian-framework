@@ -1,7 +1,6 @@
 use axum::http::HeaderMap;
 use axum::http::header::{COOKIE, SET_COOKIE};
 
-// HTTP/2 clients can send each cookie in its own Cookie field, so read every field.
 pub fn read_cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers
         .get_all(COOKIE)

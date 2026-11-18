@@ -96,7 +96,6 @@ fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<
     ts.with_timezone(now.offset())
 }
 
-// The text is shown in log lines, so a client cannot choose a line break or a text above the limit.
 fn client_text(text: &str, max_chars: usize) -> String {
     text.chars()
         .map(|ch| if ch.is_control() { ' ' } else { ch })
@@ -121,7 +120,6 @@ fn client_fields(extra: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValu
     kept
 }
 
-// A client sends camelCase keys, but the log schema uses snake_case keys.
 pub(crate) fn snake_case(key: &str) -> String {
     let chars: Vec<char> = key.chars().collect();
     let mut result = String::with_capacity(key.len() + 4);

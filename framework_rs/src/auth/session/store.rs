@@ -69,7 +69,6 @@ impl SessionStore {
         }))
     }
 
-    // The key of an ended session can stay in the subject set. `create` and `remove_subject` clear it.
     pub async fn remove(&self, token: &str) -> Result<(), Exception> {
         redis::cmd("DEL")
             .arg(self.key(token))
@@ -115,19 +114,16 @@ impl SessionStore {
         self.inner.conn.clone()
     }
 
-    // A copy of Redis must not give working tokens, so the key holds only the token hash.
     pub(crate) fn key(&self, token: &str) -> String {
         let hash = hex::encode(Sha256::digest(token.as_bytes()));
         format!("{}{hash}", self.inner.config.prefix)
     }
 
-    // The set holds the keys of the sessions of one subject. It is hashed so the subject cannot change the key.
     pub(crate) fn subject_key(&self, subject: &str) -> String {
         let hash = hex::encode(Sha256::digest(subject.as_bytes()));
         format!("{}subject:{hash}", self.inner.config.prefix)
     }
 
-    // The keys of expired sessions leave the set first. Then the least recently used sessions end, but never the new one.
     async fn trim_subject(&self, subject_key: &str, new_key: &str) -> Result<(), Exception> {
         let mut conn = self.conn();
         let members: Vec<String> = redis::cmd("SMEMBERS")

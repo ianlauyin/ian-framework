@@ -100,7 +100,6 @@ impl RateLimiter {
         );
     }
 
-    // A full map drops this many of the least recently used buckets at once, so the scan is rare.
     pub(crate) fn evict_count(&self) -> usize {
         (self.prune_at / 10).max(1)
     }
@@ -132,7 +131,6 @@ pub async fn rate_limit(
     }
 }
 
-// One client can own a whole IPv6 /64 network, so all addresses of a /64 share one bucket.
 pub(crate) fn limit_key(ip: &str) -> Option<IpAddr> {
     match ip.parse::<IpAddr>().ok()? {
         IpAddr::V6(v6) => {

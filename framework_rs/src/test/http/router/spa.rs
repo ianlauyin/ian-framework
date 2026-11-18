@@ -8,7 +8,6 @@ use tower::ServiceExt;
 
 use crate::http::router::spa::*;
 
-// The router reads a path relative to the working directory, which all tests share.
 static WORKING_DIR: Mutex<()> = Mutex::const_new(());
 
 fn make_root(name: &str, with_dist: bool) -> PathBuf {

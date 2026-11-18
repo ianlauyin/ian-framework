@@ -17,7 +17,6 @@ pub fn optional(name: &str) -> Result<Option<String>, Exception> {
     }
 }
 
-// The exception never holds the value of the variable, because the value can be a secret.
 pub fn required(name: &str) -> Result<String, Exception> {
     optional(name)?.ok_or_else(|| exception!(code = ENV_MISSING, format!("{name} is required")))
 }

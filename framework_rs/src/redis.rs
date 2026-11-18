@@ -29,7 +29,6 @@ pub async fn connect(url: &str) -> Result<ConnectionManager, Exception> {
     Ok(conn)
 }
 
-// Fail fast when Redis is down instead of retrying for many seconds.
 fn manager_config() -> ConnectionManagerConfig {
     ConnectionManagerConfig::new()
         .set_connection_timeout(Some(Duration::from_secs(2)))

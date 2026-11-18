@@ -9,16 +9,12 @@ pub struct ShutdownReceiver {
 }
 
 impl ShutdownReceiver {
-    // `new` spawns the signal listener, which a `Default` value should not do.
-    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let (signal_tx, _) = watch::channel(false);
         let receiver = Self { signal: signal_tx };
         let listener = receiver.clone();
         tokio::spawn(async move {
             let mut sigterm = signal(SignalKind::terminate()).ok();
-            // A listener that fails to install disables its branch. With no branch left, the
-            // task ends without a shutdown.
             tokio::select! {
                 Ok(()) = tokio::signal::ctrl_c() => {}
                 Some(()) = async { sigterm.as_mut()?.recv().await } => {}
@@ -30,8 +26,6 @@ impl ShutdownReceiver {
         receiver
     }
 
-    // The future owns its own watch receiver, so it is 'static and can go to
-    // `with_graceful_shutdown` or a `select!` in a loop without a clone.
     pub fn wait(&self) -> impl Future<Output = ()> + Send + 'static {
         let mut signal = self.signal.subscribe();
         async move {

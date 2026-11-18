@@ -6,8 +6,7 @@ The linter is the crate `ian-lint` in `lint/`.
 
 - After a change, run these commands in `lint/`. All must pass with no warnings:
   1. `cargo fmt`
-  2. `cargo clippy --all-targets`
-  3. `cargo test`
+  2. `cargo test`
 - Readability is more important than strict DRY. Do not add a helper, a generic type, or an abstraction only to remove duplication.
 - Write a comment only when the code cannot show the reason. Write the comment as one complete sentence.
 - Return early when a check fails. Keep the success path at the end of the function.

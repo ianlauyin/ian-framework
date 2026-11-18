@@ -26,13 +26,8 @@ export class VersionChecker {
     }
   }
 
-  // A plain reload can reuse a cached index.html, which still names the old assets.
   public static async reload(): Promise<void> {
-    try {
-      await fetch(location.href, { cache: "reload" });
-    } catch {
-      // The reload below still runs when the fetch fails.
-    }
+    await fetch(location.href, { cache: "reload" }).catch(() => undefined);
     location.reload();
   }
 
@@ -54,7 +49,7 @@ export class VersionChecker {
         VersionChecker.onUpdated?.();
       }
     } catch {
-      // ignore network errors — version check is best-effort
+      return;
     }
   }
 }

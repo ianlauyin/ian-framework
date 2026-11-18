@@ -38,7 +38,6 @@ pub(crate) fn with_vars<T>(vars: &[(&str, Option<&OsStr>)], read: impl FnOnce() 
 }
 
 fn set_or_remove(name: &str, value: Option<&OsStr>) {
-    // SAFETY: Every caller holds the lock from `env_lock`, so no other test thread touches the env.
     unsafe {
         match value {
             Some(value) => std::env::set_var(name, value),

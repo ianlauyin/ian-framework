@@ -113,7 +113,6 @@ export class Logger {
   }
 
   private static watchWindowError(): void {
-    // The capture phase is the only way to see a failed script, style or image load, as these events do not bubble.
     window.addEventListener(
       "error",
       (event) => {
@@ -139,7 +138,6 @@ export class Logger {
     return `DOM source error: <${target.tagName.toLowerCase()}> ${source}`.trim();
   }
 
-  // A beacon cannot be read back, so only a beacon that the browser refuses is put back in the buffer.
   private static send(): void {
     if (Logger.buffer.length === 0) return;
 

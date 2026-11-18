@@ -58,7 +58,6 @@ fn app() -> Router {
         .layer(from_fn(access_log))
 }
 
-// All tests share the global logger, so each test uses a request URL that no other test uses.
 fn recorded(request_url: &str) -> LogEvent {
     let mut events: Vec<_> = buffered_events(global_logger())
         .into_iter()

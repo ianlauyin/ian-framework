@@ -103,7 +103,6 @@ pub(crate) fn parse_sample(stat: &str) -> Option<CpuSample> {
     if fields.next()? != "cpu" {
         return None;
     }
-    // user, nice, system, idle, iowait, irq, softirq, steal. The guest times are in user and nice.
     let values = fields
         .take(8)
         .map(|field| field.parse::<u64>().ok())

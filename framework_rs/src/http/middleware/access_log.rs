@@ -71,7 +71,6 @@ pub async fn access_log(mut request: Request, next: Next) -> Response {
         let Fields { context, extra } = fields.take();
         event.context = context;
         event.extra = extra;
-        // The middleware keys go in last, so a handler cannot replace them.
         event.context.insert("ip".to_string(), ip.into());
         event
             .context

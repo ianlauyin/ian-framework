@@ -22,14 +22,14 @@ export function createStorage<Schema extends object>(
       try {
         storage().setItem(`${prefix}:${key}`, JSON.stringify(value));
       } catch {
-        // Blocked or full: the value is not kept
+        return;
       }
     },
     remove(key) {
       try {
         storage().removeItem(`${prefix}:${key}`);
       } catch {
-        // Blocked: nothing to remove
+        return;
       }
     },
   };

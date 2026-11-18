@@ -14,7 +14,6 @@ pub fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     Some(token)
 }
 
-// Slices of different lengths compare in less time, so compare the fixed-size hashes.
 pub(crate) fn key_matches(token: &str, key: &str) -> bool {
     if key.is_empty() {
         return false;

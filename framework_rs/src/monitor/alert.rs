@@ -15,7 +15,6 @@ impl Alert {
         }
     }
 
-    // One event for each rise to the threshold. The alert arms again when the usage falls below it.
     pub(crate) fn check(&mut self, percent: f64) -> Option<LogEvent> {
         if percent < self.threshold_percent {
             self.active = false;

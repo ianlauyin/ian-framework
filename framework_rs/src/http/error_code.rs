@@ -22,7 +22,6 @@ pub const TOO_MANY_REQUESTS: &str = "TOO_MANY_REQUESTS";
 pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
 pub const BAD_GATEWAY: &str = "BAD_GATEWAY";
 
-// Only the code of the top exception counts. A wrapped client error becomes an internal error.
 impl IntoResponse for Exception {
     fn into_response(self) -> Response {
         let status = match self.code() {
@@ -42,7 +41,6 @@ impl IntoResponse for Exception {
             Some(status) => error_response(status, self.message()),
             None => error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal server error"),
         };
-        // A response extension stays in the process. Hyper never writes it to the client.
         response.extensions_mut().insert(Arc::new(self));
         response
     }
