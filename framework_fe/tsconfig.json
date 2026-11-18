@@ -9,7 +9,7 @@
     "noEmit": true,
     "strict": true,
     "jsx": "preserve",
-    "jsxImportSource": "solid-js",
+    "jsxImportSource": "@solidjs/web",
     "types": []
   },
   "include": ["src", "test"]

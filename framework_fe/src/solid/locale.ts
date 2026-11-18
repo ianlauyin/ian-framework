@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createStore, flush, untrack } from "solid-js";
 
 export type Locales<Locale extends string, Dictionary extends object> = Record<Locale, Dictionary>;
 
@@ -12,13 +12,18 @@ export function createLocale<Locale extends string, Dictionary extends object>(
   locales: Locales<Locale, Dictionary>,
   initial: NoInfer<Locale>,
 ): LocaleState<Locale, Dictionary> {
-  const [current, setCurrent] = createSignal<Locale>(initial);
+  const [current, setCurrent] = createStore({ locale: initial });
   return {
-    locale: current,
-    dict: () => locales[current()],
+    locale: () => current.locale,
+    dict: () => locales[current.locale],
     setLocale(locale) {
       if (!(locale in locales)) return;
-      setCurrent(() => locale);
+      if (locale === untrack(() => current.locale)) return;
+      setCurrent((state) => {
+        state.locale = locale;
+      });
+      // Solid 2 shows a store write after the batch flushes, so flush here before the caller reads the locale.
+      flush();
     },
   };
 }

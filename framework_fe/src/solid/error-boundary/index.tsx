@@ -1,4 +1,5 @@
-import {type JSX, ErrorBoundary as SolidErrorBoundary } from "solid-js";
+import type { JSX } from "@solidjs/web";
+import { Errored } from "solid-js";
 
 import { Logger } from "../../logger";
 
@@ -9,13 +10,15 @@ export interface ErrorBoundaryProps {
 
 export function ErrorBoundary(props: ErrorBoundaryProps): JSX.Element {
   return (
-      <SolidErrorBoundary
+    <Errored
       fallback={(error, reset) => {
-        Logger.error("ERROR-BOUNDARY/caughtError", error);
-          return props.fallback(reset);
-        }}
-      >
-        {props.children}
-      </SolidErrorBoundary>
-    );
+        const caught = error();
+        const logged = caught instanceof Error ? caught : new Error(String(caught));
+        Logger.error("ERROR-BOUNDARY/caughtError", logged);
+        return props.fallback(reset);
+      }}
+    >
+      {props.children}
+    </Errored>
+  );
 }
