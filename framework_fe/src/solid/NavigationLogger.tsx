@@ -2,7 +2,7 @@ import { useLocation } from "@solidjs/router";
 import type { JSX } from "@solidjs/web";
 import { createEffect } from "solid-js";
 
-import { Logger } from "../../logger";
+import { Logger } from "../logger";
 
 export function NavigationLogger(): JSX.Element {
   const location = useLocation();

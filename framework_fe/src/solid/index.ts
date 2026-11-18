@@ -1,3 +1,4 @@
-export * from "./error-boundary";
+export * from "./ErrorBoundary";
 export * from "./locale";
-export * from "./navigation-logger";
+export * from "./NavigationLogger";
+export * from "./SwitchRouter";

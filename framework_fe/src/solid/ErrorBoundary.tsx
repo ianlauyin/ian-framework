@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Errored } from "solid-js";
 
-import { Logger } from "../../logger";
+import { Logger } from "../logger";
 
 export interface ErrorBoundaryProps {
   children: JSX.Element;
