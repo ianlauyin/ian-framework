@@ -1,9 +1,9 @@
 import { ApiError, NetworkConnectionException } from "./network";
 
-export type ExceptionHandler = (exception: ApiError | NetworkConnectionException) => void | Promise<void>;
-
 let initialized = false;
 let handlerRunning = false;
+
+export type ExceptionHandler = (exception: ApiError | NetworkConnectionException) => void | Promise<void>;
 
 export function setupExceptionHandler(handler: ExceptionHandler): void {
   if (initialized) throw new Error("setupExceptionHandler() is called twice");

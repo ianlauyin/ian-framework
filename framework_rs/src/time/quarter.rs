@@ -1,12 +1,27 @@
 use chrono::{Datelike, NaiveDate};
 
+use crate::exception;
+use crate::exception::Exception;
+
+pub const QUARTER_NUMBER_INVALID: &str = "QUARTER_NUMBER_INVALID";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Quarter {
-    pub year: i32,
-    pub number: u32,
+    year: i32,
+    number: u32,
 }
 
 impl Quarter {
+    pub fn new(year: i32, number: u32) -> Result<Self, Exception> {
+        if !(1..=4).contains(&number) {
+            return Err(exception!(
+                code = QUARTER_NUMBER_INVALID,
+                "quarter number must be from 1 to 4"
+            ));
+        }
+        Ok(Self { year, number })
+    }
+
     pub fn of(day: NaiveDate) -> Self {
         Self {
             year: day.year(),

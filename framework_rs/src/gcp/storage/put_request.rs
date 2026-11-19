@@ -51,22 +51,19 @@ pub(crate) async fn open_upload_file(path: &Path) -> Result<tokio::fs::File, Exc
     let file = tokio::fs::File::open(path).await.map_err(|err| {
         exception!(
             code = FILE_OPEN_FAILED,
-            format!("cannot open {}", path.display()),
+            "cannot open the file",
             source = err,
         )
     })?;
     let meta = file.metadata().await.map_err(|err| {
         exception!(
             code = FILE_METADATA_FAILED,
-            format!("cannot read metadata for {}", path.display()),
+            "cannot read the file metadata",
             source = err,
         )
     })?;
     if !meta.is_file() {
-        return Err(exception!(
-            code = NOT_A_FILE,
-            format!("{} is not a file", path.display()),
-        ));
+        return Err(exception!(code = NOT_A_FILE, "the path is not a file"));
     }
     Ok(file)
 }

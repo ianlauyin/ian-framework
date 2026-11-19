@@ -8,6 +8,7 @@ use crate::exception::Severity;
 use crate::http::error_code;
 
 pub const PASSWORD_HASH_FAILED: &str = "PASSWORD_HASH_FAILED";
+pub const PASSWORD_HASH_INVALID: &str = "PASSWORD_HASH_INVALID";
 
 pub(crate) const MIN_PASSWORD_BYTES: usize = 8;
 pub(crate) const MAX_PASSWORD_BYTES: usize = 256;
@@ -26,16 +27,18 @@ pub async fn hash_password(password: &str) -> Result<String, Exception> {
         })
 }
 
-pub async fn verify_password(password: &str, hash: &str) -> bool {
-    if validate_password(password).is_err() {
-        return false;
-    }
-    let Ok(parsed) = PasswordHash::new(hash) else {
-        return false;
-    };
-    Argon2::default()
+pub async fn verify_password(password: &str, hash: &str) -> Result<bool, Exception> {
+    validate_password(password)?;
+    let parsed = PasswordHash::new(hash).map_err(|err| {
+        exception!(
+            code = PASSWORD_HASH_INVALID,
+            "password hash is not valid",
+            source = err
+        )
+    })?;
+    Ok(Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
-        .is_ok()
+        .is_ok())
 }
 
 pub(crate) fn validate_password(password: &str) -> Result<(), Exception> {

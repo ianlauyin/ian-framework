@@ -18,11 +18,12 @@ impl DiskMonitor {
         if !(threshold_percent > 0.0 && threshold_percent <= 100.0) || interval.is_zero() {
             Logger::warn_with(
                 "DISK/invalidConfig",
-                BTreeMap::new(),
-                format!(
-                    "invalid disk monitor config: threshold_percent={threshold_percent} must be in (0, 100] and interval={interval:?} must not be zero"
-                )
-                .into(),
+                BTreeMap::from([
+                    ("threshold_percent".to_string(), threshold_percent.into()),
+                    ("interval_seconds".to_string(), interval.as_secs_f64().into()),
+                ]),
+                "the threshold must be more than 0 and at most 100, and the interval must not be zero"
+                    .into(),
             );
             return None;
         }
