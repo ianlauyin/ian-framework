@@ -9,7 +9,9 @@ pub(crate) mod with_log;
 pub use client_log::{ClientLog, ClientLogEvent, client_log_router};
 pub use event::{LogEvent, LogLevel, LogValue};
 pub use log_request::LogRequest;
-pub use log_shipper::{HttpLogShipper, LogShipper};
+pub use log_shipper::{
+    API_KEY_HEADER_INVALID, HTTP_CLIENT_BUILD_FAILED, HttpLogShipper, LogShipper,
+};
 pub use logger::Logger;
-pub use mask::DEFAULT_MASK_PATTERNS;
+pub use mask::{DEFAULT_MASK_PATTERNS, MASK_PATTERN_INVALID};
 pub use with_log::with_log;

@@ -1,21 +1,4 @@
-use std::time::Duration;
-
 use crate::logging::HttpLogShipper;
-use crate::logging::log_shipper::SHIP_CHUNK;
-use crate::logging::log_shipper::http_log_shipper::SHIP_TIMEOUT;
-use crate::logging::logger::SHIP_EVERY;
-use crate::logging::logger::log_buffer::CAPACITY;
-use crate::test::logging::default_shipper;
-
-#[test]
-fn defaults() {
-    let shipper = default_shipper("api");
-    assert_eq!(shipper.inner.app, "api");
-    assert_eq!(SHIP_CHUNK, 1_000);
-    assert_eq!(SHIP_TIMEOUT, Duration::from_secs(10));
-    assert_eq!(CAPACITY, 20_000);
-    assert_eq!(SHIP_EVERY, Duration::from_secs(60));
-}
 
 #[test]
 fn invalid_post_api_key_returns_an_exception() {

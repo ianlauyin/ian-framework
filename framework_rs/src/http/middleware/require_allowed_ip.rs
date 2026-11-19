@@ -10,6 +10,7 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::headers::client_ip;
+
 pub const ALLOWED_IPS_INVALID: &str = "ALLOWED_IPS_INVALID";
 
 #[derive(Clone, Debug)]
@@ -20,10 +21,11 @@ impl AllowedIps {
         let mut set = HashSet::new();
         for ip in ips {
             let text = ip.as_ref().trim();
-            let parsed = text.parse::<IpAddr>().map_err(|_| {
+            let parsed = text.parse::<IpAddr>().map_err(|err| {
                 exception!(
                     code = ALLOWED_IPS_INVALID,
-                    "allowed ip is not an IP address"
+                    "allowed ip is not an IP address",
+                    source = err
                 )
             })?;
             set.insert(parsed);

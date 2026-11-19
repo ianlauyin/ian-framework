@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::gcp::storage::validate::*;
 
 #[test]
-fn object_names_are_checked() {
+fn an_empty_dot_long_or_multiline_object_name_is_refused() {
     assert!(validate_object_name("a/b.txt").is_ok());
     assert!(validate_object_name(&"a".repeat(MAX_OBJECT_NAME_BYTES)).is_ok());
     for bad in ["", ".", "..", "a\nb"] {
@@ -13,7 +13,7 @@ fn object_names_are_checked() {
 }
 
 #[test]
-fn bucket_names_are_checked() {
+fn a_bucket_name_with_a_separator_space_or_non_ascii_is_refused() {
     assert!(validate_bucket("my-bucket").is_ok());
     for bad in ["", "a/b", "a b", "a\\b", "b\u{fc}cket"] {
         assert!(validate_bucket(bad).is_err());

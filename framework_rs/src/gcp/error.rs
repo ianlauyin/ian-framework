@@ -5,6 +5,7 @@ use crate::exception::Exception;
 
 pub const API_FAILED: &str = "API_FAILED";
 pub const AUTH_FAILED: &str = "AUTH_FAILED";
+pub const CLIENT_BUILD_FAILED: &str = "CLIENT_BUILD_FAILED";
 pub const RESOURCE_NOT_FOUND: &str = "RESOURCE_NOT_FOUND";
 pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
 pub const TRANSPORT_FAILED: &str = "TRANSPORT_FAILED";

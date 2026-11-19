@@ -26,11 +26,6 @@ pub struct RateLimiter {
     pub(crate) buckets: Arc<Mutex<HashMap<Option<IpAddr>, Bucket>>>,
 }
 
-pub(crate) struct Bucket {
-    tokens: f64,
-    updated: Instant,
-}
-
 impl RateLimiter {
     pub fn new(capacity: u32, refill_per_sec: f64, prune_at: usize) -> Result<Self, Exception> {
         if prune_at == 0 {
@@ -59,14 +54,14 @@ impl RateLimiter {
         });
         bucket.tokens = self.refilled(bucket, now);
         bucket.updated = now;
-        if bucket.tokens >= 1.0 {
-            bucket.tokens -= 1.0;
-            return Ok(());
+        if bucket.tokens < 1.0 {
+            return Err(
+                Duration::try_from_secs_f64((1.0 - bucket.tokens) / self.refill_per_sec)
+                    .unwrap_or(UNKNOWN_WAIT),
+            );
         }
-        Err(
-            Duration::try_from_secs_f64((1.0 - bucket.tokens) / self.refill_per_sec)
-                .unwrap_or(UNKNOWN_WAIT),
-        )
+        bucket.tokens -= 1.0;
+        Ok(())
     }
 
     fn make_room(
@@ -129,6 +124,11 @@ pub async fn rate_limit(
             response
         }
     }
+}
+
+pub(crate) struct Bucket {
+    tokens: f64,
+    updated: Instant,
 }
 
 pub(crate) fn limit_key(ip: &str) -> Option<IpAddr> {

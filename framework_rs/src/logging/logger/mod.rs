@@ -5,7 +5,7 @@ use std::error::Error;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use log_buffer::LogBuffer;
+use crate::logging::logger::log_buffer::LogBuffer;
 
 use crate::exception::Exception;
 use crate::logging::log_shipper::{HttpLogShipper, LogShipper, SHIP_CHUNK};
@@ -13,7 +13,7 @@ use crate::logging::mask::Masks;
 use crate::logging::{LogEvent, LogLevel, LogValue};
 use crate::shutdown::ShutdownReceiver;
 
-pub(crate) const SHIP_EVERY: Duration = Duration::from_secs(60);
+const SHIP_EVERY: Duration = Duration::from_secs(60);
 
 const FLUSH_RETRY_EVERY: Duration = Duration::from_secs(1);
 const FLUSH_RETRY_LIMIT: u8 = 3;

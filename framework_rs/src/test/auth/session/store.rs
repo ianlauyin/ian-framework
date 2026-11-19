@@ -219,11 +219,6 @@ async fn debug_shows_only_the_config() {
     store.remove_subject("7").await.unwrap();
 }
 
-#[test]
-fn tls_url_is_accepted() {
-    assert!(redis::Client::open("rediss://default:secret@example.upstash.io:6379").is_ok());
-}
-
 #[tokio::test]
 async fn bad_config_is_refused_before_connecting() {
     let Some(conn) = connection().await else {

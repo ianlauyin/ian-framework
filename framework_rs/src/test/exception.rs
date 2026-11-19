@@ -3,9 +3,15 @@ use crate::exception;
 #[test]
 fn display_shows_the_current_message_only() {
     let root = exception!(code = "ENV_INVALID", "port is not a number");
+    let top = exception!(code = "ENV_MISSING", "app cannot start", source = root);
+    assert_eq!(top.to_string(), "app cannot start");
+}
+
+#[test]
+fn trace_follows_each_exception_source() {
+    let root = exception!(code = "ENV_INVALID", "port is not a number");
     let middle = exception!(code = "ENV_SECRET", "cannot read the secret", source = root);
     let top = exception!(code = "ENV_MISSING", "app cannot start", source = middle);
-    assert_eq!(top.to_string(), "app cannot start");
     let causes: Vec<_> = top.trace().map(|e| e.code()).collect();
     assert_eq!(causes, ["ENV_MISSING", "ENV_SECRET", "ENV_INVALID"]);
 }

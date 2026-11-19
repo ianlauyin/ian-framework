@@ -16,6 +16,7 @@ pub const URL_SIGNER_BUILD_FAILED: &str = "URL_SIGNER_BUILD_FAILED";
 pub const SIGNED_URL_LIFETIME_TOO_LONG: &str = "SIGNED_URL_LIFETIME_TOO_LONG";
 pub const SIGNED_URL_LIFETIME_TOO_SHORT: &str = "SIGNED_URL_LIFETIME_TOO_SHORT";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
+const HEX: &[u8; 16] = b"0123456789ABCDEF";
 
 pub(crate) fn validate_lifetime(expires_in: Duration) -> Result<Duration, Exception> {
     let seconds = expires_in.as_secs();
@@ -139,7 +140,6 @@ fn canonical_query(params: &BTreeMap<&str, String>) -> String {
 }
 
 fn encode(segment: &str, keep_slash: bool) -> String {
-    const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut out = String::with_capacity(segment.len());
     for byte in segment.bytes() {
         match byte {

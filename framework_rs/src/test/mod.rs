@@ -9,6 +9,8 @@ mod http;
 mod logging;
 #[cfg(all(feature = "monitor", target_os = "linux"))]
 mod monitor;
+#[cfg(feature = "redis")]
+mod redis;
 mod shutdown;
 mod time;
 mod token;

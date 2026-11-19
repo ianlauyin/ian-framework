@@ -17,18 +17,31 @@ pub struct SessionConfig {
 
 impl SessionConfig {
     pub(crate) fn check(&self) -> Result<(), Exception> {
-        let problem = if self.ttl_secs == 0 {
-            "session ttl is zero"
-        } else if self.ttl_secs > MAX_TTL_SECS {
-            "session ttl is more than 400 days"
-        } else if self.max_sessions_per_subject == 0 {
-            "session max sessions per subject is zero"
-        } else if !is_cookie_name(&self.cookie_name) {
-            "session cookie name is not valid"
-        } else {
-            return Ok(());
-        };
-        Err(exception!(code = SESSION_CONFIG_INVALID, problem))
+        if self.ttl_secs == 0 {
+            return Err(exception!(
+                code = SESSION_CONFIG_INVALID,
+                "session ttl is zero"
+            ));
+        }
+        if self.ttl_secs > MAX_TTL_SECS {
+            return Err(exception!(
+                code = SESSION_CONFIG_INVALID,
+                "session ttl is more than 400 days"
+            ));
+        }
+        if self.max_sessions_per_subject == 0 {
+            return Err(exception!(
+                code = SESSION_CONFIG_INVALID,
+                "session max sessions per subject is zero"
+            ));
+        }
+        if !is_cookie_name(&self.cookie_name) {
+            return Err(exception!(
+                code = SESSION_CONFIG_INVALID,
+                "session cookie name is not valid"
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn cookie(&self, token: &str) -> String {

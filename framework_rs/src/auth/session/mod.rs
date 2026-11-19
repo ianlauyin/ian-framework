@@ -2,8 +2,9 @@ pub(crate) mod config;
 pub(crate) mod store;
 pub(crate) mod token;
 
-pub use config::SessionConfig;
-pub use store::SessionStore;
+pub use config::{SESSION_CONFIG_INVALID, SessionConfig};
+pub use store::{SESSION_STORE_COMMAND_FAILED, SessionStore};
+pub use token::RANDOM_SOURCE_FAILED;
 
 use std::fmt;
 

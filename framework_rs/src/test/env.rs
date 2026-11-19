@@ -5,8 +5,8 @@ use std::sync::{Mutex, MutexGuard};
 use crate::env::*;
 use crate::exception::Exception;
 
-const OPTIONAL_NAME: &str = "IAN_FRAMEWORK_TEST_OPTIONAL";
-const REQUIRED_NAME: &str = "IAN_FRAMEWORK_TEST_REQUIRED";
+const OPTIONAL_NAME: &str = "MY_APP_OPTIONAL";
+const REQUIRED_NAME: &str = "MY_APP_REQUIRED";
 
 pub(crate) fn env_lock() -> MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());

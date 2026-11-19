@@ -9,7 +9,7 @@ pub(crate) async fn store_or_skip() -> Option<SessionStore> {
     let mut bytes = [0u8; 8];
     getrandom::fill(&mut bytes).unwrap();
     let config = SessionConfig {
-        prefix: format!("ian-framework-test:{}:", hex::encode(bytes)),
+        prefix: format!("my-app-test:{}:", hex::encode(bytes)),
         cookie_name: "sid".to_string(),
         ttl_secs: 60,
         max_sessions_per_subject: LIMIT,

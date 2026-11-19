@@ -10,18 +10,13 @@ use crate::logging::{LogEvent, LogRequest};
 pub const API_KEY_HEADER_INVALID: &str = "API_KEY_HEADER_INVALID";
 pub const HTTP_CLIENT_BUILD_FAILED: &str = "HTTP_CLIENT_BUILD_FAILED";
 
-pub(crate) const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const SHIP_CHUNK: usize = 1_000;
+
+const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone)]
 pub struct HttpLogShipper {
-    pub(crate) inner: Arc<Inner>,
-}
-
-pub(crate) struct Inner {
-    pub(crate) app: &'static str,
-    pub(crate) endpoint: String,
-    pub(crate) post_api_key: reqwest::header::HeaderValue,
-    pub(crate) http: reqwest::Client,
+    inner: Arc<Inner>,
 }
 
 impl HttpLogShipper {
@@ -98,4 +93,11 @@ impl std::fmt::Debug for HttpLogShipper {
             .field("post_api_key", &MASK)
             .finish_non_exhaustive()
     }
+}
+
+struct Inner {
+    app: &'static str,
+    endpoint: String,
+    post_api_key: reqwest::header::HeaderValue,
+    http: reqwest::Client,
 }

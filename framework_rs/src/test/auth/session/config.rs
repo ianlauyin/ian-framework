@@ -7,7 +7,7 @@ fn config_with(change: impl FnOnce(&mut SessionConfig)) -> SessionConfig {
 }
 
 #[test]
-fn checks_the_config() {
+fn a_config_out_of_range_is_refused() {
     assert!(SessionConfig::default().check().is_ok());
     let bad = [
         config_with(|config| config.ttl_secs = 0),

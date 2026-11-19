@@ -12,21 +12,17 @@ use google_cloud_wkt::FieldMask;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::error::to_exception;
-use crate::gcp::storage::put_request::open_upload_file;
+use crate::gcp::error::{CLIENT_BUILD_FAILED, RESOURCE_NOT_FOUND, to_exception};
+use crate::gcp::storage::list::{ListPage, ListQuery};
+use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
+use crate::gcp::storage::put_request::{PutBody, PutRequest, open_upload_file};
 use crate::gcp::storage::signed_url::{
     build_signer, content_disposition_value, signed_get, validate_lifetime,
 };
 use crate::gcp::storage::validate::{validate_bucket, validate_metadata, validate_object_name};
 use crate::logging::{LogEvent, Logger};
 
-use crate::gcp::storage::list::{ListPage, ListQuery};
-use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
-use crate::gcp::storage::put_request::{PutBody, PutRequest};
-
-pub const CLIENT_BUILD_FAILED: &str = "CLIENT_BUILD_FAILED";
 pub const MOVE_SAME_OBJECT: &str = "MOVE_SAME_OBJECT";
-pub const RESOURCE_NOT_FOUND: &str = "RESOURCE_NOT_FOUND";
 pub const COPY_NO_OBJECT: &str = "COPY_NO_OBJECT";
 pub const COPY_STEP_LIMIT: &str = "COPY_STEP_LIMIT";
 pub const COPY_TOKEN_STUCK: &str = "COPY_TOKEN_STUCK";
@@ -313,17 +309,14 @@ impl GcsClient {
             Ok(Some(_)) => match self.delete_object(to).await {
                 Ok(()) => return delete_err,
                 Err(cleanup_err) => format!(
-                    "move could not delete the source ({delete_err}) and could not delete \
-                     the destination ({cleanup_err}); the object exists at both names"
+                    "move left the object at both names after {}",
+                    cleanup_err.code()
                 ),
             },
-            Ok(None) => format!(
-                "move could not delete the source ({delete_err}) but the source is gone; \
-                 the object exists only at the destination"
-            ),
+            Ok(None) => "move left the object only at the destination".to_string(),
             Err(check_err) => format!(
-                "move could not delete the source ({delete_err}) and could not check \
-                 the source ({check_err}); the object may exist at both names"
+                "move may have left the object at both names after {}",
+                check_err.code()
             ),
         };
         exception!(code = kind, message, source = delete_err)

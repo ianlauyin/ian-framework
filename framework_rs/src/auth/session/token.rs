@@ -8,7 +8,8 @@ pub(crate) fn random_token() -> Result<String, Exception> {
     getrandom::fill(&mut bytes).map_err(|err| {
         exception!(
             code = RANDOM_SOURCE_FAILED,
-            format!("os random source failed: {err}"),
+            "os random source failed",
+            source = err
         )
     })?;
     Ok(hex::encode(bytes))

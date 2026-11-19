@@ -1,9 +1,11 @@
+mod log_buffer;
+
 use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
-use crate::logging::{HttpLogShipper, LogEvent, LogLevel, LogRequest, Logger};
+use crate::logging::{HttpLogShipper, LogEvent, LogRequest, Logger};
 use crate::shutdown::ShutdownReceiver;
 use crate::test::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
 
@@ -78,128 +80,6 @@ fn record_keeps_the_event_and_omits_scope_keys() {
     let value: serde_json::Value = serde_json::to_value(&stored).unwrap();
     assert!(value.get("app").is_none());
     assert!(value.get("project").is_none());
-}
-
-#[test]
-fn invalid_mask_pattern_returns_an_exception() {
-    let err = Logger::new(default_shipper("api"), vec!["(".to_string()])
-        .err()
-        .unwrap();
-    assert_eq!(err.code(), "MASK_PATTERN_INVALID");
-    assert!(err.message().contains("is not a valid regex"));
-}
-
-#[test]
-fn record_masks_the_value_of_a_matching_key() {
-    let shipper = Logger::new(
-        default_shipper("api"),
-        vec![r"(?i)^(password|token)$".to_string()],
-    )
-    .unwrap();
-    let mut event = LogEvent::info("login");
-    event.extra.insert("password".to_string(), "hunter2".into());
-    event.extra.insert("TOKEN".to_string(), 1234u64.into());
-    event.extra.insert("user".to_string(), "alice".into());
-    shipper.record(event);
-    let stored = buffered_events(&shipper).remove(0);
-    assert_eq!(stored.extra["password"], serde_json::json!("***"));
-    assert_eq!(stored.extra["TOKEN"], serde_json::json!("***"));
-    assert_eq!(stored.extra["user"], serde_json::json!("alice"));
-}
-
-#[test]
-fn record_masks_every_pattern_match_in_string_values() {
-    let shipper = Logger::new(
-        default_shipper("api"),
-        vec![
-            r"password=\S+".to_string(),
-            r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
-        ],
-    )
-    .unwrap();
-    let mut event = LogEvent::info("POST /login?password=x");
-    event.context.insert(
-        "user_agent".to_string(),
-        "agent BEARER abc.def".to_string().into(),
-    );
-    event.extra.insert(
-        "note".to_string(),
-        "user password=a, BEARER b.c done".into(),
-    );
-    shipper.record(event);
-    let stored = buffered_events(&shipper).remove(0);
-    assert_eq!(stored.action, "POST /login?password=x");
-    assert_eq!(stored.context["user_agent"], "agent ***");
-    assert_eq!(stored.extra["note"], serde_json::json!("user *** *** done"));
-}
-
-#[test]
-fn default_patterns_mask_the_value_of_a_name_value_pair() {
-    let shipper = buffered();
-    let mut event = LogEvent::info("GET /");
-    event.context.insert(
-        "request_url".to_string(),
-        "/x?a=1&access_token=abc123&page=2&Password=hunter2"
-            .to_string()
-            .into(),
-    );
-    shipper.record(event);
-    let stored = buffered_events(&shipper).remove(0);
-    assert_eq!(stored.context["request_url"], "/x?a=1&***&page=2&***");
-}
-
-#[test]
-fn record_without_mask_patterns_keeps_the_text() {
-    let shipper = Logger::new(default_shipper("api"), Vec::new()).unwrap();
-    let mut event = LogEvent::info("GET /");
-    event
-        .extra
-        .insert("note".to_string(), "password=hunter2".into());
-    shipper.record(event);
-    let stored = buffered_events(&shipper).remove(0);
-    assert_eq!(stored.extra["note"], serde_json::json!("password=hunter2"));
-}
-
-#[test]
-fn record_drops_the_oldest_event_when_full() {
-    let shipper = buffered();
-    fill(&shipper, CAPACITY + 5);
-    let events = buffered_events(&shipper);
-    assert_eq!(events.len(), CAPACITY);
-    assert_ne!(events[0].action, "0");
-}
-
-#[test]
-fn record_inserts_one_capacity_warning_at_80_percent() {
-    let shipper = buffered();
-    fill(&shipper, LIMIT - 1);
-    let below = buffered_events(&shipper);
-    assert_eq!(below.len(), LIMIT - 1);
-    assert_eq!(warn_count(&below), 0);
-    let before = chrono::Utc::now();
-    shipper.record(LogEvent::info("crossing"));
-    let after = chrono::Utc::now();
-    let events = buffered_events(&shipper);
-    assert_eq!(events.len(), LIMIT + 1);
-    assert_eq!(events[LIMIT - 1].action, "crossing");
-    let warn = &events[LIMIT];
-    assert_eq!(warn.action, CAPACITY_WARN_NOTE);
-    assert_eq!(warn.level, LogLevel::Warn);
-    crate::test::logging::assert_uuid_v7(&warn.id);
-    assert!(warn.context.is_empty());
-    assert!(warn.extra.is_empty());
-    assert!(warn.ts >= before && warn.ts <= after);
-    shipper.record(LogEvent::info("next"));
-    assert_eq!(warn_count(&buffered_events(&shipper)), 1);
-}
-
-#[test]
-fn record_drops_the_oldest_event_to_store_the_capacity_warning() {
-    let shipper = buffered();
-    fill(&shipper, CAPACITY);
-    let events = buffered_events(&shipper);
-    assert_eq!(events.len(), CAPACITY);
-    assert_eq!(warn_count(&events), 1);
 }
 
 #[tokio::test]

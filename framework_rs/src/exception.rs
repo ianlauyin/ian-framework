@@ -22,6 +22,15 @@ pub enum Severity {
     Error,
 }
 
+impl Severity {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Severity::Warn => "WARN",
+            Severity::Error => "ERROR",
+        }
+    }
+}
+
 pub struct Exception {
     severity: Severity,
     code: &'static str,
@@ -89,15 +98,6 @@ impl Exception {
 
     pub fn trace(&self) -> impl Iterator<Item = &Exception> {
         std::iter::successors(Some(self), |exception| exception.source_exception())
-    }
-}
-
-impl Severity {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Severity::Warn => "WARN",
-            Severity::Error => "ERROR",
-        }
     }
 }
 
