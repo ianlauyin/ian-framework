@@ -1,11 +1,12 @@
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
-use crate::callback;
 use crate::exception;
 use crate::http::error_code;
 use crate::http::headers::bearer::{bearer_token, key_matches};
@@ -13,7 +14,7 @@ use crate::http::headers::bearer::{bearer_token, key_matches};
 #[derive(Clone)]
 pub struct ApiKey {
     key: Arc<str>,
-    on_reject: Option<callback::Callback<Request>>,
+    on_reject: Option<OnReject>,
 }
 
 impl ApiKey {
@@ -24,12 +25,14 @@ impl ApiKey {
         }
     }
 
-    pub fn on_reject<F, Kind>(mut self, callback: F) -> Self
+    pub fn on_reject<F, Fut>(mut self, on_reject: F) -> Self
     where
-        F: callback::Call<Request, (), Kind> + 'static,
-        Kind: Send + Sync + 'static,
+        F: Fn(Request) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
-        self.on_reject = Some(callback::Callback::from_fn(callback));
+        self.on_reject = Some(Arc::new(move |request| {
+            Box::pin(on_reject(request)) as Pin<Box<dyn Future<Output = ()> + Send>>
+        }));
         self
     }
 }
@@ -44,9 +47,11 @@ pub async fn require_api_key(State(key): State<ApiKey>, request: Request, next: 
     let allowed = bearer_token(request.headers()).is_some_and(|token| key_matches(token, &key.key));
     if !allowed {
         if let Some(on_reject) = &key.on_reject {
-            on_reject.call(request).await;
+            on_reject(request).await;
         }
         return exception!(code = error_code::UNAUTHORIZED, "unauthorized").into_response();
     }
     next.run(request).await
 }
+
+type OnReject = Arc<dyn Fn(Request) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;

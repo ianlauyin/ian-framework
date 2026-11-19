@@ -3,7 +3,6 @@ mod test;
 
 pub(crate) mod mutex;
 
-pub mod callback;
 pub mod env;
 pub mod exception;
 pub mod http;

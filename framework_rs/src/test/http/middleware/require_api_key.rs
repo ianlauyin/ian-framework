@@ -62,7 +62,10 @@ async fn calls_on_reject_only_for_a_rejected_request() {
     let calls = Arc::new(AtomicUsize::new(0));
     let counter = calls.clone();
     let key = ApiKey::new(KEY).on_reject(move |_: Request| {
-        counter.fetch_add(1, Ordering::SeqCst);
+        let counter = counter.clone();
+        async move {
+            counter.fetch_add(1, Ordering::SeqCst);
+        }
     });
     let router = Router::new()
         .fallback(any(|| async { StatusCode::NO_CONTENT }))
