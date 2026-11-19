@@ -16,10 +16,6 @@ Write all text in ASD-STE100 (Simplified Technical English).
 - Do not add a `[label](path)` link.
 - Do not write a home path or an absolute path of the user's computer. To refer to a file in a different repo, write the repo name and the path from the root of that repo.
 
-## The catalog folder
-
-The `catalog/` folder is only for agents to read. Write each file in it for an agent, not for a human.
-
 ## Sensitive data
 
 - Do not write sensitive data in a doc. Sensitive data is a cloud project id and project number, a service account email, an external IP address, a bucket name, a registry path that contains the project id, a key, a token and a secret value.
