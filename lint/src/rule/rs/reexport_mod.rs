@@ -21,12 +21,9 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut finder = Finder::new(path, source);
-    walk(&file.items, &mut finder);
-    finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        walk(&file.items, finder);
+    })
 }
 
 fn walk(items: &[Item], finder: &mut Finder<'_>) {
@@ -42,9 +39,8 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
         if let Item::Mod(module) = item {
             let name = module.ident.to_string();
             if exported.contains(&name) && !is_pub_crate(&module.vis) {
-                finder.report(
-                    module.ident.span().byte_range().start as u32,
-                    RULE,
+                finder.at_span(
+                    module.ident.span(),
                     format!("`{name}` is re-exported and is not `pub(crate) mod`."),
                     format!("Declare `{name}` as `pub(crate) mod`."),
                 );

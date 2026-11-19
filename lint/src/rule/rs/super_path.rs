@@ -22,27 +22,23 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut pass = Pass {
-        finder: Finder::new(path, source),
-    };
-    pass.visit_file(&file);
-    pass.finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        let mut pass = Pass { finder };
+        pass.visit_file(file);
+    })
 }
 
-struct Pass<'a> {
-    finder: Finder<'a>,
+struct Pass<'a, 'b> {
+    finder: &'b mut Finder<'a>,
 }
 
-impl Visit<'_> for Pass<'_> {
+impl Visit<'_> for Pass<'_, '_> {
     fn visit_path(&mut self, path: &SynPath) {
         let mut previous = false;
         for segment in &path.segments {
             let is_super = segment.ident == "super";
             if previous && is_super {
-                report(&mut self.finder, path.span().byte_range().start as u32);
+                report(self.finder, path.span());
                 break;
             }
             previous = is_super;
@@ -51,7 +47,7 @@ impl Visit<'_> for Pass<'_> {
     }
 
     fn visit_use_tree(&mut self, tree: &UseTree) {
-        report_use(tree, false, &mut self.finder);
+        report_use(tree, false, self.finder);
     }
 }
 
@@ -60,7 +56,7 @@ fn report_use(tree: &UseTree, previous: bool, finder: &mut Finder<'_>) {
         UseTree::Path(path) => {
             let is_super = path.ident == "super";
             if previous && is_super {
-                report(finder, path.ident.span().byte_range().start as u32);
+                report(finder, path.ident.span());
             }
             report_use(&path.tree, is_super, finder);
         }
@@ -71,22 +67,21 @@ fn report_use(tree: &UseTree, previous: bool, finder: &mut Finder<'_>) {
         }
         UseTree::Name(name) => {
             if previous && name.ident == "super" {
-                report(finder, name.ident.span().byte_range().start as u32);
+                report(finder, name.ident.span());
             }
         }
         UseTree::Rename(name) => {
             if previous && name.ident == "super" {
-                report(finder, name.ident.span().byte_range().start as u32);
+                report(finder, name.ident.span());
             }
         }
         UseTree::Glob(_) => {}
     }
 }
 
-fn report(finder: &mut Finder<'_>, offset: u32) {
-    finder.report(
-        offset,
-        RULE,
+fn report(finder: &mut Finder<'_>, span: proc_macro2::Span) {
+    finder.at_span(
+        span,
         "The path uses `super::super`.",
         "Use a `crate::` path.",
     );

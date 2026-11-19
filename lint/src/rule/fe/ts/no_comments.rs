@@ -5,10 +5,6 @@
 use std::fs;
 use std::path::Path;
 
-use oxc_allocator::Allocator;
-use oxc_parser::Parser;
-use oxc_span::SourceType;
-
 use crate::diagnostic::Diagnostic;
 use crate::rule::finder::Finder;
 
@@ -22,19 +18,13 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(source_type) = SourceType::from_path(path) else {
-        return Vec::new();
-    };
-    let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, source, source_type).parse();
-    let mut finder = Finder::new(path, source);
-    for comment in &parsed.program.comments {
-        finder.report(
-            comment.span.start,
-            RULE,
-            "The file has a comment.",
-            "Put the decision in the catalog. Or add a test that prevents that reason.",
-        );
-    }
-    finder.finish()
+    Finder::typescript_source(path, source, RULE, |program, finder| {
+        for comment in &program.comments {
+            finder.report(
+                comment.span.start,
+                "The file has a comment.",
+                "Put the decision in the catalog. Or add a test that prevents that reason.",
+            );
+        }
+    })
 }

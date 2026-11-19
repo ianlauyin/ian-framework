@@ -6,10 +6,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use oxc_allocator::Allocator;
 use oxc_ast::ast::Statement;
-use oxc_parser::Parser;
-use oxc_span::SourceType;
 
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
@@ -62,11 +59,10 @@ fn report_missing(
         .filter(|name| !exported.contains(*name))
         .collect();
     missing.sort_unstable();
-    let mut finder = Finder::new(path, source);
+    let mut finder = Finder::new(path, source, RULE);
     for name in missing {
         finder.report(
             0,
-            RULE,
             format!("`./{name}` is missing from the index."),
             format!("Re-export `./{name}` from the index."),
         );
@@ -124,25 +120,22 @@ fn is_ts_file(path: &Path) -> bool {
 
 fn exported_names(path: &Path, source: &str) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
-    let Ok(source_type) = SourceType::from_path(path) else {
-        return names;
-    };
-    let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, source, source_type).parse();
-    for statement in &parsed.program.body {
-        let specifier = match statement {
-            Statement::ExportAllDeclaration(declaration) => declaration.source.value.as_str(),
-            Statement::ExportFromDeclaration(declaration) => declaration.source.value.as_str(),
-            _ => None,
-        };
-        let Some(specifier) = specifier else {
-            continue;
-        };
-        let Some(name) = module_name(specifier) else {
-            continue;
-        };
-        names.insert(name);
-    }
+    Finder::typescript_source(path, source, RULE, |program, _finder| {
+        for statement in &program.body {
+            let specifier = match statement {
+                Statement::ExportAllDeclaration(declaration) => declaration.source.value.as_str(),
+                Statement::ExportFromDeclaration(declaration) => declaration.source.value.as_str(),
+                _ => None,
+            };
+            let Some(specifier) = specifier else {
+                continue;
+            };
+            let Some(name) = module_name(specifier) else {
+                continue;
+            };
+            names.insert(name);
+        }
+    });
     names
 }
 

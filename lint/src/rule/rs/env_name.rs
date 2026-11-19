@@ -34,24 +34,22 @@ pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<D
     if place.in_test() {
         return Vec::new();
     }
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut pass = Pass {
-        finder: Finder::new(path, source),
-        place,
-        consts: const_values(&file.items),
-        reads: BTreeSet::new(),
-        helpers: BTreeSet::new(),
-        reported: BTreeSet::new(),
-    };
-    collect_uses(&file.items, &mut pass.reads, &mut pass.helpers);
-    pass.visit_file(&file);
-    pass.finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        let mut pass = Pass {
+            finder,
+            place,
+            consts: const_values(&file.items),
+            reads: BTreeSet::new(),
+            helpers: BTreeSet::new(),
+            reported: BTreeSet::new(),
+        };
+        collect_uses(&file.items, &mut pass.reads, &mut pass.helpers);
+        pass.visit_file(file);
+    })
 }
 
-struct Pass<'a> {
-    finder: Finder<'a>,
+struct Pass<'a, 'b> {
+    finder: &'b mut Finder<'a>,
     place: Place,
     consts: BTreeMap<String, (String, Span)>,
     reads: BTreeSet<String>,
@@ -59,7 +57,7 @@ struct Pass<'a> {
     reported: BTreeSet<u32>,
 }
 
-impl Visit<'_> for Pass<'_> {
+impl Visit<'_> for Pass<'_, '_> {
     fn visit_expr_call(&mut self, call: &ExprCall) {
         if let Expr::Path(path) = &*call.func {
             match kind(&path.path, &self.reads, &self.helpers) {
@@ -119,7 +117,7 @@ fn kind(path: &syn::Path, reads: &BTreeSet<String>, helpers: &BTreeSet<String>) 
     Kind::Other
 }
 
-impl Pass<'_> {
+impl Pass<'_, '_> {
     fn report_read(&mut self, span: Span) {
         if self.place.is_file("env.rs") {
             return;
@@ -153,7 +151,7 @@ impl Pass<'_> {
         if !self.reported.insert(offset) {
             return;
         }
-        self.finder.report(offset, RULE, problem, fix);
+        self.finder.at_span(span, problem, fix);
     }
 }
 

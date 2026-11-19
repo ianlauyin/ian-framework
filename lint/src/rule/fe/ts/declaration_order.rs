@@ -5,10 +5,8 @@
 use std::fs;
 use std::path::Path;
 
-use oxc_allocator::Allocator;
 use oxc_ast::ast::Statement;
-use oxc_parser::Parser;
-use oxc_span::{GetSpan, SourceType};
+use oxc_span::GetSpan;
 
 use crate::diagnostic::Diagnostic;
 use crate::rule::finder::Finder;
@@ -28,24 +26,19 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(source_type) = SourceType::from_path(path) else {
-        return Vec::new();
-    };
-    let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, source, source_type).parse();
-    let mut finder = Finder::new(path, source);
-    let mut last: Option<u8> = None;
-    for statement in &parsed.program.body {
-        let Some(group) = group(statement) else {
-            report(&mut finder, statement.span().start);
-            continue;
-        };
-        if last.is_some_and(|previous| group < previous) {
-            report(&mut finder, statement.span().start);
+    Finder::typescript_source(path, source, RULE, |program, finder| {
+        let mut last: Option<u8> = None;
+        for statement in &program.body {
+            let Some(group) = group(statement) else {
+                report(finder, statement.span().start);
+                continue;
+            };
+            if last.is_some_and(|previous| group < previous) {
+                report(finder, statement.span().start);
+            }
+            last = Some(last.map_or(group, |previous| previous.max(group)));
         }
-        last = Some(last.map_or(group, |previous| previous.max(group)));
-    }
-    finder.finish()
+    })
 }
 
 fn group(statement: &Statement<'_>) -> Option<u8> {
@@ -70,7 +63,6 @@ fn group(statement: &Statement<'_>) -> Option<u8> {
 fn report(finder: &mut Finder<'_>, offset: u32) {
     finder.report(
         offset,
-        RULE,
         "This item is out of declaration order.",
         "Put imports first, then private types and constants, then exported items, then private interfaces, then private functions.",
     );

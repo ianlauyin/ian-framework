@@ -23,23 +23,21 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut pass = Pass {
-        finder: Finder::new(path, source),
-        reported: BTreeSet::new(),
-    };
-    pass.visit_file(&file);
-    pass.finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        let mut pass = Pass {
+            finder,
+            reported: BTreeSet::new(),
+        };
+        pass.visit_file(file);
+    })
 }
 
-struct Pass<'a> {
-    finder: Finder<'a>,
+struct Pass<'a, 'b> {
+    finder: &'b mut Finder<'a>,
     reported: BTreeSet<u32>,
 }
 
-impl Visit<'_> for Pass<'_> {
+impl Visit<'_> for Pass<'_, '_> {
     fn visit_expr_macro(&mut self, mac: &ExprMacro) {
         if is_exception(&mac.mac.path) {
             self.scan(mac.mac.tokens.clone());
@@ -55,7 +53,7 @@ impl Visit<'_> for Pass<'_> {
     }
 }
 
-impl Pass<'_> {
+impl Pass<'_, '_> {
     fn scan(&mut self, tokens: TokenStream) {
         let list: Vec<_> = tokens.into_iter().collect();
         let mut index = 0;
@@ -84,9 +82,8 @@ impl Pass<'_> {
         if !self.reported.insert(offset) {
             return;
         }
-        self.finder.report(
-            offset,
-            RULE,
+        self.finder.at_span(
+            span,
             "The error code in `exception!` is a string literal.",
             "Pass a constant for the error code.",
         );

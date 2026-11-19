@@ -94,33 +94,29 @@ fn cfg_mismatch(test_file: &Path, source_file: &Path) -> Vec<Diagnostic> {
     let Ok(source_source) = fs::read_to_string(source_file) else {
         return Vec::new();
     };
-    let Ok(test_file_ast) = syn::parse_file(&test_source) else {
-        return Vec::new();
-    };
     let Ok(source_file_ast) = syn::parse_file(&source_source) else {
         return Vec::new();
     };
     let source_mods = mod_cfgs(&source_file_ast.items);
-    let mut finder = Finder::new(test_file, &test_source);
-    for item in &test_file_ast.items {
-        let Item::Mod(module) = item else {
-            continue;
-        };
-        let name = module.ident.to_string();
-        let Some(expected) = source_mods.get(&name) else {
-            continue;
-        };
-        if &cfg_keys(&module.attrs) == expected {
-            continue;
+    Finder::rust_source(test_file, &test_source, RULE, |test_ast, finder| {
+        for item in &test_ast.items {
+            let Item::Mod(module) = item else {
+                continue;
+            };
+            let name = module.ident.to_string();
+            let Some(expected) = source_mods.get(&name) else {
+                continue;
+            };
+            if &cfg_keys(&module.attrs) == expected {
+                continue;
+            }
+            finder.at_span(
+                module.ident.span(),
+                format!("The cfg on `{name}` does not match the source module."),
+                "Use the same `#[cfg(...)]` as the source module.",
+            );
         }
-        finder.report(
-            module.ident.span().byte_range().start as u32,
-            RULE,
-            format!("The cfg on `{name}` does not match the source module."),
-            "Use the same `#[cfg(...)]` as the source module.",
-        );
-    }
-    finder.finish()
+    })
 }
 
 fn mod_cfgs(items: &[Item]) -> BTreeMap<String, Vec<String>> {

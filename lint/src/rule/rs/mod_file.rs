@@ -32,27 +32,23 @@ pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<D
     let Some(folder) = folder.to_str() else {
         return Vec::new();
     };
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
     let pascal = pascal_case(folder);
-    let has_folder_item = file
-        .items
-        .iter()
-        .any(|item| is_folder_item(item, &pascal, folder));
-    let mut finder = Finder::new(path, source);
-    for item in &file.items {
-        if is_allowed(item, &pascal, folder, has_folder_item) {
-            continue;
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        let has_folder_item = file
+            .items
+            .iter()
+            .any(|item| is_folder_item(item, &pascal, folder));
+        for item in &file.items {
+            if is_allowed(item, &pascal, folder, has_folder_item) {
+                continue;
+            }
+            finder.at_span(
+                item.span(),
+                format!("`{}` is not allowed in `mod.rs`.", item_label(item)),
+                "Move it out of `mod.rs`.",
+            );
         }
-        finder.report(
-            item.span().byte_range().start as u32,
-            RULE,
-            format!("`{}` is not allowed in `mod.rs`.", item_label(item)),
-            "Move it out of `mod.rs`.",
-        );
-    }
-    finder.finish()
+    })
 }
 
 fn is_allowed(item: &Item, pascal: &str, snake: &str, has_folder_item: bool) -> bool {

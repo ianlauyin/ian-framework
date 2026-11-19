@@ -5,10 +5,7 @@
 use std::fs;
 use std::path::Path;
 
-use oxc_allocator::Allocator;
 use oxc_ast::ast::{ModuleExportName, Statement};
-use oxc_parser::Parser;
-use oxc_span::SourceType;
 
 use crate::diagnostic::Diagnostic;
 use crate::rule::finder::Finder;
@@ -23,27 +20,22 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(source_type) = SourceType::from_path(path) else {
-        return Vec::new();
-    };
-    let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, source, source_type).parse();
-    let mut finder = Finder::new(path, source);
-    for statement in &parsed.program.body {
-        match statement {
-            Statement::ExportDefaultDeclaration(declaration) => {
-                report(&mut finder, declaration.span.start);
+    Finder::typescript_source(path, source, RULE, |program, finder| {
+        for statement in &program.body {
+            match statement {
+                Statement::ExportDefaultDeclaration(declaration) => {
+                    report(finder, declaration.span.start);
+                }
+                Statement::ExportNamedDeclaration(declaration) => {
+                    report_specifiers(finder, &declaration.specifiers);
+                }
+                Statement::ExportFromDeclaration(declaration) => {
+                    report_specifiers(finder, &declaration.specifiers);
+                }
+                _ => {}
             }
-            Statement::ExportNamedDeclaration(declaration) => {
-                report_specifiers(&mut finder, &declaration.specifiers);
-            }
-            Statement::ExportFromDeclaration(declaration) => {
-                report_specifiers(&mut finder, &declaration.specifiers);
-            }
-            _ => {}
         }
-    }
-    finder.finish()
+    })
 }
 
 fn report_specifiers(finder: &mut Finder<'_>, specifiers: &[oxc_ast::ast::ExportSpecifier<'_>]) {
@@ -65,7 +57,6 @@ fn is_default_name(name: &ModuleExportName<'_>) -> bool {
 fn report(finder: &mut Finder<'_>, offset: u32) {
     finder.report(
         offset,
-        RULE,
         "The file has a default export.",
         "Use a named export.",
     );

@@ -22,12 +22,9 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut finder = Finder::new(path, source);
-    walk(&file.items, &mut finder);
-    finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        walk(&file.items, finder);
+    })
 }
 
 fn walk(items: &[Item], finder: &mut Finder<'_>) {
@@ -40,9 +37,8 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
         {
             if imp.trait_.is_none() {
                 if trait_seen.contains(&name) {
-                    finder.report(
-                        imp.span().byte_range().start as u32,
-                        RULE,
+                    finder.at_span(
+                        imp.span(),
                         format!("The inherent impl of `{name}` comes after a trait impl."),
                         "Put the inherent impl before the trait impls.",
                     );

@@ -21,12 +21,9 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut finder = Finder::new(path, source);
-    walk(&file.items, &mut finder);
-    finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        walk(&file.items, finder);
+    })
 }
 
 fn walk(items: &[Item], finder: &mut Finder<'_>) {
@@ -73,9 +70,8 @@ fn report(output: &ReturnType, name: &str, span: proc_macro2::Span, finder: &mut
     if !is_result(ty) {
         return;
     }
-    finder.report(
-        span.byte_range().start as u32,
-        RULE,
+    finder.at_span(
+        span,
         format!("`{name}` does not return `Result<T, Exception>`."),
         "Return `Result<T, Exception>`.",
     );

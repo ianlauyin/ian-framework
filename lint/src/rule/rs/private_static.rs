@@ -16,12 +16,9 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };
-    let Ok(file) = syn::parse_file(&source) else {
-        return Vec::new();
-    };
-    let mut finder = Finder::new(path, &source);
-    walk(&file.items, &mut finder);
-    finder.finish()
+    Finder::rust_source(path, &source, RULE, |file, finder| {
+        walk(&file.items, finder);
+    })
 }
 
 fn walk(items: &[syn::Item], finder: &mut Finder<'_>) {
@@ -53,9 +50,8 @@ fn report(vis: &syn::Visibility, ident: &syn::Ident, finder: &mut Finder<'_>) {
     if matches!(vis, syn::Visibility::Inherited) {
         return;
     }
-    finder.report(
-        vis.span().byte_range().start as u32,
-        RULE,
+    finder.at_span(
+        vis.span(),
         format!("`{ident}` is not a private static."),
         "Remove the visibility.",
     );

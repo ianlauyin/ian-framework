@@ -31,12 +31,9 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut finder = Finder::new(path, source);
-    walk(&file.items, &mut finder);
-    finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        walk(&file.items, finder);
+    })
 }
 
 fn walk(items: &[Item], finder: &mut Finder<'_>) {
@@ -45,12 +42,7 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
     for item in items {
         let group = group(item, &private_types);
         if last.is_some_and(|previous| group < previous) {
-            finder.report(
-                item.span().byte_range().start as u32,
-                RULE,
-                "This item is out of source order.",
-                FIX,
-            );
+            finder.at_span(item.span(), "This item is out of source order.", FIX);
         }
         last = Some(last.map_or(group, |previous| previous.max(group)));
         if let Item::Mod(module) = item

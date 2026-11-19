@@ -26,29 +26,24 @@ pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<D
     if Place::new(path, srcs).is_file("exception.rs") {
         return Vec::new();
     }
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut pass = Pass {
-        finder: Finder::new(path, source),
-    };
-    pass.visit_file(&file);
-    pass.finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        let mut pass = Pass { finder };
+        pass.visit_file(file);
+    })
 }
 
-struct Pass<'a> {
-    finder: Finder<'a>,
+struct Pass<'a, 'b> {
+    finder: &'b mut Finder<'a>,
 }
 
-impl Visit<'_> for Pass<'_> {
+impl Visit<'_> for Pass<'_, '_> {
     fn visit_path(&mut self, path: &SynPath) {
         let mut previous = String::new();
         for segment in &path.segments {
             let name = segment.ident.to_string();
             if previous == "Exception" && name == "__new" {
-                self.finder.report(
-                    path.span().byte_range().start as u32,
-                    RULE,
+                self.finder.at_span(
+                    path.span(),
                     "`Exception::__new` builds an `Exception` outside `exception.rs`.",
                     "Build the `Exception` with `exception!`.",
                 );

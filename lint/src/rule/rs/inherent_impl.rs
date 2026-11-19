@@ -22,14 +22,11 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut defined = BTreeSet::new();
-    collect_types(&file.items, &mut defined);
-    let mut finder = Finder::new(path, source);
-    walk(&file.items, &defined, &mut finder);
-    finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        let mut defined = BTreeSet::new();
+        collect_types(&file.items, &mut defined);
+        walk(&file.items, &defined, finder);
+    })
 }
 
 fn collect_types(items: &[Item], defined: &mut BTreeSet<String>) {
@@ -61,9 +58,8 @@ fn walk(items: &[Item], defined: &BTreeSet<String>, finder: &mut Finder<'_>) {
             && let Some(name) = type_name(&item.self_ty)
             && !defined.contains(&name)
         {
-            finder.report(
-                item.span().byte_range().start as u32,
-                RULE,
+            finder.at_span(
+                item.span(),
                 format!("The inherent impl of `{name}` is outside the file that defines `{name}`."),
                 format!("Move the inherent impl into the file that defines `{name}`."),
             );

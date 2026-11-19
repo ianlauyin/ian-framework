@@ -5,15 +5,12 @@
 use std::fs;
 use std::path::Path;
 
-use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     ExportAllDeclaration, ExportFromDeclaration, Expression, ImportDeclaration, ImportExpression,
     StringLiteral, TSExternalModuleReference,
 };
 use oxc_ast_visit::Visit;
 use oxc_ast_visit::walk::walk_import_expression;
-use oxc_parser::Parser;
-use oxc_span::SourceType;
 
 use crate::diagnostic::Diagnostic;
 use crate::rule::finder::Finder;
@@ -28,48 +25,42 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let Ok(source_type) = SourceType::from_path(path) else {
-        return Vec::new();
-    };
-    let allocator = Allocator::default();
-    let parsed = Parser::new(&allocator, source, source_type).parse();
-    let mut imports = Imports {
-        finder: Finder::new(path, source),
-    };
-    imports.visit_program(&parsed.program);
-    imports.finder.finish()
+    Finder::typescript_source(path, source, RULE, |program, finder| {
+        let mut imports = Imports { finder };
+        imports.visit_program(program);
+    })
 }
 
-struct Imports<'a> {
-    finder: Finder<'a>,
+struct Imports<'a, 'b> {
+    finder: &'b mut Finder<'a>,
 }
 
-impl<'a> Visit<'a> for Imports<'a> {
-    fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
+impl<'ast> Visit<'ast> for Imports<'_, '_> {
+    fn visit_import_declaration(&mut self, it: &ImportDeclaration<'ast>) {
         self.specifier(&it.source);
     }
 
-    fn visit_export_from_declaration(&mut self, it: &ExportFromDeclaration<'a>) {
+    fn visit_export_from_declaration(&mut self, it: &ExportFromDeclaration<'ast>) {
         self.specifier(&it.source);
     }
 
-    fn visit_export_all_declaration(&mut self, it: &ExportAllDeclaration<'a>) {
+    fn visit_export_all_declaration(&mut self, it: &ExportAllDeclaration<'ast>) {
         self.specifier(&it.source);
     }
 
-    fn visit_import_expression(&mut self, it: &ImportExpression<'a>) {
+    fn visit_import_expression(&mut self, it: &ImportExpression<'ast>) {
         if let Expression::StringLiteral(literal) = &it.source {
             self.specifier(literal);
         }
         walk_import_expression(self, it);
     }
 
-    fn visit_ts_external_module_reference(&mut self, it: &TSExternalModuleReference<'a>) {
+    fn visit_ts_external_module_reference(&mut self, it: &TSExternalModuleReference<'ast>) {
         self.specifier(&it.expression);
     }
 }
 
-impl Imports<'_> {
+impl Imports<'_, '_> {
     fn specifier(&mut self, literal: &StringLiteral<'_>) {
         let Some(text) = literal.value.as_str() else {
             return;
@@ -79,7 +70,6 @@ impl Imports<'_> {
         }
         self.finder.report(
             literal.span.start,
-            RULE,
             format!("`{text}` goes through `node_modules`."),
             "Import the package by its name.",
         );

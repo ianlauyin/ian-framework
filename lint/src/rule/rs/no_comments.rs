@@ -16,7 +16,7 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };
-    let mut finder = Finder::new(path, &source);
+    let mut finder = Finder::new(path, &source, RULE);
     let skipped = strip_shebang(&source).unwrap_or(0);
     let mut offset = skipped as u32;
     for token in tokenize(&source[skipped..], FrontmatterAllowed::Yes) {
@@ -26,7 +26,6 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
         ) {
             finder.report(
                 offset,
-                RULE,
                 "The file has a comment.",
                 "Put the decision in the catalog. Or add a test that prevents that reason.",
             );

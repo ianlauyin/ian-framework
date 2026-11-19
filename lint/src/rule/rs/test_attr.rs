@@ -26,13 +26,10 @@ pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<D
     if place.in_test() {
         return Vec::new();
     }
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut finder = Finder::new(path, source);
-    report_attrs(&file.attrs, false, &mut finder);
-    walk(&file.items, &place, &mut finder);
-    finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        report_attrs(&file.attrs, false, finder);
+        walk(&file.items, &place, finder);
+    })
 }
 
 fn walk(items: &[Item], place: &Place, finder: &mut Finder<'_>) {
@@ -66,9 +63,8 @@ fn report_attrs(attrs: &[Attribute], keep_cfg_test: bool, finder: &mut Finder<'_
             continue;
         }
         if is_test_attr(attr) {
-            finder.report(
-                attr.span().byte_range().start as u32,
-                RULE,
+            finder.at_span(
+                attr.span(),
                 "A test is outside the test folder.",
                 "Move the test under the test folder.",
             );

@@ -26,30 +26,25 @@ pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<D
     if Place::new(path, srcs).is_file("mutex.rs") {
         return Vec::new();
     }
-    let Ok(file) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    let mut pass = Pass {
-        finder: Finder::new(path, source),
-    };
-    pass.visit_file(&file);
-    pass.finder.finish()
+    Finder::rust_source(path, source, RULE, |file, finder| {
+        let mut pass = Pass { finder };
+        pass.visit_file(file);
+    })
 }
 
-struct Pass<'a> {
-    finder: Finder<'a>,
+struct Pass<'a, 'b> {
+    finder: &'b mut Finder<'a>,
 }
 
-impl Visit<'_> for Pass<'_> {
+impl Visit<'_> for Pass<'_, '_> {
     fn visit_expr_method_call(&mut self, call: &ExprMethodCall) {
         if (call.method == "unwrap" || call.method == "unwrap_or")
             && let Expr::MethodCall(inner) = &*call.receiver
             && inner.method == "lock"
         {
             let method = call.method.to_string();
-            self.finder.report(
-                call.method.span().byte_range().start as u32,
-                RULE,
+            self.finder.at_span(
+                call.method.span(),
                 format!("`lock().{method}` locks a standard mutex."),
                 "Lock it with `mutex::lock`.",
             );
