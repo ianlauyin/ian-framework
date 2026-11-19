@@ -95,13 +95,13 @@ fn render(diagnostic: &Diagnostic, color: bool) -> String {
     );
     let rule = format!("ian-lint/{}", diagnostic.rule);
     let text = format!(
-        "{} {}: {}",
+        "{} {}: \n{}",
         paint(&location, CYAN, color),
         paint(&rule, RED, color),
         highlight(&diagnostic.problem, color)
     );
     format!(
-        "{text}\n    {} {}",
+        "{text}\n    {} {}\n",
         paint("fix:", GREEN, color),
         highlight(&diagnostic.fix, color)
     )
