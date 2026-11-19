@@ -2,7 +2,9 @@
 
 This file is the catalog of the frontend library in `framework_fe/`.
 
-Each row has the entry path, a short description, and the open behaviour. Update that row in the same change when you make a new decision, the entry moves, or you add or remove a feature. When a code change would change the open behaviour and you did not make that decision, stop and ask. Leave the decision as it is.
+- The decision records a behaviour that the code does not show. 
+- Update that row in the same change when you make a new decision, the entry moves, or you add or remove a feature. 
+- When a code change would change the decision and you did not make that decision, stop and ask. Leave the decision as it is.
 
 | Path | Description | Decision |
 | --- | --- | --- |
