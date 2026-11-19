@@ -91,3 +91,52 @@ fn a_rust_ignore_comment_stops_only_a_rust_rule() {
         ]
     );
 }
+
+#[test]
+fn an_offset_inside_a_character_uses_the_start_of_that_character() {
+    let source = "a\u{1F600}b\nc";
+    let at = |offset| {
+        let item = Diagnostic::at_offset(
+            Path::new("src/a.ts"),
+            source,
+            offset,
+            Tool::CodeStyle,
+            "rule",
+            "problem",
+            "fix",
+        );
+        (item.line, item.column)
+    };
+    assert_eq!(at(2), (1, 2));
+    assert_eq!(at(3), (1, 2));
+    assert_eq!(at(4), (1, 2));
+}
+
+#[test]
+fn an_offset_past_the_end_uses_the_end_of_the_source() {
+    let item = Diagnostic::at_offset(
+        Path::new("src/a.ts"),
+        "ab\ncd",
+        99,
+        Tool::CodeStyle,
+        "rule",
+        "problem",
+        "fix",
+    );
+    assert_eq!((item.line, item.column), (2, 3));
+}
+
+#[test]
+fn an_offset_gives_a_one_based_line_and_column_in_characters() {
+    let source = "ab\n\u{e9}cd";
+    let item = Diagnostic::at_offset(
+        Path::new("src/a.ts"),
+        source,
+        6,
+        Tool::CodeStyle,
+        "rule",
+        "problem",
+        "fix",
+    );
+    assert_eq!((item.line, item.column), (2, 3));
+}

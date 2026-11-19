@@ -12,16 +12,6 @@ pub enum Tool {
     IanLint,
 }
 
-impl fmt::Display for Tool {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::CodeStyle => "code-style",
-            Self::RsStyle => "rs-style",
-            Self::IanLint => "ian-lint",
-        })
-    }
-}
-
 impl Tool {
     fn ignore_marker(self) -> Option<&'static str> {
         match self {
@@ -29,6 +19,16 @@ impl Tool {
             Self::RsStyle => Some(RUST_IGNORE),
             Self::IanLint => None,
         }
+    }
+}
+
+impl fmt::Display for Tool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::CodeStyle => "code-style",
+            Self::RsStyle => "rs-style",
+            Self::IanLint => "ian-lint",
+        })
     }
 }
 
@@ -83,7 +83,7 @@ impl Diagnostic {
         problem: impl Into<String>,
         fix: impl Into<String>,
     ) -> Self {
-        let before = &source[..(offset as usize).min(source.len())];
+        let before = &source[..source.floor_char_boundary(offset as usize)];
         let line = before.matches('\n').count() as u32 + 1;
         let column = before.rsplit('\n').next().unwrap_or("").chars().count() as u32 + 1;
         Self::new(path, line, column, tool, rule, problem, fix)

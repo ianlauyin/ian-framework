@@ -78,10 +78,12 @@ fn walk_obeys_gitignore_without_a_git_folder() {
 
 #[test]
 fn walk_gives_the_errors_of_a_root_that_it_cannot_read() {
-    let root = temp_root("missing").join("does-not-exist");
+    let parent = temp_root("missing");
+    let root = parent.join("does-not-exist");
     let (files, errors) = FileSet::walk(&root);
     assert_eq!(files.files().count(), 0);
     assert_eq!(errors.len(), 1);
+    fs::remove_dir_all(parent).unwrap();
 }
 
 #[test]
@@ -98,10 +100,12 @@ fn lint_reports_no_diagnostics_when_there_are_no_rules() {
 
 #[test]
 fn lint_reports_a_walk_error_as_a_failure() {
-    let root = temp_root("missing-lint").join("does-not-exist");
+    let parent = temp_root("missing-lint");
+    let root = parent.join("does-not-exist");
     let report = ian_lint::lint(&root);
     assert!(report.diagnostics.is_empty());
     assert_eq!(report.failures.len(), 1);
     assert_eq!(report.failures[0].tool, Tool::IanLint);
     assert!(!report.failures[0].output.is_empty());
+    fs::remove_dir_all(parent).unwrap();
 }
