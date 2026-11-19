@@ -34,7 +34,7 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 - A `static` is private. Do not write `pub` or `pub(crate)` on a `static`.
 - Do not use `super::super::` in a path. Use a `crate::` path for an item that is not in the current module or its parent module.
 - To use a module and an item of that module, import only the module. Then use the module name to refer to the item.
-- To use the `exception!` macro, import `crate::exception`. This import can stay next to the import of `crate::exception::Exception`, because the macro and the module have the same name.
+- When a macro has the same name as its module, import the module to use the macro. That import can stay next to an import of an item from that module.
 - Keep a type and its inherent `impl` blocks in one file. Do not write an inherent `impl` block for a type in a different file. A trait impl for a type can be in a different file.
 - A `mod.rs` has only `mod` lines and `pub use` re-exports. It has no other item, with one exception: the item that has the same name as the module folder can be in the `mod.rs`. The name of the item is the name of the folder in PascalCase for a type and a trait, and in snake_case for a function and a constant. The private items and the `impl` blocks of that item can also be in the `mod.rs`.
 - Put each other type, function, constant and `impl` block in a file that is not a `mod.rs`.
@@ -63,5 +63,8 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 - For a type that holds a secret, write its `Debug` impl by hand. Do not show a secret, a token or a query string in that `Debug` output or in an error message.
 - Do not use an index that can be out of range outside tests. This includes startup code.
 - When an input is invalid or an operation fails, return an `Exception`. The project decides how to handle it.
+- Lock a standard mutex with `lock` in `framework_rs/src/mutex.rs`. A poisoned mutex calls `clear_poison` and the caller continues with the guard.
+- `trace_event` in `framework_rs/src/logging/logger/trace_event.rs` writes an empty context when the context does not encode.
+- `spa` in `framework_rs/src/http/router/spa.rs` returns the HTTP response. A missing dist and an unreadable file are logged with `NOT_FOUND`. The response is an internal error.
 - `CpuMonitor::new` in `framework_rs/src/monitor/cpu_monitor.rs` and `DiskMonitor::new` in `framework_rs/src/monitor/disk_monitor.rs` return `None` for a threshold of 0, less than 0, more than 100, or not a number, and for a zero interval. They write a warning. They do not return an `Exception`.
 - The first failed read in a monitor task writes a log record and stops the task. A later failed CPU read writes one error and the loop continues. A later failed disk read skips that sample and writes no log record.

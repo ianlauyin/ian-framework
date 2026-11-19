@@ -4,6 +4,7 @@ use crate::shutdown::ShutdownReceiver;
 
 use crate::logging::LogLevel;
 use crate::monitor::cpu_monitor::*;
+use crate::mutex;
 
 use serde_json::json;
 
@@ -93,7 +94,7 @@ async fn run_sends_one_event_for_a_busy_cpu_and_skips_a_failed_read() {
     ];
     let run = monitor.run(
         shutdown.clone(),
-        move |event| sink_events.lock().unwrap().push(event),
+        move |event| mutex::lock(&sink_events).push(event),
         sampler(samples),
     );
     let task = tokio::spawn(run);
@@ -103,7 +104,7 @@ async fn run_sends_one_event_for_a_busy_cpu_and_skips_a_failed_read() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(events.lock().unwrap().len(), 1);
+    assert_eq!(mutex::lock(&events).len(), 1);
 }
 
 #[tokio::test]

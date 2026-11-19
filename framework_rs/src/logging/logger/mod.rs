@@ -6,28 +6,29 @@ pub(crate) mod trace_event;
 
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync;
 
 use crate::exception::Exception;
 use crate::logging::log_shipper::{HttpLogShipper, LogShipper, SHIP_CHUNK};
 use crate::logging::mask::Masks;
 use crate::logging::{LogEvent, LogValue};
+use crate::mutex;
 use crate::shutdown::ShutdownReceiver;
 
 pub use installed::LOGGER_ALREADY_SET;
 
 #[derive(Clone)]
 pub struct Logger {
-    inner: Arc<inner::Inner>,
+    inner: sync::Arc<inner::Inner>,
 }
 
 impl Logger {
     pub fn new(shipper: HttpLogShipper, mask_patterns: Vec<String>) -> Result<Self, Exception> {
         Ok(Self {
-            inner: Arc::new(inner::Inner {
+            inner: sync::Arc::new(inner::Inner {
                 shipper,
                 masks: Masks::new(&mask_patterns)?,
-                buffer: Mutex::new(log_buffer::LogBuffer::new()),
+                buffer: sync::Mutex::new(log_buffer::LogBuffer::new()),
                 shipping: tokio::sync::Mutex::new(()),
             }),
         })
@@ -107,11 +108,8 @@ impl Logger {
         })
     }
 
-    pub(crate) fn lock_buffer(&self) -> std::sync::MutexGuard<'_, log_buffer::LogBuffer> {
-        self.inner
-            .buffer
-            .lock()
-            .unwrap_or_else(|err| err.into_inner())
+    pub(crate) fn lock_buffer(&self) -> sync::MutexGuard<'_, log_buffer::LogBuffer> {
+        mutex::lock(&self.inner.buffer)
     }
 
     pub(crate) fn buffered_len(&self) -> usize {

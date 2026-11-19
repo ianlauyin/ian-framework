@@ -1,5 +1,3 @@
-// @vitest-environment happy-dom
-
 import type { JSX } from "@solidjs/web";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

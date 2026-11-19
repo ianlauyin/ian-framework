@@ -1,3 +1,4 @@
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::{env, fs, process};
@@ -66,16 +67,28 @@ fn a_root_without_a_configuration_file_exits_with_code_2() {
 
 #[test]
 fn a_root_that_the_walk_cannot_read_exits_with_code_2_and_prints_the_failure_on_stderr() {
-    let base = temp_root("missing");
-    let root = base.join("does-not-exist");
+    let root = temp_root("unreadable");
+    write_config(&root);
+    let blocked = root.join("blocked");
+    fs::create_dir(&blocked).expect("folder is created");
+    let mut closed = fs::metadata(&blocked)
+        .expect("folder metadata")
+        .permissions();
+    closed.set_mode(0);
+    fs::set_permissions(&blocked, closed).expect("folder is unreadable");
 
     let output = run(&root, &[]);
-    fs::remove_dir_all(&base).unwrap();
+    let mut open = fs::metadata(&blocked)
+        .expect("folder metadata")
+        .permissions();
+    open.set_mode(0o755);
+    fs::set_permissions(&blocked, open).expect("folder is readable");
+    fs::remove_dir_all(&root).unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
     assert!(stderr.contains("ian-lint did not run correctly. This is not a lint error."));
-    assert!(stderr.contains("does-not-exist"));
+    assert!(stderr.contains("blocked"));
 }
 
 #[test]

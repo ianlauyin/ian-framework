@@ -1,3 +1,4 @@
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
@@ -152,9 +153,17 @@ fn lint_reports_a_missing_configuration_file_as_a_failure() {
 
 #[test]
 fn lint_reports_a_walk_error_as_a_failure() {
-    let parent = temp_root("missing-lint");
-    let root = parent.join("does-not-exist");
+    let root = temp_root("unreadable");
+    write_config(&root);
+    let blocked = root.join("blocked");
+    fs::create_dir(&blocked).unwrap();
+    let mut closed = fs::metadata(&blocked).unwrap().permissions();
+    closed.set_mode(0);
+    fs::set_permissions(&blocked, closed).unwrap();
     let report = ian_lint::lint(&root);
+    let mut open = fs::metadata(&blocked).unwrap().permissions();
+    open.set_mode(0o755);
+    fs::set_permissions(&blocked, open).unwrap();
     assert!(report.diagnostics.is_empty());
     assert!(
         report
@@ -162,5 +171,5 @@ fn lint_reports_a_walk_error_as_a_failure() {
             .iter()
             .any(|failure| !failure.output.contains("ian-linter.config"))
     );
-    fs::remove_dir_all(parent).unwrap();
+    fs::remove_dir_all(root).unwrap();
 }

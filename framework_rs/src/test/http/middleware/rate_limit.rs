@@ -6,6 +6,7 @@ use axum::http::{StatusCode, header};
 use axum::response::Response;
 
 use crate::http::middleware::rate_limit::*;
+use crate::mutex;
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::middleware::from_fn_with_state;
@@ -93,7 +94,7 @@ fn prunes_full_buckets_when_the_map_is_large() {
     }
     let later = now + Duration::from_secs(10);
     assert!(limiter.check(None, later).is_ok());
-    assert_eq!(limiter.buckets.lock().unwrap().len(), 1);
+    assert_eq!(mutex::lock(&limiter.buckets).len(), 1);
 }
 
 #[test]
@@ -107,7 +108,7 @@ fn evicts_the_oldest_buckets_when_no_bucket_is_full() {
     let at = now + Duration::from_millis(PRUNE_AT as u64);
     assert!(limiter.check(None, at).is_ok());
     let evict_count = limiter.evict_count();
-    let buckets = limiter.buckets.lock().unwrap();
+    let buckets = mutex::lock(&limiter.buckets);
     assert_eq!(buckets.len(), PRUNE_AT - evict_count + 1);
     assert!(!buckets.contains_key(&key(0)));
     assert!(!buckets.contains_key(&key(evict_count - 1)));
@@ -131,7 +132,7 @@ fn a_prune_at_of_one_keeps_only_the_newest_key() {
     let now = Instant::now();
     assert!(limiter.check(key(1), now).is_ok());
     assert!(limiter.check(key(2), now).is_ok());
-    let buckets = limiter.buckets.lock().unwrap();
+    let buckets = mutex::lock(&limiter.buckets);
     assert_eq!(buckets.len(), 1);
     assert!(buckets.contains_key(&key(2)));
 }

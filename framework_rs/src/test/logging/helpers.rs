@@ -5,6 +5,7 @@ use axum;
 use crate::logging::{
     ClientLogEvent, DEFAULT_MASK_PATTERNS, HttpLogShipper, LogEvent, LogRequest, Logger,
 };
+use crate::mutex;
 
 static GLOBAL_LOGGER: Once = Once::new();
 static SHIPPED: Mutex<Vec<Vec<LogEvent>>> = Mutex::new(Vec::new());
@@ -72,9 +73,7 @@ pub(crate) async fn wait_for(done: impl Fn() -> bool) {
 }
 
 pub(crate) fn shipped_batches(action: &str) -> Vec<Vec<LogEvent>> {
-    SHIPPED
-        .lock()
-        .unwrap()
+    mutex::lock(&SHIPPED)
         .iter()
         .filter(|batch| batch.iter().any(|event| event.action == action))
         .cloned()
@@ -109,7 +108,7 @@ async fn receive_batch(
         .events
         .iter()
         .any(|event| event.action == REFUSED_ACTION);
-    SHIPPED.lock().unwrap().push(log.events);
+    mutex::lock(&SHIPPED).push(log.events);
     let status = if refused {
         axum::http::StatusCode::SERVICE_UNAVAILABLE
     } else {

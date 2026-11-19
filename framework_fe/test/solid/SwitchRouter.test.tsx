@@ -1,5 +1,3 @@
-// @vitest-environment happy-dom
-
 import { render } from "@solidjs/web";
 import { afterEach, describe, expect, it } from "vitest";
 

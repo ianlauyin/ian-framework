@@ -20,25 +20,24 @@ pub struct Failure {
 }
 
 pub fn lint(root: &Path) -> Report {
-    let mut failures = Vec::new();
     let config = match config::load(root) {
-        Ok(config) => Some(config),
+        Ok(config) => config,
         Err(output) => {
-            failures.push(Failure { output });
-            None
+            return Report {
+                diagnostics: Vec::new(),
+                failures: vec![Failure { output }],
+            };
         }
     };
     let (files, walk_errors) = FileSet::walk(root);
+    let mut failures = Vec::new();
     if !walk_errors.is_empty() {
         failures.push(Failure {
             output: walk_errors.join("\n"),
         });
     }
-    let mut diagnostics = Vec::new();
-    if let Some(config) = &config {
-        diagnostics = check_files(&files, config);
-        diagnostics.sort();
-    }
+    let mut diagnostics = check_files(&files, &config);
+    diagnostics.sort();
     Report {
         diagnostics,
         failures,

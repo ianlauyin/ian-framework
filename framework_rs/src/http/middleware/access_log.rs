@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use axum::extract::{FromRequestParts, Request};
 use axum::http::request::Parts;
@@ -10,6 +10,7 @@ use axum::response::Response;
 use crate::exception::Exception;
 use crate::http::headers::client::{client_ip, user_agent};
 use crate::logging::{LogEvent, LogValue, Logger, with_log};
+use crate::mutex;
 
 #[derive(Clone, Default)]
 pub struct AccessLog {
@@ -26,7 +27,7 @@ impl AccessLog {
     }
 
     fn lock(&self) -> MutexGuard<'_, Fields> {
-        self.fields.lock().unwrap_or_else(PoisonError::into_inner)
+        mutex::lock(&self.fields)
     }
 
     fn take(&self) -> Fields {

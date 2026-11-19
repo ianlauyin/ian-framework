@@ -1,4 +1,4 @@
-use std::fmt;
+use std;
 
 #[macro_export]
 macro_rules! exception {
@@ -101,8 +101,8 @@ impl Exception {
     }
 }
 
-impl fmt::Debug for Exception {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Debug for Exception {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Exception")
             .field("severity", &self.severity)
             .field("code", &self.code)
@@ -112,8 +112,8 @@ impl fmt::Debug for Exception {
     }
 }
 
-impl fmt::Display for Exception {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Exception {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
     }
 }

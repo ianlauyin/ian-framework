@@ -13,6 +13,7 @@ use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::headers::client_ip;
 use crate::logging::Logger;
+use crate::mutex;
 
 pub const RATE_LIMIT_PRUNE_AT_INVALID: &str = "RATE_LIMIT_PRUNE_AT_INVALID";
 
@@ -43,10 +44,7 @@ impl RateLimiter {
     }
 
     pub(crate) fn check(&self, key: Option<IpAddr>, now: Instant) -> Result<(), Exception> {
-        let mut buckets = self
-            .buckets
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut buckets = mutex::lock(&self.buckets);
         self.make_room(&mut buckets, key, now);
         let bucket = buckets.entry(key).or_insert(Bucket {
             tokens: self.capacity,
@@ -68,10 +66,7 @@ impl RateLimiter {
         if self.refill_per_sec <= 0.0 {
             return UNKNOWN_WAIT;
         }
-        let buckets = self
-            .buckets
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let buckets = mutex::lock(&self.buckets);
         let Some(bucket) = buckets.get(&key) else {
             return UNKNOWN_WAIT;
         };
