@@ -17,7 +17,10 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/mod.rs` | The two rule sets | |
 | `lint/src/rule/finder.rs` | The diagnostics for one file | |
 | `lint/src/rule/fe/mod.rs` | The frontend rules | |
-| `lint/src/rule/fe/css/mod.rs` | The CSS rules | |
+| `lint/src/rule/fe/css/mod.rs` | The CSS rules | A class selector, an id selector, and descending specificity are not checked. |
+| `lint/src/rule/fe/css/parse.rs` | The CSS statements | |
+| `lint/src/rule/fe/css/rule_empty_line_before.rs` | An empty line before a rule | The first node of a file is not checked. The first child of a block has no empty line before it. A rule after a single-line comment has no empty line before it. |
+| `lint/src/rule/fe/css/selector_nested_pattern.rs` | A nested selector | Each selector in a list is checked on its own. A rule in an at-rule is not checked. |
 | `lint/src/rule/fe/folder/mod.rs` | The frontend folder rules | |
 | `lint/src/rule/fe/folder/index_file.rs` | Each source folder has an `index.ts` | |
 | `lint/src/rule/fe/folder/root_reexport.rs` | The root index re-exports each feature | A nested index can leave out an export for a sibling file. |
