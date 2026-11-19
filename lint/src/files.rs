@@ -71,31 +71,6 @@ impl FileSet {
     pub fn has_dir(&self, path: &Path) -> bool {
         self.dirs.contains(path)
     }
-
-    pub fn module_name<'a>(&self, path: &'a Path) -> Option<&'a str> {
-        path.ancestors()
-            .skip(1)
-            .find(|dir| self.has_file(&dir.join("module.tsx")))?
-            .file_name()?
-            .to_str()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Scope {
-    Component,
-    Module,
-}
-
-pub fn scope(path: &Path, src: &Path) -> Option<Scope> {
-    let path = without_dot(path);
-    let src = without_dot(src);
-    let rest = path.strip_prefix(&src).ok()?;
-    match rest.components().next()?.as_os_str().to_str() {
-        Some("component") => Some(Scope::Component),
-        Some("module") => Some(Scope::Module),
-        _ => None,
-    }
 }
 
 pub fn file_name(path: &Path) -> &str {
@@ -110,20 +85,15 @@ pub fn in_src(path: &Path, srcs: &[PathBuf]) -> bool {
 }
 
 pub fn is_ts_name(name: &str) -> bool {
-    name.ends_with(".ts") || name.ends_with(".tsx")
-}
-
-pub fn is_ts_source(path: &Path, srcs: &[PathBuf]) -> bool {
-    let name = file_name(path);
-    in_src(path, srcs) && is_ts_name(name) && !name.ends_with(".d.ts")
-}
-
-pub fn is_frontend_source(path: &Path, srcs: &[PathBuf]) -> bool {
-    is_ts_source(path, srcs)
+    (name.ends_with(".ts") || name.ends_with(".tsx")) && !name.ends_with(".d.ts")
 }
 
 pub fn is_style_file(path: &Path, srcs: &[PathBuf]) -> bool {
     in_src(path, srcs) && file_name(path).ends_with(".css")
+}
+
+pub fn is_frontend_source(path: &Path, srcs: &[PathBuf]) -> bool {
+    (in_src(path, srcs) && is_ts_name(file_name(path))) || is_style_file(path, srcs)
 }
 
 pub fn is_rust_source(path: &Path, srcs: &[PathBuf]) -> bool {

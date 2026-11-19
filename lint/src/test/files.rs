@@ -2,7 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
-use crate::files::{FileSet, Scope, is_frontend_source, is_rust_source, is_style_file, scope};
+use crate::files::{FileSet, is_frontend_source, is_rust_source, is_style_file};
 
 fn temp_root(name: &str) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-{name}-{}", process::id()));
@@ -33,61 +33,18 @@ fn a_source_file_has_one_kind() {
     let be = [PathBuf::from("api/src")];
     assert!(is_frontend_source(Path::new("web/src/app.ts"), &fe));
     assert!(is_frontend_source(Path::new("web/src/app.tsx"), &fe));
-    assert!(!is_frontend_source(Path::new("web/src/app.css"), &fe));
+    assert!(is_frontend_source(Path::new("web/src/app.css"), &fe));
     assert!(is_style_file(Path::new("web/src/app.css"), &fe));
     assert!(!is_style_file(Path::new("web/src/app.ts"), &fe));
     assert!(!is_style_file(Path::new("other/src/app.css"), &fe));
     assert!(!is_frontend_source(Path::new("web/src/app.d.ts"), &fe));
     assert!(!is_frontend_source(Path::new("web/src/app.rs"), &fe));
     assert!(!is_frontend_source(Path::new("other/src/app.ts"), &fe));
+    assert!(!is_frontend_source(Path::new("other/src/app.css"), &fe));
     assert!(is_rust_source(Path::new("api/src/app.rs"), &be));
     assert!(!is_rust_source(Path::new("api/src/app.ts"), &be));
     assert!(!is_rust_source(Path::new("api/tests/app.rs"), &be));
     assert!(!is_rust_source(Path::new("web/src/app.rs"), &be));
-}
-
-#[test]
-fn scope_uses_the_first_folder_under_the_src_path() {
-    let src = Path::new("web/src");
-    assert_eq!(
-        scope(Path::new("web/src/component/Button/index.css"), src),
-        Some(Scope::Component)
-    );
-    assert_eq!(
-        scope(Path::new("web/src/module/account/Panel/index.css"), src),
-        Some(Scope::Module)
-    );
-    assert_eq!(scope(Path::new("web/src/util/x.ts"), src), None);
-    assert_eq!(
-        scope(Path::new("other/src/component/Button/index.css"), src),
-        None
-    );
-}
-
-#[test]
-fn module_name_is_the_nearest_folder_with_a_module_tsx() {
-    let files = FileSet::from_paths(
-        [
-            "src/module/account/module.tsx",
-            "src/module/account/billing/module.tsx",
-            "src/module/account/billing/Form/index.css",
-            "src/module/account/Panel/index.css",
-            "src/component/Button/index.css",
-        ]
-        .map(PathBuf::from),
-    );
-    assert_eq!(
-        files.module_name(Path::new("src/module/account/billing/Form/index.css")),
-        Some("billing")
-    );
-    assert_eq!(
-        files.module_name(Path::new("src/module/account/Panel/index.css")),
-        Some("account")
-    );
-    assert_eq!(
-        files.module_name(Path::new("src/component/Button/index.css")),
-        None
-    );
 }
 
 #[test]
