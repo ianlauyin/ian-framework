@@ -25,15 +25,18 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 ## Modules
 
 - Declare a child module as `pub(crate)` when the parent re-exports the items that a caller uses.
-- Re-export those items from the parent module file. A caller imports from the parent module.
+- Re-export those items from the parent module file.
 
 ## Files
 
 - In a source file, put the imports and the constants first. Then put each public item. For a public type, put its inherent `impl` block with the public methods first, then its trait impls (`Debug`, `Display`). Put the private types, the private functions and their impl blocks after the public items.
-- In a file two or more levels deep, use `crate::` paths.
+- Do not use `super::super::` in a path. Use a `crate::` path for an item that is not in the current module or its parent module.
 - To use a module and an item of that module, import only the module. Then use the module name to refer to the item.
-- Keep a type, its inherent `impl` block and its trait impls in one file. Do not write an `impl` block for a type in a different file.
-- When the sibling files of a module folder use the main type of that folder, put the type in the `mod.rs` of the folder. The sibling files import it from the parent module.
+- To use the `exception!` macro, import `crate::exception`. This import can stay next to the import of `crate::exception::Exception`, because the macro and the module have the same name.
+- Keep a type and its inherent `impl` blocks in one file. Do not write an inherent `impl` block for a type in a different file. A trait impl for a type can be in a different file.
+- A `mod.rs` has only `mod` lines and `pub use` re-exports. It has no other item, with one exception: the item that has the same name as the module folder can be in the `mod.rs`. The name of the item is the name of the folder in PascalCase for a type and a trait, and in snake_case for a function and a constant. The private items and the `impl` blocks of that item can also be in the `mod.rs`.
+- Put each other type, function, constant and `impl` block in a file that is not a `mod.rs`.
+- When the sibling files of a module folder use the main type of that folder, and the type has the same name as the folder, put the type in the `mod.rs` of the folder. The sibling files import it from the parent module. If the type has a different name, put it in its own file and re-export it from the `mod.rs`.
 
 ## Errors
 
@@ -47,7 +50,7 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 
 - In the tests, do not use a name from a project of the user. This includes repo names, app ids, env variable names, secret names, GCP project ids, service accounts and bucket names. Use generic names: `my-app`, `my-project` and `APP_KEY`.
 - Put each test in `framework_rs/src/test/`. Do not put a test in the source file of the tested item.
-- The folder `framework_rs/src/test/` has the same shape as the crate. The tests of `framework_rs/src/a/b.rs` are in `framework_rs/src/test/a/b.rs`. The tests of `framework_rs/src/a/mod.rs` are in `framework_rs/src/test/a/mod.rs`. Each test folder has a `mod.rs` that declares its child modules, with the same `#[cfg(feature = "...")]` attributes as the source.
+- The folder `framework_rs/src/test/` has the same shape as the crate. The tests of `framework_rs/src/a/b.rs` are in `framework_rs/src/test/a/b.rs`. The tests of an item in `framework_rs/src/a/mod.rs` are in `framework_rs/src/test/a/mod.rs`. Each test folder has a `mod.rs` that declares its child modules, with the same `#[cfg(feature = "...")]` attributes as the source.
 - A test reaches the tested item with a `crate::` path. When a test needs a private item, change the visibility of the item to `pub(crate)`. Do not use `pub` for this.
 - Keep all test-only code in a test module. This includes test constructors, test-only methods and test doubles.
 - Name each `#[test]` function with the behavior that it checks.
