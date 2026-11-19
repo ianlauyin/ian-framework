@@ -1,4 +1,5 @@
 mod css;
+mod folder;
 mod ts;
 
 use std::path::Path;
@@ -14,6 +15,6 @@ pub fn check(path: &Path, files: &FileSet) -> Vec<Diagnostic> {
     }
 }
 
-pub fn check_folder(_path: &Path, _files: &FileSet) -> Vec<Diagnostic> {
-    Vec::new()
+pub fn check_folder(path: &Path, files: &FileSet) -> Vec<Diagnostic> {
+    folder::check(path, files)
 }

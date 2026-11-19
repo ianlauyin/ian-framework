@@ -16,13 +16,14 @@ The linter is the crate `ian-lint` in `lint/`.
 
 ## Rules
 
-- Put a TypeScript rule in one file in `lint/src/rule/fe/ts/`. Put a CSS rule in one file in `lint/src/rule/fe/css/`. Put a Rust rule in one file in `lint/src/rule/rs/`. These folders have no rules until you add one.
+- Put a TypeScript rule in one file in `lint/src/rule/fe/ts/`. Put a CSS rule in one file in `lint/src/rule/fe/css/`. Put a frontend folder rule in one file in `lint/src/rule/fe/folder/`. Put a Rust rule in one file in `lint/src/rule/rs/`. Put a Rust folder rule in one file in `lint/src/rule/rs/folder/`. These folders have no rules until you add one.
 - The rule id in kebab-case is the file name in snake_case.
 - The comment at the top of the file is the text of the rule. It has a line that starts with `Why a lint rule:`.
-- Call a TypeScript rule from `check` in `lint/src/rule/fe/ts/mod.rs`. Call a CSS rule from `check` in `lint/src/rule/fe/css/mod.rs`.
+- Call a TypeScript rule from `check` in `lint/src/rule/fe/ts/mod.rs`. Call a CSS rule from `check` in `lint/src/rule/fe/css/mod.rs`. Call a frontend folder rule from `check` in `lint/src/rule/fe/folder/mod.rs`.
 - `check` in `lint/src/rule/fe/mod.rs` calls the `css` module for a `.css` file and the `ts` module for any other file.
-- Call a frontend folder rule from `check_folder` in `lint/src/rule/fe/mod.rs`.
-- Call a Rust file rule from `check` in `lint/src/rule/rs/mod.rs`. Call a Rust folder rule from `check_folder` in `lint/src/rule/rs/mod.rs`.
+- `check_folder` in `lint/src/rule/fe/mod.rs` calls the `folder` module.
+- Call a Rust file rule from `check` in `lint/src/rule/rs/mod.rs`. Call a Rust folder rule from `check` in `lint/src/rule/rs/folder/mod.rs`.
+- `check_folder` in `lint/src/rule/rs/mod.rs` calls the `folder` module.
 - `check_files` in `lint/src/lib.rs` calls the frontend rules for a frontend source file or a style file, and the Rust rules for a Rust source file.
 - `check_folders` in `lint/src/lib.rs` calls the frontend folder rules for a folder under a frontend src folder and the Rust folder rules for a folder under a backend src folder.
 - A diagnostic of a rule has a fix.

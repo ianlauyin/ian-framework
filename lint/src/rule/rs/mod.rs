@@ -1,3 +1,5 @@
+mod folder;
+
 use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
@@ -7,6 +9,6 @@ pub fn check(_path: &Path, _files: &FileSet) -> Vec<Diagnostic> {
     Vec::new()
 }
 
-pub fn check_folder(_path: &Path, _files: &FileSet) -> Vec<Diagnostic> {
-    Vec::new()
+pub fn check_folder(path: &Path, files: &FileSet) -> Vec<Diagnostic> {
+    folder::check(path, files)
 }
