@@ -62,17 +62,3 @@ extern \"C\" {
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
     assert!(lint("invalid", "pub static").is_empty());
 }
-
-#[test]
-fn an_ignore_comment_stops_the_rule() {
-    let source = "\
-pub static LEFT: i32 = 1; // ian-lint-ignore private-static
-// ian-lint-ignore private-static
-pub static RIGHT: i32 = 2;
-pub static KEPT: i32 = 3;
-";
-    let found = lint("ignore", source);
-    assert_eq!(found.len(), 1);
-    assert_eq!(found[0].line, 4);
-    assert_eq!(found[0].problem, "`KEPT` is not a private static.");
-}

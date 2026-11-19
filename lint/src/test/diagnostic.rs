@@ -1,10 +1,6 @@
 use std::path::Path;
 
-use crate::diagnostic::{Diagnostic, suppress};
-
-fn diagnostic(line: u32, rule: &'static str) -> Diagnostic {
-    Diagnostic::new(Path::new("src/a.css"), line, 1, rule, "problem", "fix")
-}
+use crate::diagnostic::Diagnostic;
 
 #[test]
 fn diagnostic_has_the_fix_line() {
@@ -32,23 +28,6 @@ fn diagnostic_has_the_fix_line() {
         rust.to_string(),
         "src/app.rs:2:5 ian-lint/no-panic: `.unwrap()` panics.\n    fix: Return an `Exception`."
     );
-}
-
-#[test]
-fn an_ignore_comment_stops_that_rule_on_the_same_line_and_the_next_line() {
-    let source = "/* ian-lint-ignore global-prefix: reason */\n.a {}\n.b {}\n.c {} /* ian-lint-ignore global-prefix */\n";
-    let diagnostics = vec![
-        diagnostic(1, "global-prefix"),
-        diagnostic(2, "global-prefix"),
-        diagnostic(2, "class-name-case"),
-        diagnostic(3, "global-prefix"),
-        diagnostic(4, "global-prefix"),
-    ];
-    let left: Vec<_> = suppress(source, diagnostics)
-        .into_iter()
-        .map(|item| (item.line, item.rule))
-        .collect();
-    assert_eq!(left, [(2, "class-name-case"), (3, "global-prefix")]);
 }
 
 #[test]

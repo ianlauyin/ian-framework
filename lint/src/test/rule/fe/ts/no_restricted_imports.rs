@@ -105,18 +105,3 @@ fn a_file_extension_oxc_does_not_accept_has_no_diagnostic() {
     let source = "import a from \"node_modules/pkg\";\n";
     assert!(check_source(Path::new("src/a.css"), source).is_empty());
 }
-
-#[test]
-fn an_ignore_comment_stops_the_rule() {
-    let source = "\
-import a from \"node_modules/pkg\"; // ian-lint-ignore no-restricted-imports
-// ian-lint-ignore no-restricted-imports
-import b from \"node_modules/pkg\";
-import c from \"node_modules/pkg\";
-";
-    let lines: Vec<_> = diagnostics(source)
-        .into_iter()
-        .map(|item| item.line)
-        .collect();
-    assert_eq!(lines, vec![4]);
-}

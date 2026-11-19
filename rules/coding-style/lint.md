@@ -27,6 +27,7 @@ The linter is the crate `ian-lint` in `lint/`.
 - `check_files` in `lint/src/lib.rs` calls the frontend rules for a frontend source file or a style file, and the Rust rules for a Rust source file.
 - `check_folders` in `lint/src/lib.rs` calls the frontend folder rules for a folder under a frontend src folder and the Rust folder rules for a folder under a backend src folder.
 - A diagnostic of a rule has a fix.
+- Record a diagnostic with `Finder` from `lint/src/rule/finder.rs`. One rule uses one `Finder` for one file.
 
 ## Tests
 

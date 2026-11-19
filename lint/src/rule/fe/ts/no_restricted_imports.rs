@@ -15,7 +15,8 @@ use oxc_ast_visit::walk::walk_import_expression;
 use oxc_parser::Parser;
 use oxc_span::SourceType;
 
-use crate::diagnostic::{Diagnostic, suppress};
+use crate::diagnostic::Diagnostic;
+use crate::rule::finder::Finder;
 
 const RULE: &str = "no-restricted-imports";
 
@@ -32,22 +33,18 @@ pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
     };
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, source, source_type).parse();
-    let mut finder = Finder {
-        path,
-        source,
-        diagnostics: Vec::new(),
+    let mut imports = Imports {
+        finder: Finder::new(path, source),
     };
-    finder.visit_program(&parsed.program);
-    suppress(source, finder.diagnostics)
+    imports.visit_program(&parsed.program);
+    imports.finder.finish()
 }
 
-struct Finder<'a> {
-    path: &'a Path,
-    source: &'a str,
-    diagnostics: Vec<Diagnostic>,
+struct Imports<'a> {
+    finder: Finder<'a>,
 }
 
-impl<'a> Visit<'a> for Finder<'a> {
+impl<'a> Visit<'a> for Imports<'a> {
     fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         self.specifier(&it.source);
     }
@@ -72,7 +69,7 @@ impl<'a> Visit<'a> for Finder<'a> {
     }
 }
 
-impl Finder<'_> {
+impl Imports<'_> {
     fn specifier(&mut self, literal: &StringLiteral<'_>) {
         let Some(text) = literal.value.as_str() else {
             return;
@@ -80,14 +77,12 @@ impl Finder<'_> {
         if !one_segment_after_node_modules(text) {
             return;
         }
-        self.diagnostics.push(Diagnostic::at_offset(
-            self.path,
-            self.source,
+        self.finder.report(
             literal.span.start,
             RULE,
             format!("`{text}` goes through `node_modules`."),
             "Import the package by its name.",
-        ));
+        );
     }
 }
 

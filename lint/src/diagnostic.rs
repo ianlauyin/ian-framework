@@ -1,8 +1,6 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-pub const IAN_LINT_IGNORE: &str = "ian-lint-ignore";
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Diagnostic {
     pub path: PathBuf,
@@ -30,15 +28,6 @@ impl Diagnostic {
             problem: problem.into(),
             fix: fix.into(),
         }
-    }
-
-    pub fn file(
-        path: &Path,
-        rule: &'static str,
-        problem: impl Into<String>,
-        fix: impl Into<String>,
-    ) -> Self {
-        Self::new(path, 1, 1, rule, problem, fix)
     }
 
     pub fn at_offset(
@@ -69,28 +58,4 @@ impl fmt::Display for Diagnostic {
             self.fix
         )
     }
-}
-
-pub fn suppress(source: &str, diagnostics: Vec<Diagnostic>) -> Vec<Diagnostic> {
-    if !source.contains(IAN_LINT_IGNORE) {
-        return diagnostics;
-    }
-    let lines: Vec<&str> = source.lines().collect();
-    let ignores = |line: u32, rule: &str| {
-        lines.get(line as usize - 1).is_some_and(|text| {
-            text.split(IAN_LINT_IGNORE).skip(1).any(|rest| {
-                rest.trim_start()
-                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
-                    .next()
-                    == Some(rule)
-            })
-        })
-    };
-    diagnostics
-        .into_iter()
-        .filter(|diagnostic| {
-            !ignores(diagnostic.line, diagnostic.rule)
-                && !(diagnostic.line > 1 && ignores(diagnostic.line - 1, diagnostic.rule))
-        })
-        .collect()
 }
