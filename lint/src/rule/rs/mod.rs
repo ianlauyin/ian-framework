@@ -1,4 +1,5 @@
 mod folder;
+pub(crate) mod no_comments;
 pub(crate) mod private_static;
 
 use std::path::Path;
@@ -7,7 +8,9 @@ use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
 
 pub fn check(path: &Path) -> Vec<Diagnostic> {
-    private_static::check(path)
+    let mut diagnostics = private_static::check(path);
+    diagnostics.extend(no_comments::check(path));
+    diagnostics
 }
 
 pub fn check_folder(path: &Path, files: &FileSet) -> Vec<Diagnostic> {

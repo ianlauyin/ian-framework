@@ -6,7 +6,7 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 
 - After a refactor, fix all the warnings.
 - Readability is more important than strict DRY. Do not add a helper, a generic type or an abstraction only to remove duplication.
-- Do not write a comment in the code. Put a decision in `catalog/framework_rs.md`.
+- Put a decision in `catalog/framework_rs.md`.
 - When the text is a reason and not a decision, write a test that prevents that reason.
 - Return early when a check fails. Keep the success path at the end of the function.
 - Write tests only for functions that hold important logic. For each of these functions, test each edge case. Do not test a trivial function, a getter or a pass-through.
@@ -31,7 +31,6 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 
 - In a source file, put the items in this order: `mod` and `pub(crate) mod`, `use` imports, `pub mod`, `pub use` and `pub(crate) use`, a private `static`, constants, public items, private items.
 - For a public type, put its inherent `impl` block with the public methods first, then its trait impls (`Debug`, `Display`).
-- A `static` is private. Do not write `pub` or `pub(crate)` on a `static`.
 - Do not use `super::super::` in a path. Use a `crate::` path for an item that is not in the current module or its parent module.
 - To use a module and an item of that module, import only the module. Then use the module name to refer to the item.
 - When a macro has the same name as its module, import the module to use the macro. That import can stay next to an import of an item from that module.

@@ -4,7 +4,7 @@
 
 - After a refactor, fix all the warnings.
 - Readability is more important than strict DRY. Do not add a helper, a generic type or an abstraction only to remove duplication.
-- Do not write a comment in the code. Put a decision in `catalog/framework_fe.md`.
+- Put a decision in `catalog/framework_fe.md`.
 - When the text is a reason and not a decision, write a test that prevents that reason.
 - Return early when a check fails. Keep the success path at the end of the function.
 - Write tests only for functions that hold important logic. For each of these functions, test each edge case. Do not test a trivial function, a getter or a pass-through.

@@ -20,7 +20,9 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/css/mod.rs` | The CSS rules | |
 | `lint/src/rule/fe/folder/mod.rs` | The frontend folder rules | |
 | `lint/src/rule/fe/ts/mod.rs` | The TypeScript rules | |
+| `lint/src/rule/fe/ts/no_comments.rs` | A comment | |
 | `lint/src/rule/fe/ts/no_restricted_imports.rs` | The import path rule | |
 | `lint/src/rule/rs/mod.rs` | The Rust rules | |
+| `lint/src/rule/rs/no_comments.rs` | A comment | |
 | `lint/src/rule/rs/private_static.rs` | A private static | |
 | `lint/src/rule/rs/folder/mod.rs` | The Rust folder rules | |
