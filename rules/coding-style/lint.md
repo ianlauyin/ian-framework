@@ -1,7 +1,5 @@
 # lint coding style
 
-The linter is the crate `ian-lint` in `lint/`.
-
 - After a change, run `cargo fmt` and `cargo test` in `lint/`. Both must pass with no warnings.
 - Do not write a comment in the code. Put a decision in `catalog/lint.md`. When the text is a reason and not a decision, write a test that prevents that reason.
 - Do not put a name of a project in the code or in a test. Use a generic name.
