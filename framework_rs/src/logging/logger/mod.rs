@@ -1,55 +1,44 @@
+pub(crate) mod inner;
+pub(crate) mod installed;
 pub(crate) mod log_buffer;
+pub(crate) mod ship;
+pub(crate) mod trace_event;
 
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
-use crate::exception;
 use crate::exception::Exception;
 use crate::logging::log_shipper::{HttpLogShipper, LogShipper, SHIP_CHUNK};
-use crate::logging::logger::log_buffer::LogBuffer;
 use crate::logging::mask::Masks;
-use crate::logging::{LogEvent, LogLevel, LogValue};
+use crate::logging::{LogEvent, LogValue};
 use crate::shutdown::ShutdownReceiver;
 
-static LOGGER: OnceLock<Logger> = OnceLock::new();
-
-const SHIP_EVERY: Duration = Duration::from_secs(60);
-const FLUSH_RETRY_EVERY: Duration = Duration::from_secs(1);
-const FLUSH_RETRY_LIMIT: u8 = 3;
-
-pub const LOGGER_ALREADY_SET: &str = "LOGGER_ALREADY_SET";
+pub use installed::LOGGER_ALREADY_SET;
 
 #[derive(Clone)]
 pub struct Logger {
-    inner: Arc<Inner>,
+    inner: Arc<inner::Inner>,
 }
 
 impl Logger {
     pub fn new(shipper: HttpLogShipper, mask_patterns: Vec<String>) -> Result<Self, Exception> {
         Ok(Self {
-            inner: Arc::new(Inner {
+            inner: Arc::new(inner::Inner {
                 shipper,
                 masks: Masks::new(&mask_patterns)?,
-                buffer: Mutex::new(LogBuffer::new()),
+                buffer: Mutex::new(log_buffer::LogBuffer::new()),
                 shipping: tokio::sync::Mutex::new(()),
             }),
         })
     }
 
     pub fn init(logger: Logger) -> Result<(), Exception> {
-        if LOGGER.set(logger).is_err() {
-            return Err(exception!(
-                code = LOGGER_ALREADY_SET,
-                "logger is already set"
-            ));
-        }
-        Ok(())
+        installed::set(logger)
     }
 
     pub fn get() -> Option<&'static Logger> {
-        LOGGER.get()
+        installed::get()
     }
 
     pub fn info(action: impl Into<String>, context: BTreeMap<String, LogValue>) {
@@ -103,7 +92,7 @@ impl Logger {
     pub fn spawn_ship_loop(&self, shutdown: ShutdownReceiver) -> tokio::task::JoinHandle<()> {
         let logger = self.clone();
         tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(SHIP_EVERY);
+            let mut ticker = tokio::time::interval(ship::SHIP_EVERY);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let stop = shutdown.wait();
             tokio::pin!(stop);
@@ -118,7 +107,7 @@ impl Logger {
         })
     }
 
-    pub(crate) fn lock_buffer(&self) -> std::sync::MutexGuard<'_, LogBuffer> {
+    pub(crate) fn lock_buffer(&self) -> std::sync::MutexGuard<'_, log_buffer::LogBuffer> {
         self.inner
             .buffer
             .lock()
@@ -151,10 +140,10 @@ impl Logger {
                 continue;
             }
             failed += 1;
-            if failed >= FLUSH_RETRY_LIMIT {
+            if failed >= ship::FLUSH_RETRY_LIMIT {
                 return;
             }
-            tokio::time::sleep(FLUSH_RETRY_EVERY).await;
+            tokio::time::sleep(ship::FLUSH_RETRY_EVERY).await;
         }
     }
 
@@ -162,31 +151,7 @@ impl Logger {
         log_event.context = context;
         match Logger::get() {
             Some(logger) => logger.record(log_event),
-            None => trace_event(&log_event),
+            None => trace_event::trace_event(&log_event),
         }
-    }
-}
-
-struct Inner {
-    shipper: HttpLogShipper,
-    masks: Masks,
-    buffer: Mutex<LogBuffer>,
-    shipping: tokio::sync::Mutex<()>,
-}
-
-fn trace_event(log_event: &LogEvent) {
-    let context = serde_json::to_string(&log_event.context).unwrap_or_default();
-    match log_event.level {
-        LogLevel::Info => tracing::info!(action = %log_event.action, context = %context),
-        LogLevel::Warn => tracing::warn!(
-            action = %log_event.action,
-            error_message = ?log_event.error_message,
-            context = %context
-        ),
-        LogLevel::Error => tracing::error!(
-            action = %log_event.action,
-            error_message = ?log_event.error_message,
-            context = %context
-        ),
     }
 }

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod test;
+
 pub mod callback;
 pub mod env;
 pub mod exception;
@@ -18,6 +21,3 @@ pub mod gcp;
 
 #[cfg(all(feature = "monitor", target_os = "linux"))]
 pub mod monitor;
-
-#[cfg(test)]
-mod test;

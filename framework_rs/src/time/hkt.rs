@@ -2,12 +2,13 @@ use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
 
 const HKT_OFFSET_SECS: i32 = 8 * 3600;
 
+const HKT_OFFSET: FixedOffset = match FixedOffset::east_opt(HKT_OFFSET_SECS) {
+    Some(offset) => offset,
+    None => panic!("the Hong Kong offset is out of range"),
+};
+
 pub fn hkt_now() -> DateTime<FixedOffset> {
-    let now = Utc::now();
-    match FixedOffset::east_opt(HKT_OFFSET_SECS) {
-        Some(hkt) => now.with_timezone(&hkt),
-        None => now.fixed_offset(),
-    }
+    Utc::now().with_timezone(&HKT_OFFSET)
 }
 
 pub fn hkt_today() -> NaiveDate {

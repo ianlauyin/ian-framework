@@ -15,7 +15,6 @@
 
 - Put each library file in `framework_fe/src/`. A component with styles uses `framework_fe/src/{name}/index.tsx` and `framework_fe/src/{name}/index.css`.
 - In a source file, put the imports first, then the constants, then the exported items, then the private functions.
-- Use a class when the value holds state. A service with one shared state can be a class that has only static methods. Use a function when the operation holds no state.
 
 ## Modules
 

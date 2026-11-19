@@ -1,11 +1,11 @@
-pub mod diagnostic;
-pub mod files;
-pub mod rule;
-
 use std::path::Path;
 
 use diagnostic::{Diagnostic, Tool};
 use files::FileSet;
+
+pub mod diagnostic;
+pub mod files;
+pub mod rule;
 
 pub struct Report {
     pub diagnostics: Vec<Diagnostic>,

@@ -63,3 +63,5 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 - For a type that holds a secret, write its `Debug` impl by hand. Do not show a secret, a token or a query string in that `Debug` output or in an error message.
 - Do not use an index that can be out of range outside tests. This includes startup code.
 - When an input is invalid or an operation fails, return an `Exception`. The project decides how to handle it.
+- `CpuMonitor::new` in `framework_rs/src/monitor/cpu_monitor.rs` and `DiskMonitor::new` in `framework_rs/src/monitor/disk_monitor.rs` return `None` for a threshold of 0, less than 0, more than 100, or not a number, and for a zero interval. They write a warning. They do not return an `Exception`.
+- The first failed read in a monitor task writes a log record and stops the task. A later failed CPU read writes one error and the loop continues. A later failed disk read skips that sample and writes no log record.
