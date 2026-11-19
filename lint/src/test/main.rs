@@ -38,8 +38,8 @@ fn has_escape(output: &Output) -> bool {
 
 fn write_config(root: &Path) {
     fs::write(
-        root.join("ian-linter.config"),
-        "{\n  \"ruleset\": \"framework\",\n  \"fe\": { \"path\": [\"src\"] },\n  \"be\": { \"path\": [] }\n}\n",
+        root.join(crate::config::FILE_NAME),
+        "{\n  \"ruleset\": \"framework\",\n  \"fe\": { \"paths\": [\"src\"] },\n  \"be\": { \"paths\": [] }\n}\n",
     )
     .expect("config is written");
 }
@@ -54,7 +54,7 @@ fn a_root_with_no_diagnostics_exits_with_code_0() {
     let output = run(&root, &[]);
     fs::remove_dir_all(&root).unwrap();
     assert_eq!(output.status.code(), Some(0));
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout, b"lint okay\n");
     assert!(output.stderr.is_empty());
 }
 
@@ -70,7 +70,7 @@ fn a_root_without_a_configuration_file_exits_with_code_2() {
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
     assert!(stderr.contains("ian-lint did not run correctly. This is not a lint error."));
-    assert!(stderr.contains("ian-linter.config"));
+    assert!(stderr.contains(crate::config::FILE_NAME));
 }
 
 #[test]

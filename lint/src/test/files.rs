@@ -22,8 +22,8 @@ fn write(root: &Path, path: &str, text: &str) {
 fn write_config(root: &Path) {
     write(
         root,
-        "ian-linter.config",
-        "{\n  \"ruleset\": \"framework\",\n  \"fe\": { \"path\": [\"src\"] },\n  \"be\": { \"path\": [\"src\"] }\n}\n",
+        crate::config::FILE_NAME,
+        "{\n  \"ruleset\": \"framework\",\n  \"fe\": { \"paths\": [\"src\"] },\n  \"be\": { \"paths\": [\"src\"] }\n}\n",
     );
 }
 
@@ -110,7 +110,7 @@ fn lint_reports_a_missing_configuration_file_as_a_failure() {
     let report = crate::lint(&root);
     assert!(report.diagnostics.is_empty());
     assert_eq!(report.failures.len(), 1);
-    assert!(report.failures[0].output.contains("ian-linter.config"));
+    assert!(report.failures[0].output.contains(crate::config::FILE_NAME));
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -132,7 +132,7 @@ fn lint_reports_a_walk_error_as_a_failure() {
         report
             .failures
             .iter()
-            .any(|failure| !failure.output.contains("ian-linter.config"))
+            .any(|failure| !failure.output.contains(crate::config::FILE_NAME))
     );
     fs::remove_dir_all(root).unwrap();
 }

@@ -51,6 +51,7 @@ fn main() -> ExitCode {
     } else if has_errors {
         ExitCode::FAILURE
     } else {
+        println!("{}", paint("lint okay", GREEN, out_color));
         ExitCode::SUCCESS
     }
 }

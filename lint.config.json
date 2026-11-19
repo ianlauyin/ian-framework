@@ -1,0 +1,9 @@
+{
+  "ruleset": "framework",
+  "fe": {
+    "paths": ["framework_fe/src"]
+  },
+  "be": {
+    "paths": ["framework_rs/src"]
+  }
+}

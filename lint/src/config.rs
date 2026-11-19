@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Deserialize;
 
-pub const FILE_NAME: &str = "ian-linter.config";
+pub const FILE_NAME: &str = "lint.config.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ruleset {
@@ -32,8 +32,8 @@ pub fn load(root: &Path) -> Result<Config, String> {
     }
     Ok(Config {
         ruleset: Ruleset::Framework,
-        fe: src_paths(root, &file.fe.path)?,
-        be: src_paths(root, &file.be.path)?,
+        fe: src_paths(root, &file.fe.paths)?,
+        be: src_paths(root, &file.be.paths)?,
     })
 }
 
@@ -48,7 +48,7 @@ struct File {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Side {
-    path: Vec<String>,
+    paths: Vec<String>,
 }
 
 fn src_paths(root: &Path, paths: &[String]) -> Result<Vec<PathBuf>, String> {
