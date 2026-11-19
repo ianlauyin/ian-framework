@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use ian_lint::diagnostic::{Diagnostic, suppress};
+use crate::diagnostic::{Diagnostic, suppress};
 
 fn diagnostic(line: u32, rule: &'static str) -> Diagnostic {
     Diagnostic::new(Path::new("src/a.css"), line, 1, rule, "problem", "fix")

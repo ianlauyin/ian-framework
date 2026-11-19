@@ -12,8 +12,16 @@ fn temp_root(name: &str) -> PathBuf {
     root
 }
 
+fn ian_lint() -> PathBuf {
+    let exe = env::current_exe().expect("test executable");
+    exe.ancestors()
+        .map(|dir| dir.join("ian-lint"))
+        .find(|path| path.is_file())
+        .expect("ian-lint is built")
+}
+
 fn run(root: &Path, vars: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_ian-lint"));
+    let mut command = Command::new(ian_lint());
     command
         .arg(root)
         .env_remove("NO_COLOR")

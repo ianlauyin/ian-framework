@@ -2,7 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
-use ian_lint::files::{FileSet, Scope, is_frontend_source, is_rust_source, is_style_file, scope};
+use crate::files::{FileSet, Scope, is_frontend_source, is_rust_source, is_style_file, scope};
 
 fn temp_root(name: &str) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-{name}-{}", process::id()));
@@ -140,7 +140,7 @@ fn lint_reports_no_diagnostics_when_there_are_no_rules() {
     write(&root, "src/app.rs", "fn f() { panic!(\"x\"); }\n");
     fs::create_dir_all(root.join("src/empty")).expect("folder is created");
 
-    let report = ian_lint::lint(&root);
+    let report = crate::lint(&root);
     assert!(report.diagnostics.is_empty());
     assert!(report.failures.is_empty());
     fs::remove_dir_all(root).unwrap();
@@ -150,7 +150,7 @@ fn lint_reports_no_diagnostics_when_there_are_no_rules() {
 fn lint_reports_a_missing_configuration_file_as_a_failure() {
     let root = temp_root("no-config");
     write(&root, "src/app.ts", "const a = 1;\n");
-    let report = ian_lint::lint(&root);
+    let report = crate::lint(&root);
     assert!(report.diagnostics.is_empty());
     assert_eq!(report.failures.len(), 1);
     assert!(report.failures[0].output.contains("ian-linter.config"));
@@ -166,7 +166,7 @@ fn lint_reports_a_walk_error_as_a_failure() {
     let mut closed = fs::metadata(&blocked).unwrap().permissions();
     closed.set_mode(0);
     fs::set_permissions(&blocked, closed).unwrap();
-    let report = ian_lint::lint(&root);
+    let report = crate::lint(&root);
     let mut open = fs::metadata(&blocked).unwrap().permissions();
     open.set_mode(0o755);
     fs::set_permissions(&blocked, open).unwrap();

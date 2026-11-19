@@ -29,8 +29,9 @@ The linter is the crate `ian-lint` in `lint/`.
 
 ## Tests
 
-- Put a test of public behavior in `lint/tests/`.
-- A test that reads a private item of a rule stays in that rule file.
+- Put each test in `lint/src/test/`. Do not put a test in the source file of the tested item.
+- The folder `lint/src/test/` has the same shape as the crate. The tests of `lint/src/a/b.rs` are in `lint/src/test/a/b.rs`. The tests of an item in `lint/src/a/mod.rs` are in `lint/src/test/a/mod.rs`. Each test folder has a `mod.rs` that declares its child modules.
+- A test reaches the tested item with a `crate::` path. When a test needs a private item, change the visibility of the item to `pub(crate)`. Do not use `pub` for this.
 - Name each test by the behavior that it checks.
 - For each rule, test a case that passes and a case that fails.
 

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::{env, fs, process};
 
-use ian_lint::config::{Ruleset, load};
+use crate::config::{Ruleset, load};
 
 fn temp_root(name: &str) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-config-{name}-{}", process::id()));

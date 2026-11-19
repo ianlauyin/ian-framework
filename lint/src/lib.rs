@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod test;
+
 use std::path::Path;
 
 use config::Config;
