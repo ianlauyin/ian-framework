@@ -1,6 +1,6 @@
 use crate::auth::session::config::SessionConfig;
 use crate::auth::session::store::*;
-use crate::test::auth::{LIMIT, connection, store_or_skip};
+use crate::test::auth::helpers::{LIMIT, connection, store_or_skip};
 
 async fn subject_of(store: &SessionStore, token: &str) -> Option<String> {
     store

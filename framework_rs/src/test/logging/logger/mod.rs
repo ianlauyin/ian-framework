@@ -8,7 +8,9 @@ use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
 use crate::logging::{HttpLogShipper, LogEvent, LogRequest, Logger};
 use crate::shutdown::ShutdownReceiver;
-use crate::test::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
+use crate::test::logging::helpers::{
+    buffered_events, default_shipper, global_logger, http_shipper, logger,
+};
 
 const LIMIT: usize = CAPACITY / 5 * 4;
 
@@ -308,10 +310,7 @@ struct Captured {
 async fn capture_server(
     action: StatusAction,
 ) -> (String, tokio::sync::mpsc::UnboundedReceiver<Captured>) {
-    use axum::Router;
-    use axum::extract::{Path, State};
-    use axum::http::{HeaderMap, StatusCode, Uri};
-    use axum::routing::post;
+    use axum;
 
     #[derive(Clone)]
     struct Capture {
@@ -327,14 +326,14 @@ async fn capture_server(
         StatusAction::UnavailableThenOk(fails) => (3, fails),
     };
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    let app = Router::new()
+    let app = axum::Router::new()
         .route(
             "/log/{app}",
-            post(
-                |State(capture): State<Capture>,
-                 Path(app): Path<String>,
-                 uri: Uri,
-                 headers: HeaderMap,
+            axum::routing::post(
+                |axum::extract::State(capture): axum::extract::State<Capture>,
+                 axum::extract::Path(app): axum::extract::Path<String>,
+                 uri: axum::http::Uri,
+                 headers: axum::http::HeaderMap,
                  body: String| async move {
                     if capture.action == 2 {
                         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -366,9 +365,9 @@ async fn capture_server(
                                 )
                                 .is_ok());
                     if fail {
-                        StatusCode::SERVICE_UNAVAILABLE
+                        axum::http::StatusCode::SERVICE_UNAVAILABLE
                     } else {
-                        StatusCode::NO_CONTENT
+                        axum::http::StatusCode::NO_CONTENT
                     }
                 },
             ),

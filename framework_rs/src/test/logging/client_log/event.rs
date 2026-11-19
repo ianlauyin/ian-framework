@@ -1,11 +1,11 @@
 use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, FixedOffset};
-use serde_json::{Map, Value, json};
+use serde_json;
 
 use crate::logging::client_log::event::snake_case;
 use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::{ClientLog, LogEvent, LogLevel};
-use crate::test::logging::{assert_uuid_v7, client_log_event};
+use crate::test::logging::helpers;
 use crate::time::hkt_now;
 
 #[test]
@@ -20,15 +20,15 @@ fn log_events_rejects_an_empty_list() {
 fn log_events_returns_sanitized_events() {
     let log = ClientLog {
         events: vec![
-            client_log_event(&LogEvent::info("/a?x=1")),
-            client_log_event(&LogEvent::error("#frag", "boom")),
+            helpers::client_log_event(&LogEvent::info("/a?x=1")),
+            helpers::client_log_event(&LogEvent::error("#frag", "boom")),
         ],
     };
     let stored = log.log_events(&HeaderMap::new()).unwrap();
     assert_eq!(stored.len(), 2);
     assert_eq!(stored[0].action, "/a?x=1");
     assert_eq!(stored[0].level, LogLevel::Info);
-    assert_uuid_v7(&stored[0].id);
+    helpers::assert_uuid_v7(&stored[0].id);
     assert_eq!(stored[0].context.len(), 2);
     assert_eq!(stored[0].context["ip"], "");
     assert_eq!(stored[0].latency_ms, 0);
@@ -39,17 +39,17 @@ fn log_events_returns_sanitized_events() {
 #[test]
 fn log_events_accepts_a_list_at_the_ship_chunk() {
     let events: Vec<_> = (0..SHIP_CHUNK)
-        .map(|_| client_log_event(&LogEvent::info("/ok")))
+        .map(|_| helpers::client_log_event(&LogEvent::info("/ok")))
         .collect();
     let stored = ClientLog { events }.log_events(&HeaderMap::new()).unwrap();
     assert_eq!(stored.len(), SHIP_CHUNK);
-    assert_uuid_v7(&stored[0].id);
+    helpers::assert_uuid_v7(&stored[0].id);
 }
 
 #[test]
 fn log_events_rejects_a_list_above_the_ship_chunk() {
     let events: Vec<_> = (0..=SHIP_CHUNK)
-        .map(|_| client_log_event(&LogEvent::info("/ok")))
+        .map(|_| helpers::client_log_event(&LogEvent::info("/ok")))
         .collect();
     assert_eq!(events.len(), SHIP_CHUNK + 1);
     let err = ClientLog { events }
@@ -65,7 +65,7 @@ trait ClientChecked {
 impl ClientChecked for LogEvent {
     fn client_checked(&self) -> LogEvent {
         let log = ClientLog {
-            events: vec![crate::test::logging::client_log_event(self)],
+            events: vec![helpers::client_log_event(self)],
         };
         log.log_events(&HeaderMap::new()).unwrap().remove(0)
     }
@@ -73,20 +73,36 @@ impl ClientChecked for LogEvent {
 
 #[test]
 fn client_action_and_info_are_bounded() {
-    let batch_event = |action: &str, info: Value| -> LogEvent {
+    let batch_event = |action: &str, info: serde_json::Value| -> LogEvent {
         let mut wire = serde_json::to_value(LogEvent::info(action)).unwrap();
         wire["extra"] = info;
         serde_json::from_value::<LogEvent>(wire)
             .unwrap()
             .client_checked()
     };
-    let forged = batch_event("a\nINFO forged\r", json!({}));
+    let forged = batch_event("a\nINFO forged\r", serde_json::json!({}));
     assert!(!forged.action().contains(['\n', '\r']));
-    assert_eq!(batch_event(&"x".repeat(500), json!({})).action().len(), 128);
+    assert_eq!(
+        batch_event(&"x".repeat(500), serde_json::json!({}))
+            .action()
+            .len(),
+        128
+    );
     let long = "y".repeat(2049);
-    assert!(batch_event("a", json!({ "k": long })).extra.is_empty());
-    let many: Map<String, Value> = (0..100).map(|n| (format!("k{n}"), json!("v"))).collect();
-    assert_eq!(batch_event("a", Value::Object(many)).extra.len(), 32);
+    assert!(
+        batch_event("a", serde_json::json!({ "k": long }))
+            .extra
+            .is_empty()
+    );
+    let many: serde_json::Map<String, serde_json::Value> = (0..100)
+        .map(|n| (format!("k{n}"), serde_json::json!("v")))
+        .collect();
+    assert_eq!(
+        batch_event("a", serde_json::Value::Object(many))
+            .extra
+            .len(),
+        32
+    );
 }
 
 #[test]
@@ -109,7 +125,7 @@ fn new_drops_untrusted_fields() {
     let stored = event.client_checked();
     let after = hkt_now();
     assert_eq!(event.id, "client-id");
-    crate::test::logging::assert_uuid_v7(&stored.id);
+    helpers::assert_uuid_v7(&stored.id);
     assert_ne!(stored.id, event.id);
     assert_eq!(stored.context.len(), 2);
     assert_eq!(stored.context["ip"], "");
@@ -180,10 +196,10 @@ fn new_filters_info() {
             "k09".to_string(),
         ]
     );
-    assert_eq!(stored.extra["k01"], json!("kept"));
-    assert_eq!(stored.extra["k07"], json!("x".repeat(250)));
-    assert_eq!(stored.extra["k08"], json!("ninth"));
-    assert_eq!(stored.extra["k09"], json!(true));
+    assert_eq!(stored.extra["k01"], serde_json::json!("kept"));
+    assert_eq!(stored.extra["k07"], serde_json::json!("x".repeat(250)));
+    assert_eq!(stored.extra["k08"], serde_json::json!("ninth"));
+    assert_eq!(stored.extra["k09"], serde_json::json!(true));
     assert!(!stored.extra.contains_key("bad key"));
 
     let mut scalars = LogEvent::error("/files", "boom");
@@ -196,12 +212,12 @@ fn new_filters_info() {
     scalars.extra.insert("ratio".to_string(), 1.5.into());
     let stored = scalars.client_checked();
     assert_eq!(stored.extra.get("a/b"), None);
-    assert_eq!(stored.extra[&"a".repeat(65)], json!("long-key"));
-    assert_eq!(stored.extra["a_b-c.d"], json!("yes"));
-    assert_eq!(stored.extra["count"], json!(12));
-    assert_eq!(stored.extra["flag"], json!(true));
-    assert_eq!(stored.extra["off"], json!(false));
-    assert_eq!(stored.extra["ratio"], json!(1.5));
+    assert_eq!(stored.extra[&"a".repeat(65)], serde_json::json!("long-key"));
+    assert_eq!(stored.extra["a_b-c.d"], serde_json::json!("yes"));
+    assert_eq!(stored.extra["count"], serde_json::json!(12));
+    assert_eq!(stored.extra["flag"], serde_json::json!(true));
+    assert_eq!(stored.extra["off"], serde_json::json!(false));
+    assert_eq!(stored.extra["ratio"], serde_json::json!(1.5));
 
     let mut text = LogEvent::info("/files");
     text.extra.insert(String::new(), "no".into());
@@ -213,7 +229,7 @@ fn new_filters_info() {
     assert_eq!(stored.extra.get(""), None);
     assert_eq!(stored.extra.get("café"), None);
     assert_eq!(stored.extra.get("ok!"), None);
-    assert_eq!(stored.extra["text"], json!(long));
+    assert_eq!(stored.extra["text"], serde_json::json!(long));
 
     let mut later = LogEvent::info("/files");
     for index in 0..8 {
@@ -222,7 +238,7 @@ fn new_filters_info() {
     later.extra.insert("zzzz".to_string(), "yes".into());
     let stored = later.client_checked();
     assert_eq!(stored.extra.len(), 1);
-    assert_eq!(stored.extra["zzzz"], json!("yes"));
+    assert_eq!(stored.extra["zzzz"], serde_json::json!("yes"));
 }
 
 #[test]
@@ -235,7 +251,12 @@ fn a_client_error_event_without_a_message_gets_a_placeholder() {
         parsed.client_checked().error_message(),
         Some("unknown error")
     );
-    for blank in [json!(null), json!(""), json!("  "), json!("\u{1}\n")] {
+    for blank in [
+        serde_json::json!(null),
+        serde_json::json!(""),
+        serde_json::json!("  "),
+        serde_json::json!("\u{1}\n"),
+    ] {
         value["error_message"] = blank;
         let parsed: LogEvent = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(
@@ -243,7 +264,7 @@ fn a_client_error_event_without_a_message_gets_a_placeholder() {
             Some("unknown error")
         );
     }
-    value["error_message"] = json!("boom");
+    value["error_message"] = serde_json::json!("boom");
     let parsed: LogEvent = serde_json::from_value(value).unwrap();
     assert_eq!(parsed.client_checked().error_message(), Some("boom"));
 }
@@ -304,7 +325,7 @@ fn client_context_and_extra_keys_become_snake_case() {
     event.extra.insert("retryCount".to_string(), 2u64.into());
     let stored = event.client_checked();
     assert_eq!(stored.context["tenant_id"], "my-app");
-    assert_eq!(stored.extra["retry_count"], json!(2));
+    assert_eq!(stored.extra["retry_count"], serde_json::json!(2));
     assert!(!stored.extra.contains_key("retryCount"));
 }
 
@@ -323,7 +344,7 @@ fn client_context_is_kept_and_the_request_ip_and_user_agent_win() {
     event.context.insert("count".to_string(), 3u64.into());
     let stored = event.client_checked();
     assert_eq!(stored.context["tenant"], "my-app");
-    assert_eq!(stored.context["count"], json!(3));
+    assert_eq!(stored.context["count"], serde_json::json!(3));
     assert_eq!(stored.context["ip"], "");
     assert_eq!(stored.context["user_agent"], "");
     assert!(!stored.context.contains_key("bad key"));

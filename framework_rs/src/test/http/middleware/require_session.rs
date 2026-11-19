@@ -1,47 +1,40 @@
-use axum::extract::Request;
-use axum::http::{HeaderValue, StatusCode, header};
-use axum::response::Response;
-
-use crate::auth::{Session, SessionStore};
-
-use crate::http::middleware::require_session::*;
-use crate::test::auth::store_or_skip;
-use axum::Router;
-use axum::body::Body;
-use axum::middleware::from_fn_with_state;
-use axum::response::IntoResponse;
-use axum::routing::get;
+use axum;
 use tower::ServiceExt;
 
-fn router(store: SessionStore, status: StatusCode, set_cookie: bool) -> Router {
-    Router::new()
+use crate::auth::{Session, SessionStore};
+use crate::http::middleware::require_session::*;
+use crate::test::auth::helpers::store_or_skip;
+
+fn router(store: SessionStore, status: axum::http::StatusCode, set_cookie: bool) -> axum::Router {
+    axum::Router::new()
         .route(
             "/",
-            get(move || async move {
-                let mut response = status.into_response();
+            axum::routing::get(move || async move {
+                let mut response = axum::response::IntoResponse::into_response(status);
                 if set_cookie {
-                    response
-                        .headers_mut()
-                        .append(header::SET_COOKIE, HeaderValue::from_static("sid=other"));
+                    response.headers_mut().append(
+                        axum::http::header::SET_COOKIE,
+                        axum::http::HeaderValue::from_static("sid=other"),
+                    );
                 }
                 response
             }),
         )
-        .layer(from_fn_with_state(store, require_session))
+        .layer(axum::middleware::from_fn_with_state(store, require_session))
 }
 
-fn request(cookie: Option<&str>) -> Request<Body> {
-    let mut request = Request::builder().uri("/");
+fn request(cookie: Option<&str>) -> axum::extract::Request<axum::body::Body> {
+    let mut request = axum::extract::Request::builder().uri("/");
     if let Some(cookie) = cookie {
-        request = request.header(header::COOKIE, cookie);
+        request = request.header(axum::http::header::COOKIE, cookie);
     }
-    request.body(Body::empty()).unwrap()
+    request.body(axum::body::Body::empty()).unwrap()
 }
 
-fn set_cookies(response: &Response) -> Vec<String> {
+fn set_cookies(response: &axum::response::Response) -> Vec<String> {
     response
         .headers()
-        .get_all(header::SET_COOKIE)
+        .get_all(axum::http::header::SET_COOKIE)
         .iter()
         .map(|value| value.to_str().unwrap().to_string())
         .collect()
@@ -53,7 +46,7 @@ async fn a_live_session_gets_its_cookie_again() {
         return;
     };
     let session = store.create("7").await.unwrap();
-    let app = router(store.clone(), StatusCode::OK, false);
+    let app = router(store.clone(), axum::http::StatusCode::OK, false);
     let response = app
         .oneshot(request(Some(&format!("sid={}", session.token))))
         .await
@@ -67,22 +60,28 @@ async fn the_handler_gets_the_loaded_session() {
         return;
     };
     let session = store.create("7").await.unwrap();
-    let app = Router::new()
-        .route("/", get(|session: Session| async move { session.subject }))
-        .layer(from_fn_with_state(store.clone(), require_session));
+    let app = axum::Router::new()
+        .route(
+            "/",
+            axum::routing::get(|session: Session| async move { session.subject }),
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            store.clone(),
+            require_session,
+        ));
     let response = app
         .clone()
         .oneshot(request(Some(&format!("sid={}", session.token))))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
     let body = axum::body::to_bytes(response.into_body(), 64)
         .await
         .unwrap();
     assert_eq!(&body[..], b"7");
 
     let response = app.oneshot(request(None)).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -90,12 +89,12 @@ async fn a_missing_or_unknown_session_is_rejected_before_the_handler() {
     let Some(store) = store_or_skip().await else {
         return;
     };
-    let app = router(store, StatusCode::OK, false);
+    let app = router(store, axum::http::StatusCode::OK, false);
     let response = app.clone().oneshot(request(None)).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert!(set_cookies(&response).is_empty());
     let response = app.oneshot(request(Some("sid=missing"))).await.unwrap();
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     assert!(set_cookies(&response).is_empty());
 }
 
@@ -106,7 +105,7 @@ async fn no_cookie_is_sent_after_a_401() {
     };
     let session = store.create("7").await.unwrap();
     let cookie = format!("sid={}", session.token);
-    let app = router(store, StatusCode::UNAUTHORIZED, false);
+    let app = router(store, axum::http::StatusCode::UNAUTHORIZED, false);
     let response = app.oneshot(request(Some(&cookie))).await.unwrap();
     assert!(set_cookies(&response).is_empty());
 }
@@ -117,7 +116,7 @@ async fn a_cookie_set_by_the_handler_is_kept_alone() {
         return;
     };
     let session = store.create("7").await.unwrap();
-    let app = router(store, StatusCode::OK, true);
+    let app = router(store, axum::http::StatusCode::OK, true);
     let response = app
         .oneshot(request(Some(&format!("sid={}", session.token))))
         .await

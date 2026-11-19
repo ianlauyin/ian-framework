@@ -19,7 +19,10 @@
 ## Modules
 
 - Use a named export. Do not use a default export.
-- Each folder has an `index.ts` or an `index.tsx` that re-exports the public items of that folder. `framework_fe/src/index.ts` re-exports each feature.
+- Each folder has an `index.ts` or an `index.tsx`.
+- The index re-exports the items that a project imports.
+- An export for a sibling file or a test can stay out of the index.
+- `framework_fe/src/index.ts` re-exports each feature.
 - Use a relative import inside `framework_fe/src/`. Import a type with the `type` keyword.
 
 ## Errors

@@ -1,38 +1,32 @@
-use axum::body::{Body, to_bytes};
-use axum::extract::Request;
-use axum::http::StatusCode;
+use std::net::SocketAddr;
 
-use crate::logging::LogEvent;
+use axum;
+use serde_json;
+use tower::ServiceExt;
 
 use crate::exception;
 use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::middleware::access_log::*;
-use crate::logging::LogLevel;
-use crate::test::logging::{buffered_events, global_logger};
-use axum::Router;
-use axum::extract::{ConnectInfo, Path};
-use axum::middleware::from_fn;
-use axum::routing::{get, post};
-use serde_json::json;
-use std::net::SocketAddr;
+use crate::logging::{LogEvent, LogLevel};
+use crate::test::logging::helpers;
 
-use tower::ServiceExt;
-
-async fn status_from_path(Path(code): Path<u16>) -> StatusCode {
-    StatusCode::from_u16(code).unwrap_or(StatusCode::BAD_REQUEST)
+async fn status_from_path(
+    axum::extract::Path(code): axum::extract::Path<u16>,
+) -> axum::http::StatusCode {
+    axum::http::StatusCode::from_u16(code).unwrap_or(axum::http::StatusCode::BAD_REQUEST)
 }
 
 async fn echo(body: String) -> String {
     body
 }
 
-async fn enrich(log: AccessLog) -> StatusCode {
+async fn enrich(log: AccessLog) -> axum::http::StatusCode {
     log.context("user_id", "u-1");
     log.context("ip", "198.51.100.1");
     log.extra("order_id", "o-1");
     log.extra("count", 2u64);
-    StatusCode::CONFLICT
+    axum::http::StatusCode::CONFLICT
 }
 
 async fn hidden_error() -> Result<(), Exception> {
@@ -47,19 +41,19 @@ async fn client_error() -> Result<(), Exception> {
     Err(exception!(code = error_code::NOT_FOUND, "job not found"))
 }
 
-fn app() -> Router {
-    global_logger();
-    Router::new()
-        .route("/status/{code}", get(status_from_path))
-        .route("/echo", post(echo))
-        .route("/enrich", get(enrich))
-        .route("/hidden-error", get(hidden_error))
-        .route("/client-error", get(client_error))
-        .layer(from_fn(access_log))
+fn app() -> axum::Router {
+    helpers::global_logger();
+    axum::Router::new()
+        .route("/status/{code}", axum::routing::get(status_from_path))
+        .route("/echo", axum::routing::post(echo))
+        .route("/enrich", axum::routing::get(enrich))
+        .route("/hidden-error", axum::routing::get(hidden_error))
+        .route("/client-error", axum::routing::get(client_error))
+        .layer(axum::middleware::from_fn(access_log))
 }
 
 fn recorded(request_url: &str) -> LogEvent {
-    let mut events: Vec<_> = buffered_events(global_logger())
+    let mut events: Vec<_> = helpers::buffered_events(helpers::global_logger())
         .into_iter()
         .filter(|event| {
             event
@@ -73,50 +67,63 @@ fn recorded(request_url: &str) -> LogEvent {
 }
 
 async fn body_text(response: axum::response::Response) -> String {
-    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     String::from_utf8(bytes.to_vec()).unwrap()
 }
 
-async fn post_body(uri: &str, content_type: &str, body: String) -> (StatusCode, String) {
+async fn post_body(
+    uri: &str,
+    content_type: &str,
+    body: String,
+) -> (axum::http::StatusCode, String) {
     let response = app()
         .oneshot(
-            Request::builder()
+            axum::extract::Request::builder()
                 .method("POST")
                 .uri(uri)
                 .header("content-type", content_type)
                 .header("content-length", body.len())
-                .body(Body::from(body))
+                .body(axum::body::Body::from(body))
                 .unwrap(),
         )
         .await
         .unwrap();
     let status = response.status();
-    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     (status, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-async fn send(app: Router, uri: &str) -> axum::response::Response {
-    app.oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
-        .await
-        .unwrap()
+async fn send(app: axum::Router, uri: &str) -> axum::response::Response {
+    app.oneshot(
+        axum::extract::Request::builder()
+            .uri(uri)
+            .body(axum::body::Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
 async fn middleware_records_the_request_schema() {
     let response = app()
         .oneshot(
-            Request::builder()
+            axum::extract::Request::builder()
                 .uri("/status/204?token=secret")
                 .header("x-request-id", "req-1")
-                .body(Body::empty())
+                .body(axum::body::Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
     assert!(response.headers().get("x-request-id").is_none());
     let event = recorded("/status/204?***");
-    crate::test::logging::assert_uuid_v7(&event.id);
+    helpers::assert_uuid_v7(&event.id);
     assert_eq!(event.action, "API/GET:/status/204");
     assert_eq!(event.context["ip"], "-");
     assert_eq!(event.context["user_agent"], "-");
@@ -125,11 +132,11 @@ async fn middleware_records_the_request_schema() {
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(value.get("app").is_none());
     assert!(value.get("project").is_none());
-    crate::test::logging::assert_uuid_v7(value["id"].as_str().unwrap());
+    helpers::assert_uuid_v7(value["id"].as_str().unwrap());
     assert_eq!(value["action"], "API/GET:/status/204");
     assert!(!json.contains("req-1"));
     assert!(value.get("request").is_none());
-    assert_eq!(value["extra"], json!({}));
+    assert_eq!(value["extra"], serde_json::json!({}));
     assert_eq!(value["context"]["request_url"], "/status/204?***");
 }
 
@@ -142,9 +149,9 @@ async fn middleware_logs_the_request_url_with_its_query() {
 
 #[tokio::test]
 async fn middleware_does_not_log_the_body_and_keeps_it() {
-    let body = json!({"name": "alice", "age": 3}).to_string();
+    let body = serde_json::json!({"name": "alice", "age": 3}).to_string();
     let (status, echoed) = post_body("/echo?x=1", "application/json", body.clone()).await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(echoed, body);
     let event = recorded("/echo?x=1");
     assert_eq!(event.action, "API/POST:/echo");
@@ -154,19 +161,22 @@ async fn middleware_does_not_log_the_body_and_keeps_it() {
 #[tokio::test]
 async fn handler_adds_context_and_extra_to_the_event() {
     let response = send(app(), "/enrich").await;
-    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
     let event = recorded("/enrich");
     assert_eq!(event.level, LogLevel::Warn);
     assert_eq!(event.context["user_id"], "u-1");
     assert_eq!(event.context["ip"], "-");
     assert_eq!(event.extra["order_id"], "o-1");
-    assert_eq!(event.extra["count"], json!(2));
+    assert_eq!(event.extra["count"], serde_json::json!(2));
 }
 
 #[tokio::test]
 async fn handler_without_the_middleware_still_runs() {
-    let router = Router::new().route("/enrich", get(enrich));
-    assert_eq!(send(router, "/enrich").await.status(), StatusCode::CONFLICT);
+    let router = axum::Router::new().route("/enrich", axum::routing::get(enrich));
+    assert_eq!(
+        send(router, "/enrich").await.status(),
+        axum::http::StatusCode::CONFLICT
+    );
 }
 
 #[tokio::test]
@@ -182,11 +192,11 @@ async fn middleware_levels_follow_the_status() {
         send(router.clone(), "/status/404?case=levels")
             .await
             .status(),
-        StatusCode::NOT_FOUND
+        axum::http::StatusCode::NOT_FOUND
     );
     assert_eq!(
         send(router, "/status/503?case=levels").await.status(),
-        StatusCode::SERVICE_UNAVAILABLE
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
     );
     assert_eq!(recorded("/status/404?case=levels").level, LogLevel::Warn);
     assert_eq!(recorded("/status/503?case=levels").level, LogLevel::Error);
@@ -195,7 +205,10 @@ async fn middleware_levels_follow_the_status() {
 #[tokio::test]
 async fn a_hidden_exception_logs_its_trace_and_not_to_the_client() {
     let response = send(app(), "/hidden-error").await;
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        response.status(),
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR
+    );
     assert_eq!(
         body_text(response).await,
         r#"{"message":"internal server error"}"#
@@ -210,7 +223,7 @@ async fn a_hidden_exception_logs_its_trace_and_not_to_the_client() {
 #[tokio::test]
 async fn a_client_exception_logs_a_warn_with_its_message() {
     let response = send(app(), "/client-error").await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
     let event = recorded("/client-error");
     assert_eq!(event.level, LogLevel::Warn);
     let message = event.error_message.as_deref().unwrap();
@@ -228,19 +241,22 @@ async fn a_status_without_an_exception_keeps_the_status_message() {
 async fn middleware_reads_ip_and_user_agent() {
     let response = app()
         .oneshot(
-            Request::builder()
+            axum::extract::Request::builder()
                 .uri("/status/200?case=cloudflare")
                 .header("cf-connecting-ip", " 203.0.113.9 ")
                 .header("x-forwarded-for", "203.0.113.8, 10.0.0.1")
                 .header("x-real-ip", "198.51.100.4")
                 .header("user-agent", " demo-agent ")
-                .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
-                .body(Body::empty())
+                .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                    [192, 0, 2, 10],
+                    443,
+                ))))
+                .body(axum::body::Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
     let event = recorded("/status/200?case=cloudflare");
     assert_eq!(event.context["ip"], "203.0.113.9");
     assert_eq!(event.context["user_agent"], "demo-agent");
@@ -251,12 +267,15 @@ async fn middleware_reads_ip_and_user_agent() {
 async fn middleware_ignores_every_source_but_cloudflare() {
     app()
         .oneshot(
-            Request::builder()
+            axum::extract::Request::builder()
                 .uri("/status/200?case=other-sources")
                 .header("x-forwarded-for", "203.0.113.8, 10.0.0.1")
                 .header("x-real-ip", "198.51.100.4")
-                .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 10], 443))))
-                .body(Body::empty())
+                .extension(axum::extract::ConnectInfo(SocketAddr::from((
+                    [192, 0, 2, 10],
+                    443,
+                ))))
+                .body(axum::body::Body::empty())
                 .unwrap(),
         )
         .await

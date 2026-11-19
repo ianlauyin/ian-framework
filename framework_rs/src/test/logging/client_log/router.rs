@@ -6,16 +6,16 @@ use crate::logging::LogLevel;
 
 use crate::http::middleware::access_log;
 use crate::logging::client_log::router::*;
-use crate::test::logging::{
+use crate::test::logging::helpers::{
     REFUSED_ACTION, assert_uuid_v7, buffered_events, global_logger, shipped_batches, wait_for,
 };
 use axum::body::Body;
 use axum::middleware::from_fn;
-use serde_json::json;
+use serde_json;
 use tower::ServiceExt;
 
 fn client_event(action: &str) -> serde_json::Value {
-    json!({
+    serde_json::json!({
         "ts": "2026-10-25T12:00:00Z",
         "id": "client-id",
         "action": action,
@@ -29,7 +29,7 @@ fn client_event(action: &str) -> serde_json::Value {
 
 fn batch_body(actions: &[&str]) -> Body {
     let events: Vec<_> = actions.iter().map(|action| client_event(action)).collect();
-    Body::from(json!({ "events": events }).to_string())
+    Body::from(serde_json::json!({ "events": events }).to_string())
 }
 
 fn is_buffered(action: &str) -> bool {
@@ -83,7 +83,7 @@ async fn sends_a_same_origin_batch_with_the_request_ip_and_user_agent() {
 async fn an_error_event_without_a_message_does_not_reject_the_batch() {
     let mut bad = client_event("no-message");
     bad.as_object_mut().unwrap().remove("errorMessage");
-    let body = json!({ "events": [bad, client_event("with-message")] }).to_string();
+    let body = serde_json::json!({ "events": [bad, client_event("with-message")] }).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&headers, Body::from(body)).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
@@ -97,8 +97,8 @@ async fn an_error_event_without_a_message_does_not_reject_the_batch() {
 #[tokio::test]
 async fn a_non_string_error_message_rejects_the_batch() {
     let mut number = client_event("number-message");
-    number["errorMessage"] = json!(123);
-    let body = json!({ "events": [number, client_event("beside-number")] }).to_string();
+    number["errorMessage"] = serde_json::json!(123);
+    let body = serde_json::json!({ "events": [number, client_event("beside-number")] }).to_string();
     let headers = [("sec-fetch-site", "same-origin")];
     let status = send(&headers, Body::from(body)).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -189,7 +189,7 @@ async fn rejects_a_bad_body() {
     assert_eq!(
         send(
             &headers,
-            Body::from(json!([client_event("bare-array")]).to_string()),
+            Body::from(serde_json::json!([client_event("bare-array")]).to_string()),
         )
         .await,
         StatusCode::UNPROCESSABLE_ENTITY

@@ -1,5 +1,5 @@
 use chrono::DateTime;
-use serde_json::{Value, json};
+use serde_json;
 
 use crate::logging::*;
 
@@ -9,8 +9,8 @@ impl PartialEq<&str> for LogValue {
     }
 }
 
-impl PartialEq<Value> for LogValue {
-    fn eq(&self, other: &Value) -> bool {
+impl PartialEq<serde_json::Value> for LogValue {
+    fn eq(&self, other: &serde_json::Value) -> bool {
         serde_json::to_value(self).is_ok_and(|value| &value == other)
     }
 }
@@ -33,7 +33,7 @@ fn sample() -> LogEvent {
 #[test]
 fn json_object_has_every_schema_field() {
     let json = serde_json::to_string(&sample()).unwrap();
-    let value: Value = serde_json::from_str(&json).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     for key in [
         "ts",
         "id",
@@ -66,10 +66,10 @@ fn json_object_has_every_schema_field() {
 #[test]
 fn empty_http_fields_are_null_or_empty() {
     let json = serde_json::to_string(&LogEvent::warn("")).unwrap();
-    let value: Value = serde_json::from_str(&json).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(value.get("app").is_none());
     assert!(value.get("project").is_none());
-    crate::test::logging::assert_uuid_v7(value["id"].as_str().unwrap());
+    crate::test::logging::helpers::assert_uuid_v7(value["id"].as_str().unwrap());
     assert!(value["context"].as_object().unwrap().is_empty());
     assert_eq!(value["action"], "");
     assert!(value.get("request").is_none());
@@ -94,7 +94,7 @@ fn a_new_event_ts_has_the_hkt_offset() {
 #[test]
 fn a_utc_ts_is_accepted() {
     let mut value = serde_json::to_value(sample()).unwrap();
-    value["ts"] = json!("2026-10-18T12:00:00Z");
+    value["ts"] = serde_json::json!("2026-10-18T12:00:00Z");
     let parsed: LogEvent = serde_json::from_value(value).unwrap();
     assert_eq!(parsed.ts, sample().ts);
     assert_eq!(parsed.ts.offset().local_minus_utc(), 0);
@@ -103,7 +103,12 @@ fn a_utc_ts_is_accepted() {
 #[test]
 fn context_and_extra_accept_only_a_string_a_number_or_a_bool() {
     for field in ["context", "extra"] {
-        for good in [json!("text"), json!(1), json!(1.5), json!(true)] {
+        for good in [
+            serde_json::json!("text"),
+            serde_json::json!(1),
+            serde_json::json!(1.5),
+            serde_json::json!(true),
+        ] {
             let mut value = serde_json::to_value(sample()).unwrap();
             value[field]["k"] = good.clone();
             let event = serde_json::from_value::<LogEvent>(value).unwrap();
@@ -114,7 +119,11 @@ fn context_and_extra_accept_only_a_string_a_number_or_a_bool() {
             };
             assert_eq!(fields["k"], good);
         }
-        for bad in [json!(null), json!({"a": 1}), json!([1])] {
+        for bad in [
+            serde_json::json!(null),
+            serde_json::json!({"a": 1}),
+            serde_json::json!([1]),
+        ] {
             let mut value = serde_json::to_value(sample()).unwrap();
             value[field]["k"] = bad;
             assert!(serde_json::from_value::<LogEvent>(value).is_err());
@@ -139,7 +148,7 @@ fn constructors_set_the_level_and_the_message() {
     let error = LogEvent::error("a", "boom");
     assert_eq!(error.level(), LogLevel::Error);
     assert_eq!(error.error_message(), Some("boom"));
-    crate::test::logging::assert_uuid_v7(error.id());
+    crate::test::logging::helpers::assert_uuid_v7(error.id());
     assert!(error.context.is_empty());
     assert!(error.extra.is_empty());
 }
@@ -162,20 +171,25 @@ fn a_warn_event_may_have_error_message() {
             .error_message(),
         None
     );
-    value["error_message"] = json!("slow");
+    value["error_message"] = serde_json::json!("slow");
     let parsed: LogEvent = serde_json::from_value(value).unwrap();
     assert_eq!(parsed.error_message(), Some("slow"));
 }
 
 #[test]
 fn a_non_string_error_message_is_rejected() {
-    for bad in [json!(123), json!({"a": 1}), json!([1]), json!(true)] {
+    for bad in [
+        serde_json::json!(123),
+        serde_json::json!({"a": 1}),
+        serde_json::json!([1]),
+        serde_json::json!(true),
+    ] {
         let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
         value["error_message"] = bad;
         assert!(serde_json::from_value::<LogEvent>(value).is_err());
     }
     let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
-    value["error_message"] = json!(null);
+    value["error_message"] = serde_json::json!(null);
     let parsed: LogEvent = serde_json::from_value(value).unwrap();
     assert_eq!(parsed.error_message(), None);
 }

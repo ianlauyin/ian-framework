@@ -39,7 +39,7 @@ fn push_inserts_one_capacity_warning_at_80_percent() {
     let warn = &buffer.events[LIMIT];
     assert_eq!(warn.action, CAPACITY_WARN_NOTE);
     assert_eq!(warn.level, LogLevel::Warn);
-    crate::test::logging::assert_uuid_v7(&warn.id);
+    crate::test::logging::helpers::assert_uuid_v7(&warn.id);
     assert!(warn.context.is_empty());
     assert!(warn.extra.is_empty());
     assert!(warn.ts >= before && warn.ts <= after);

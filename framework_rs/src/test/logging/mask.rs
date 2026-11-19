@@ -1,5 +1,5 @@
 use crate::logging::{LogEvent, Logger};
-use crate::test::logging::{buffered_events, default_shipper, http_shipper, logger};
+use crate::test::logging::helpers::{buffered_events, default_shipper, http_shipper, logger};
 
 fn buffered() -> Logger {
     logger(http_shipper("api", "https://logs.example"))
