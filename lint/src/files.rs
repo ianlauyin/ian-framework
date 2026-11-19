@@ -13,21 +13,34 @@ impl FileSet {
     pub fn walk(root: &Path) -> (Self, Vec<String>) {
         let mut errors = Vec::new();
         let mut paths = Vec::new();
+        let mut dir_paths = Vec::new();
         for entry in WalkBuilder::new(root).require_git(false).build() {
             match entry {
-                Ok(entry) if entry.file_type().is_some_and(|kind| kind.is_file()) => {
+                Ok(entry) => {
+                    let is_file = entry.file_type().is_some_and(|kind| kind.is_file());
+                    let is_dir = entry.file_type().is_some_and(|kind| kind.is_dir());
+                    if !is_file && !is_dir {
+                        continue;
+                    }
                     let path = entry.into_path();
-                    paths.push(
-                        path.strip_prefix("./")
-                            .map(Path::to_path_buf)
-                            .unwrap_or(path),
-                    );
+                    let path = path
+                        .strip_prefix("./")
+                        .map(Path::to_path_buf)
+                        .unwrap_or(path);
+                    if is_file {
+                        paths.push(path);
+                    } else {
+                        dir_paths.push(path);
+                    }
                 }
-                Ok(_) => {}
                 Err(error) => errors.push(error.to_string()),
             }
         }
-        (Self::from_paths(paths), errors)
+        let mut set = Self::from_paths(paths);
+        for dir in dir_paths {
+            set.dirs.insert(dir);
+        }
+        (set, errors)
     }
 
     pub fn from_paths(paths: impl IntoIterator<Item = PathBuf>) -> Self {
@@ -45,6 +58,10 @@ impl FileSet {
 
     pub fn files(&self) -> impl Iterator<Item = &Path> {
         self.files.iter().map(PathBuf::as_path)
+    }
+
+    pub fn dirs(&self) -> impl Iterator<Item = &Path> {
+        self.dirs.iter().map(PathBuf::as_path)
     }
 
     pub fn has_file(&self, path: &Path) -> bool {
@@ -87,8 +104,9 @@ pub fn file_name(path: &Path) -> &str {
         .unwrap_or("")
 }
 
-pub fn is_component_css(path: &Path, srcs: &[PathBuf]) -> bool {
-    file_name(path) == "index.css" && srcs.iter().any(|src| scope(path, src).is_some())
+pub fn in_src(path: &Path, srcs: &[PathBuf]) -> bool {
+    let path = without_dot(path);
+    srcs.iter().any(|src| path.starts_with(without_dot(src)))
 }
 
 pub fn is_ts_name(name: &str) -> bool {
@@ -97,20 +115,19 @@ pub fn is_ts_name(name: &str) -> bool {
 
 pub fn is_ts_source(path: &Path, srcs: &[PathBuf]) -> bool {
     let name = file_name(path);
-    under_one(path, srcs) && is_ts_name(name) && !name.ends_with(".d.ts")
+    in_src(path, srcs) && is_ts_name(name) && !name.ends_with(".d.ts")
 }
 
 pub fn is_frontend_source(path: &Path, srcs: &[PathBuf]) -> bool {
-    is_ts_source(path, srcs) || (under_one(path, srcs) && file_name(path).ends_with(".css"))
+    is_ts_source(path, srcs)
+}
+
+pub fn is_style_file(path: &Path, srcs: &[PathBuf]) -> bool {
+    in_src(path, srcs) && file_name(path).ends_with(".css")
 }
 
 pub fn is_rust_source(path: &Path, srcs: &[PathBuf]) -> bool {
-    under_one(path, srcs) && file_name(path).ends_with(".rs")
-}
-
-fn under_one(path: &Path, srcs: &[PathBuf]) -> bool {
-    let path = without_dot(path);
-    srcs.iter().any(|src| path.starts_with(without_dot(src)))
+    in_src(path, srcs) && file_name(path).ends_with(".rs")
 }
 
 fn without_dot(path: &Path) -> PathBuf {

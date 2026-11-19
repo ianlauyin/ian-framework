@@ -2,9 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
-use ian_lint::files::{
-    FileSet, Scope, is_component_css, is_frontend_source, is_rust_source, scope,
-};
+use ian_lint::files::{FileSet, Scope, is_frontend_source, is_rust_source, is_style_file, scope};
 
 fn temp_root(name: &str) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-{name}-{}", process::id()));
@@ -35,7 +33,10 @@ fn a_source_file_has_one_kind() {
     let be = [PathBuf::from("api/src")];
     assert!(is_frontend_source(Path::new("web/src/app.ts"), &fe));
     assert!(is_frontend_source(Path::new("web/src/app.tsx"), &fe));
-    assert!(is_frontend_source(Path::new("web/src/app.css"), &fe));
+    assert!(!is_frontend_source(Path::new("web/src/app.css"), &fe));
+    assert!(is_style_file(Path::new("web/src/app.css"), &fe));
+    assert!(!is_style_file(Path::new("web/src/app.ts"), &fe));
+    assert!(!is_style_file(Path::new("other/src/app.css"), &fe));
     assert!(!is_frontend_source(Path::new("web/src/app.d.ts"), &fe));
     assert!(!is_frontend_source(Path::new("web/src/app.rs"), &fe));
     assert!(!is_frontend_source(Path::new("other/src/app.ts"), &fe));
@@ -61,15 +62,6 @@ fn scope_uses_the_first_folder_under_the_src_path() {
         scope(Path::new("other/src/component/Button/index.css"), src),
         None
     );
-    let srcs = [PathBuf::from("web/src")];
-    assert!(is_component_css(
-        Path::new("web/src/component/Button/index.css"),
-        &srcs
-    ));
-    assert!(!is_component_css(
-        Path::new("web/src/component/Button/page.css"),
-        &srcs
-    ));
 }
 
 #[test]
@@ -96,6 +88,18 @@ fn module_name_is_the_nearest_folder_with_a_module_tsx() {
         files.module_name(Path::new("src/component/Button/index.css")),
         None
     );
+}
+
+#[test]
+fn walk_records_a_folder_that_has_no_file() {
+    let root = temp_root("empty-folder");
+    write(&root, "src/app.ts", "const a = 1;\n");
+    fs::create_dir_all(root.join("src/empty")).expect("folder is created");
+
+    let (files, errors) = FileSet::walk(&root);
+    assert!(errors.is_empty());
+    assert!(files.has_dir(&root.join("src/empty")));
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -132,7 +136,9 @@ fn lint_reports_no_diagnostics_when_there_are_no_rules() {
     let root = temp_root("empty-rules");
     write_config(&root);
     write(&root, "src/util/x.ts", "const x = 1;\n");
+    write(&root, "src/app.css", ".a { color: red; }\n");
     write(&root, "src/app.rs", "fn f() { panic!(\"x\"); }\n");
+    fs::create_dir_all(root.join("src/empty")).expect("folder is created");
 
     let report = ian_lint::lint(&root);
     assert!(report.diagnostics.is_empty());
