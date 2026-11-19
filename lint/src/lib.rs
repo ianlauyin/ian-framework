@@ -54,7 +54,7 @@ pub fn check_files(files: &FileSet, config: &Config) -> Vec<Diagnostic> {
         if files::is_frontend_source(path, &config.fe) {
             diagnostics.extend(rule::fe::check(path));
         } else if files::is_rust_source(path, &config.be) {
-            diagnostics.extend(rule::rs::check(path));
+            diagnostics.extend(rule::rs::check(path, &config.be));
         }
     }
     diagnostics
@@ -67,7 +67,7 @@ pub fn check_folders(files: &FileSet, config: &Config) -> Vec<Diagnostic> {
             diagnostics.extend(rule::fe::check_folder(path, files, &config.fe));
         }
         if files::in_src(path, &config.be) {
-            diagnostics.extend(rule::rs::check_folder(path, files));
+            diagnostics.extend(rule::rs::check_folder(path, files, &config.be));
         }
     }
     diagnostics

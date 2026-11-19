@@ -100,7 +100,7 @@ pub fn is_rust_source(path: &Path, srcs: &[PathBuf]) -> bool {
     in_src(path, srcs) && file_name(path).ends_with(".rs")
 }
 
-fn without_dot(path: &Path) -> PathBuf {
+pub(crate) fn without_dot(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for part in path.components() {
         if !matches!(part, Component::CurDir) {

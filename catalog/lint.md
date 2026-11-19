@@ -28,6 +28,20 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/ts/no_default_export.rs` | No default export | |
 | `lint/src/rule/fe/ts/no_restricted_imports.rs` | The import path rule | |
 | `lint/src/rule/rs/mod.rs` | The Rust rules | |
+| `lint/src/rule/rs/env_name.rs` | An env value and an env-name literal | A test file can read an env value and can contain an env-name literal. |
+| `lint/src/rule/rs/exception_code.rs` | A string literal error code in `exception!` | |
+| `lint/src/rule/rs/exception_new.rs` | `Exception::__new` outside `exception.rs` | |
+| `lint/src/rule/rs/impl_order.rs` | The inherent impl before trait impls | |
+| `lint/src/rule/rs/inherent_impl.rs` | An inherent impl outside the file that defines the type | |
+| `lint/src/rule/rs/mod_file.rs` | The items in a `mod.rs` | A `use` can be in `mod.rs`. A test file is not checked. |
+| `lint/src/rule/rs/mutex_lock.rs` | `lock().unwrap` on a standard mutex | |
 | `lint/src/rule/rs/no_comments.rs` | A comment | |
+| `lint/src/rule/rs/place.rs` | The src-relative place of a Rust file | |
 | `lint/src/rule/rs/private_static.rs` | A private static | |
+| `lint/src/rule/rs/reexport_mod.rs` | A child module re-exported with `pub use` | |
+| `lint/src/rule/rs/result_type.rs` | A fallible function returns `Result<T, Exception>` | |
+| `lint/src/rule/rs/source_order.rs` | The source order | |
+| `lint/src/rule/rs/super_path.rs` | A `super::super` path | |
+| `lint/src/rule/rs/test_attr.rs` | A test outside the test folder | |
 | `lint/src/rule/rs/folder/mod.rs` | The Rust folder rules | |
+| `lint/src/rule/rs/folder/test_tree.rs` | The test tree matches the crate | A source file does not need a test file. The test root `mod.rs` follows `lib.rs`. |

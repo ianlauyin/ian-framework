@@ -1,0 +1,51 @@
+use std::path::{Path, PathBuf};
+
+use crate::rule::rs::exception_new::check_source;
+
+fn srcs() -> Vec<PathBuf> {
+    vec![PathBuf::from("api/src")]
+}
+
+#[test]
+fn exception_new_in_exception_rs_passes() {
+    let source = "\
+fn build() {
+    let _ = Exception::__new(1, 2, 3, 4, 5);
+}
+";
+    assert!(check_source(Path::new("api/src/exception.rs"), source, &srcs()).is_empty());
+    let other = "\
+fn build() {
+    Exception::new();
+    let _ = \"Exception::__new\";
+}
+";
+    assert!(check_source(Path::new("api/src/app.rs"), other, &srcs()).is_empty());
+}
+
+#[test]
+fn exception_new_outside_exception_rs_fails() {
+    let source = "\
+fn build() {
+    Exception::__new(1, 2, 3, 4, 5);
+    crate::exception::Exception::__new(1, 2, 3, 4, 5);
+}
+";
+    let found = check_source(Path::new("api/src/app.rs"), source, &srcs());
+    assert_eq!(found.len(), 2);
+    assert_eq!(found[0].line, 2);
+    assert_eq!(found[0].rule, "exception-new");
+    assert_eq!(
+        found[0].problem,
+        "`Exception::__new` builds an `Exception` outside `exception.rs`."
+    );
+    assert_eq!(found[0].fix, "Build the `Exception` with `exception!`.");
+    assert_eq!(found[1].line, 3);
+    assert!(found.iter().all(|item| item.problem == found[0].problem));
+    assert!(found.iter().all(|item| item.fix == found[0].fix));
+}
+
+#[test]
+fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
+    assert!(check_source(Path::new("api/src/app.rs"), "fn (", &srcs()).is_empty());
+}
