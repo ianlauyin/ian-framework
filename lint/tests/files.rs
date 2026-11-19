@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
-use ian_lint::diagnostic::Tool;
-use ian_lint::files::{FileSet, is_frontend_source, is_rust_source};
+use ian_lint::files::{
+    FileSet, Scope, is_component_css, is_frontend_source, is_rust_source, scope,
+};
 
 fn temp_root(name: &str) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-{name}-{}", process::id()));
@@ -19,16 +20,55 @@ fn write(root: &Path, path: &str, text: &str) {
     fs::write(path, text).expect("file is written");
 }
 
+fn write_config(root: &Path) {
+    write(
+        root,
+        "ian-linter.config",
+        "{\n  \"ruleset\": \"framework\",\n  \"fe\": { \"path\": [\"src\"] },\n  \"be\": { \"path\": [\"src\"] }\n}\n",
+    );
+}
+
 #[test]
 fn a_source_file_has_one_kind() {
-    assert!(is_frontend_source(Path::new("src/app.ts")));
-    assert!(is_frontend_source(Path::new("src/app.tsx")));
-    assert!(is_frontend_source(Path::new("src/app.css")));
-    assert!(!is_frontend_source(Path::new("src/app.d.ts")));
-    assert!(!is_frontend_source(Path::new("src/app.rs")));
-    assert!(is_rust_source(Path::new("src/app.rs")));
-    assert!(!is_rust_source(Path::new("src/app.ts")));
-    assert!(!is_rust_source(Path::new("tests/app.rs")));
+    let fe = [PathBuf::from("web/src")];
+    let be = [PathBuf::from("api/src")];
+    assert!(is_frontend_source(Path::new("web/src/app.ts"), &fe));
+    assert!(is_frontend_source(Path::new("web/src/app.tsx"), &fe));
+    assert!(is_frontend_source(Path::new("web/src/app.css"), &fe));
+    assert!(!is_frontend_source(Path::new("web/src/app.d.ts"), &fe));
+    assert!(!is_frontend_source(Path::new("web/src/app.rs"), &fe));
+    assert!(!is_frontend_source(Path::new("other/src/app.ts"), &fe));
+    assert!(is_rust_source(Path::new("api/src/app.rs"), &be));
+    assert!(!is_rust_source(Path::new("api/src/app.ts"), &be));
+    assert!(!is_rust_source(Path::new("api/tests/app.rs"), &be));
+    assert!(!is_rust_source(Path::new("web/src/app.rs"), &be));
+}
+
+#[test]
+fn scope_uses_the_first_folder_under_the_src_path() {
+    let src = Path::new("web/src");
+    assert_eq!(
+        scope(Path::new("web/src/component/Button/index.css"), src),
+        Some(Scope::Component)
+    );
+    assert_eq!(
+        scope(Path::new("web/src/module/account/Panel/index.css"), src),
+        Some(Scope::Module)
+    );
+    assert_eq!(scope(Path::new("web/src/util/x.ts"), src), None);
+    assert_eq!(
+        scope(Path::new("other/src/component/Button/index.css"), src),
+        None
+    );
+    let srcs = [PathBuf::from("web/src")];
+    assert!(is_component_css(
+        Path::new("web/src/component/Button/index.css"),
+        &srcs
+    ));
+    assert!(!is_component_css(
+        Path::new("web/src/component/Button/page.css"),
+        &srcs
+    ));
 }
 
 #[test]
@@ -89,6 +129,7 @@ fn walk_gives_the_errors_of_a_root_that_it_cannot_read() {
 #[test]
 fn lint_reports_no_diagnostics_when_there_are_no_rules() {
     let root = temp_root("empty-rules");
+    write_config(&root);
     write(&root, "src/util/x.ts", "const x = 1;\n");
     write(&root, "src/app.rs", "fn f() { panic!(\"x\"); }\n");
 
@@ -99,13 +140,27 @@ fn lint_reports_no_diagnostics_when_there_are_no_rules() {
 }
 
 #[test]
+fn lint_reports_a_missing_configuration_file_as_a_failure() {
+    let root = temp_root("no-config");
+    write(&root, "src/app.ts", "const a = 1;\n");
+    let report = ian_lint::lint(&root);
+    assert!(report.diagnostics.is_empty());
+    assert_eq!(report.failures.len(), 1);
+    assert!(report.failures[0].output.contains("ian-linter.config"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn lint_reports_a_walk_error_as_a_failure() {
     let parent = temp_root("missing-lint");
     let root = parent.join("does-not-exist");
     let report = ian_lint::lint(&root);
     assert!(report.diagnostics.is_empty());
-    assert_eq!(report.failures.len(), 1);
-    assert_eq!(report.failures[0].tool, Tool::IanLint);
-    assert!(!report.failures[0].output.is_empty());
+    assert!(
+        report
+            .failures
+            .iter()
+            .any(|failure| !failure.output.contains("ian-linter.config"))
+    );
     fs::remove_dir_all(parent).unwrap();
 }

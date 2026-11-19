@@ -24,10 +24,7 @@ fn main() -> ExitCode {
     }
     for failure in &report.failures {
         let title = paint(
-            &format!(
-                "{} did not run correctly. This is not a lint error.",
-                failure.tool
-            ),
+            "ian-lint did not run correctly. This is not a lint error.",
             YELLOW,
             err_color,
         );
@@ -95,7 +92,7 @@ fn render(diagnostic: &Diagnostic, color: bool) -> String {
         diagnostic.line,
         diagnostic.column
     );
-    let rule = format!("{}/{}", diagnostic.tool, diagnostic.rule);
+    let rule = format!("ian-lint/{}", diagnostic.rule);
     let text = format!(
         "{} {}: {}",
         paint(&location, CYAN, color),

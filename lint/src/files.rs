@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use ignore::WalkBuilder;
 
@@ -70,23 +70,15 @@ pub enum Scope {
     Module,
 }
 
-pub fn scope(path: &Path) -> Option<Scope> {
-    let parts: Vec<_> = path
-        .components()
-        .map(std::path::Component::as_os_str)
-        .collect();
-    parts
-        .iter()
-        .zip(parts.iter().skip(1))
-        .find_map(|(first, second)| match (first.to_str(), second.to_str()) {
-            (Some("src"), Some("component")) => Some(Scope::Component),
-            (Some("src"), Some("module")) => Some(Scope::Module),
-            _ => None,
-        })
-}
-
-pub fn in_src(path: &Path) -> bool {
-    path.components().any(|part| part.as_os_str() == "src")
+pub fn scope(path: &Path, src: &Path) -> Option<Scope> {
+    let path = without_dot(path);
+    let src = without_dot(src);
+    let rest = path.strip_prefix(&src).ok()?;
+    match rest.components().next()?.as_os_str().to_str() {
+        Some("component") => Some(Scope::Component),
+        Some("module") => Some(Scope::Module),
+        _ => None,
+    }
 }
 
 pub fn file_name(path: &Path) -> &str {
@@ -95,23 +87,38 @@ pub fn file_name(path: &Path) -> &str {
         .unwrap_or("")
 }
 
-pub fn is_component_css(path: &Path) -> bool {
-    file_name(path) == "index.css" && scope(path).is_some()
+pub fn is_component_css(path: &Path, srcs: &[PathBuf]) -> bool {
+    file_name(path) == "index.css" && srcs.iter().any(|src| scope(path, src).is_some())
 }
 
 pub fn is_ts_name(name: &str) -> bool {
     name.ends_with(".ts") || name.ends_with(".tsx")
 }
 
-pub fn is_ts_source(path: &Path) -> bool {
+pub fn is_ts_source(path: &Path, srcs: &[PathBuf]) -> bool {
     let name = file_name(path);
-    in_src(path) && is_ts_name(name) && !name.ends_with(".d.ts")
+    under_one(path, srcs) && is_ts_name(name) && !name.ends_with(".d.ts")
 }
 
-pub fn is_frontend_source(path: &Path) -> bool {
-    is_ts_source(path) || (in_src(path) && file_name(path).ends_with(".css"))
+pub fn is_frontend_source(path: &Path, srcs: &[PathBuf]) -> bool {
+    is_ts_source(path, srcs) || (under_one(path, srcs) && file_name(path).ends_with(".css"))
 }
 
-pub fn is_rust_source(path: &Path) -> bool {
-    in_src(path) && file_name(path).ends_with(".rs")
+pub fn is_rust_source(path: &Path, srcs: &[PathBuf]) -> bool {
+    under_one(path, srcs) && file_name(path).ends_with(".rs")
+}
+
+fn under_one(path: &Path, srcs: &[PathBuf]) -> bool {
+    let path = without_dot(path);
+    srcs.iter().any(|src| path.starts_with(without_dot(src)))
+}
+
+fn without_dot(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        if !matches!(part, Component::CurDir) {
+            out.push(part);
+        }
+    }
+    out
 }

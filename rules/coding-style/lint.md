@@ -11,7 +11,7 @@ The linter is the crate `ian-lint` in `lint/`.
 - Do not write a comment in the code. Put a decision in `catalog/lint.md`.
 - When the text is a reason and not a decision, write a test that prevents that reason.
 - Return early when a check fails. Keep the success path at the end of the function.
-- The library does not read a configuration file.
+- The library reads `ian-linter.config` in the root folder.
 - Do not put a name of a project in the code or in a test. Use a generic name.
 
 ## Rules
@@ -20,7 +20,7 @@ The linter is the crate `ian-lint` in `lint/`.
 - The rule id in kebab-case is the file name in snake_case.
 - The comment at the top of the file is the text of the rule. It has a line that starts with `Why a lint rule:`.
 - Call a frontend rule from `check` in `lint/src/rule/fe/mod.rs`. Call a Rust rule from `check` in `lint/src/rule/rs/mod.rs`.
-- `check_files` in `lint/src/lib.rs` calls the set for the file kind.
+- `check_files` in `lint/src/lib.rs` calls the frontend rules for a frontend source file and the Rust rules for a Rust source file.
 - A diagnostic of a rule has a fix.
 
 ## Tests

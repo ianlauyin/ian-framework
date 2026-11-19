@@ -1,17 +1,9 @@
 use std::path::Path;
 
-use ian_lint::diagnostic::{Diagnostic, Tool, suppress};
+use ian_lint::diagnostic::{Diagnostic, suppress};
 
-fn diagnostic(tool: Tool, line: u32, rule: &'static str) -> Diagnostic {
-    Diagnostic::new(
-        Path::new("src/a.css"),
-        line,
-        1,
-        tool,
-        rule,
-        "problem",
-        "fix",
-    )
+fn diagnostic(line: u32, rule: &'static str) -> Diagnostic {
+    Diagnostic::new(Path::new("src/a.css"), line, 1, rule, "problem", "fix")
 }
 
 #[test]
@@ -20,76 +12,43 @@ fn diagnostic_has_the_fix_line() {
         Path::new("src/a.css"),
         2,
         1,
-        Tool::CodeStyle,
         "name-case",
         "`.b` is a second name.",
         "Rename it to `b-item`.",
     );
     assert_eq!(
         frontend.to_string(),
-        "src/a.css:2:1 code-style/name-case: `.b` is a second name.\n    fix: Rename it to `b-item`."
+        "src/a.css:2:1 ian-lint/name-case: `.b` is a second name.\n    fix: Rename it to `b-item`."
     );
     let rust = Diagnostic::new(
         Path::new("src/app.rs"),
         2,
         5,
-        Tool::RsStyle,
         "no-panic",
         "`.unwrap()` panics.",
         "Return an `Exception`.",
     );
     assert_eq!(
         rust.to_string(),
-        "src/app.rs:2:5 rs-style/no-panic: `.unwrap()` panics.\n    fix: Return an `Exception`."
+        "src/app.rs:2:5 ian-lint/no-panic: `.unwrap()` panics.\n    fix: Return an `Exception`."
     );
 }
 
 #[test]
-fn a_frontend_ignore_comment_stops_only_a_frontend_rule() {
-    let source = "/* code-style-lint-ignore global-prefix: reason */\n.a {}\n.b {}\n.c {} /* code-style-lint-ignore global-prefix */\n";
+fn an_ignore_comment_stops_that_rule_on_the_same_line_and_the_next_line() {
+    let source = "/* ian-lint-ignore global-prefix: reason */\n.a {}\n.b {}\n.c {} /* ian-lint-ignore global-prefix */\n";
     let diagnostics = vec![
-        diagnostic(Tool::CodeStyle, 1, "global-prefix"),
-        diagnostic(Tool::CodeStyle, 2, "global-prefix"),
-        diagnostic(Tool::CodeStyle, 2, "class-name-case"),
-        diagnostic(Tool::RsStyle, 2, "global-prefix"),
-        diagnostic(Tool::CodeStyle, 3, "global-prefix"),
-        diagnostic(Tool::CodeStyle, 4, "global-prefix"),
+        diagnostic(1, "global-prefix"),
+        diagnostic(2, "global-prefix"),
+        diagnostic(2, "class-name-case"),
+        diagnostic(3, "global-prefix"),
+        diagnostic(4, "global-prefix"),
     ];
     let left: Vec<_> = suppress(source, diagnostics)
         .into_iter()
-        .map(|item| (item.tool, item.line, item.rule))
+        .map(|item| (item.line, item.rule))
         .collect();
-    assert_eq!(
-        left,
-        [
-            (Tool::CodeStyle, 2, "class-name-case"),
-            (Tool::RsStyle, 2, "global-prefix"),
-            (Tool::CodeStyle, 3, "global-prefix")
-        ]
-    );
-}
-
-#[test]
-fn a_rust_ignore_comment_stops_only_a_rust_rule() {
-    let source = "// rs-lint-ignore no-panic: reason\nfn a() {}\nfn b() {}\nfn c() {} // rs-lint-ignore no-panic\n";
-    let diagnostics = vec![
-        diagnostic(Tool::RsStyle, 1, "no-panic"),
-        diagnostic(Tool::RsStyle, 2, "no-panic"),
-        diagnostic(Tool::CodeStyle, 2, "no-panic"),
-        diagnostic(Tool::RsStyle, 3, "no-panic"),
-        diagnostic(Tool::RsStyle, 4, "no-panic"),
-    ];
-    let left: Vec<_> = suppress(source, diagnostics)
-        .into_iter()
-        .map(|item| (item.tool, item.line, item.rule))
-        .collect();
-    assert_eq!(
-        left,
-        [
-            (Tool::CodeStyle, 2, "no-panic"),
-            (Tool::RsStyle, 3, "no-panic")
-        ]
-    );
+    assert_eq!(left, [(2, "class-name-case"), (3, "global-prefix")]);
 }
 
 #[test]
@@ -100,7 +59,6 @@ fn an_offset_inside_a_character_uses_the_start_of_that_character() {
             Path::new("src/a.ts"),
             source,
             offset,
-            Tool::CodeStyle,
             "rule",
             "problem",
             "fix",
@@ -118,7 +76,6 @@ fn an_offset_past_the_end_uses_the_end_of_the_source() {
         Path::new("src/a.ts"),
         "ab\ncd",
         99,
-        Tool::CodeStyle,
         "rule",
         "problem",
         "fix",
@@ -129,14 +86,6 @@ fn an_offset_past_the_end_uses_the_end_of_the_source() {
 #[test]
 fn an_offset_gives_a_one_based_line_and_column_in_characters() {
     let source = "ab\n\u{e9}cd";
-    let item = Diagnostic::at_offset(
-        Path::new("src/a.ts"),
-        source,
-        6,
-        Tool::CodeStyle,
-        "rule",
-        "problem",
-        "fix",
-    );
+    let item = Diagnostic::at_offset(Path::new("src/a.ts"), source, 6, "rule", "problem", "fix");
     assert_eq!((item.line, item.column), (2, 3));
 }

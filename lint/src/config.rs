@@ -1,0 +1,76 @@
+use std::fs;
+use std::path::{Component, Path, PathBuf};
+
+use serde::Deserialize;
+
+pub const FILE_NAME: &str = "ian-linter.config";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ruleset {
+    Framework,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Config {
+    pub ruleset: Ruleset,
+    pub fe: Vec<PathBuf>,
+    pub be: Vec<PathBuf>,
+}
+
+pub fn load(root: &Path) -> Result<Config, String> {
+    let path = root.join(FILE_NAME);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) => return Err(format!("{}: {error}", path.display())),
+    };
+    let file = match serde_json::from_str::<File>(&text) {
+        Ok(file) => file,
+        Err(error) => return Err(format!("{FILE_NAME}: {error}")),
+    };
+    if file.ruleset != "framework" {
+        return Err(format!("{FILE_NAME}: `{}` is not a ruleset", file.ruleset));
+    }
+    Ok(Config {
+        ruleset: Ruleset::Framework,
+        fe: src_paths(root, &file.fe.path)?,
+        be: src_paths(root, &file.be.path)?,
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct File {
+    ruleset: String,
+    fe: Side,
+    be: Side,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Side {
+    path: Vec<String>,
+}
+
+fn src_paths(root: &Path, paths: &[String]) -> Result<Vec<PathBuf>, String> {
+    let mut srcs = Vec::new();
+    for path in paths {
+        srcs.push(src_path(root, path)?);
+    }
+    Ok(srcs)
+}
+
+fn src_path(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let relative = Path::new(path);
+    if path.is_empty() || relative.is_absolute() {
+        return Err(format!("{FILE_NAME}: `{path}` is not a src path"));
+    }
+    let mut out = root.to_path_buf();
+    for part in relative.components() {
+        match part {
+            Component::Normal(name) => out.push(name),
+            Component::CurDir => {}
+            _ => return Err(format!("{FILE_NAME}: `{path}` is not a src path")),
+        }
+    }
+    Ok(out)
+}

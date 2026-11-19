@@ -27,9 +27,18 @@ fn has_escape(output: &Output) -> bool {
     output.stdout.contains(&0x1b) || output.stderr.contains(&0x1b)
 }
 
+fn write_config(root: &Path) {
+    fs::write(
+        root.join("ian-linter.config"),
+        "{\n  \"ruleset\": \"framework\",\n  \"fe\": { \"path\": [\"src\"] },\n  \"be\": { \"path\": [] }\n}\n",
+    )
+    .expect("config is written");
+}
+
 #[test]
 fn a_root_with_no_diagnostics_exits_with_code_0() {
     let root = temp_root("clean");
+    write_config(&root);
     fs::create_dir_all(root.join("src")).expect("folder is created");
     fs::write(root.join("src/app.ts"), "const a = 1;\n").expect("file is written");
 
@@ -38,6 +47,21 @@ fn a_root_with_no_diagnostics_exits_with_code_0() {
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn a_root_without_a_configuration_file_exits_with_code_2() {
+    let root = temp_root("no-config");
+    fs::create_dir_all(root.join("src")).expect("folder is created");
+    fs::write(root.join("src/app.ts"), "const a = 1;\n").expect("file is written");
+
+    let output = run(&root, &[]);
+    fs::remove_dir_all(&root).unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(stderr.contains("ian-lint did not run correctly. This is not a lint error."));
+    assert!(stderr.contains("ian-linter.config"));
 }
 
 #[test]
