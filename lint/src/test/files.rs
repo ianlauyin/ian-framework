@@ -93,9 +93,15 @@ fn lint_reports_no_diagnostics_for_source_that_passes() {
     let root = temp_root("empty-rules");
     write_config(&root);
     write(&root, "src/util/x.ts", "const x = 1;\n");
+    write(&root, "src/util/index.ts", "export { x } from \"./x\";\n");
+    write(
+        &root,
+        "src/index.ts",
+        "export * from \"./util\";\nexport * from \"./empty\";\n",
+    );
+    write(&root, "src/empty/index.ts", "");
     write(&root, "src/app.css", ".a { color: red; }\n");
     write(&root, "src/app.rs", "fn f() { panic!(\"x\"); }\n");
-    fs::create_dir_all(root.join("src/empty")).expect("folder is created");
 
     let report = crate::lint(&root);
     assert!(report.diagnostics.is_empty());

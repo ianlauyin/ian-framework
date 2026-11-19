@@ -1,4 +1,4 @@
- # framework_fe coding style
+# framework_fe coding style
 
 ## General
 
@@ -13,31 +13,16 @@
 
 ## Files
 
-- Put each library file in `framework_fe/src/`. A component with styles uses `framework_fe/src/{name}/index.tsx` and `framework_fe/src/{name}/index.css`.
-- In a source file, put the imports first, then the constants, then the exported items, then the private functions.
+- Put each library file in `framework_fe/src/`.
 
 ## Modules
 
-- Use a named export. Do not use a default export.
-- Each folder has an `index.ts` or an `index.tsx`.
 - The index re-exports the items that a project imports.
 - An export for a sibling file or a test can stay out of the index.
-- `framework_fe/src/index.ts` re-exports each feature.
-- Use a relative import inside `framework_fe/src/`. Import a type with the `type` keyword.
+- Import a type with the `type` keyword.
 
 ## Errors
 
 - A type that matches a JSON body from the Rust library uses the same field names as that body.
 - A path parameter check throws `Error` before the request.
 - An HTTP failure throws `ApiError` or `NetworkConnectionException` from `framework_fe/src/http/network.ts`. Do not return a result object for that failure.
-
-## Tests
-
-- Put the tests in `framework_fe/test/`. Do not put tests in `framework_fe/src/`.
-- The folder `framework_fe/test/` has the same shape as `framework_fe/src/`. The test of `framework_fe/src/a/b.ts` is `framework_fe/test/a/b.test.ts`. The test of `framework_fe/src/a/index.tsx` is `framework_fe/test/a/index.test.tsx`.
-
-## Styles
-
-- Each `index.css` file has only one root selector.
-- Nest each child selector inside the block of its parent.
-- Give the outermost tag of a component a class name with the `g-` prefix. Use the `g-` prefix also for the modifier classes on that tag.

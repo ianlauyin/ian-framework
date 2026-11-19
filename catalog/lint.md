@@ -19,8 +19,13 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/mod.rs` | The frontend rules | |
 | `lint/src/rule/fe/css/mod.rs` | The CSS rules | |
 | `lint/src/rule/fe/folder/mod.rs` | The frontend folder rules | |
+| `lint/src/rule/fe/folder/index_file.rs` | Each source folder has an `index.ts` | |
+| `lint/src/rule/fe/folder/root_reexport.rs` | The root index re-exports each feature | A nested index can leave out an export for a sibling file. |
+| `lint/src/rule/fe/folder/test_path.rs` | The test path matches the source path | A source file does not need a test file. |
 | `lint/src/rule/fe/ts/mod.rs` | The TypeScript rules | |
+| `lint/src/rule/fe/ts/declaration_order.rs` | The declaration order | A private `let` is in the same group as a constant. |
 | `lint/src/rule/fe/ts/no_comments.rs` | A comment | |
+| `lint/src/rule/fe/ts/no_default_export.rs` | No default export | |
 | `lint/src/rule/fe/ts/no_restricted_imports.rs` | The import path rule | |
 | `lint/src/rule/rs/mod.rs` | The Rust rules | |
 | `lint/src/rule/rs/no_comments.rs` | A comment | |

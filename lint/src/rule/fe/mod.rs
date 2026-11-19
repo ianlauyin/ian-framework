@@ -1,8 +1,8 @@
 mod css;
-mod folder;
+pub(crate) mod folder;
 pub(crate) mod ts;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
@@ -15,6 +15,6 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
     }
 }
 
-pub fn check_folder(path: &Path, files: &FileSet) -> Vec<Diagnostic> {
-    folder::check(path, files)
+pub fn check_folder(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+    folder::check(path, files, srcs)
 }

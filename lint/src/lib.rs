@@ -64,7 +64,7 @@ pub fn check_folders(files: &FileSet, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for path in files.dirs() {
         if files::in_src(path, &config.fe) {
-            diagnostics.extend(rule::fe::check_folder(path, files));
+            diagnostics.extend(rule::fe::check_folder(path, files, &config.fe));
         }
         if files::in_src(path, &config.be) {
             diagnostics.extend(rule::rs::check_folder(path, files));

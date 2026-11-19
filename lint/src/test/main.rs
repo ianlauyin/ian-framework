@@ -50,6 +50,7 @@ fn a_root_with_no_diagnostics_exits_with_code_0() {
     write_config(&root);
     fs::create_dir_all(root.join("src")).expect("folder is created");
     fs::write(root.join("src/app.ts"), "const a = 1;\n").expect("file is written");
+    fs::write(root.join("src/index.ts"), "export * from \"./app\";\n").expect("file is written");
 
     let output = run(&root, &[]);
     fs::remove_dir_all(&root).unwrap();
