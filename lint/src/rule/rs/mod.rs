@@ -49,38 +49,38 @@ pub(crate) fn check_folder(
     diagnostics
 }
 
-pub(crate) fn check_private_static(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn private_static(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     private_static::check(path)
 }
 
-pub(crate) fn check_comments(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn no_comments(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     no_comments::check(path)
 }
 
-pub(crate) fn check_super_path(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn super_path(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     super_path::check(path)
 }
 
-pub(crate) fn check_exception_code(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn exception_code(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     exception_code::check(path)
 }
 
-pub(crate) fn check_source_order(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn source_order(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     source_order::check(path)
 }
 
-pub(crate) fn check_impl_order(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn impl_order(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     impl_order::check(path)
 }
 
-pub(crate) fn check_inherent_impl(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn inherent_impl(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     inherent_impl::check(path)
 }
 
-pub(crate) fn check_reexport_mod(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn reexport_mod(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     reexport_mod::check(path)
 }
 
-pub(crate) fn check_result_type(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn result_type(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
     result_type::check(path)
 }

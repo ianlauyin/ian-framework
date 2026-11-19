@@ -6,10 +6,10 @@ use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
 
-pub(crate) fn empty_line(path: &Path) -> Vec<Diagnostic> {
+pub(crate) fn rule_empty_line_before(path: &Path) -> Vec<Diagnostic> {
     rule_empty_line_before::check(path)
 }
 
-pub(crate) fn nested(path: &Path) -> Vec<Diagnostic> {
+pub(crate) fn selector_nested_pattern(path: &Path) -> Vec<Diagnostic> {
     selector_nested_pattern::check(path)
 }
