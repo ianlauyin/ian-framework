@@ -80,7 +80,21 @@ fn a_configuration_file_with_an_unknown_field_is_an_error() {
 }
 
 #[test]
-fn a_ruleset_that_is_not_framework_is_an_error() {
+fn the_project_ruleset_loads() {
+    let root = temp_root("project");
+    write_config(
+        &root,
+        r#"{"ruleset":"project","fe":{"paths":["web/src"]},"be":{"paths":["api/src"]}}"#,
+    );
+    let config = load(&root).expect("config loads");
+    assert_eq!(config.ruleset, Ruleset::Project);
+    assert_eq!(config.fe, vec![root.join("web/src")]);
+    assert_eq!(config.be, vec![root.join("api/src")]);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_ruleset_that_is_not_known_is_an_error() {
     let root = temp_root("ruleset");
     write_config(
         &root,

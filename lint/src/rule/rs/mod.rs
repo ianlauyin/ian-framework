@@ -17,27 +17,70 @@ pub(crate) mod test_attr;
 
 use std::path::{Path, PathBuf};
 
+use crate::config::Ruleset;
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
+use crate::rule::ruleset::{RsRule, rules};
 
-pub fn check(path: &Path, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let mut diagnostics = private_static::check(path);
-    diagnostics.extend(no_comments::check(path));
-    diagnostics.extend(super_path::check(path));
-    diagnostics.extend(test_attr::check(path, srcs));
-    diagnostics.extend(env_name::check(path, srcs));
-    diagnostics.extend(exception_new::check(path, srcs));
-    diagnostics.extend(exception_code::check(path));
-    diagnostics.extend(mutex_lock::check(path, srcs));
-    diagnostics.extend(source_order::check(path));
-    diagnostics.extend(impl_order::check(path));
-    diagnostics.extend(mod_file::check(path, srcs));
-    diagnostics.extend(inherent_impl::check(path));
-    diagnostics.extend(reexport_mod::check(path));
-    diagnostics.extend(result_type::check(path));
+pub(crate) fn check(path: &Path, srcs: &[PathBuf], ruleset: Ruleset) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for rule in rules(ruleset).rs {
+        let RsRule::File(check) = rule else {
+            continue;
+        };
+        diagnostics.extend(check(path, srcs));
+    }
     diagnostics
 }
 
-pub fn check_folder(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    folder::check(path, files, srcs)
+pub(crate) fn check_folder(
+    path: &Path,
+    files: &FileSet,
+    srcs: &[PathBuf],
+    ruleset: Ruleset,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for rule in rules(ruleset).rs {
+        let RsRule::Folder(check) = rule else {
+            continue;
+        };
+        diagnostics.extend(check(path, files, srcs));
+    }
+    diagnostics
+}
+
+pub(crate) fn check_private_static(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    private_static::check(path)
+}
+
+pub(crate) fn check_comments(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    no_comments::check(path)
+}
+
+pub(crate) fn check_super_path(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    super_path::check(path)
+}
+
+pub(crate) fn check_exception_code(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    exception_code::check(path)
+}
+
+pub(crate) fn check_source_order(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    source_order::check(path)
+}
+
+pub(crate) fn check_impl_order(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    impl_order::check(path)
+}
+
+pub(crate) fn check_inherent_impl(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    inherent_impl::check(path)
+}
+
+pub(crate) fn check_reexport_mod(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    reexport_mod::check(path)
+}
+
+pub(crate) fn check_result_type(path: &Path, _: &[PathBuf]) -> Vec<Diagnostic> {
+    result_type::check(path)
 }

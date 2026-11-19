@@ -7,9 +7,14 @@ use std::path::{Path, PathBuf};
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
 
-pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let mut diagnostics = index_file::check(path, files);
-    diagnostics.extend(root_reexport::check(path, files, srcs));
-    diagnostics.extend(test_path::check(path, files, srcs));
-    diagnostics
+pub(crate) fn index(path: &Path, files: &FileSet, _: &[PathBuf]) -> Vec<Diagnostic> {
+    index_file::check(path, files)
+}
+
+pub(crate) fn reexport(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+    root_reexport::check(path, files, srcs)
+}
+
+pub(crate) fn test(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+    test_path::check(path, files, srcs)
 }

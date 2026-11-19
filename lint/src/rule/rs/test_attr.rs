@@ -1,6 +1,6 @@
 // A test is outside the test folder.
 // Move the test under the test folder.
-// Why a lint rule: Tests live in the test folder. `mod test` in `lib.rs` stays.
+// Why a lint rule: Tests live in the test folder. `mod test` in `lib.rs` or `main.rs` stays.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,7 +34,7 @@ pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<D
 
 fn walk(items: &[Item], place: &Place, finder: &mut Finder<'_>) {
     for item in items {
-        let keep_cfg_test = place.is_file("lib.rs") && is_mod_test(item);
+        let keep_cfg_test = is_crate_root(&place) && is_mod_test(item);
         report_attrs(item_attrs(item), keep_cfg_test, finder);
         match item {
             Item::Mod(module) => {
@@ -70,6 +70,10 @@ fn report_attrs(attrs: &[Attribute], keep_cfg_test: bool, finder: &mut Finder<'_
             );
         }
     }
+}
+
+fn is_crate_root(place: &Place) -> bool {
+    place.is_file("lib.rs") || place.is_file("main.rs")
 }
 
 fn is_mod_test(item: &Item) -> bool {

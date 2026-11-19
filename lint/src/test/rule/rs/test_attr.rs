@@ -32,6 +32,7 @@ mod test;
 fn run() {}
 ";
     assert!(check_source(Path::new("api/src/lib.rs"), lib, &srcs()).is_empty());
+    assert!(check_source(Path::new("api/src/main.rs"), lib, &srcs()).is_empty());
 }
 
 #[test]

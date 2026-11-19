@@ -8,6 +8,7 @@ pub const FILE_NAME: &str = "lint.config.json";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ruleset {
     Framework,
+    Project,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -27,11 +28,15 @@ pub fn load(root: &Path) -> Result<Config, String> {
         Ok(file) => file,
         Err(error) => return Err(format!("{FILE_NAME}: {error}")),
     };
-    if file.ruleset != "framework" {
-        return Err(format!("{FILE_NAME}: `{}` is not a ruleset", file.ruleset));
-    }
+    let ruleset = match file.ruleset.as_str() {
+        "framework" => Ruleset::Framework,
+        "project" => Ruleset::Project,
+        _ => {
+            return Err(format!("{FILE_NAME}: `{}` is not a ruleset", file.ruleset));
+        }
+    };
     Ok(Config {
-        ruleset: Ruleset::Framework,
+        ruleset,
         fe: src_paths(root, &file.fe.paths)?,
         be: src_paths(root, &file.be.paths)?,
     })

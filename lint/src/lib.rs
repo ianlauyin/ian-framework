@@ -69,9 +69,9 @@ pub fn check_files(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnost
     let mut diagnostics = Vec::new();
     for path in files.files() {
         if side.checks_fe() && files::is_frontend_source(path, &config.fe) {
-            diagnostics.extend(rule::fe::check(path));
+            diagnostics.extend(rule::fe::check(path, config.ruleset));
         } else if side.checks_rs() && files::is_rust_source(path, &config.be) {
-            diagnostics.extend(rule::rs::check(path, &config.be));
+            diagnostics.extend(rule::rs::check(path, &config.be, config.ruleset));
         }
     }
     diagnostics
@@ -81,10 +81,20 @@ pub fn check_folders(files: &FileSet, config: &Config, side: Side) -> Vec<Diagno
     let mut diagnostics = Vec::new();
     for path in files.dirs() {
         if side.checks_fe() && files::in_src(path, &config.fe) {
-            diagnostics.extend(rule::fe::check_folder(path, files, &config.fe));
+            diagnostics.extend(rule::fe::check_folder(
+                path,
+                files,
+                &config.fe,
+                config.ruleset,
+            ));
         }
         if side.checks_rs() && files::in_src(path, &config.be) {
-            diagnostics.extend(rule::rs::check_folder(path, files, &config.be));
+            diagnostics.extend(rule::rs::check_folder(
+                path,
+                files,
+                &config.be,
+                config.ruleset,
+            ));
         }
     }
     diagnostics

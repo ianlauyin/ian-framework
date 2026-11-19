@@ -159,6 +159,89 @@ mod auth;
     );
 }
 
+#[test]
+fn the_test_root_follows_main_rs_when_lib_rs_is_absent() {
+    let root = temp_root("main");
+    let src = root.join("api/src");
+    write(
+        &src,
+        "main.rs",
+        "\
+#[cfg(feature = \"auth\")]
+pub mod auth;
+",
+    );
+    write(
+        &src,
+        "test/mod.rs",
+        "\
+#[cfg(feature = \"auth\")]
+mod auth;
+",
+    );
+    let files = FileSet::from_paths([src.join("main.rs"), src.join("test/mod.rs")]);
+    let found = check(&src, &files, &[src.clone()]);
+    fs::remove_dir_all(root).unwrap();
+    assert!(found.is_empty());
+}
+
+#[test]
+fn a_different_cfg_against_main_rs_fails() {
+    let root = temp_root("main-differ");
+    let src = root.join("api/src");
+    write(
+        &src,
+        "main.rs",
+        "\
+#[cfg(feature = \"auth\")]
+pub mod auth;
+",
+    );
+    write(
+        &src,
+        "test/mod.rs",
+        "\
+mod auth;
+",
+    );
+    let files = FileSet::from_paths([src.join("main.rs"), src.join("test/mod.rs")]);
+    let found = check(&src, &files, &[src.clone()]);
+    fs::remove_dir_all(root).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].problem,
+        "The cfg on `auth` does not match the source module."
+    );
+}
+
+#[test]
+fn lib_rs_stays_the_test_root_when_main_rs_is_also_present() {
+    let root = temp_root("both");
+    let src = root.join("api/src");
+    write(
+        &src,
+        "lib.rs",
+        "\
+#[cfg(feature = \"auth\")]
+pub mod auth;
+",
+    );
+    write(&src, "main.rs", "pub mod auth;\n");
+    write(&src, "test/mod.rs", "mod auth;\n");
+    let files = FileSet::from_paths([
+        src.join("lib.rs"),
+        src.join("main.rs"),
+        src.join("test/mod.rs"),
+    ]);
+    let found = check(&src, &files, &[src.clone()]);
+    fs::remove_dir_all(root).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].problem,
+        "The cfg on `auth` does not match the source module."
+    );
+}
+
 fn temp_root(name: &str) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-test-tree-{name}-{}", process::id()));
     if root.exists() {

@@ -75,7 +75,7 @@ pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> 
             continue;
         };
         let source = if relative == Path::new("mod.rs") {
-            path.join("lib.rs")
+            crate_root(path, files)
         } else {
             path.join(relative)
         };
@@ -85,6 +85,15 @@ pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> 
         diagnostics.extend(cfg_mismatch(file, &source));
     }
     diagnostics
+}
+
+fn crate_root(path: &Path, files: &FileSet) -> PathBuf {
+    let lib = path.join("lib.rs");
+    if files.has_file(&lib) {
+        lib
+    } else {
+        path.join("main.rs")
+    }
 }
 
 fn cfg_mismatch(test_file: &Path, source_file: &Path) -> Vec<Diagnostic> {

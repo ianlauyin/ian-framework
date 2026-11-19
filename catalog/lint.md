@@ -9,12 +9,13 @@ This file is the catalog of the linter in `lint/`.
 | Path | Description | Decision |
 | --- | --- | --- |
 | `lint/Cargo.toml` | The crate `ian-lint` | |
-| `lint/src/config.rs` | The configuration file | |
+| `lint/src/config.rs` | The configuration file | `ruleset` is `framework` or `project`. |
 | `lint/src/lib.rs` | Lint run for one root folder | A side checks the frontend, Rust, or both. |
 | `lint/src/main.rs` | The `ian-lint` program | `fe` checks only the frontend. `rs` checks only Rust. No side argument checks both. The other argument is the root. The root is `.` when it is omitted. The arguments can be in either order. Two roots, or two sides, stops the run. |
 | `lint/src/diagnostic.rs` | One error | |
 | `lint/src/files.rs` | The file tree and the file kinds | |
 | `lint/src/rule/mod.rs` | The two rule sets | |
+| `lint/src/rule/ruleset.rs` | The rules in each ruleset | `FRAMEWORK` and `PROJECT` each hold `css`, `ts`, and `rs`. The `framework` ruleset runs `FRAMEWORK`. The `project` ruleset runs `PROJECT`. |
 | `lint/src/rule/finder.rs` | The diagnostics for one file | |
 | `lint/src/rule/fe/mod.rs` | The frontend rules | |
 | `lint/src/rule/fe/css/mod.rs` | The CSS rules | A class selector, an id selector, and descending specificity are not checked. |
@@ -45,6 +46,6 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/result_type.rs` | A fallible function returns `Result<T, Exception>` | |
 | `lint/src/rule/rs/source_order.rs` | The source order | |
 | `lint/src/rule/rs/super_path.rs` | A `super::super` path | |
-| `lint/src/rule/rs/test_attr.rs` | A test outside the test folder | |
+| `lint/src/rule/rs/test_attr.rs` | A test outside the test folder | `mod test` in `lib.rs` or `main.rs` stays. |
 | `lint/src/rule/rs/folder/mod.rs` | The Rust folder rules | |
-| `lint/src/rule/rs/folder/test_tree.rs` | The test tree matches the crate | A source file does not need a test file. The test root `mod.rs` follows `lib.rs`. |
+| `lint/src/rule/rs/folder/test_tree.rs` | The test tree matches the crate | A source file does not need a test file. The test root `mod.rs` follows `lib.rs`. When `lib.rs` is absent, it follows `main.rs`. |

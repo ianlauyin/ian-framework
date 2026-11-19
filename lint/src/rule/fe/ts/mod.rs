@@ -7,10 +7,18 @@ use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
-    let mut diagnostics = no_restricted_imports::check(path);
-    diagnostics.extend(no_comments::check(path));
-    diagnostics.extend(no_default_export::check(path));
-    diagnostics.extend(declaration_order::check(path));
-    diagnostics
+pub(crate) fn restricted_imports(path: &Path) -> Vec<Diagnostic> {
+    no_restricted_imports::check(path)
+}
+
+pub(crate) fn comments(path: &Path) -> Vec<Diagnostic> {
+    no_comments::check(path)
+}
+
+pub(crate) fn default_export(path: &Path) -> Vec<Diagnostic> {
+    no_default_export::check(path)
+}
+
+pub(crate) fn declaration(path: &Path) -> Vec<Diagnostic> {
+    declaration_order::check(path)
 }

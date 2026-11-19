@@ -4,17 +4,43 @@ pub(crate) mod ts;
 
 use std::path::{Path, PathBuf};
 
+use crate::config::Ruleset;
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
+use crate::rule::ruleset::{TsRule, rules};
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub(crate) fn check(path: &Path, ruleset: Ruleset) -> Vec<Diagnostic> {
+    let rules = rules(ruleset);
     if crate::files::file_name(path).ends_with(".css") {
-        css::check(path)
+        let mut diagnostics = Vec::new();
+        for check in rules.css {
+            diagnostics.extend(check(path));
+        }
+        diagnostics
     } else {
-        ts::check(path)
+        let mut diagnostics = Vec::new();
+        for rule in rules.ts {
+            let TsRule::File(check) = rule else {
+                continue;
+            };
+            diagnostics.extend(check(path));
+        }
+        diagnostics
     }
 }
 
-pub fn check_folder(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    folder::check(path, files, srcs)
+pub(crate) fn check_folder(
+    path: &Path,
+    files: &FileSet,
+    srcs: &[PathBuf],
+    ruleset: Ruleset,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for rule in rules(ruleset).ts {
+        let TsRule::Folder(check) = rule else {
+            continue;
+        };
+        diagnostics.extend(check(path, files, srcs));
+    }
+    diagnostics
 }
