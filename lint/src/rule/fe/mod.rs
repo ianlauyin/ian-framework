@@ -1,17 +1,17 @@
 mod css;
 mod folder;
-mod ts;
+pub(crate) mod ts;
 
 use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
 
-pub fn check(path: &Path, files: &FileSet) -> Vec<Diagnostic> {
+pub fn check(path: &Path) -> Vec<Diagnostic> {
     if crate::files::file_name(path).ends_with(".css") {
-        css::check(path, files)
+        css::check(path)
     } else {
-        ts::check(path, files)
+        ts::check(path)
     }
 }
 

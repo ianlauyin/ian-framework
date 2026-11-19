@@ -89,7 +89,7 @@ fn walk_gives_the_errors_of_a_root_that_it_cannot_read() {
 }
 
 #[test]
-fn lint_reports_no_diagnostics_when_there_are_no_rules() {
+fn lint_reports_no_diagnostics_for_source_that_passes() {
     let root = temp_root("empty-rules");
     write_config(&root);
     write(&root, "src/util/x.ts", "const x = 1;\n");

@@ -52,9 +52,9 @@ pub fn check_files(files: &FileSet, config: &Config) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for path in files.files() {
         if files::is_frontend_source(path, &config.fe) {
-            diagnostics.extend(rule::fe::check(path, files));
+            diagnostics.extend(rule::fe::check(path));
         } else if files::is_rust_source(path, &config.be) {
-            diagnostics.extend(rule::rs::check(path, files));
+            diagnostics.extend(rule::rs::check(path));
         }
     }
     diagnostics
