@@ -10,8 +10,8 @@ This file is the catalog of the linter in `lint/`.
 | --- | --- | --- |
 | `lint/Cargo.toml` | The crate `ian-lint` | |
 | `lint/src/config.rs` | The configuration file | |
-| `lint/src/lib.rs` | Lint run for one root folder | |
-| `lint/src/main.rs` | The `ian-lint` program | |
+| `lint/src/lib.rs` | Lint run for one root folder | A side checks the frontend, Rust, or both. |
+| `lint/src/main.rs` | The `ian-lint` program | `fe` checks only the frontend. `rs` checks only Rust. No side argument checks both. The other argument is the root. The root is `.` when it is omitted. The arguments can be in either order. Two roots, or two sides, stops the run. |
 | `lint/src/diagnostic.rs` | One error | |
 | `lint/src/files.rs` | The file tree and the file kinds | |
 | `lint/src/rule/mod.rs` | The two rule sets | |

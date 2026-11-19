@@ -22,7 +22,24 @@ pub struct Failure {
     pub output: String,
 }
 
-pub fn lint(root: &Path) -> Report {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    All,
+    Fe,
+    Rs,
+}
+
+impl Side {
+    fn checks_fe(self) -> bool {
+        matches!(self, Self::All | Self::Fe)
+    }
+
+    fn checks_rs(self) -> bool {
+        matches!(self, Self::All | Self::Rs)
+    }
+}
+
+pub fn lint(root: &Path, side: Side) -> Report {
     let config = match config::load(root) {
         Ok(config) => config,
         Err(output) => {
@@ -39,8 +56,8 @@ pub fn lint(root: &Path) -> Report {
             output: walk_errors.join("\n"),
         });
     }
-    let mut diagnostics = check_files(&files, &config);
-    diagnostics.extend(check_folders(&files, &config));
+    let mut diagnostics = check_files(&files, &config, side);
+    diagnostics.extend(check_folders(&files, &config, side));
     diagnostics.sort();
     Report {
         diagnostics,
@@ -48,25 +65,25 @@ pub fn lint(root: &Path) -> Report {
     }
 }
 
-pub fn check_files(files: &FileSet, config: &Config) -> Vec<Diagnostic> {
+pub fn check_files(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for path in files.files() {
-        if files::is_frontend_source(path, &config.fe) {
+        if side.checks_fe() && files::is_frontend_source(path, &config.fe) {
             diagnostics.extend(rule::fe::check(path));
-        } else if files::is_rust_source(path, &config.be) {
+        } else if side.checks_rs() && files::is_rust_source(path, &config.be) {
             diagnostics.extend(rule::rs::check(path, &config.be));
         }
     }
     diagnostics
 }
 
-pub fn check_folders(files: &FileSet, config: &Config) -> Vec<Diagnostic> {
+pub fn check_folders(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for path in files.dirs() {
-        if files::in_src(path, &config.fe) {
+        if side.checks_fe() && files::in_src(path, &config.fe) {
             diagnostics.extend(rule::fe::check_folder(path, files, &config.fe));
         }
-        if files::in_src(path, &config.be) {
+        if side.checks_rs() && files::in_src(path, &config.be) {
             diagnostics.extend(rule::rs::check_folder(path, files, &config.be));
         }
     }

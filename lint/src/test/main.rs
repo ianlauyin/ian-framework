@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -21,15 +22,24 @@ fn ian_lint() -> PathBuf {
 }
 
 fn run(root: &Path, vars: &[(&str, &str)]) -> Output {
+    command(vars).arg(root).output().expect("ian-lint runs")
+}
+
+fn run_in(dir: &Path, args: &[&OsStr]) -> Output {
+    command(&[])
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("ian-lint runs")
+}
+
+fn command(vars: &[(&str, &str)]) -> Command {
     let mut command = Command::new(ian_lint());
-    command
-        .arg(root)
-        .env_remove("NO_COLOR")
-        .env_remove("FORCE_COLOR");
+    command.env_remove("NO_COLOR").env_remove("FORCE_COLOR");
     for (name, value) in vars {
         command.env(name, value);
     }
-    command.output().expect("ian-lint runs")
+    command
 }
 
 fn has_escape(output: &Output) -> bool {
@@ -153,4 +163,88 @@ fn force_color_turns_the_color_on_when_the_output_is_not_a_terminal() {
     fs::remove_dir_all(&base).unwrap();
     assert_eq!(output.status.code(), Some(2));
     assert!(has_escape(&output));
+}
+
+fn write_both(root: &Path, fe: &str, rs: &str) {
+    fs::write(
+        root.join(crate::config::FILE_NAME),
+        "{\n  \"ruleset\": \"framework\",\n  \"fe\": { \"paths\": [\"src\"] },\n  \"be\": { \"paths\": [\"src\"] }\n}\n",
+    )
+    .expect("config is written");
+    fs::create_dir_all(root.join("src")).expect("folder is created");
+    fs::write(root.join("src/app.ts"), fe).expect("file is written");
+    fs::write(root.join("src/index.ts"), "export * from \"./app\";\n").expect("file is written");
+    fs::write(root.join("src/app.rs"), rs).expect("file is written");
+}
+
+#[test]
+fn fe_reports_a_frontend_comment_and_skips_rust() {
+    let root = temp_root("arg-fe");
+    write_both(&root, "// note\nconst a = 1;\n", "// note\nfn f() {}\n");
+
+    let output = run_in(&root, &[root.as_os_str(), OsStr::new("fe")]);
+    fs::remove_dir_all(&root).unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout.contains("src/app.ts"));
+    assert!(!stdout.contains("src/app.rs"));
+}
+
+#[test]
+fn fe_with_no_root_checks_the_current_folder() {
+    let root = temp_root("arg-fe-cwd");
+    write_both(&root, "const a = 1;\n", "// note\nfn f() {}\n");
+
+    let output = run_in(&root, &[OsStr::new("fe")]);
+    fs::remove_dir_all(&root).unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"lint okay\n");
+}
+
+#[test]
+fn rs_before_the_root_reports_a_rust_comment_and_skips_the_frontend() {
+    let root = temp_root("arg-rs");
+    write_both(&root, "// note\nconst a = 1;\n", "// note\nfn f() {}\n");
+
+    let output = run_in(&root, &[OsStr::new("rs"), root.as_os_str()]);
+    fs::remove_dir_all(&root).unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout.contains("src/app.rs"));
+    assert!(!stdout.contains("src/app.ts"));
+}
+
+#[test]
+fn rs_reports_no_diagnostics_when_only_the_frontend_has_a_comment() {
+    let root = temp_root("arg-rs-clean");
+    write_both(&root, "// note\nconst a = 1;\n", "fn f() {}\n");
+
+    let output = run_in(&root, &[OsStr::new("rs")]);
+    fs::remove_dir_all(&root).unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"lint okay\n");
+}
+
+#[test]
+fn two_sides_stop_the_run() {
+    let root = temp_root("arg-two-sides");
+    write_config(&root);
+
+    let output = run_in(&root, &[OsStr::new("fe"), OsStr::new("rs")]);
+    fs::remove_dir_all(&root).unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr.contains("The side is set two times."));
+}
+
+#[test]
+fn two_roots_stop_the_run() {
+    let root = temp_root("arg-two-roots");
+    write_config(&root);
+
+    let output = run_in(&root, &[OsStr::new("one"), OsStr::new("two")]);
+    fs::remove_dir_all(&root).unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr.contains("The root is set two times."));
 }
