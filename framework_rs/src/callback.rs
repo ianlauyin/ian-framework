@@ -3,30 +3,30 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
-pub struct Callback<T, R = ()> {
-    inner: Arc<dyn Erased<T, R> + Send + Sync>,
+pub struct Callback<Input, Output = ()> {
+    inner: Arc<dyn Erased<Input, Output> + Send + Sync>,
 }
 
-impl<T, R> Callback<T, R>
+impl<Input, Output> Callback<Input, Output>
 where
-    T: Send + 'static,
-    R: Send + 'static,
+    Input: Send + 'static,
+    Output: Send + 'static,
 {
-    pub fn from_sync(callback: impl Fn(T) -> R + Send + Sync + 'static) -> Self {
+    pub fn from_sync(callback: impl Fn(Input) -> Output + Send + Sync + 'static) -> Self {
         Self::from_fn::<_, SyncKind>(callback)
     }
 
     pub fn from_async<F, Fut>(callback: F) -> Self
     where
-        F: Fn(T) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = R> + Send + 'static,
+        F: Fn(Input) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Output> + Send + 'static,
     {
         Self::from_fn::<_, AsyncKind>(callback)
     }
 
     pub fn from_fn<F, Kind>(callback: F) -> Self
     where
-        F: Call<T, R, Kind> + 'static,
+        F: Call<Input, Output, Kind> + 'static,
         Kind: Send + Sync + 'static,
     {
         Self {
@@ -37,12 +37,12 @@ where
         }
     }
 
-    pub async fn call(&self, input: T) -> R {
-        self.inner.call(input).await
+    pub fn call(&self, input: Input) -> impl Future<Output = Output> + Send + '_ {
+        self.inner.call(input)
     }
 }
 
-impl<T, R> Clone for Callback<T, R> {
+impl<Input, Output> Clone for Callback<Input, Output> {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -50,36 +50,37 @@ impl<T, R> Clone for Callback<T, R> {
     }
 }
 
-pub enum SyncKind {}
-pub enum AsyncKind {}
+pub struct SyncKind;
+pub struct AsyncKind;
 
-pub trait Call<T, R, Kind>: Send + Sync {
-    fn call(&self, input: T) -> Pin<Box<dyn Future<Output = R> + Send>>;
+pub trait Call<Input, Output, Kind>: Send + Sync {
+    fn call(&self, input: Input) -> Pin<Box<dyn Future<Output = Output> + Send + '_>>;
 }
 
-impl<T, R, F> Call<T, R, SyncKind> for F
+impl<Input, Output, F> Call<Input, Output, SyncKind> for F
 where
-    T: 'static,
-    R: Send + 'static,
-    F: Fn(T) -> R + Send + Sync,
+    Input: Send + 'static,
+    Output: Send + 'static,
+    F: Fn(Input) -> Output + Send + Sync,
 {
-    fn call(&self, input: T) -> Pin<Box<dyn Future<Output = R> + Send>> {
-        Box::pin(std::future::ready((self)(input)))
+    fn call(&self, input: Input) -> Pin<Box<dyn Future<Output = Output> + Send + '_>> {
+        Box::pin(async move { (self)(input) })
     }
 }
 
-impl<T, R, F, Fut> Call<T, R, AsyncKind> for F
+impl<Input, Output, F, Fut> Call<Input, Output, AsyncKind> for F
 where
-    F: Fn(T) -> Fut + Send + Sync,
-    Fut: Future<Output = R> + Send + 'static,
+    Input: Send + 'static,
+    F: Fn(Input) -> Fut + Send + Sync,
+    Fut: Future<Output = Output> + Send + 'static,
 {
-    fn call(&self, input: T) -> Pin<Box<dyn Future<Output = R> + Send>> {
-        Box::pin((self)(input))
+    fn call(&self, input: Input) -> Pin<Box<dyn Future<Output = Output> + Send + '_>> {
+        Box::pin(async move { (self)(input).await })
     }
 }
 
-trait Erased<T, R>: Send + Sync {
-    fn call(&self, input: T) -> Pin<Box<dyn Future<Output = R> + Send>>;
+trait Erased<Input, Output>: Send + Sync {
+    fn call(&self, input: Input) -> Pin<Box<dyn Future<Output = Output> + Send + '_>>;
 }
 
 struct Stored<F, Kind> {
@@ -87,12 +88,12 @@ struct Stored<F, Kind> {
     _kind: PhantomData<Kind>,
 }
 
-impl<T, R, F, Kind> Erased<T, R> for Stored<F, Kind>
+impl<Input, Output, F, Kind> Erased<Input, Output> for Stored<F, Kind>
 where
-    F: Call<T, R, Kind>,
+    F: Call<Input, Output, Kind>,
     Kind: Send + Sync,
 {
-    fn call(&self, input: T) -> Pin<Box<dyn Future<Output = R> + Send>> {
-        Call::<T, R, Kind>::call(&self.callback, input)
+    fn call(&self, input: Input) -> Pin<Box<dyn Future<Output = Output> + Send + '_>> {
+        Call::<Input, Output, Kind>::call(&self.callback, input)
     }
 }
