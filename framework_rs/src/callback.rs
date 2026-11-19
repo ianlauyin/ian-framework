@@ -12,7 +12,7 @@ where
     T: Send + 'static,
     R: Send + 'static,
 {
-    pub fn new(callback: impl Fn(T) -> R + Send + Sync + 'static) -> Self {
+    pub fn from_sync(callback: impl Fn(T) -> R + Send + Sync + 'static) -> Self {
         Self::from_fn::<_, SyncKind>(callback)
     }
 
