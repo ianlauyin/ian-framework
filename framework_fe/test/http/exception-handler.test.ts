@@ -3,62 +3,62 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let listeners: Record<string, (event: any) => void>;
 
 async function setup(handler: (error: unknown) => void | Promise<void>) {
-  const { setupExceptionHandler } = await import("../../src/http/exception-handler");
-  setupExceptionHandler(handler);
-  return import("../../src/http/network");
+    const { setupExceptionHandler } = await import("../../src/http/exception-handler");
+    setupExceptionHandler(handler);
+    return import("../../src/http/network");
 }
 
 beforeEach(() => {
-  vi.resetModules();
-  listeners = {};
-  vi.stubGlobal("window", {
-    addEventListener(type: string, listener: (event: any) => void) {
-      listeners[type] = listener;
-    },
-  });
+    vi.resetModules();
+    listeners = {};
+    vi.stubGlobal("window", {
+        addEventListener(type: string, listener: (event: any) => void) {
+            listeners[type] = listener;
+        },
+    });
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+    vi.unstubAllGlobals();
 });
 
 describe("setupExceptionHandler", () => {
-  it("gives only ApiError and NetworkConnectionException to the handler", async () => {
-    const handler = vi.fn();
-    const { ApiError, NetworkConnectionException } = await setup(handler);
-    const apiError = new ApiError(400, { message: "bad" });
-    const networkError = new NetworkConnectionException("down", "/api/item");
+    it("gives only ApiError and NetworkConnectionException to the handler", async () => {
+        const handler = vi.fn();
+        const { ApiError, NetworkConnectionException } = await setup(handler);
+        const apiError = new ApiError(400, { message: "bad" });
+        const networkError = new NetworkConnectionException("down", "/api/item");
 
-    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+        const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-    listeners.error({ error: apiError });
-    await flush();
-    listeners.unhandledrejection({ reason: networkError });
-    await flush();
-    listeners.error({ error: new Error("other") });
-    listeners.unhandledrejection({ reason: "text" });
+        listeners.error({ error: apiError });
+        await flush();
+        listeners.unhandledrejection({ reason: networkError });
+        await flush();
+        listeners.error({ error: new Error("other") });
+        listeners.unhandledrejection({ reason: "text" });
 
-    expect(handler.mock.calls).toEqual([[apiError], [networkError]]);
-  });
+        expect(handler.mock.calls).toEqual([[apiError], [networkError]]);
+    });
 
-  it("ignores an error while the handler is running", async () => {
-    let finish = () => {};
-    const handler = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
-    const { ApiError } = await setup(handler);
+    it("ignores an error while the handler is running", async () => {
+        let finish = () => {};
+        const handler = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+        const { ApiError } = await setup(handler);
 
-    listeners.error({ error: new ApiError(400, null) });
-    listeners.error({ error: new ApiError(500, null) });
-    expect(handler).toHaveBeenCalledOnce();
+        listeners.error({ error: new ApiError(400, null) });
+        listeners.error({ error: new ApiError(500, null) });
+        expect(handler).toHaveBeenCalledOnce();
 
-    finish();
-    await Promise.resolve();
-    await Promise.resolve();
-    listeners.error({ error: new ApiError(500, null) });
-    expect(handler).toHaveBeenCalledTimes(2);
-  });
+        finish();
+        await Promise.resolve();
+        await Promise.resolve();
+        listeners.error({ error: new ApiError(500, null) });
+        expect(handler).toHaveBeenCalledTimes(2);
+    });
 
-  it("throws when it is called twice", async () => {
-    await setup(vi.fn());
-    await expect(setup(vi.fn())).rejects.toThrow("called twice");
-  });
+    it("throws when it is called twice", async () => {
+        await setup(vi.fn());
+        await expect(setup(vi.fn())).rejects.toThrow("called twice");
+    });
 });

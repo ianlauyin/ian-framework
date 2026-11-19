@@ -6,21 +6,21 @@ let handlerRunning = false;
 export type ExceptionHandler = (exception: ApiError | NetworkConnectionException) => void | Promise<void>;
 
 export function setupExceptionHandler(handler: ExceptionHandler): void {
-  if (initialized) throw new Error("setupExceptionHandler() is called twice");
-  initialized = true;
+    if (initialized) throw new Error("setupExceptionHandler() is called twice");
+    initialized = true;
 
-  const handle = async (error: unknown) => {
-    if (handlerRunning) return;
-    if (!(error instanceof ApiError) && !(error instanceof NetworkConnectionException)) return;
+    const handle = async (error: unknown) => {
+        if (handlerRunning) return;
+        if (!(error instanceof ApiError) && !(error instanceof NetworkConnectionException)) return;
 
-    handlerRunning = true;
-    try {
-      await handler(error);
-    } finally {
-      handlerRunning = false;
-    }
-  };
+        handlerRunning = true;
+        try {
+            await handler(error);
+        } finally {
+            handlerRunning = false;
+        }
+    };
 
-  window.addEventListener("error", (event) => void handle(event.error));
-  window.addEventListener("unhandledrejection", (event) => void handle(event.reason));
+    window.addEventListener("error", (event) => void handle(event.error));
+    window.addEventListener("unhandledrejection", (event) => void handle(event.reason));
 }

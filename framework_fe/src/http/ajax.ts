@@ -4,56 +4,48 @@ type PathParams = Record<string, any> | null;
 type AJAXRequest = Record<string, any> | null;
 type AJAXResponse = Record<string, any> | null;
 
-type PathParamValues<Url extends string> = Url extends `${string}{${infer Name}}${infer Rest}`
-  ? { [Key in Name | keyof PathParamValues<Rest>]: string | number | boolean }
-  : Record<never, never>;
+type PathParamValues<Url extends string> = Url extends `${string}{${infer Name}}${infer Rest}` ? { [Key in Name | keyof PathParamValues<Rest>]: string | number | boolean } : Record<never, never>;
 
-type PathParamsArgument<Url extends string> = keyof PathParamValues<Url> extends never
-  ? [pathParams?: PathParams]
-  : [pathParams: PathParamValues<Url>];
+type PathParamsArgument<Url extends string> = keyof PathParamValues<Url> extends never ? [pathParams?: PathParams] : [pathParams: PathParamValues<Url>];
 
-export const ajax = async <
-  Req extends AJAXRequest,
-  Res extends AJAXResponse,
-  Url extends string = string,
->(
-  url: Url,
-  method: "GET" | "DELETE" | "POST" | "PUT" | "PATCH",
-  request?: Req,
-  ...[pathParams]: PathParamsArgument<Url>
+export const ajax = async <Req extends AJAXRequest, Res extends AJAXResponse, Url extends string = string>(
+    url: Url,
+    method: "GET" | "DELETE" | "POST" | "PUT" | "PATCH",
+    request?: Req,
+    ...[pathParams]: PathParamsArgument<Url>
 ): Promise<Res> => {
-  const isGetOrDelete = method === "GET" || method === "DELETE";
+    const isGetOrDelete = method === "GET" || method === "DELETE";
 
-  let parsedUrl =
-    "/api" +
-    url.replace(/{(\w+)}/g, (_, key) => {
-      const value = (pathParams as PathParams)?.[key];
-      if (value === undefined || value === null || value === "") {
-        throw new Error(`Path param ${key} is required`);
-      }
-      const text = String(value);
-      if (text === "." || text === "..") {
-        throw new Error(`Path param ${key} is not valid`);
-      }
-      return encodeURIComponent(text);
+    let parsedUrl =
+        "/api" +
+        url.replace(/{(\w+)}/g, (_, key) => {
+            const value = (pathParams as PathParams)?.[key];
+            if (value === undefined || value === null || value === "") {
+                throw new Error(`Path param ${key} is required`);
+            }
+            const text = String(value);
+            if (text === "." || text === "..") {
+                throw new Error(`Path param ${key} is not valid`);
+            }
+            return encodeURIComponent(text);
+        });
+    if (isGetOrDelete && request) parsedUrl += queryString(request);
+
+    const headers = new Headers();
+    if (!isGetOrDelete) headers.set("Content-Type", "application/json");
+    return rawSend(parsedUrl, {
+        method,
+        headers,
+        body: isGetOrDelete ? undefined : JSON.stringify(request),
     });
-  if (isGetOrDelete && request) parsedUrl += queryString(request);
-
-  const headers = new Headers();
-  if (!isGetOrDelete) headers.set("Content-Type", "application/json");
-  return rawSend(parsedUrl, {
-    method,
-    headers,
-    body: isGetOrDelete ? undefined : JSON.stringify(request),
-  });
 };
 
 function queryString(request: object): string {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(request)) {
-    if (value === undefined) continue;
-    query.append(key, value instanceof Date ? value.toISOString() : String(value));
-  }
-  const text = query.toString();
-  return text === "" ? "" : `?${text}`;
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(request)) {
+        if (value === undefined) continue;
+        query.append(key, value instanceof Date ? value.toISOString() : String(value));
+    }
+    const text = query.toString();
+    return text === "" ? "" : `?${text}`;
 }
