@@ -13,10 +13,10 @@ use axum::{Json, Router};
 
 use crate::logging::*;
 
-pub(crate) const REFUSED_ACTION: &str = "refused";
-
 static GLOBAL_LOGGER: Once = Once::new();
 static SHIPPED: Mutex<Vec<Vec<LogEvent>>> = Mutex::new(Vec::new());
+
+pub(crate) const REFUSED_ACTION: &str = "refused";
 
 pub(crate) fn http_shipper(app: &'static str, endpoint: &str) -> HttpLogShipper {
     HttpLogShipper::new(app, endpoint.to_string(), "APP_KEY").unwrap()

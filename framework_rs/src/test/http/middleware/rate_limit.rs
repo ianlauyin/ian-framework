@@ -56,8 +56,9 @@ fn refills_with_time_and_reports_the_wait() {
     let limiter = limiter(1, 0.5);
     let now = Instant::now();
     assert!(limiter.check(key(1), now).is_ok());
-    let wait = limiter.check(key(1), now).unwrap_err();
-    assert_eq!(wait, Duration::from_secs(2));
+    let err = limiter.check(key(1), now).unwrap_err();
+    assert_eq!(err.code(), "TOO_MANY_REQUESTS");
+    assert_eq!(limiter.retry_after(key(1), now), Duration::from_secs(2));
     assert!(limiter.check(key(1), now + Duration::from_secs(1)).is_err());
     assert!(limiter.check(key(1), now + Duration::from_secs(3)).is_ok());
 }
@@ -67,7 +68,7 @@ fn a_zero_refill_never_recovers() {
     let limiter = limiter(1, 0.0);
     let now = Instant::now();
     assert!(limiter.check(key(1), now).is_ok());
-    assert_eq!(limiter.check(key(1), now).unwrap_err(), UNKNOWN_WAIT);
+    assert_eq!(limiter.retry_after(key(1), now), UNKNOWN_WAIT);
     assert!(
         limiter
             .check(key(1), now + Duration::from_secs(86_400))
@@ -80,7 +81,7 @@ fn a_negative_refill_never_recovers() {
     let limiter = limiter(1, -1.0);
     let now = Instant::now();
     assert!(limiter.check(key(1), now).is_ok());
-    assert_eq!(limiter.check(key(1), now).unwrap_err(), UNKNOWN_WAIT);
+    assert_eq!(limiter.retry_after(key(1), now), UNKNOWN_WAIT);
 }
 
 #[test]

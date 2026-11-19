@@ -3,11 +3,14 @@ mod log_buffer;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use crate::exception;
 use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
 use crate::logging::{HttpLogShipper, LogEvent, LogRequest, Logger};
 use crate::shutdown::ShutdownReceiver;
 use crate::test::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
+
+const LIMIT: usize = CAPACITY / 5 * 4;
 
 #[test]
 fn logs_without_a_shipper_and_keeps_the_first_shipper() {
@@ -22,8 +25,8 @@ fn logs_without_a_shipper_and_keeps_the_first_shipper() {
 
 #[test]
 fn error_adds_the_exception_trace_to_the_message() {
-    let root = crate::exception!(code = "ENV_INVALID", "port is not a number");
-    let top = crate::exception!(code = "ENV_MISSING", "app cannot start", source = root);
+    let root = exception!(code = "ENV_INVALID", "port is not a number");
+    let top = exception!(code = "ENV_MISSING", "app cannot start", source = root);
     global_logger();
     Logger::error("TEST/exceptionTrace", BTreeMap::new(), Box::new(top));
     Logger::error("TEST/plain", BTreeMap::new(), "slow".into());
@@ -39,8 +42,6 @@ fn error_adds_the_exception_trace_to_the_message() {
     assert!(text.contains("\n1: ERROR [ENV_INVALID] port is not a number at "));
     assert_eq!(message("TEST/plain"), "slow");
 }
-
-const LIMIT: usize = CAPACITY / 5 * 4;
 
 fn buffered() -> Logger {
     logger(http_shipper("api", "https://logs.example"))

@@ -4,6 +4,9 @@ use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, FixedOffset};
 use serde::{Deserialize, Serialize};
 
+use crate::exception;
+use crate::exception::Exception;
+use crate::http::error_code;
 use crate::http::headers::{client_ip, user_agent};
 use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::{LogEvent, LogLevel, LogValue};
@@ -22,18 +25,26 @@ pub struct ClientLog {
 }
 
 impl ClientLog {
-    pub fn log_events(&self, headers: &HeaderMap) -> Option<Vec<LogEvent>> {
-        if self.events.is_empty() || self.events.len() > SHIP_CHUNK {
-            return None;
+    pub fn log_events(&self, headers: &HeaderMap) -> Result<Vec<LogEvent>, Exception> {
+        if self.events.is_empty() {
+            return Err(exception!(
+                code = error_code::BAD_REQUEST,
+                "client log is empty"
+            ));
+        }
+        if self.events.len() > SHIP_CHUNK {
+            return Err(exception!(
+                code = error_code::BAD_REQUEST,
+                "client log has too many events"
+            ));
         }
         let ip = client_ip(headers).unwrap_or_default();
         let user_agent = user_agent(headers).unwrap_or_default();
-        Some(
-            self.events
-                .iter()
-                .map(|event| client_event(event, ip, user_agent))
-                .collect(),
-        )
+        Ok(self
+            .events
+            .iter()
+            .map(|event| client_event(event, ip, user_agent))
+            .collect())
     }
 }
 

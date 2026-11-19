@@ -29,7 +29,9 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 
 ## Files
 
-- In a source file, put the imports and the constants first. Then put each public item. For a public type, put its inherent `impl` block with the public methods first, then its trait impls (`Debug`, `Display`). Put the private types, the private functions and their impl blocks after the public items.
+- In a source file, put the items in this order: `mod` and `pub(crate) mod`, `use` imports, `pub mod`, `pub use` and `pub(crate) use`, a private `static`, constants, public items, private items.
+- For a public type, put its inherent `impl` block with the public methods first, then its trait impls (`Debug`, `Display`).
+- A `static` is private. Do not write `pub` or `pub(crate)` on a `static`.
 - Do not use `super::super::` in a path. Use a `crate::` path for an item that is not in the current module or its parent module.
 - To use a module and an item of that module, import only the module. Then use the module name to refer to the item.
 - To use the `exception!` macro, import `crate::exception`. This import can stay next to the import of `crate::exception::Exception`, because the macro and the module have the same name.
@@ -57,6 +59,7 @@ The Rust library is the crate `ian-framework-rs` in `framework_rs/`.
 
 ## Safety
 
-- Do not show a secret, a token or a query string in `Debug` output or in an error message. For a type that holds a secret, write its `Debug` impl by hand.
+- A log record may derive `Debug`. The log records are `LogEvent` in `framework_rs/src/logging/event.rs`, `ClientLogEvent` in `framework_rs/src/logging/client_log/event.rs`, and `LogRequest` in `framework_rs/src/logging/log_request.rs`.
+- For a type that holds a secret, write its `Debug` impl by hand. Do not show a secret, a token or a query string in that `Debug` output or in an error message.
 - Do not use an index that can be out of range outside tests. This includes startup code.
 - When an input is invalid or an operation fails, return an `Exception`. The project decides how to handle it.

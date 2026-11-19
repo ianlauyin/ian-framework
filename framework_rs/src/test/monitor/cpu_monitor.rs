@@ -27,35 +27,38 @@ fn new_rejects_a_bad_threshold_or_interval() {
 #[test]
 fn parse_sample_counts_guest_time_inside_user_and_nice() {
     let stat = "cpu  100 10 50 800 40 5 5 0 7 3\n";
-    assert_eq!(parse_sample(stat), Some(sample(840, 1010)));
+    assert_eq!(parse_sample(stat).unwrap(), sample(840, 1010));
 }
 
 #[test]
 fn parse_sample_reads_the_total_cpu_line() {
     let stat = "cpu  100 10 50 800 40 5 5 0 0 0\ncpu0 50 5 25 400 20 2 3 0 0 0\nintr 1\n";
-    assert_eq!(parse_sample(stat), Some(sample(840, 1010)));
+    assert_eq!(parse_sample(stat).unwrap(), sample(840, 1010));
 }
 
 #[test]
 fn parse_sample_rejects_bad_text() {
     for stat in ["", "intr 1 2 3", "cpu  1 2 3", "cpu  a b c d e f g h"] {
-        assert_eq!(parse_sample(stat), None, "{stat:?}");
+        assert!(parse_sample(stat).is_err(), "{stat:?}");
     }
 }
 
 #[test]
 fn usage_percent_uses_the_change_between_samples() {
-    assert_eq!(usage_percent(sample(0, 0), sample(25, 100)), Some(75.0));
-    assert_eq!(usage_percent(sample(10, 100), sample(110, 200)), Some(0.0));
-    assert_eq!(usage_percent(sample(10, 100), sample(10, 100)), None);
-    assert_eq!(usage_percent(sample(10, 100), sample(5, 50)), None);
-    assert_eq!(usage_percent(sample(0, 0), sample(50, 40)), None);
+    assert_eq!(usage_percent(sample(0, 0), sample(25, 100)).unwrap(), 75.0);
+    assert_eq!(
+        usage_percent(sample(10, 100), sample(110, 200)).unwrap(),
+        0.0
+    );
+    assert!(usage_percent(sample(10, 100), sample(10, 100)).is_err());
+    assert!(usage_percent(sample(10, 100), sample(5, 50)).is_err());
+    assert!(usage_percent(sample(0, 0), sample(50, 40)).is_err());
 }
 
 #[test]
 fn parse_sample_rejects_a_total_that_overflows() {
     let stat = format!("cpu  {} 1 0 0 0 0 0 0", u64::MAX);
-    assert_eq!(parse_sample(&stat), None);
+    assert!(parse_sample(&stat).is_err());
 }
 
 #[tokio::test]

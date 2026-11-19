@@ -6,6 +6,9 @@ use axum::middleware::from_fn;
 use axum::routing::post;
 use axum::{Json, Router};
 
+use crate::exception;
+use crate::exception::Exception;
+use crate::http::error_code;
 use crate::http::middleware::require_same_origin;
 use crate::logging::{ClientLog, Logger};
 
@@ -21,14 +24,20 @@ pub fn client_log_router() -> Router {
     )
 }
 
-async fn receive(headers: HeaderMap, Json(log): Json<ClientLog>) -> StatusCode {
-    let Some(events) = log.log_events(&headers) else {
-        Logger::warn("CLIENT_LOG/rejected", BTreeMap::new());
-        return StatusCode::BAD_REQUEST;
+async fn receive(headers: HeaderMap, Json(log): Json<ClientLog>) -> Result<StatusCode, Exception> {
+    let events = match log.log_events(&headers) {
+        Ok(events) => events,
+        Err(error) => {
+            Logger::warn("CLIENT_LOG/rejected", BTreeMap::new());
+            return Err(error);
+        }
     };
-    if Logger::direct_send(&events).await {
-        StatusCode::NO_CONTENT
-    } else {
-        StatusCode::BAD_GATEWAY
+    if let Err(error) = Logger::direct_send(&events).await {
+        return Err(exception!(
+            code = error_code::BAD_GATEWAY,
+            "log server refused the batch",
+            source = error,
+        ));
     }
+    Ok(StatusCode::NO_CONTENT)
 }

@@ -10,11 +10,10 @@ use crate::time::hkt_now;
 
 #[test]
 fn log_events_rejects_an_empty_list() {
-    assert!(
-        ClientLog { events: vec![] }
-            .log_events(&HeaderMap::new())
-            .is_none()
-    );
+    let err = ClientLog { events: vec![] }
+        .log_events(&HeaderMap::new())
+        .unwrap_err();
+    assert_eq!(err.code(), "BAD_REQUEST");
 }
 
 #[test]
@@ -53,7 +52,10 @@ fn log_events_rejects_a_list_above_the_ship_chunk() {
         .map(|_| client_log_event(&LogEvent::info("/ok")))
         .collect();
     assert_eq!(events.len(), SHIP_CHUNK + 1);
-    assert!(ClientLog { events }.log_events(&HeaderMap::new()).is_none());
+    let err = ClientLog { events }
+        .log_events(&HeaderMap::new())
+        .unwrap_err();
+    assert_eq!(err.code(), "BAD_REQUEST");
 }
 
 trait ClientChecked {

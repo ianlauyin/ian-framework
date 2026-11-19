@@ -26,6 +26,7 @@
 ## Errors
 
 - A type that matches a JSON body from the Rust library uses the same field names as that body.
+- A path parameter check throws `Error` before the request.
 - An HTTP failure throws `ApiError` or `NetworkConnectionException` from `framework_fe/src/http/network.ts`. Do not return a result object for that failure.
 
 ## Tests

@@ -9,6 +9,8 @@ use crate::logging::{LogEvent, LogRequest};
 
 pub const API_KEY_HEADER_INVALID: &str = "API_KEY_HEADER_INVALID";
 pub const HTTP_CLIENT_BUILD_FAILED: &str = "HTTP_CLIENT_BUILD_FAILED";
+pub const LOG_ENCODE_FAILED: &str = "LOG_ENCODE_FAILED";
+pub const LOG_SHIP_FAILED: &str = "LOG_SHIP_FAILED";
 
 pub(crate) const SHIP_CHUNK: usize = 1_000;
 
@@ -61,13 +63,17 @@ impl HttpLogShipper {
 }
 
 impl LogShipper for HttpLogShipper {
-    async fn ship(&self, events: &[LogEvent]) -> bool {
+    async fn ship(&self, events: &[LogEvent]) -> Result<(), Exception> {
         let log_request = LogRequest {
             events: events.to_vec(),
         };
-        let Ok(body) = serde_json::to_string(&log_request) else {
-            return false;
-        };
+        let body = serde_json::to_string(&log_request).map_err(|err| {
+            exception!(
+                code = LOG_ENCODE_FAILED,
+                "log batch is not json",
+                source = err
+            )
+        })?;
         let request = self
             .inner
             .http
@@ -79,8 +85,16 @@ impl LogShipper for HttpLogShipper {
                 self.inner.post_api_key.clone(),
             );
         match request.body(body).send().await {
-            Ok(response) => response.status().is_success(),
-            Err(_) => false,
+            Ok(response) if response.status().is_success() => Ok(()),
+            Ok(_) => Err(exception!(
+                code = LOG_SHIP_FAILED,
+                "log server refused the batch"
+            )),
+            Err(err) => Err(exception!(
+                code = LOG_SHIP_FAILED,
+                "cannot reach the log server",
+                source = err,
+            )),
         }
     }
 }

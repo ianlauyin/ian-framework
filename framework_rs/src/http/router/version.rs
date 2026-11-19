@@ -7,9 +7,9 @@ use serde::Serialize;
 use crate::exception;
 use crate::exception::Exception;
 
-pub const VERSION_RANDOM_FAILED: &str = "VERSION_RANDOM_FAILED";
-
 static VERSION: OnceLock<String> = OnceLock::new();
+
+pub const VERSION_RANDOM_FAILED: &str = "VERSION_RANDOM_FAILED";
 
 pub fn version_router() -> Router {
     Router::new().route("/version", get(get_version))

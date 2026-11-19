@@ -7,11 +7,11 @@ use crate::gcp::error::{CLIENT_BUILD_FAILED, RESOURCE_NOT_FOUND};
 use crate::gcp::error::{error_code, to_exception};
 use crate::gcp::project::{is_safe_name, resolve_project};
 
+static SECRET_MANAGER: OnceCell<Option<SecretManager>> = OnceCell::const_new();
+
 pub const SECRET_ID_INVALID: &str = "SECRET_ID_INVALID";
 pub const SECRET_VALUE_EMPTY: &str = "SECRET_VALUE_EMPTY";
 pub const SECRET_VALUE_NOT_UTF8: &str = "SECRET_VALUE_NOT_UTF8";
-
-static SECRET_MANAGER: OnceCell<Option<SecretManager>> = OnceCell::const_new();
 
 pub struct SecretManager {
     client: SecretManagerService,

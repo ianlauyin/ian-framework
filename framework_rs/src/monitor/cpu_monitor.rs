@@ -1,12 +1,17 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use crate::exception;
+use crate::exception::Exception;
 use crate::logging::{LogEvent, Logger};
 use crate::monitor::alert::Alert;
 use crate::shutdown::ShutdownReceiver;
 
 const STAT_PATH: &str = "/proc/stat";
 const ACTION: &str = "CPU/meetsThreshold";
+
+pub const CPU_STAT_INVALID: &str = "CPU_STAT_INVALID";
+pub const CPU_USAGE_INVALID: &str = "CPU_USAGE_INVALID";
 
 #[derive(Debug, Clone)]
 pub struct CpuMonitor {
@@ -39,7 +44,7 @@ impl CpuMonitor {
         F: Fn(LogEvent) + Send + 'static,
     {
         tokio::spawn(self.run(shutdown, sink, move || {
-            parse_sample(&std::fs::read_to_string(STAT_PATH).ok()?)
+            parse_sample(&std::fs::read_to_string(STAT_PATH).ok()?).ok()
         }))
     }
 
@@ -81,7 +86,7 @@ impl CpuMonitor {
                 continue;
             };
             read_failed = false;
-            if let Some(percent) = usage_percent(previous, current) {
+            if let Ok(percent) = usage_percent(previous, current) {
                 if let Some(event) = alert.check(percent) {
                     sink(event);
                 }
@@ -97,28 +102,54 @@ pub(crate) struct CpuSample {
     pub(crate) total: u64,
 }
 
-pub(crate) fn parse_sample(stat: &str) -> Option<CpuSample> {
-    let line = stat.lines().next()?;
+pub(crate) fn parse_sample(stat: &str) -> Result<CpuSample, Exception> {
+    let Some(line) = stat.lines().next() else {
+        return Err(exception!(code = CPU_STAT_INVALID, "cpu stat is not valid"));
+    };
     let mut fields = line.split_whitespace();
-    if fields.next()? != "cpu" {
-        return None;
+    if fields.next() != Some("cpu") {
+        return Err(exception!(code = CPU_STAT_INVALID, "cpu stat is not valid"));
     }
-    let values = fields
+    let Some(values) = fields
         .take(8)
         .map(|field| field.parse::<u64>().ok())
-        .collect::<Option<Vec<_>>>()?;
-    let idle = values.get(3)?.checked_add(*values.get(4)?)?;
-    let total = values
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Err(exception!(code = CPU_STAT_INVALID, "cpu stat is not valid"));
+    };
+    let (Some(idle_field), Some(wait_field)) = (values.get(3), values.get(4)) else {
+        return Err(exception!(code = CPU_STAT_INVALID, "cpu stat is not valid"));
+    };
+    let Some(idle) = idle_field.checked_add(*wait_field) else {
+        return Err(exception!(code = CPU_STAT_INVALID, "cpu stat is not valid"));
+    };
+    let Some(total) = values
         .iter()
-        .try_fold(0u64, |sum, value| sum.checked_add(*value))?;
-    Some(CpuSample { idle, total })
+        .try_fold(0u64, |sum, value| sum.checked_add(*value))
+    else {
+        return Err(exception!(code = CPU_STAT_INVALID, "cpu stat is not valid"));
+    };
+    Ok(CpuSample { idle, total })
 }
 
-pub(crate) fn usage_percent(previous: CpuSample, current: CpuSample) -> Option<f64> {
-    let total = current.total.checked_sub(previous.total)?;
-    let idle = current.idle.checked_sub(previous.idle)?;
+pub(crate) fn usage_percent(previous: CpuSample, current: CpuSample) -> Result<f64, Exception> {
+    let Some(total) = current.total.checked_sub(previous.total) else {
+        return Err(exception!(
+            code = CPU_USAGE_INVALID,
+            "cpu usage is not valid"
+        ));
+    };
+    let Some(idle) = current.idle.checked_sub(previous.idle) else {
+        return Err(exception!(
+            code = CPU_USAGE_INVALID,
+            "cpu usage is not valid"
+        ));
+    };
     if total == 0 || idle > total {
-        return None;
+        return Err(exception!(
+            code = CPU_USAGE_INVALID,
+            "cpu usage is not valid"
+        ));
     }
-    Some(100.0 * (total - idle) as f64 / total as f64)
+    Ok(100.0 * (total - idle) as f64 / total as f64)
 }

@@ -5,20 +5,21 @@ use std::error::Error;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use crate::logging::logger::log_buffer::LogBuffer;
-
+use crate::exception;
 use crate::exception::Exception;
 use crate::logging::log_shipper::{HttpLogShipper, LogShipper, SHIP_CHUNK};
+use crate::logging::logger::log_buffer::LogBuffer;
 use crate::logging::mask::Masks;
 use crate::logging::{LogEvent, LogLevel, LogValue};
 use crate::shutdown::ShutdownReceiver;
 
-const SHIP_EVERY: Duration = Duration::from_secs(60);
+static LOGGER: OnceLock<Logger> = OnceLock::new();
 
+const SHIP_EVERY: Duration = Duration::from_secs(60);
 const FLUSH_RETRY_EVERY: Duration = Duration::from_secs(1);
 const FLUSH_RETRY_LIMIT: u8 = 3;
 
-static LOGGER: OnceLock<Logger> = OnceLock::new();
+pub const LOGGER_ALREADY_SET: &str = "LOGGER_ALREADY_SET";
 
 #[derive(Clone)]
 pub struct Logger {
@@ -37,8 +38,14 @@ impl Logger {
         })
     }
 
-    pub fn init(logger: Logger) -> Result<(), Logger> {
-        LOGGER.set(logger)
+    pub fn init(logger: Logger) -> Result<(), Exception> {
+        if LOGGER.set(logger).is_err() {
+            return Err(exception!(
+                code = LOGGER_ALREADY_SET,
+                "logger is already set"
+            ));
+        }
+        Ok(())
     }
 
     pub fn get() -> Option<&'static Logger> {
@@ -82,9 +89,9 @@ impl Logger {
         self.lock_buffer().push(event);
     }
 
-    pub async fn direct_send(events: &[LogEvent]) -> bool {
+    pub async fn direct_send(events: &[LogEvent]) -> Result<(), Exception> {
         let Some(logger) = Logger::get() else {
-            return true;
+            return Ok(());
         };
         let mut masked = events.to_vec();
         for event in &mut masked {
@@ -128,7 +135,7 @@ impl Logger {
         if batch.is_empty() {
             return;
         }
-        if !self.inner.shipper.ship(&batch).await {
+        if self.inner.shipper.ship(&batch).await.is_err() {
             self.lock_buffer().restore(batch);
         } else {
             self.lock_buffer().shipped();

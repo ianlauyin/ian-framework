@@ -1,9 +1,9 @@
-#[cfg(feature = "gcs")]
-pub mod storage;
-
 pub(crate) mod error;
 pub(crate) mod project;
 pub(crate) mod secret_manager;
+
+#[cfg(feature = "gcs")]
+pub mod storage;
 
 pub use error::{
     API_FAILED, AUTH_FAILED, CLIENT_BUILD_FAILED, RESOURCE_NOT_FOUND, SERVICE_UNAVAILABLE,

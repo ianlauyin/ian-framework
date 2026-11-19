@@ -42,7 +42,7 @@ impl RateLimiter {
         })
     }
 
-    pub(crate) fn check(&self, key: Option<IpAddr>, now: Instant) -> Result<(), Duration> {
+    pub(crate) fn check(&self, key: Option<IpAddr>, now: Instant) -> Result<(), Exception> {
         let mut buckets = self
             .buckets
             .lock()
@@ -55,13 +55,31 @@ impl RateLimiter {
         bucket.tokens = self.refilled(bucket, now);
         bucket.updated = now;
         if bucket.tokens < 1.0 {
-            return Err(
-                Duration::try_from_secs_f64((1.0 - bucket.tokens) / self.refill_per_sec)
-                    .unwrap_or(UNKNOWN_WAIT),
-            );
+            return Err(exception!(
+                code = error_code::TOO_MANY_REQUESTS,
+                "too many requests",
+            ));
         }
         bucket.tokens -= 1.0;
         Ok(())
+    }
+
+    pub(crate) fn retry_after(&self, key: Option<IpAddr>, now: Instant) -> Duration {
+        if self.refill_per_sec <= 0.0 {
+            return UNKNOWN_WAIT;
+        }
+        let buckets = self
+            .buckets
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(bucket) = buckets.get(&key) else {
+            return UNKNOWN_WAIT;
+        };
+        let tokens = self.refilled(bucket, now);
+        if tokens >= 1.0 {
+            return Duration::ZERO;
+        }
+        Duration::try_from_secs_f64((1.0 - tokens) / self.refill_per_sec).unwrap_or(UNKNOWN_WAIT)
     }
 
     fn make_room(
@@ -111,13 +129,12 @@ pub async fn rate_limit(
     next: Next,
 ) -> Response {
     let key = limit_key(client_ip(request.headers()).unwrap_or_default());
-    match limiter.check(key, Instant::now()) {
+    let now = Instant::now();
+    match limiter.check(key, now) {
         Ok(()) => next.run(request).await,
-        Err(wait) => {
-            let mut response =
-                exception!(code = error_code::TOO_MANY_REQUESTS, "too many requests")
-                    .into_response();
-            let seconds = wait.as_secs_f64().ceil().max(1.0) as u64;
+        Err(error) => {
+            let seconds = limiter.retry_after(key, now).as_secs_f64().ceil().max(1.0) as u64;
+            let mut response = error.into_response();
             response
                 .headers_mut()
                 .insert(header::RETRY_AFTER, HeaderValue::from(seconds));
