@@ -9,7 +9,7 @@ use oxc_ast::ast::{
 use oxc_ast_visit::Visit;
 use oxc_ast_visit::walk::walk_import_expression;
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file::TsFile;
 use crate::rule::report::Report;
 

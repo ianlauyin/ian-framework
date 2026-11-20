@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Statement;
 
-use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file;
 use crate::rule::report::Report;
 

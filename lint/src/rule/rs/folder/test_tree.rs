@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use syn::{Attribute, Item, Meta};
 
-use crate::diagnostic::Diagnostic;
 use crate::files::{FileSet, file_name, without_dot};
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::Report;
 use crate::rule::rs::file;
 

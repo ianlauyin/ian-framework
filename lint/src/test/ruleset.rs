@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
 use crate::config::Ruleset;
-use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::{check as check_fe_file, check_folder as check_fe_folder};
 use crate::rule::rs::check as check_rs_file;
 
@@ -107,6 +107,22 @@ fn the_project_ruleset_skips_a_missing_root_reexport() {
     let found = check_fe_folder(&src, &files, &[src.clone()], Ruleset::Project);
     fs::remove_dir_all(root).expect("test folder is removed");
     assert!(found.iter().all(|item| item.rule != "root-reexport"));
+}
+
+#[test]
+fn the_framework_ruleset_formats_source_order_and_the_project_ruleset_does_not() {
+    let source = "\
+fn helper() {}
+
+pub fn run() {}
+";
+    let path = env::temp_dir().join(format!("ian-lint-ruleset-order-{}.rs", process::id()));
+    fs::write(&path, source).expect("file is written");
+    let framework = crate::rule::rs::preview(&path, Ruleset::Framework).expect("preview");
+    let project = crate::rule::rs::preview(&path, Ruleset::Project).expect("preview");
+    fs::remove_file(&path).unwrap();
+    assert!(framework.find("pub fn run()").unwrap() < framework.find("fn helper()").unwrap());
+    assert_eq!(project, source);
 }
 
 #[test]

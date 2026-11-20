@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use syn::spanned::Spanned;
 use syn::{Item, Type};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
 

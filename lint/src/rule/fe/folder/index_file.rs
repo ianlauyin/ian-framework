@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
+use crate::rule::diagnostic::Diagnostic;
 
 const RULE: &str = "folder-index";
 

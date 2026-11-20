@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use syn::{Item, UseTree, Visibility};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
 

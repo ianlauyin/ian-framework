@@ -5,7 +5,7 @@
 use syn::spanned::Spanned;
 use syn::{Attribute, ImplItem, Item, Meta, TraitItem};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
 use crate::rule::rs::place::Place;

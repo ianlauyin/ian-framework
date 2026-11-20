@@ -7,11 +7,22 @@ use std::collections::BTreeSet;
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
+use crate::rule::rs::source_order::{self, Sort};
 
 const RULE: &str = "impl-order";
+
+pub(crate) enum Kind {
+    Other,
+    Inherent(String),
+    Trait(String),
+}
+
+pub(crate) fn edit(file: &RsFile) -> Vec<crate::rule::edit::Edit> {
+    source_order::reorder(file, Sort::Impl)
+}
 
 pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {
@@ -50,7 +61,7 @@ fn walk(items: &[Item], report: &mut Report<'_>) {
     }
 }
 
-fn public_types(items: &[Item]) -> BTreeSet<String> {
+pub(crate) fn public_types(items: &[Item]) -> BTreeSet<String> {
     items
         .iter()
         .filter_map(|item| {
@@ -67,6 +78,23 @@ fn public_types(items: &[Item]) -> BTreeSet<String> {
             }
         })
         .collect()
+}
+
+pub(crate) fn kind(item: &Item, public: &BTreeSet<String>) -> Kind {
+    let Item::Impl(item) = item else {
+        return Kind::Other;
+    };
+    let Some(name) = type_name(&item.self_ty) else {
+        return Kind::Other;
+    };
+    if !public.contains(&name) {
+        return Kind::Other;
+    }
+    if item.trait_.is_none() {
+        Kind::Inherent(name)
+    } else {
+        Kind::Trait(name)
+    }
 }
 
 fn type_name(ty: &Type) -> Option<String> {

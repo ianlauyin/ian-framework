@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::rs::file::with_source;
 use crate::rule::rs::private_static::check;
 

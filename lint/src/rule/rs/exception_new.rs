@@ -6,7 +6,7 @@ use syn::Path as SynPath;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
 use crate::rule::rs::place::Place;

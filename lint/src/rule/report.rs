@@ -2,7 +2,7 @@ use std::path::Path;
 
 use proc_macro2::Span;
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 
 pub struct Report<'a> {
     path: &'a Path,

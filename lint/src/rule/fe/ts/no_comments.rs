@@ -2,7 +2,7 @@
 // Put the decision in the catalog. Or add a test that prevents that reason.
 // Why a lint rule: A comment hides a decision that belongs in the catalog.
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file::TsFile;
 use crate::rule::report::Report;
 

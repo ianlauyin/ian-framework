@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 
 #[test]
 fn diagnostic_has_the_fix_line() {

@@ -7,9 +7,11 @@ use std::collections::BTreeSet;
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
+use crate::rule::edit::Edit;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
+use crate::rule::rs::impl_order::{self, Kind};
 
 const RULE: &str = "source-order";
 const MOD: u8 = 0;
@@ -21,6 +23,31 @@ const CONSTANT: u8 = 5;
 const PUBLIC: u8 = 6;
 const PRIVATE: u8 = 7;
 const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants, then public items, then private items.";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Sort {
+    Source,
+    Impl,
+}
+
+pub(crate) fn edit(file: &RsFile) -> Vec<Edit> {
+    reorder(file, Sort::Source)
+}
+
+pub(crate) fn reorder(file: &RsFile, sort: Sort) -> Vec<Edit> {
+    let Some(ast) = file.ast else {
+        return Vec::new();
+    };
+    let Some((start, end, text)) = rewrite(file.source, &ast.items, sort) else {
+        return Vec::new();
+    };
+    vec![Edit {
+        path: file.path.to_path_buf(),
+        start: start as u32,
+        end: end as u32,
+        text,
+    }]
+}
 
 pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {
@@ -48,7 +75,7 @@ fn walk(items: &[Item], report: &mut Report<'_>) {
     }
 }
 
-fn group(item: &Item, private_types: &BTreeSet<String>) -> u8 {
+pub(crate) fn group(item: &Item, private_types: &BTreeSet<String>) -> u8 {
     match item {
         Item::Mod(item) => {
             if is_public(&item.vis) {
@@ -101,7 +128,7 @@ fn group(item: &Item, private_types: &BTreeSet<String>) -> u8 {
     }
 }
 
-fn private_type_names(items: &[Item]) -> BTreeSet<String> {
+pub(crate) fn private_type_names(items: &[Item]) -> BTreeSet<String> {
     items
         .iter()
         .filter_map(|item| {
@@ -157,4 +184,120 @@ fn is_public(vis: &Visibility) -> bool {
 
 fn is_private(vis: &Visibility) -> bool {
     matches!(vis, Visibility::Inherited)
+}
+
+fn rewrite(source: &str, items: &[Item], sort: Sort) -> Option<(usize, usize, String)> {
+    if items.is_empty() {
+        return None;
+    }
+    let private_types = private_type_names(items);
+    let public_types = impl_order::public_types(items);
+    let spans: Vec<(usize, usize)> = items.iter().map(item_bounds).collect();
+    let (start, end, ranges) = crate::rule::edit::piece_ranges(source, &spans)?;
+    let mut pieces = Vec::with_capacity(items.len());
+    for (index, item) in items.iter().enumerate() {
+        let (from, to) = ranges[index];
+        let group = if sort == Sort::Source {
+            group(item, &private_types)
+        } else {
+            0
+        };
+        let kind = if sort == Sort::Impl {
+            impl_order::kind(item, &public_types)
+        } else {
+            Kind::Other
+        };
+        pieces.push(Piece {
+            group,
+            index,
+            text: piece_text(source, from, to, item, sort),
+            kind,
+        });
+    }
+    if sort == Sort::Source {
+        pieces.sort_by(|left, right| {
+            left.group
+                .cmp(&right.group)
+                .then(left.index.cmp(&right.index))
+        });
+    }
+    if sort == Sort::Impl {
+        move_inherent_impls(&mut pieces);
+    }
+    let text: String = pieces.iter().map(|piece| piece.text.as_str()).collect();
+    if text == source[start..end] {
+        None
+    } else {
+        Some((start, end, text))
+    }
+}
+
+fn piece_text(source: &str, from: usize, to: usize, item: &Item, sort: Sort) -> String {
+    let Item::Mod(module) = item else {
+        return source[from..to].to_owned();
+    };
+    let Some((_, nested)) = &module.content else {
+        return source[from..to].to_owned();
+    };
+    let Some((inner_start, inner_end, inner)) = rewrite(source, nested, sort) else {
+        return source[from..to].to_owned();
+    };
+    if inner_start < from || inner_end > to || inner_start > inner_end {
+        return source[from..to].to_owned();
+    }
+    let mut text = String::new();
+    text.push_str(&source[from..inner_start]);
+    text.push_str(&inner);
+    text.push_str(&source[inner_end..to]);
+    text
+}
+
+fn move_inherent_impls(pieces: &mut Vec<Piece>) {
+    let names = pieces
+        .iter()
+        .filter_map(|piece| kind_name(&piece.kind))
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    for name in names {
+        loop {
+            let Some(trait_at) = pieces.iter().position(|piece| is_trait(&piece.kind, &name))
+            else {
+                break;
+            };
+            let Some(inherent_at) = pieces.iter().enumerate().find_map(|(index, piece)| {
+                (index > trait_at && is_inherent(&piece.kind, &name)).then_some(index)
+            }) else {
+                break;
+            };
+            let piece = pieces.remove(inherent_at);
+            pieces.insert(trait_at, piece);
+        }
+    }
+}
+
+fn kind_name(kind: &Kind) -> Option<&str> {
+    match kind {
+        Kind::Inherent(name) | Kind::Trait(name) => Some(name),
+        Kind::Other => None,
+    }
+}
+
+fn is_inherent(kind: &Kind, name: &str) -> bool {
+    matches!(kind, Kind::Inherent(found) if found == name)
+}
+
+fn is_trait(kind: &Kind, name: &str) -> bool {
+    matches!(kind, Kind::Trait(found) if found == name)
+}
+
+fn item_bounds(item: &Item) -> (usize, usize) {
+    let range = item.span().byte_range();
+    (range.start, range.end)
+}
+
+struct Piece {
+    group: u8,
+    index: usize,
+    text: String,
+    kind: Kind,
 }

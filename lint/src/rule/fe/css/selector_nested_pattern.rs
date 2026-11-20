@@ -2,7 +2,7 @@
 // Use a class, an id, a `&` suffix, or a `>`, `+`, or `~` combinator.
 // Why a lint rule: A nested rule names a child by class or id, extends the parent with `&`, or uses a `>`, `+`, or `~` combinator. `&:where(&)` is not a nested selector.
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Kind, is_css_whitespace};
 use crate::rule::report::Report;

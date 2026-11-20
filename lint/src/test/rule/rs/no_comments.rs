@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::{env, process};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::rs::file::with_source;
 use crate::rule::rs::no_comments::check;
 

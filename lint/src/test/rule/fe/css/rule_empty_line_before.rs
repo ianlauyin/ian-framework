@@ -1,12 +1,20 @@
 use std::path::Path;
 use std::{env, process};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::css::file::with_source;
 use crate::rule::fe::css::rule_empty_line_before::check;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/a.css"), source, check)
+}
+
+fn formatted(source: &str) -> String {
+    with_source(Path::new("src/a.css"), source, |file| {
+        let found = crate::rule::fe::css::rule_empty_line_before::edit(file);
+        let edits: Vec<_> = found.iter().collect();
+        crate::rule::edit::apply(source, &edits).expect("edits apply")
+    })
 }
 
 #[test]
@@ -289,6 +297,82 @@ b {}
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].line, 2);
     assert_eq!(found[0].problem, "The rule has no empty line before it.");
+}
+
+#[test]
+fn a_second_rule_without_an_empty_line_is_formatted() {
+    let source = "\
+a {}
+b {}
+c {}
+";
+    let next = formatted(source);
+    assert_eq!(
+        next,
+        "\
+a {}
+
+b {}
+
+c {}
+"
+    );
+    assert!(diagnostics(&next).is_empty());
+}
+
+#[test]
+fn a_second_rule_with_an_empty_line_is_unchanged() {
+    let source = "\
+a {}
+
+b {}
+";
+    assert_eq!(formatted(source), source);
+}
+
+#[test]
+fn an_empty_line_before_the_first_rule_in_a_block_is_removed() {
+    let source = "\
+a {
+
+  &:hover {}
+}
+";
+    let next = formatted(source);
+    assert_eq!(
+        next,
+        "\
+a {
+  &:hover {}
+}
+"
+    );
+    assert!(diagnostics(&next).is_empty());
+}
+
+#[test]
+fn a_crlf_line_without_an_empty_line_is_formatted() {
+    let next = formatted("a {}\r\nb {}\r\n");
+    assert_eq!(next, "a {}\r\n\r\nb {}\r\n");
+    assert!(diagnostics(&next).is_empty());
+}
+
+#[test]
+fn an_empty_line_after_a_single_line_comment_is_removed() {
+    let source = "\
+/* note */
+
+a {}
+";
+    let next = formatted(source);
+    assert_eq!(
+        next,
+        "\
+/* note */
+a {}
+"
+    );
+    assert!(diagnostics(&next).is_empty());
 }
 
 #[test]

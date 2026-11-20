@@ -4,7 +4,7 @@
 
 use oxc_ast::ast::{ModuleExportName, Statement};
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file::TsFile;
 use crate::rule::report::Report;
 

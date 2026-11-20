@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::diagnostic::Diagnostic;
+use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file::with_source;
 use crate::rule::fe::ts::no_default_export::check;
 

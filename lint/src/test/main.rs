@@ -238,6 +238,37 @@ fn two_sides_stop_the_run() {
 }
 
 #[test]
+fn format_fe_rewrites_the_frontend_and_skips_rust() {
+    let root = temp_root("format-fe");
+    write_both(
+        &root,
+        "export const name = \"a\";\nconst value = 1;\n",
+        "fn helper() {}\n",
+    );
+
+    let output = run_in(&root, &[OsStr::new("format"), OsStr::new("fe")]);
+    let frontend = fs::read_to_string(root.join("src/app.ts")).unwrap();
+    let rust = fs::read_to_string(root.join("src/app.rs")).unwrap();
+    fs::remove_dir_all(&root).unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"lint okay\n");
+    assert!(frontend.find("const value").unwrap() < frontend.find("export const").unwrap());
+    assert_eq!(rust, "fn helper() {}\n");
+}
+
+#[test]
+fn two_formats_stop_the_run() {
+    let root = temp_root("arg-two-formats");
+    write_config(&root);
+
+    let output = run_in(&root, &[OsStr::new("format"), OsStr::new("format")]);
+    fs::remove_dir_all(&root).unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr.contains("The format is set two times."));
+}
+
+#[test]
 fn two_roots_stop_the_run() {
     let root = temp_root("arg-two-roots");
     write_config(&root);

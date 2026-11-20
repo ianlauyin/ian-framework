@@ -11,6 +11,23 @@ pub enum Ruleset {
     Project,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    All,
+    Fe,
+    Rs,
+}
+
+impl Side {
+    pub(crate) fn checks_fe(self) -> bool {
+        matches!(self, Self::All | Self::Fe)
+    }
+
+    pub(crate) fn checks_rs(self) -> bool {
+        matches!(self, Self::All | Self::Rs)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Config {
     pub ruleset: Ruleset,
@@ -46,13 +63,13 @@ pub fn load(root: &Path) -> Result<Config, String> {
 #[serde(deny_unknown_fields)]
 struct File {
     ruleset: String,
-    fe: Side,
-    be: Side,
+    fe: Paths,
+    be: Paths,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Side {
+struct Paths {
     paths: Vec<String>,
 }
 
