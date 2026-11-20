@@ -1,9 +1,15 @@
 use std::path::Path;
 
-use crate::rule::fe::ts::file::{parse, with_source};
+use crate::rule::fe::ts::file::{TsFile, parse};
 use crate::rule::fe::ts::no_comments::check;
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
 use oxc_allocator::Allocator;
+
+pub(crate) fn with_source<T>(path: &Path, source: &str, f: impl FnOnce(&TsFile) -> T) -> T {
+    let allocator = Allocator::default();
+    let program = parse(&allocator, path, source);
+    f(&TsFile::new(path, source, program.as_ref()))
+}
 
 #[test]
 fn a_parsed_file_has_one_statement() {
@@ -14,7 +20,7 @@ fn a_parsed_file_has_one_statement() {
     with_source(Path::new("src/a.ts"), source, |file| {
         let program = file.program.expect("parsed");
         assert_eq!(program.body.len(), 1);
-        let mut report = Report::new(file.path, file.source, "sample");
+        let mut report = RuleReport::new(file.path, file.source, "sample");
         report.at_offset(0, "`a` is wrong.", "Change `a`.");
         let found = report.finish();
         assert_eq!(found.len(), 1);

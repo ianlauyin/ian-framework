@@ -1,8 +1,13 @@
 use std::path::Path;
 
-use crate::rule::fe::css::file::with_source;
+use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::parse;
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
+
+pub(crate) fn with_source<T>(path: &Path, source: &str, f: impl FnOnce(&CssFile) -> T) -> T {
+    let items = crate::rule::fe::css::parse::parse(source);
+    f(&CssFile::new(path, source, &items))
+}
 
 #[test]
 fn a_parsed_file_has_one_rule() {
@@ -10,7 +15,7 @@ fn a_parsed_file_has_one_rule() {
     assert_eq!(parse(source).len(), 1);
     with_source(Path::new("src/a.css"), source, |file| {
         assert_eq!(file.items.len(), 1);
-        let mut report = Report::new(file.path, file.source, "sample");
+        let mut report = RuleReport::new(file.path, file.source, "sample");
         report.at_offset(0, "`a` is wrong.", "Change `a`.");
         let found = report.finish();
         assert_eq!(found.len(), 1);

@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod test;
 
-pub mod check;
-pub mod config;
-pub mod files;
-pub mod format;
-pub mod rule;
+pub(crate) mod check;
+pub(crate) mod config;
+pub(crate) mod files;
+pub(crate) mod format;
+pub(crate) mod rule;
 pub(crate) mod ruleset;
 
 use std::env;
@@ -17,14 +17,14 @@ use std::process::ExitCode;
 use config::Side;
 use rule::diagnostic::Diagnostic;
 
-pub struct Report {
-    pub diagnostics: Vec<Diagnostic>,
-    pub failures: Vec<Failure>,
+pub(crate) struct Report {
+    pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) failures: Vec<Failure>,
 }
 
 #[derive(Debug)]
-pub struct Failure {
-    pub output: String,
+pub(crate) struct Failure {
+    pub(crate) output: String,
 }
 
 const RED: &str = "38;2;220;107;106";

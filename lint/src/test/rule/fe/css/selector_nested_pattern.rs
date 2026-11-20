@@ -2,8 +2,8 @@ use std::path::Path;
 use std::{env, process};
 
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::css::file::with_source;
 use crate::rule::fe::css::selector_nested_pattern::check;
+use crate::test::rule::fe::css::file::with_source;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/a.css"), source, check)
@@ -216,7 +216,7 @@ fn a_file_that_cannot_be_read_has_no_diagnostic() {
         process::id()
     ));
     assert!(
-        crate::rule::fe::check(
+        crate::rule::fe::run::check(
             &path.with_extension("css"),
             crate::config::Ruleset::Framework
         )

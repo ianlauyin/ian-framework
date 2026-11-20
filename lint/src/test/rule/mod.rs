@@ -1,5 +1,5 @@
 mod diagnostic;
 mod edit;
-mod fe;
+pub(crate) mod fe;
 mod report;
-mod rs;
+pub(crate) mod rs;

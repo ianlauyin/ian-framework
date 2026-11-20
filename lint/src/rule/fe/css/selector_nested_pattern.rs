@@ -5,12 +5,12 @@
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Kind, is_css_whitespace};
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
 
 const RULE: &str = "selector-nested-pattern";
 
-pub fn check(file: &CssFile) -> Vec<Diagnostic> {
-    let mut report = Report::new(file.path, file.source, RULE);
+pub(crate) fn check(file: &CssFile) -> Vec<Diagnostic> {
+    let mut report = RuleReport::new(file.path, file.source, RULE);
     walk(file.items, false, file.source, &mut report);
     report.finish()
 }
@@ -66,7 +66,7 @@ fn walk(
     items: &[crate::rule::fe::css::parse::Item],
     parent_is_rule: bool,
     source: &str,
-    report: &mut Report<'_>,
+    report: &mut RuleReport<'_>,
 ) {
     for item in items {
         match &item.kind {
@@ -85,7 +85,7 @@ fn walk(
     }
 }
 
-fn check_selector(source: &str, start: u32, selector_end: u32, report: &mut Report<'_>) {
+fn check_selector(source: &str, start: u32, selector_end: u32, report: &mut RuleReport<'_>) {
     let raw = &source[start as usize..selector_end as usize];
     let selector = raw.trim_end_matches(is_css_ws_char);
     for (offset, text) in selectors(selector) {

@@ -8,7 +8,7 @@ use oxc_span::GetSpan;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::{Edit, piece_ranges};
 use crate::rule::fe::ts::file::TsFile;
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
 
 const RULE: &str = "declaration-order";
 const IMPORT: u8 = 0;
@@ -75,11 +75,11 @@ struct Piece {
     text: String,
 }
 
-pub fn check(file: &TsFile) -> Vec<Diagnostic> {
+pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {
         return Vec::new();
     };
-    let mut report = Report::new(file.path, file.source, RULE);
+    let mut report = RuleReport::new(file.path, file.source, RULE);
     let mut last: Option<u8> = None;
     for statement in &program.body {
         let Some(group) = group(statement) else {
@@ -113,7 +113,7 @@ fn group(statement: &Statement<'_>) -> Option<u8> {
     }
 }
 
-fn report_order(report: &mut Report<'_>, offset: u32) {
+fn report_order(report: &mut RuleReport<'_>, offset: u32) {
     report.at_offset(
         offset,
         "This item is out of declaration order.",

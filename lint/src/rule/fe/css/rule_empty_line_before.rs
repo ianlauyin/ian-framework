@@ -10,11 +10,11 @@ use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
 use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Item, Kind};
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
 
 const RULE: &str = "rule-empty-line-before";
 
-pub fn check(file: &CssFile) -> Vec<Diagnostic> {
+pub(crate) fn check(file: &CssFile) -> Vec<Diagnostic> {
     scan(file).0
 }
 
@@ -24,7 +24,7 @@ pub(crate) fn edit(file: &CssFile) -> Vec<Edit> {
 
 fn scan(file: &CssFile) -> (Vec<Diagnostic>, Vec<Edit>) {
     let lines = Lines::new(file.source);
-    let mut report = Report::new(file.path, file.source, RULE);
+    let mut report = RuleReport::new(file.path, file.source, RULE);
     let mut edits = Vec::new();
     walk(
         file.items,
@@ -44,7 +44,7 @@ fn walk(
     source: &str,
     lines: &Lines,
     path: &Path,
-    report: &mut Report<'_>,
+    report: &mut RuleReport<'_>,
     edits: &mut Vec<Edit>,
 ) {
     for (index, item) in items.iter().enumerate() {
@@ -93,7 +93,7 @@ fn report_rule(
     source: &str,
     lines: &Lines,
     path: &Path,
-    report: &mut Report<'_>,
+    report: &mut RuleReport<'_>,
     edits: &mut Vec<Edit>,
 ) {
     let expect_empty = !is_first_nested(source, items, index, brace, lines)

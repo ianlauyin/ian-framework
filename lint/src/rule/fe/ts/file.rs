@@ -29,10 +29,3 @@ pub(crate) fn parse<'a>(
     let source_type = SourceType::from_path(path).ok()?;
     Some(Parser::new(allocator, source, source_type).parse().program)
 }
-
-#[cfg(test)]
-pub(crate) fn with_source<T>(path: &Path, source: &str, f: impl FnOnce(&TsFile) -> T) -> T {
-    let allocator = Allocator::default();
-    let program = parse(&allocator, path, source);
-    f(&TsFile::new(path, source, program.as_ref()))
-}

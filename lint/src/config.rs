@@ -3,16 +3,16 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Deserialize;
 
-pub const FILE_NAME: &str = "lint.config.json";
+pub(crate) const FILE_NAME: &str = "lint.config.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Ruleset {
+pub(crate) enum Ruleset {
     Framework,
     Project,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Side {
+pub(crate) enum Side {
     All,
     Fe,
     Rs,
@@ -29,13 +29,13 @@ impl Side {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Config {
-    pub ruleset: Ruleset,
-    pub fe: Vec<PathBuf>,
-    pub be: Vec<PathBuf>,
+pub(crate) struct Config {
+    pub(crate) ruleset: Ruleset,
+    pub(crate) fe: Vec<PathBuf>,
+    pub(crate) be: Vec<PathBuf>,
 }
 
-pub fn load(root: &Path) -> Result<Config, String> {
+pub(crate) fn load(root: &Path) -> Result<Config, String> {
     let path = root.join(FILE_NAME);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,

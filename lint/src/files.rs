@@ -4,13 +4,13 @@ use std::path::{Component, Path, PathBuf};
 use ignore::WalkBuilder;
 
 #[derive(Default)]
-pub struct FileSet {
+pub(crate) struct FileSet {
     files: BTreeSet<PathBuf>,
     dirs: BTreeSet<PathBuf>,
 }
 
 impl FileSet {
-    pub fn walk(root: &Path) -> (Self, Vec<String>) {
+    pub(crate) fn walk(root: &Path) -> (Self, Vec<String>) {
         let mut errors = Vec::new();
         let mut paths = Vec::new();
         let mut dir_paths = Vec::new();
@@ -43,7 +43,7 @@ impl FileSet {
         (set, errors)
     }
 
-    pub fn from_paths(paths: impl IntoIterator<Item = PathBuf>) -> Self {
+    pub(crate) fn from_paths(paths: impl IntoIterator<Item = PathBuf>) -> Self {
         let mut set = Self::default();
         for path in paths {
             for dir in path.ancestors().skip(1) {
@@ -56,47 +56,47 @@ impl FileSet {
         set
     }
 
-    pub fn files(&self) -> impl Iterator<Item = &Path> {
+    pub(crate) fn files(&self) -> impl Iterator<Item = &Path> {
         self.files.iter().map(PathBuf::as_path)
     }
 
-    pub fn dirs(&self) -> impl Iterator<Item = &Path> {
+    pub(crate) fn dirs(&self) -> impl Iterator<Item = &Path> {
         self.dirs.iter().map(PathBuf::as_path)
     }
 
-    pub fn has_file(&self, path: &Path) -> bool {
+    pub(crate) fn has_file(&self, path: &Path) -> bool {
         self.files.contains(path)
     }
 
-    pub fn has_dir(&self, path: &Path) -> bool {
+    pub(crate) fn has_dir(&self, path: &Path) -> bool {
         self.dirs.contains(path)
     }
 }
 
-pub fn file_name(path: &Path) -> &str {
+pub(crate) fn file_name(path: &Path) -> &str {
     path.file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("")
 }
 
-pub fn in_src(path: &Path, srcs: &[PathBuf]) -> bool {
+pub(crate) fn in_src(path: &Path, srcs: &[PathBuf]) -> bool {
     let path = without_dot(path);
     srcs.iter().any(|src| path.starts_with(without_dot(src)))
 }
 
-pub fn is_ts_name(name: &str) -> bool {
+pub(crate) fn is_ts_name(name: &str) -> bool {
     (name.ends_with(".ts") || name.ends_with(".tsx")) && !name.ends_with(".d.ts")
 }
 
-pub fn is_style_file(path: &Path, srcs: &[PathBuf]) -> bool {
+pub(crate) fn is_style_file(path: &Path, srcs: &[PathBuf]) -> bool {
     in_src(path, srcs) && file_name(path).ends_with(".css")
 }
 
-pub fn is_frontend_source(path: &Path, srcs: &[PathBuf]) -> bool {
+pub(crate) fn is_frontend_source(path: &Path, srcs: &[PathBuf]) -> bool {
     (in_src(path, srcs) && is_ts_name(file_name(path))) || is_style_file(path, srcs)
 }
 
-pub fn is_rust_source(path: &Path, srcs: &[PathBuf]) -> bool {
+pub(crate) fn is_rust_source(path: &Path, srcs: &[PathBuf]) -> bool {
     in_src(path, srcs) && file_name(path).ends_with(".rs")
 }
 

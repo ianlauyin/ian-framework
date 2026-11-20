@@ -11,15 +11,15 @@ use oxc_ast_visit::walk::walk_import_expression;
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file::TsFile;
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
 
 const RULE: &str = "no-restricted-imports";
 
-pub fn check(file: &TsFile) -> Vec<Diagnostic> {
+pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {
         return Vec::new();
     };
-    let mut report = Report::new(file.path, file.source, RULE);
+    let mut report = RuleReport::new(file.path, file.source, RULE);
     let mut imports = Imports {
         report: &mut report,
     };
@@ -28,7 +28,7 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
 }
 
 struct Imports<'a, 'b> {
-    report: &'b mut Report<'a>,
+    report: &'b mut RuleReport<'a>,
 }
 
 impl<'ast> Visit<'ast> for Imports<'_, '_> {

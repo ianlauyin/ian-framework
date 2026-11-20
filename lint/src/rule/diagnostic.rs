@@ -2,17 +2,17 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Diagnostic {
-    pub path: PathBuf,
-    pub line: u32,
-    pub column: u32,
-    pub rule: &'static str,
-    pub problem: String,
-    pub fix: String,
+pub(crate) struct Diagnostic {
+    pub(crate) path: PathBuf,
+    pub(crate) line: u32,
+    pub(crate) column: u32,
+    pub(crate) rule: &'static str,
+    pub(crate) problem: String,
+    pub(crate) fix: String,
 }
 
 impl Diagnostic {
-    pub fn new(
+    pub(crate) fn new(
         path: &Path,
         line: u32,
         column: u32,
@@ -30,7 +30,7 @@ impl Diagnostic {
         }
     }
 
-    pub fn at_offset(
+    pub(crate) fn at_offset(
         path: &Path,
         source: &str,
         offset: u32,

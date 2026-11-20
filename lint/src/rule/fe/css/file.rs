@@ -17,9 +17,3 @@ impl<'a> CssFile<'a> {
         }
     }
 }
-
-#[cfg(test)]
-pub(crate) fn with_source<T>(path: &Path, source: &str, f: impl FnOnce(&CssFile) -> T) -> T {
-    let items = crate::rule::fe::css::parse::parse(source);
-    f(&CssFile::new(path, source, &items))
-}

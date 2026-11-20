@@ -4,8 +4,8 @@ use std::{env, fs, process};
 use crate::config::Ruleset;
 use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::{check as check_fe_file, check_folder as check_fe_folder};
-use crate::rule::rs::check as check_rs_file;
+use crate::rule::fe::run::{check as check_fe_file, check_folder as check_fe_folder};
+use crate::rule::rs::run::check as check_rs_file;
 
 fn rust_file(name: &str, relative: &str, source: &str, ruleset: Ruleset) -> Vec<Diagnostic> {
     let root = env::temp_dir().join(format!("ian-lint-ruleset-rs-{name}-{}", process::id()));
@@ -118,8 +118,8 @@ pub fn run() {}
 ";
     let path = env::temp_dir().join(format!("ian-lint-ruleset-order-{}.rs", process::id()));
     fs::write(&path, source).expect("file is written");
-    let framework = crate::rule::rs::preview(&path, Ruleset::Framework).expect("preview");
-    let project = crate::rule::rs::preview(&path, Ruleset::Project).expect("preview");
+    let framework = crate::rule::rs::run::preview(&path, Ruleset::Framework).expect("preview");
+    let project = crate::rule::rs::run::preview(&path, Ruleset::Project).expect("preview");
     fs::remove_file(&path).unwrap();
     assert!(framework.find("pub fn run()").unwrap() < framework.find("fn helper()").unwrap());
     assert_eq!(project, source);

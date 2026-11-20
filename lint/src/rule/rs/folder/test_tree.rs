@@ -14,12 +14,12 @@ use syn::{Attribute, Item, Meta};
 
 use crate::files::{FileSet, file_name, without_dot};
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::report::Report;
-use crate::rule::rs::file;
+use crate::rule::report::RuleReport;
+use crate::rule::rs::source;
 
 const RULE: &str = "test-tree";
 
-pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
         return Vec::new();
     }
@@ -104,14 +104,14 @@ fn cfg_mismatch(test_file: &Path, source_file: &Path) -> Vec<Diagnostic> {
     let Ok(source_source) = fs::read_to_string(source_file) else {
         return Vec::new();
     };
-    let Some(source_file_ast) = file::parse(&source_source) else {
+    let Some(source_file_ast) = source::parse(&source_source) else {
         return Vec::new();
     };
-    let Some(test_ast) = file::parse(&test_source) else {
+    let Some(test_ast) = source::parse(&test_source) else {
         return Vec::new();
     };
     let source_mods = mod_cfgs(&source_file_ast.items);
-    let mut report = Report::new(test_file, &test_source, RULE);
+    let mut report = RuleReport::new(test_file, &test_source, RULE);
     for item in &test_ast.items {
         let Item::Mod(module) = item else {
             continue;

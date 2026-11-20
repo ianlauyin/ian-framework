@@ -2,12 +2,12 @@ use std::path::Path;
 
 use syn::spanned::Spanned;
 
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
 
 #[test]
 fn at_offset_records_the_line_and_column() {
     let source = "let a = 1;\nlet b = 2;\n";
-    let mut report = Report::new(Path::new("src/a.ts"), source, "sample");
+    let mut report = RuleReport::new(Path::new("src/a.ts"), source, "sample");
     report.at_offset(0, "`a` is wrong.", "Change `a`.");
     let offset = source.rfind("let b").unwrap() as u32;
     report.at_offset(offset, "`b` is wrong.", "Change `b`.");
@@ -28,7 +28,7 @@ fn at_span_reports_the_start_of_the_span() {
     let syn::Item::Fn(item) = &file.items[1] else {
         panic!("fn");
     };
-    let mut report = Report::new(Path::new("src/a.rs"), source, "sample");
+    let mut report = RuleReport::new(Path::new("src/a.rs"), source, "sample");
     report.at_span(item.span(), "`b` is wrong.", "Change `b`.");
 
     let found = report.finish();

@@ -6,15 +6,15 @@ use oxc_ast::ast::{ModuleExportName, Statement};
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file::TsFile;
-use crate::rule::report::Report;
+use crate::rule::report::RuleReport;
 
 const RULE: &str = "no-default-export";
 
-pub fn check(file: &TsFile) -> Vec<Diagnostic> {
+pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {
         return Vec::new();
     };
-    let mut report = Report::new(file.path, file.source, RULE);
+    let mut report = RuleReport::new(file.path, file.source, RULE);
     for statement in &program.body {
         match statement {
             Statement::ExportDefaultDeclaration(declaration) => {
@@ -32,7 +32,10 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
     report.finish()
 }
 
-fn report_specifiers(report: &mut Report<'_>, specifiers: &[oxc_ast::ast::ExportSpecifier<'_>]) {
+fn report_specifiers(
+    report: &mut RuleReport<'_>,
+    specifiers: &[oxc_ast::ast::ExportSpecifier<'_>],
+) {
     for specifier in specifiers {
         if is_default_name(&specifier.exported) {
             report_default(report, specifier.span.start);
@@ -48,7 +51,7 @@ fn is_default_name(name: &ModuleExportName<'_>) -> bool {
     }
 }
 
-fn report_default(report: &mut Report<'_>, offset: u32) {
+fn report_default(report: &mut RuleReport<'_>, offset: u32) {
     report.at_offset(
         offset,
         "The file has a default export.",
