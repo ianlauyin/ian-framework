@@ -74,3 +74,22 @@ fn a_nested_folder_passes() {
     fs::remove_dir_all(&root).expect("test folder is removed");
     assert!(found.is_empty());
 }
+
+#[test]
+fn a_src_path_with_a_leading_dot_finds_a_missing_feature() {
+    let root = PathBuf::from(format!(
+        "target/ian-lint-root-reexport-dot-{}",
+        process::id()
+    ));
+    if root.exists() {
+        fs::remove_dir_all(&root).expect("old test folder is removed");
+    }
+    let src = root.join("src");
+    fs::create_dir_all(src.join("http")).expect("folder is created");
+    fs::write(src.join("index.ts"), "export const local = 1;\n").expect("file is written");
+    let files = FileSet::from_paths([src.join("index.ts"), src.join("http/index.ts")]);
+    let found = check(&src, &files, &[Path::new(".").join(&src)]);
+    fs::remove_dir_all(&root).expect("test folder is removed");
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].problem, "`./http` is missing from the index.");
+}

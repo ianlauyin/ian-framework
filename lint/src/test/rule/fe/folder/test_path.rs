@@ -61,3 +61,15 @@ fn a_test_file_in_the_source_folder_fails() {
     assert_eq!(found[0].problem, "A test file is in the source folder.");
     assert_eq!(found[0].fix, "Move the test to the test folder.");
 }
+
+#[test]
+fn a_src_path_with_a_leading_dot_finds_a_test_file_with_no_source_file() {
+    let files = tree(&["app/src/view.ts", "app/test/missing.test.ts"]);
+    let srcs = [PathBuf::from("./app/src")];
+    let found = check(Path::new("app/src"), &files, &srcs);
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].problem,
+        "The test file has no source file `app/src/missing.ts`."
+    );
+}

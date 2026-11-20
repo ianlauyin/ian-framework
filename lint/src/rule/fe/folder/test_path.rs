@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::files::FileSet;
+use crate::files::{FileSet, without_dot};
 use crate::rule::diagnostic::Diagnostic;
 
 const RULE: &str = "test-path";
@@ -39,7 +39,7 @@ fn source_tests(path: &Path, files: &FileSet) -> Vec<Diagnostic> {
 }
 
 fn mirrored_tests(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    if !srcs.iter().any(|src| src == path) {
+    if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
         return Vec::new();
     }
     let Some(test_root) = path.parent().map(|parent| parent.join("test")) else {

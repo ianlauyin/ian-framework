@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Statement;
 
-use crate::files::FileSet;
+use crate::files::{FileSet, without_dot};
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file;
 use crate::rule::report::Report;
@@ -17,7 +17,7 @@ use crate::rule::report::Report;
 const RULE: &str = "root-reexport";
 
 pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    if !srcs.iter().any(|src| src == path) {
+    if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
         return Vec::new();
     }
     let children = child_modules(path, files);
