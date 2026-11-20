@@ -1,6 +1,6 @@
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
-use crate::rule::fe::css::file::CssFile;
+use crate::rule::fe::css::source::CssFile;
 
 pub(crate) struct CssRule {
     pub(crate) check: fn(&CssFile<'_>) -> Vec<Diagnostic>,

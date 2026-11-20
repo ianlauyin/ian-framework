@@ -2,8 +2,8 @@ use std::path::Path;
 use std::{env, process};
 
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::css::selector_nested_pattern::check;
-use crate::test::rule::fe::css::file::with_source;
+use crate::rule::fe::css::file::selector_nested_pattern::check;
+use crate::test::rule::fe::css::source::with_source;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/a.css"), source, check)

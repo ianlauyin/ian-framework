@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
-use crate::rule::fe::ts::file::TsFile;
+use crate::rule::fe::ts::source::TsFile;
 
 pub(crate) struct TsFileRule {
     pub(crate) check: fn(&TsFile<'_>) -> Vec<Diagnostic>,

@@ -5,8 +5,8 @@
 use oxc_ast::ast::{ModuleExportName, Statement};
 
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::ts::file::TsFile;
 use crate::rule::fe::ts::rule::TsRule;
+use crate::rule::fe::ts::source::TsFile;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "no-default-export";

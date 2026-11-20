@@ -11,8 +11,8 @@ use oxc_ast::ast::Statement;
 
 use crate::files::{FileSet, without_dot};
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::ts::file;
 use crate::rule::fe::ts::rule::TsRule;
+use crate::rule::fe::ts::source;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "root-reexport";
@@ -125,7 +125,7 @@ fn is_ts_file(path: &Path) -> bool {
 
 fn exported_names(path: &Path, source: &str) -> BTreeSet<String> {
     let allocator = Allocator::default();
-    let Some(program) = file::parse(&allocator, path, source) else {
+    let Some(program) = source::parse(&allocator, path, source) else {
         return BTreeSet::new();
     };
     let mut names = BTreeSet::new();

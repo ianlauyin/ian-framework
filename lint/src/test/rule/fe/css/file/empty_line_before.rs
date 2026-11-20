@@ -2,8 +2,8 @@ use std::path::Path;
 use std::{env, process};
 
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::css::rule_empty_line_before::check;
-use crate::test::rule::fe::css::file::with_source;
+use crate::rule::fe::css::file::empty_line_before::check;
+use crate::test::rule::fe::css::source::with_source;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/a.css"), source, check)
@@ -11,7 +11,7 @@ fn diagnostics(source: &str) -> Vec<Diagnostic> {
 
 fn formatted(source: &str) -> String {
     with_source(Path::new("src/a.css"), source, |file| {
-        let found = crate::rule::fe::css::rule_empty_line_before::edit(file);
+        let found = crate::rule::fe::css::file::empty_line_before::edit(file);
         let edits: Vec<_> = found.iter().collect();
         crate::rule::edit::apply(source, &edits).expect("edits apply")
     })

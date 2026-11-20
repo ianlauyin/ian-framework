@@ -7,9 +7,9 @@ use crate::Failure;
 use crate::config::Ruleset;
 use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::css::file::CssFile;
-use crate::rule::fe::ts::file::TsFile;
+use crate::rule::fe::css::source::CssFile;
 use crate::rule::fe::ts::rule::TsRule;
+use crate::rule::fe::ts::source::TsFile;
 use crate::ruleset::rules;
 
 pub(crate) fn check(path: &Path, ruleset: Ruleset) -> Vec<Diagnostic> {
@@ -30,7 +30,7 @@ pub(crate) fn check(path: &Path, ruleset: Ruleset) -> Vec<Diagnostic> {
             return Vec::new();
         };
         let allocator = Allocator::default();
-        let program = crate::rule::fe::ts::file::parse(&allocator, path, &source);
+        let program = crate::rule::fe::ts::source::parse(&allocator, path, &source);
         let file = TsFile::new(path, &source, program.as_ref());
         let mut diagnostics = Vec::new();
         for rule in rules.ts {
@@ -70,7 +70,7 @@ pub(crate) fn rewrite(path: &Path, ruleset: Ruleset) -> Vec<Failure> {
                 continue;
             };
             let allocator = Allocator::default();
-            let program = crate::rule::fe::ts::file::parse(&allocator, path, &source);
+            let program = crate::rule::fe::ts::source::parse(&allocator, path, &source);
             let file = TsFile::new(path, &source, program.as_ref());
             match crate::rule::edit::replace(&source, &edit(&file)) {
                 Ok(next) => source = next,

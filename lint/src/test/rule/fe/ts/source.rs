@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use crate::rule::fe::ts::file::{TsFile, parse};
-use crate::rule::fe::ts::no_comments::check;
+use crate::rule::fe::ts::file::no_comments::check;
+use crate::rule::fe::ts::source::{TsFile, parse};
 use crate::rule::report::RuleReport;
 use oxc_allocator::Allocator;
 

@@ -2,8 +2,8 @@ use std::path::Path;
 use std::{env, process};
 
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::ts::no_comments::check;
-use crate::test::rule::fe::ts::file::with_source;
+use crate::rule::fe::ts::file::no_comments::check;
+use crate::test::rule::fe::ts::source::with_source;
 
 fn diagnostics(name: &str, source: &str) -> Vec<Diagnostic> {
     with_source(Path::new(name), source, check)
