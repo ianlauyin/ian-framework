@@ -7,7 +7,6 @@ mod mod_file;
 mod mutex_lock;
 mod no_comments;
 mod private_static;
-mod reexport_mod;
 mod result_type;
 mod source_order;
 mod super_path;

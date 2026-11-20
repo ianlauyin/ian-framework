@@ -25,12 +25,10 @@ const CODE: &str = \"APP_KEY\";
     assert!(with_source(Path::new("api/src/env.rs"), helper, &srcs(), check).is_empty());
     let gcp = "\
 const PROJECT_ENV: &str = \"GOOGLE_CLOUD_PROJECT\";
-const CREDENTIALS_ENV: &str = \"GOOGLE_APPLICATION_CREDENTIALS\";
 
 fn read() {
     let _ = env::optional(PROJECT_ENV);
-    let _ = env::required(\"GOOGLE_APPLICATION_CREDENTIALS\");
-    let _ = env::optional(CREDENTIALS_ENV);
+    let _ = env::required(\"GOOGLE_CLOUD_PROJECT\");
 }
 
 fn temp() {
@@ -72,12 +70,36 @@ fn read() {
     assert_eq!(found[1].problem, "The env name `APP_PORT` is not allowed.");
     assert_eq!(
         found[1].fix,
-        "Use `GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name."
+        "Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name."
     );
     assert_eq!(found[2].problem, "The env name `APP_KEY` is not allowed.");
     assert_eq!(found[3].problem, "An env value is read outside `env.rs`.");
     assert_eq!(found[4].problem, "An env value is read outside `env.rs`.");
     assert!(found.iter().all(|item| item.rule == "env-name"));
+}
+
+#[test]
+fn google_application_credentials_under_gcp_fails() {
+    let source = "\
+const CREDENTIALS_ENV: &str = \"GOOGLE_APPLICATION_CREDENTIALS\";
+
+fn read() {
+    let _ = env::required(\"GOOGLE_APPLICATION_CREDENTIALS\");
+    let _ = env::optional(CREDENTIALS_ENV);
+}
+";
+    let found = with_source(Path::new("api/src/gcp/project.rs"), source, &srcs(), check);
+    assert_eq!(found.len(), 2);
+    assert_eq!(
+        found[0].problem,
+        "The env name `GOOGLE_APPLICATION_CREDENTIALS` is not allowed."
+    );
+    assert_eq!(
+        found[0].fix,
+        "Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name."
+    );
+    assert_eq!(found[1].problem, found[0].problem);
+    assert_eq!(found[1].fix, found[0].fix);
 }
 
 #[test]

@@ -86,6 +86,22 @@ fn the_framework_ruleset_reports_a_framework_rule() {
 }
 
 #[test]
+fn the_framework_ruleset_allows_exception_new_in_exception_rs() {
+    let source = "fn build() {\n    Exception::__new(1, 2, 3, 4, 5);\n}\n";
+    let allowed = rust_file("exception-fw", "exception.rs", source, Ruleset::Framework);
+    assert!(allowed.iter().all(|item| item.rule != "exception-new"));
+    let found = rust_file("exception-fw-app", "app.rs", source, Ruleset::Framework);
+    assert!(found.iter().any(|item| item.rule == "exception-new"));
+}
+
+#[test]
+fn the_project_ruleset_reports_exception_new_in_exception_rs() {
+    let source = "fn build() {\n    Exception::__new(1, 2, 3, 4, 5);\n}\n";
+    let found = rust_file("exception", "exception.rs", source, Ruleset::Project);
+    assert!(found.iter().any(|item| item.rule == "exception-new"));
+}
+
+#[test]
 fn the_project_ruleset_reports_a_shared_rule() {
     let found = rust_file(
         "comment",

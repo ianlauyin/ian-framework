@@ -15,9 +15,18 @@ use crate::rule::rs::source::RsFile;
 const RULE: &str = "exception-new";
 
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
+pub(crate) const FRAMEWORK_RS_RULE: RsRule = RsRule::file(check_framework);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
-    if Place::new(file.path, file.srcs).is_file("exception.rs") {
+    check_file(file, false)
+}
+
+pub(crate) fn check_framework(file: &RsFile) -> Vec<Diagnostic> {
+    check_file(file, true)
+}
+
+fn check_file(file: &RsFile, allow_exception_rs: bool) -> Vec<Diagnostic> {
+    if allow_exception_rs && Place::new(file.path, file.srcs).is_file("exception.rs") {
         return Vec::new();
     }
     let Some(ast) = file.ast else {

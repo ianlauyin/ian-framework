@@ -1,7 +1,7 @@
 // An env value is read outside `env.rs`.
 // Read the env value through `env.rs`.
 // The env name `{name}` is not allowed.
-// Use `GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.
+// Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.
 // Why a lint rule: The library does not choose an app env name.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,7 +22,7 @@ const RULE: &str = "env-name";
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 const READS: &[&str] = &["var", "var_os", "vars", "vars_os"];
 const HELPERS: &[&str] = &["optional", "required"];
-const GOOGLE: &[&str] = &["GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"];
+const GOOGLE: &[&str] = &["GOOGLE_CLOUD_PROJECT"];
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let place = Place::new(file.path, file.srcs);
@@ -140,7 +140,7 @@ impl Pass<'_, '_> {
         self.report(
             span,
             format!("The env name `{name}` is not allowed."),
-            "Use `GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.",
+            "Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.",
         );
     }
 

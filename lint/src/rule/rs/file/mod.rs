@@ -7,7 +7,6 @@ pub(crate) mod mod_file;
 pub(crate) mod mutex_lock;
 pub(crate) mod no_comments;
 pub(crate) mod private_static;
-pub(crate) mod reexport_mod;
 pub(crate) mod result_type;
 pub(crate) mod source_order;
 pub(crate) mod super_path;
