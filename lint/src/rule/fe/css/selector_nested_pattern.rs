@@ -5,9 +5,12 @@
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Kind, is_css_whitespace};
+use crate::rule::fe::css::rule::CssRule;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "selector-nested-pattern";
+
+pub(crate) const CSS_RULE: CssRule = CssRule::new(check, None);
 
 pub(crate) fn check(file: &CssFile) -> Vec<Diagnostic> {
     let mut report = RuleReport::new(file.path, file.source, RULE);

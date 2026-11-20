@@ -24,12 +24,12 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/css/mod.rs` | The CSS rules | A class selector, an id selector, and descending specificity are not checked. |
 | `lint/src/rule/fe/css/file.rs` | The CSS source and statements for one file | |
 | `lint/src/rule/fe/css/parse.rs` | The CSS statements | |
-| `lint/src/rule/fe/css/rule.rs` | The CSS rule type and the CSS rules of each ruleset | |
+| `lint/src/rule/fe/css/rule.rs` | The CSS rule type | |
 | `lint/src/rule/fe/css/rule_empty_line_before.rs` | An empty line before a rule | The first node of a file is not checked. The first child of a block has no empty line before it. A rule after a single-line comment has no empty line before it. The formatter puts one empty line in the gap when the rule should have one. The formatter leaves one line break when the rule should have no empty line. The indent of the rule stays. |
 | `lint/src/rule/fe/css/selector_nested_pattern.rs` | A nested selector | Each selector in a list is checked on its own. A rule in an at-rule is not checked. |
 | `lint/src/rule/fe/ts/mod.rs` | The TypeScript rules | |
 | `lint/src/rule/fe/ts/file.rs` | The TypeScript source and syntax tree for one file | |
-| `lint/src/rule/fe/ts/rule.rs` | The TypeScript rule type and the TypeScript rules of each ruleset. A rule checks one file or one folder. | |
+| `lint/src/rule/fe/ts/rule.rs` | The TypeScript rule type. A rule checks one file or one folder. | |
 | `lint/src/rule/fe/ts/declaration_order.rs` | The declaration order | A private `let` is in the same group as a constant. The formatter rewrites the statement list when every statement has a group. A statement with no group leaves the file unchanged. |
 | `lint/src/rule/fe/ts/no_comments.rs` | A comment | |
 | `lint/src/rule/fe/ts/no_default_export.rs` | No default export | |
@@ -42,7 +42,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/run.rs` | The run of the Rust rules on one file or one folder | |
 | `lint/src/rule/rs/source.rs` | The Rust source and syntax tree for one file | |
 | `lint/src/rule/rs/place.rs` | The src-relative place of a Rust file | |
-| `lint/src/rule/rs/rule.rs` | The Rust rule type and the Rust rules of each ruleset. A rule checks one file or one folder. | |
+| `lint/src/rule/rs/rule.rs` | The Rust rule type. A rule checks one file or one folder. | |
 | `lint/src/rule/rs/file/mod.rs` | The Rust file rules | |
 | `lint/src/rule/rs/file/env_name.rs` | An env value and an env-name literal | A test file can read an env value and can contain an env-name literal. |
 | `lint/src/rule/rs/file/exception_code.rs` | A string literal error code in `exception!` | |

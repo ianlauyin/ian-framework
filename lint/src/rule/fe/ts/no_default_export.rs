@@ -6,9 +6,12 @@ use oxc_ast::ast::{ModuleExportName, Statement};
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::fe::ts::file::TsFile;
+use crate::rule::fe::ts::rule::TsRule;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "no-default-export";
+
+pub(crate) const TS_RULE: TsRule = TsRule::file(check, None);
 
 pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {

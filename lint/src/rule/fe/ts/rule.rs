@@ -3,14 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
-use crate::rule::fe::ts::declaration_order;
 use crate::rule::fe::ts::file::TsFile;
-use crate::rule::fe::ts::folder::index_file;
-use crate::rule::fe::ts::folder::root_reexport;
-use crate::rule::fe::ts::folder::test_path;
-use crate::rule::fe::ts::no_comments;
-use crate::rule::fe::ts::no_default_export;
-use crate::rule::fe::ts::no_restricted_imports;
 
 pub(crate) struct TsFileRule {
     pub(crate) check: fn(&TsFile<'_>) -> Vec<Diagnostic>,
@@ -42,20 +35,3 @@ impl TsRule {
         Self::Folder(TsFolderRule { check, edit })
     }
 }
-
-pub(crate) const FRAMEWORK: &[TsRule] = &[
-    TsRule::file(no_restricted_imports::check, None),
-    TsRule::file(no_comments::check, None),
-    TsRule::file(no_default_export::check, None),
-    TsRule::file(declaration_order::check, Some(declaration_order::edit)),
-    TsRule::folder(index_file::check, None),
-    TsRule::folder(root_reexport::check, None),
-    TsRule::folder(test_path::check, None),
-];
-
-pub(crate) const PROJECT: &[TsRule] = &[
-    TsRule::file(no_restricted_imports::check, None),
-    TsRule::file(no_comments::check, None),
-    TsRule::file(declaration_order::check, Some(declaration_order::edit)),
-    TsRule::folder(test_path::check, None),
-];

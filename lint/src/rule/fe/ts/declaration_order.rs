@@ -8,9 +8,13 @@ use oxc_span::GetSpan;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::{Edit, piece_ranges};
 use crate::rule::fe::ts::file::TsFile;
+use crate::rule::fe::ts::rule::TsRule;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "declaration-order";
+
+pub(crate) const TS_RULE: TsRule = TsRule::file(check, Some(edit));
+
 const IMPORT: u8 = 0;
 const PRIVATE_TYPE_OR_CONSTANT: u8 = 1;
 const EXPORT: u8 = 2;

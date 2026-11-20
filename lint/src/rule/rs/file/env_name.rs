@@ -14,9 +14,12 @@ use syn::{Expr, ExprCall, ExprLit, ExprMacro, Ident, Item, Lit, UseTree};
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
 use crate::rule::rs::place::Place;
+use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "env-name";
+
+pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
 const READS: &[&str] = &["var", "var_os", "vars", "vars_os"];
 const HELPERS: &[&str] = &["optional", "required"];
 const GOOGLE: &[&str] = &["GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"];

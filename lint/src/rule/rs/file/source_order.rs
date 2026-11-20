@@ -11,9 +11,13 @@ use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
 use crate::rule::report::RuleReport;
 use crate::rule::rs::file::impl_order::Kind;
+use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "source-order";
+
+pub(crate) const RS_RULE: RsRule = RsRule::file(check, Some(edit));
+
 const MOD: u8 = 0;
 const USE: u8 = 1;
 const PUB_MOD: u8 = 2;

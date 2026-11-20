@@ -8,8 +8,11 @@ use std::path::{Path, PathBuf};
 
 use crate::files::{FileSet, without_dot};
 use crate::rule::diagnostic::Diagnostic;
+use crate::rule::fe::ts::rule::TsRule;
 
 const RULE: &str = "test-path";
+
+pub(crate) const TS_RULE: TsRule = TsRule::folder(check, None);
 
 pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let mut diagnostics = source_tests(path, files);
