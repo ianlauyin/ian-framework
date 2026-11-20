@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
@@ -23,7 +23,7 @@ const PUBLIC: u8 = 6;
 const PRIVATE: u8 = 7;
 const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants, then public items, then private items.";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };

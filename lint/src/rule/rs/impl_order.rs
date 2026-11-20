@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
@@ -14,7 +14,7 @@ use crate::rule::finder::Finder;
 
 const RULE: &str = "impl-order";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };

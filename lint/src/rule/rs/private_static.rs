@@ -3,7 +3,7 @@
 // Why a lint rule: A static is private. Visibility on a static exposes the value.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 
@@ -12,7 +12,7 @@ use crate::rule::finder::Finder;
 
 const RULE: &str = "private-static";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };

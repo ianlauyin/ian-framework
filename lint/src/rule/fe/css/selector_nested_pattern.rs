@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::fe::css::parse::{Kind, is_css_whitespace, parse};
+use crate::rule::fe::css::parse::{Kind, is_css_whitespace};
 use crate::rule::finder::Finder;
 
 const RULE: &str = "selector-nested-pattern";
@@ -18,10 +18,9 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let items = parse(source);
-    let mut finder = Finder::new(path, source, RULE);
-    walk(&items, false, source, &mut finder);
-    finder.finish()
+    Finder::css_source(path, source, RULE, |items, finder| {
+        walk(items, false, source, finder);
+    })
 }
 
 fn is_nested_selector(selector: &str) -> bool {

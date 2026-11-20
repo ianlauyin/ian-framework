@@ -11,7 +11,7 @@ fn lint(name: &str, source: &str) -> Vec<Diagnostic> {
     fs::create_dir_all(&root).expect("test folder is created");
     let path = root.join("lib.rs");
     fs::write(&path, source).expect("file is written");
-    let found = check(&path);
+    let found = check(&path, &[]);
     fs::remove_dir_all(root).expect("test folder is removed");
     found
 }
@@ -98,5 +98,5 @@ fn sample() {}
 #[test]
 fn a_file_that_cannot_be_read_has_no_diagnostic() {
     let path = env::temp_dir().join(format!("ian-lint-no-comments-missing-{}", process::id()));
-    assert!(check(&path).is_empty());
+    assert!(check(&path, &[]).is_empty());
 }

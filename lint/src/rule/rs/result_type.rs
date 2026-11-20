@@ -3,7 +3,7 @@
 // Why a lint rule: A failure is an `Exception`. A trait impl keeps the trait's error type.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::{GenericArgument, ImplItem, Item, PathArguments, ReturnType, Type};
@@ -13,7 +13,7 @@ use crate::rule::finder::Finder;
 
 const RULE: &str = "result-type";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };

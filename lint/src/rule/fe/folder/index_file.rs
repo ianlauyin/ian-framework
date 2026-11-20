@@ -2,14 +2,14 @@
 // Add an `index.ts`.
 // Why a lint rule: A folder has an `index.ts` so a project can import the folder.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
 
 const RULE: &str = "folder-index";
 
-pub fn check(path: &Path, files: &FileSet) -> Vec<Diagnostic> {
+pub fn check(path: &Path, files: &FileSet, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if files.has_file(&path.join("index.ts")) {
         return Vec::new();
     }

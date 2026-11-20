@@ -61,6 +61,19 @@ fn rust_source_has_no_diagnostic_when_the_source_does_not_parse() {
 }
 
 #[test]
+fn css_source_reports_from_the_closure() {
+    let source = "a {}\n";
+    let found = Finder::css_source(Path::new("src/a.css"), source, "sample", |items, finder| {
+        assert_eq!(items.len(), 1);
+        finder.report(0, "`a` is wrong.", "Change `a`.");
+    });
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 1);
+    assert_eq!(found[0].rule, "sample");
+    assert_eq!(found[0].problem, "`a` is wrong.");
+}
+
+#[test]
 fn typescript_source_reports_from_the_closure() {
     let source = "const a = 1;\n";
     let found = Finder::typescript_source(

@@ -3,7 +3,7 @@
 // Why a lint rule: A comment hides a decision that belongs in the catalog.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ra_ap_rustc_lexer::{FrontmatterAllowed, TokenKind, strip_shebang, tokenize};
 
@@ -12,7 +12,7 @@ use crate::rule::finder::Finder;
 
 const RULE: &str = "no-comments";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };

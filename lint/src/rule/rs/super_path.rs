@@ -3,7 +3,7 @@
 // Why a lint rule: A `super::super` path breaks when the module moves.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -14,7 +14,7 @@ use crate::rule::finder::Finder;
 
 const RULE: &str = "super-path";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };

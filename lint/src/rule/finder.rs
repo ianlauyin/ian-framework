@@ -6,6 +6,7 @@ use oxc_span::SourceType;
 use proc_macro2::Span;
 
 use crate::diagnostic::Diagnostic;
+use crate::rule::fe::css::parse::{Item, parse};
 
 pub struct Finder<'a> {
     path: &'a Path,
@@ -50,6 +51,18 @@ impl<'a> Finder<'a> {
         };
         let mut finder = Finder::new(path, source, rule);
         f(&file, &mut finder);
+        finder.finish()
+    }
+
+    pub(crate) fn css_source(
+        path: &'a Path,
+        source: &'a str,
+        rule: &'static str,
+        f: impl FnOnce(&[Item], &mut Finder<'a>),
+    ) -> Vec<Diagnostic> {
+        let items = parse(source);
+        let mut finder = Finder::new(path, source, rule);
+        f(&items, &mut finder);
         finder.finish()
     }
 

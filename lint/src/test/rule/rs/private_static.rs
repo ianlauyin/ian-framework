@@ -11,7 +11,7 @@ fn lint(name: &str, source: &str) -> Vec<Diagnostic> {
     fs::create_dir_all(&root).expect("test folder is created");
     let path = root.join("lib.rs");
     fs::write(&path, source).expect("file is written");
-    let found = check(&path);
+    let found = check(&path, &[]);
     fs::remove_dir_all(root).expect("test folder is removed");
     found
 }

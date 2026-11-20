@@ -3,11 +3,8 @@ use std::path::{Path, PathBuf};
 use crate::config::Ruleset;
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
-use crate::rule::fe::css;
-use crate::rule::fe::folder as fe_folder;
-use crate::rule::fe::ts;
+use crate::rule::fe;
 use crate::rule::rs;
-use crate::rule::rs::folder as rs_folder;
 
 pub(crate) struct Rules {
     pub(crate) css: &'static [fn(&Path) -> Vec<Diagnostic>],
@@ -26,56 +23,62 @@ pub(crate) enum RsRule {
 }
 
 const FRAMEWORK: Rules = Rules {
-    css: &[css::rule_empty_line_before, css::selector_nested_pattern],
+    css: &[
+        fe::css::rule_empty_line_before::check,
+        fe::css::selector_nested_pattern::check,
+    ],
     ts: &[
-        TsRule::File(ts::no_restricted_imports),
-        TsRule::File(ts::no_comments),
-        TsRule::File(ts::no_default_export),
-        TsRule::File(ts::declaration_order),
-        TsRule::Folder(fe_folder::index_file),
-        TsRule::Folder(fe_folder::root_reexport),
-        TsRule::Folder(fe_folder::test_path),
+        TsRule::File(fe::ts::no_restricted_imports::check),
+        TsRule::File(fe::ts::no_comments::check),
+        TsRule::File(fe::ts::no_default_export::check),
+        TsRule::File(fe::ts::declaration_order::check),
+        TsRule::Folder(fe::folder::index_file::check),
+        TsRule::Folder(fe::folder::root_reexport::check),
+        TsRule::Folder(fe::folder::test_path::check),
     ],
     rs: &[
-        RsRule::File(rs::private_static),
-        RsRule::File(rs::no_comments),
-        RsRule::File(rs::super_path),
+        RsRule::File(rs::private_static::check),
+        RsRule::File(rs::no_comments::check),
+        RsRule::File(rs::super_path::check),
         RsRule::File(rs::test_attr::check),
         RsRule::File(rs::env_name::check),
         RsRule::File(rs::exception_new::check),
-        RsRule::File(rs::exception_code),
+        RsRule::File(rs::exception_code::check),
         RsRule::File(rs::mutex_lock::check),
-        RsRule::File(rs::source_order),
-        RsRule::File(rs::impl_order),
+        RsRule::File(rs::source_order::check),
+        RsRule::File(rs::impl_order::check),
         RsRule::File(rs::mod_file::check),
-        RsRule::File(rs::inherent_impl),
-        RsRule::File(rs::reexport_mod),
-        RsRule::File(rs::result_type),
-        RsRule::Folder(rs_folder::test_tree),
+        RsRule::File(rs::inherent_impl::check),
+        RsRule::File(rs::reexport_mod::check),
+        RsRule::File(rs::result_type::check),
+        RsRule::Folder(rs::folder::test_tree::check),
     ],
 };
 
 const PROJECT: Rules = Rules {
-    css: &[css::rule_empty_line_before, css::selector_nested_pattern],
+    css: &[
+        fe::css::rule_empty_line_before::check,
+        fe::css::selector_nested_pattern::check,
+    ],
     ts: &[
-        TsRule::File(ts::no_restricted_imports),
-        TsRule::File(ts::no_comments),
-        TsRule::File(ts::declaration_order),
-        TsRule::Folder(fe_folder::test_path),
+        TsRule::File(fe::ts::no_restricted_imports::check),
+        TsRule::File(fe::ts::no_comments::check),
+        TsRule::File(fe::ts::declaration_order::check),
+        TsRule::Folder(fe::folder::test_path::check),
     ],
     rs: &[
-        RsRule::File(rs::private_static),
-        RsRule::File(rs::no_comments),
-        RsRule::File(rs::super_path),
+        RsRule::File(rs::private_static::check),
+        RsRule::File(rs::no_comments::check),
+        RsRule::File(rs::super_path::check),
         RsRule::File(rs::test_attr::check),
         RsRule::File(rs::exception_new::check),
-        RsRule::File(rs::exception_code),
+        RsRule::File(rs::exception_code::check),
         RsRule::File(rs::mutex_lock::check),
-        RsRule::File(rs::impl_order),
-        RsRule::File(rs::inherent_impl),
-        RsRule::File(rs::reexport_mod),
-        RsRule::File(rs::result_type),
-        RsRule::Folder(rs_folder::test_tree),
+        RsRule::File(rs::impl_order::check),
+        RsRule::File(rs::inherent_impl::check),
+        RsRule::File(rs::reexport_mod::check),
+        RsRule::File(rs::result_type::check),
+        RsRule::Folder(rs::folder::test_tree::check),
     ],
 };
 

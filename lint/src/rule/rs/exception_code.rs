@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use proc_macro2::{Span, TokenStream, TokenTree};
 use syn::visit::Visit;
@@ -15,7 +15,7 @@ use crate::rule::finder::Finder;
 
 const RULE: &str = "exception-code";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
+pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let Ok(source) = fs::read_to_string(path) else {
         return Vec::new();
     };

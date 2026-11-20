@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::fe::css::parse::{Item, Kind, parse};
+use crate::rule::fe::css::parse::{Item, Kind};
 use crate::rule::finder::Finder;
 
 const RULE: &str = "rule-empty-line-before";
@@ -20,11 +20,10 @@ pub fn check(path: &Path) -> Vec<Diagnostic> {
 }
 
 pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let items = parse(source);
     let lines = Lines::new(source);
-    let mut finder = Finder::new(path, source, RULE);
-    walk(&items, None, source, &lines, &mut finder);
-    finder.finish()
+    Finder::css_source(path, source, RULE, |items, finder| {
+        walk(items, None, source, &lines, finder);
+    })
 }
 
 fn walk(items: &[Item], brace: Option<u32>, source: &str, lines: &Lines, finder: &mut Finder<'_>) {
