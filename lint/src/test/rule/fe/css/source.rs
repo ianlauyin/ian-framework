@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::parse;
+use crate::rule::fe::css::source::CssFile;
 use crate::rule::report::RuleReport;
 
 pub(crate) fn with_source<T>(path: &Path, source: &str, f: impl FnOnce(&CssFile) -> T) -> T {

@@ -13,14 +13,14 @@ pub(crate) struct Rules {
 
 const FRAMEWORK: Rules = Rules {
     css: &[
-        fe::css::rule_empty_line_before::CSS_RULE,
-        fe::css::selector_nested_pattern::CSS_RULE,
+        fe::css::file::empty_line_before::CSS_RULE,
+        fe::css::file::selector_nested_pattern::CSS_RULE,
     ],
     ts: &[
-        fe::ts::no_restricted_imports::TS_RULE,
-        fe::ts::no_comments::TS_RULE,
-        fe::ts::no_default_export::TS_RULE,
-        fe::ts::declaration_order::TS_RULE,
+        fe::ts::file::no_restricted_imports::TS_RULE,
+        fe::ts::file::no_comments::TS_RULE,
+        fe::ts::file::no_default_export::TS_RULE,
+        fe::ts::file::declaration_order::TS_RULE,
         fe::ts::folder::index_file::TS_RULE,
         fe::ts::folder::root_reexport::TS_RULE,
         fe::ts::folder::test_path::TS_RULE,
@@ -46,13 +46,13 @@ const FRAMEWORK: Rules = Rules {
 
 const PROJECT: Rules = Rules {
     css: &[
-        fe::css::rule_empty_line_before::CSS_RULE,
-        fe::css::selector_nested_pattern::CSS_RULE,
+        fe::css::file::empty_line_before::CSS_RULE,
+        fe::css::file::selector_nested_pattern::CSS_RULE,
     ],
     ts: &[
-        fe::ts::no_restricted_imports::TS_RULE,
-        fe::ts::no_comments::TS_RULE,
-        fe::ts::declaration_order::TS_RULE,
+        fe::ts::file::no_restricted_imports::TS_RULE,
+        fe::ts::file::no_comments::TS_RULE,
+        fe::ts::file::declaration_order::TS_RULE,
         fe::ts::folder::test_path::TS_RULE,
     ],
     rs: &[

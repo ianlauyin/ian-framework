@@ -8,9 +8,9 @@ use std::path::Path;
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
-use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Item, Kind};
 use crate::rule::fe::css::rule::CssRule;
+use crate::rule::fe::css::source::CssFile;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "rule-empty-line-before";

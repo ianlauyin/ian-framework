@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::ts::declaration_order::{check, edit};
-use crate::test::rule::fe::ts::file::with_source;
+use crate::rule::fe::ts::file::declaration_order::{check, edit};
+use crate::test::rule::fe::ts::source::with_source;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/a.ts"), source, check)
