@@ -1,5 +1,5 @@
 // This item is out of source order.
-// Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants, then public items, then private items.
+// Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants and private `macro_rules!`, then public items, then private items.
 // Why a lint rule: That order keeps each kind of item in one place.
 
 use std::collections::BTreeSet;
@@ -24,7 +24,7 @@ const STATIC: u8 = 4;
 const CONSTANT: u8 = 5;
 const PUBLIC: u8 = 6;
 const PRIVATE: u8 = 7;
-const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants, then public items, then private items.";
+const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants and private `macro_rules!`, then public items, then private items.";
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {
@@ -91,6 +91,8 @@ fn group(item: &Item, private_types: &BTreeSet<String>) -> u8 {
                 .any(|attr| attr.path().is_ident("macro_export"))
             {
                 PUBLIC
+            } else if item.mac.path.is_ident("macro_rules") {
+                CONSTANT
             } else {
                 PRIVATE
             }

@@ -18,16 +18,15 @@ fn a_folder_without_an_index_fails() {
     assert_eq!(found[0].line, 1);
     assert_eq!(found[0].column, 1);
     assert_eq!(found[0].rule, "folder-index");
-    assert_eq!(found[0].problem, "The folder has no `index.ts`.");
+    assert_eq!(
+        found[0].problem,
+        "The folder has no `index.ts` or `index.tsx`."
+    );
     assert_eq!(found[0].fix, "Add an `index.ts`.");
 }
 
 #[test]
-fn a_folder_with_only_an_index_tsx_fails() {
+fn a_folder_with_only_an_index_tsx_passes() {
     let files = FileSet::from_paths([PathBuf::from("app/src/index.tsx")]);
-    let found = check(Path::new("app/src"), &files, &[]);
-    assert_eq!(found.len(), 1);
-    assert_eq!(found[0].rule, "folder-index");
-    assert_eq!(found[0].problem, "The folder has no `index.ts`.");
-    assert_eq!(found[0].fix, "Add an `index.ts`.");
+    assert!(check(Path::new("app/src"), &files, &[]).is_empty());
 }

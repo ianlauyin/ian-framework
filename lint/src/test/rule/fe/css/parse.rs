@@ -1,6 +1,4 @@
-use std::path::Path;
-
-use crate::rule::fe::css::parse::{Item, Kind, is_css_whitespace, parse, read};
+use crate::rule::fe::css::parse::{Item, Kind, is_css_whitespace, parse};
 
 #[test]
 fn a_rule_holds_its_declarations() {
@@ -43,11 +41,6 @@ fn css_whitespace_is_space_tab_and_line_breaks() {
     assert!(is_css_whitespace(b' '));
     assert!(is_css_whitespace(b'\n'));
     assert!(!is_css_whitespace(b'a'));
-}
-
-#[test]
-fn a_missing_file_has_no_source() {
-    assert!(read(Path::new("missing/a.css")).is_none());
 }
 
 fn text<'a>(source: &'a str, item: &Item) -> &'a str {

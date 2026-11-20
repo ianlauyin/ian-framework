@@ -115,8 +115,8 @@ fn split_commas(selector: &str) -> Vec<(usize, &str)> {
     let mut parts = Vec::new();
     let mut start = 0;
     let mut index = 0;
-    let mut paren = 0i32;
-    let mut bracket = 0i32;
+    let mut paren = 0u32;
+    let mut bracket = 0u32;
     while index < bytes.len() {
         let byte = bytes[index];
         if byte == b'\\' {

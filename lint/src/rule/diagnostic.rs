@@ -38,9 +38,7 @@ impl Diagnostic {
         problem: impl Into<String>,
         fix: impl Into<String>,
     ) -> Self {
-        let before = &source[..source.floor_char_boundary(offset as usize)];
-        let line = before.matches('\n').count() as u32 + 1;
-        let column = before.rsplit('\n').next().unwrap_or("").chars().count() as u32 + 1;
+        let (line, column) = line_column(source, offset);
         Self::new(path, line, column, rule, problem, fix)
     }
 }
@@ -58,4 +56,11 @@ impl fmt::Display for Diagnostic {
             self.fix
         )
     }
+}
+
+pub(crate) fn line_column(source: &str, offset: u32) -> (u32, u32) {
+    let before = &source[..source.floor_char_boundary(offset as usize)];
+    let line = before.matches('\n').count() as u32 + 1;
+    let column = before.rsplit('\n').next().unwrap_or("").chars().count() as u32 + 1;
+    (line, column)
 }

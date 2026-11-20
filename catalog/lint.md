@@ -10,7 +10,7 @@ This file is the catalog of the linter in `lint/`.
 | --- | --- | --- |
 | `lint/Cargo.toml` | The crate `ian-lint` | |
 | `lint/src/config.rs` | The configuration file and the side | `ruleset` is `framework` or `project`. A side checks the frontend, Rust, or both. |
-| `lint/src/check.rs` | The check of one root folder | |
+| `lint/src/check.rs` | The check of one root folder | A file that the linter cannot read is a failure. A TypeScript or Rust file that does not parse is a failure. The rules do not check that file. |
 | `lint/src/main.rs` | The `ian-lint` program, the report, and the failure | `fe` checks only the frontend. `rs` checks only Rust. No side argument checks both. The other argument is the root. The root is `.` when it is omitted. The arguments can be in either order. Two roots, or two sides, stops the run. |
 | `lint/src/files.rs` | The file tree and the file kinds | |
 | `lint/src/ruleset.rs` | The rules in each ruleset | `FRAMEWORK` and `PROJECT` each hold `css`, `ts`, and `rs`. The `framework` ruleset runs `FRAMEWORK`. The `project` ruleset runs `PROJECT`. |
@@ -21,7 +21,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/run.rs` | The run of the frontend rules on one file or one folder | |
 | `lint/src/rule/fe/css/mod.rs` | The CSS rules | A class selector, an id selector, and descending specificity are not checked. |
 | `lint/src/rule/fe/css/source.rs` | The CSS source and statements for one file | |
-| `lint/src/rule/fe/css/parse.rs` | The CSS statements | lightningcss gives the start of each rule that it knows. The byte scanner gives each span, each declaration, and each comment. The byte scanner also parses each rule that lightningcss drops. A rule from lightningcss that is outside its block, or that overlaps the previous item, is not used. When lightningcss fails, the byte scanner parses the full file. A stray `}` is skipped. A `{` or a `}` in parentheses or brackets does not open or close a block. A statement that starts with `@` is an at-rule. A statement ends after `;`, before `}`, or at the end of the file. An unclosed block ends at the end of the file. |
+| `lint/src/rule/fe/css/parse.rs` | The CSS statements | lightningcss gives the start of each rule that it knows. The byte scanner gives each span, each declaration, and each comment. The byte scanner also parses each rule that lightningcss drops. A rule from lightningcss that is outside its block, or that overlaps the previous item, is not used. When lightningcss fails, the byte scanner parses the full file. A stray `}` is skipped. A `{` or a `}` in parentheses or brackets does not open or close a block. A stray `)` or `]` does not change the depth. A statement that starts with `@` is an at-rule. A statement ends after `;`, before `}`, or at the end of the file. An unclosed block ends at the end of the file. |
 | `lint/src/rule/fe/css/position.rs` | The byte offset of a lightningcss location | A line number starts at 0. A column starts at 1 and counts UTF-16 units. `\r\n`, `\r`, `\n`, and a form feed each end a line. |
 | `lint/src/rule/fe/css/scan.rs` | The byte scanner that finds the end of a statement or a block | |
 | `lint/src/rule/fe/css/sheet.rs` | The items for the rules that lightningcss gives | |
@@ -38,7 +38,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/ts/file/no_default_export.rs` | No default export | |
 | `lint/src/rule/fe/ts/file/no_restricted_imports.rs` | The import path rule | |
 | `lint/src/rule/fe/ts/folder/mod.rs` | The frontend folder rules | |
-| `lint/src/rule/fe/ts/folder/index_file.rs` | Each source folder has an `index.ts` | |
+| `lint/src/rule/fe/ts/folder/index_file.rs` | Each source folder has an `index.ts` or an `index.tsx` | |
 | `lint/src/rule/fe/ts/folder/root_reexport.rs` | The root index re-exports each feature | A nested index can leave out an export for a sibling file. |
 | `lint/src/rule/fe/ts/folder/test_path.rs` | The test path matches the source path | A source file does not need a test file. |
 | `lint/src/rule/rs/mod.rs` | The Rust rules | |
@@ -57,7 +57,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/file/no_comments.rs` | A comment | |
 | `lint/src/rule/rs/file/private_static.rs` | A private static | |
 | `lint/src/rule/rs/file/result_type.rs` | A fallible function returns `Result<T, Exception>` | |
-| `lint/src/rule/rs/file/source_order.rs` | The source order | |
+| `lint/src/rule/rs/file/source_order.rs` | The source order | A private `macro_rules!` is in the same group as a constant. A `macro_rules!` must come before the items that use it. |
 | `lint/src/rule/rs/file/super_path.rs` | A `super::super` path | |
 | `lint/src/rule/rs/file/test_attr.rs` | A test outside the test folder | `mod test` in `lib.rs` or `main.rs` stays. |
 | `lint/src/rule/rs/folder/mod.rs` | The Rust folder rules | |

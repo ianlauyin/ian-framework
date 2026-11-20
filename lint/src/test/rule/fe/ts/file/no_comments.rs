@@ -73,7 +73,7 @@ fn a_file_extension_oxc_does_not_accept_has_no_diagnostic() {
 }
 
 #[test]
-fn a_file_that_cannot_be_read_has_no_diagnostic() {
+fn a_file_that_cannot_be_read_is_a_failure() {
     let path = env::temp_dir().join(format!("ian-lint-no-comments-ts-missing-{}", process::id()));
-    assert!(crate::rule::fe::run::check(&path, crate::config::Ruleset::Framework).is_empty());
+    assert!(crate::rule::fe::run::check(&path, crate::config::Ruleset::Framework).is_err());
 }

@@ -11,35 +11,29 @@ use crate::rule::fe::ts::rule::TsRule;
 use crate::rule::fe::ts::source::TsFile;
 use crate::ruleset::rules;
 
-pub(crate) fn check(path: &Path, ruleset: Ruleset) -> Vec<Diagnostic> {
+pub(crate) fn check(path: &Path, ruleset: Ruleset) -> Result<Vec<Diagnostic>, String> {
     let rules = rules(ruleset);
+    let source =
+        fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut diagnostics = Vec::new();
     if crate::files::file_name(path).ends_with(".css") {
-        let Some(source) = crate::rule::fe::css::parse::read(path) else {
-            return Vec::new();
-        };
         let items = crate::rule::fe::css::parse::parse(&source);
         let file = CssFile::new(path, &source, &items);
-        let mut diagnostics = Vec::new();
         for rule in rules.css {
             diagnostics.extend((rule.check)(&file));
         }
-        diagnostics
     } else {
-        let Ok(source) = fs::read_to_string(path) else {
-            return Vec::new();
-        };
         let allocator = Allocator::default();
-        let program = crate::rule::fe::ts::source::parse(&allocator, path, &source);
-        let file = TsFile::new(path, &source, program.as_ref());
-        let mut diagnostics = Vec::new();
+        let program = crate::rule::fe::ts::source::parse_valid(&allocator, path, &source)?;
+        let file = TsFile::new(path, &source, Some(&program));
         for rule in rules.ts {
             let TsRule::File(rule) = rule else {
                 continue;
             };
             diagnostics.extend((rule.check)(&file));
         }
-        diagnostics
     }
+    Ok(diagnostics)
 }
 
 pub(crate) fn check_folder(

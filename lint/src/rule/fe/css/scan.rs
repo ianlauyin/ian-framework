@@ -13,8 +13,8 @@ pub(crate) enum Bounds {
 
 pub(crate) fn bounds(source: &str, start: usize, limit: usize) -> Bounds {
     let mut cursor = Cursor::new(source, start, limit);
-    let mut paren = 0i32;
-    let mut bracket = 0i32;
+    let mut paren = 0u32;
+    let mut bracket = 0u32;
     while !cursor.eof() {
         let byte = cursor.byte();
         if byte == b'\\' {
@@ -131,8 +131,8 @@ impl<'a> Cursor<'a> {
 
     fn matching_close(&mut self) -> (usize, usize) {
         let mut depth = 1i32;
-        let mut paren = 0i32;
-        let mut bracket = 0i32;
+        let mut paren = 0u32;
+        let mut bracket = 0u32;
         while !self.eof() {
             let byte = self.byte();
             if byte == b'\\' {

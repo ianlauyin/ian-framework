@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use lightningcss::stylesheet::ParserOptions;
 use lightningcss::stylesheet::StyleSheet;
 
@@ -55,10 +53,6 @@ pub(crate) fn parse(source: &str) -> Vec<Item> {
 
 pub(crate) fn is_css_whitespace(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | b'\x0c')
-}
-
-pub(crate) fn read(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path).ok()
 }
 
 pub(crate) fn merge(

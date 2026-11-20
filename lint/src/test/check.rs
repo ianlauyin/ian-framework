@@ -151,3 +151,16 @@ fn check_rs_reports_no_diagnostics_when_only_the_frontend_has_a_comment() {
     assert!(report.diagnostics.is_empty());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn check_reports_a_file_that_does_not_parse_as_a_failure() {
+    let root = temp_root("parse-error");
+    write_both(&root, "const a = ;\n", "fn f( {}\n");
+
+    let report = crate::check::check(&root, crate::config::Side::All);
+    assert!(report.diagnostics.is_empty());
+    assert_eq!(report.failures.len(), 2);
+    assert!(report.failures[0].output.contains("src/app.rs:1:"));
+    assert!(report.failures[1].output.contains("src/app.ts:1:"));
+    fs::remove_dir_all(root).unwrap();
+}

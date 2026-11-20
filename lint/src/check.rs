@@ -22,7 +22,7 @@ pub(crate) fn check(root: &Path, side: Side) -> Report {
             output: walk_errors.join("\n"),
         });
     }
-    let mut diagnostics = check_files(&files, &config, side);
+    let mut diagnostics = check_files(&files, &config, side, &mut failures);
     diagnostics.extend(check_folders(&files, &config, side));
     diagnostics.sort();
     Report {
@@ -31,17 +31,24 @@ pub(crate) fn check(root: &Path, side: Side) -> Report {
     }
 }
 
-fn check_files(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnostic> {
+fn check_files(
+    files: &FileSet,
+    config: &Config,
+    side: Side,
+    failures: &mut Vec<Failure>,
+) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for path in files.files() {
-        if side.checks_fe() && crate::files::is_frontend_source(path, &config.fe) {
-            diagnostics.extend(crate::rule::fe::run::check(path, config.ruleset));
+        let result = if side.checks_fe() && crate::files::is_frontend_source(path, &config.fe) {
+            crate::rule::fe::run::check(path, config.ruleset)
         } else if side.checks_rs() && crate::files::is_rust_source(path, &config.be) {
-            diagnostics.extend(crate::rule::rs::run::check(
-                path,
-                &config.be,
-                config.ruleset,
-            ));
+            crate::rule::rs::run::check(path, &config.be, config.ruleset)
+        } else {
+            continue;
+        };
+        match result {
+            Ok(found) => diagnostics.extend(found),
+            Err(output) => failures.push(Failure { output }),
         }
     }
     diagnostics

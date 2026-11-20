@@ -210,7 +210,7 @@ a {
 }
 
 #[test]
-fn a_file_that_cannot_be_read_has_no_diagnostic() {
+fn a_file_that_cannot_be_read_is_a_failure() {
     let path = env::temp_dir().join(format!(
         "ian-lint-selector-nested-missing-{}",
         process::id()
@@ -220,6 +220,30 @@ fn a_file_that_cannot_be_read_has_no_diagnostic() {
             &path.with_extension("css"),
             crate::config::Ruleset::Framework
         )
-        .is_empty()
+        .is_err()
     );
+}
+
+#[test]
+fn a_rule_after_a_stray_close_paren_is_checked() {
+    let source = "\
+.a {
+  width: calc(1px));
+}
+
+.b {
+  div {}
+}
+";
+    let found = diagnostics(source);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 6);
+    assert_eq!(found[0].problem, "`div` is not a nested selector.");
+}
+
+#[test]
+fn a_comma_after_a_stray_close_paren_splits_the_selector() {
+    let found = diagnostics(".a {\n  .b), div {}\n}\n");
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].problem, "`div` is not a nested selector.");
 }

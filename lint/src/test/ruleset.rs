@@ -16,7 +16,7 @@ fn rust_file(name: &str, relative: &str, source: &str, ruleset: Ruleset) -> Vec<
     let path = src.join(relative);
     fs::create_dir_all(path.parent().expect("path has a folder")).expect("folder is created");
     fs::write(&path, source).expect("file is written");
-    let found = check_rs_file(&path, &[src], ruleset);
+    let found = check_rs_file(&path, &[src], ruleset).expect("the file is checked");
     fs::remove_dir_all(root).expect("test folder is removed");
     found
 }
@@ -29,7 +29,7 @@ fn typescript_file(name: &str, source: &str, ruleset: Ruleset) -> Vec<Diagnostic
     fs::create_dir_all(&root).expect("test folder is created");
     let path = root.join("view.ts");
     fs::write(&path, source).expect("file is written");
-    let found = check_fe_file(&path, ruleset);
+    let found = check_fe_file(&path, ruleset).expect("the file is checked");
     fs::remove_dir_all(root).expect("test folder is removed");
     found
 }
