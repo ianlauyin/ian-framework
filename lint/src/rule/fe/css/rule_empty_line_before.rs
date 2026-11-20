@@ -10,9 +10,12 @@ use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
 use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Item, Kind};
+use crate::rule::fe::css::rule::CssRule;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "rule-empty-line-before";
+
+pub(crate) const CSS_RULE: CssRule = CssRule::new(check, Some(edit));
 
 pub(crate) fn check(file: &CssFile) -> Vec<Diagnostic> {
     scan(file).0

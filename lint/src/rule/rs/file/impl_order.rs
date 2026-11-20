@@ -10,9 +10,12 @@ use syn::{Item, Type, Visibility};
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
 use crate::rule::rs::file::source_order::Sort;
+use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "impl-order";
+
+pub(crate) const RS_RULE: RsRule = RsRule::file(check, Some(edit));
 
 pub(crate) enum Kind {
     Other,

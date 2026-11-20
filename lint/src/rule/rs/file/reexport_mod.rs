@@ -8,9 +8,12 @@ use syn::{Item, UseTree, Visibility};
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
+use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "reexport-mod";
+
+pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {

@@ -9,9 +9,12 @@ use syn::{Expr, ExprMethodCall};
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
 use crate::rule::rs::place::Place;
+use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "mutex-lock";
+
+pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     if Place::new(file.path, file.srcs).is_file("mutex.rs") {

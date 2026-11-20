@@ -9,9 +9,12 @@ use crate::files::file_name;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
 use crate::rule::rs::place::Place;
+use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "mod-file";
+
+pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     if file_name(file.path) != "mod.rs" || Place::new(file.path, file.srcs).in_test() {
