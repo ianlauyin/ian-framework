@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 ignore = "0.4.34"
+lightningcss = { version = "1.0.0-alpha.72", default-features = false }
 oxc_allocator = "0.159.0"
 oxc_ast = "0.159.0"
 oxc_ast_visit = "0.159.0"

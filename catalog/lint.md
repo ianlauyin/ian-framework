@@ -23,7 +23,10 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/run.rs` | The run of the frontend rules on one file or one folder | |
 | `lint/src/rule/fe/css/mod.rs` | The CSS rules | A class selector, an id selector, and descending specificity are not checked. |
 | `lint/src/rule/fe/css/source.rs` | The CSS source and statements for one file | |
-| `lint/src/rule/fe/css/parse.rs` | The CSS statements | |
+| `lint/src/rule/fe/css/parse.rs` | The CSS statements | lightningcss gives the start of each rule that it knows. The byte scanner gives each span, each declaration, and each comment. The byte scanner also parses each rule that lightningcss drops. A rule from lightningcss that is outside its block, or that overlaps the previous item, is not used. When lightningcss fails, the byte scanner parses the full file. A stray `}` is skipped. A `{` or a `}` in parentheses or brackets does not open or close a block. A statement that starts with `@` is an at-rule. A statement ends after `;`, before `}`, or at the end of the file. An unclosed block ends at the end of the file. |
+| `lint/src/rule/fe/css/position.rs` | The byte offset of a lightningcss location | A line number starts at 0. A column starts at 1 and counts UTF-16 units. `\r\n`, `\r`, `\n`, and a form feed each end a line. |
+| `lint/src/rule/fe/css/scan.rs` | The byte scanner that finds the end of a statement or a block | |
+| `lint/src/rule/fe/css/sheet.rs` | The items for the rules that lightningcss gives | |
 | `lint/src/rule/fe/css/rule.rs` | The CSS rule type | |
 | `lint/src/rule/fe/css/file/mod.rs` | The CSS file rules | |
 | `lint/src/rule/fe/css/file/empty_line_before.rs` | An empty line before a rule | The first node of a file is not checked. The first child of a block has no empty line before it. A rule after a single-line comment has no empty line before it. The formatter puts one empty line in the gap when the rule should have one. The formatter leaves one line break when the rule should have no empty line. The indent of the rule stays. |
