@@ -1,10 +1,11 @@
 use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::fe::ts::no_restricted_imports::check_source;
+use crate::rule::fe::ts::file::with_source;
+use crate::rule::fe::ts::no_restricted_imports::check;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
-    check_source(Path::new("src/a.ts"), source)
+    with_source(Path::new("src/a.ts"), source, check)
 }
 
 #[test]
@@ -95,7 +96,7 @@ fn jsx_text_is_not_an_import() {
 export const view = <div>import a from \"node_modules/pkg\"</div>;
 import b from \"node_modules/pkg\";
 ";
-    let found = check_source(Path::new("src/a.tsx"), source);
+    let found = with_source(Path::new("src/a.tsx"), source, check);
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].line, 2);
 }
@@ -103,5 +104,5 @@ import b from \"node_modules/pkg\";
 #[test]
 fn a_file_extension_oxc_does_not_accept_has_no_diagnostic() {
     let source = "import a from \"node_modules/pkg\";\n";
-    assert!(check_source(Path::new("src/a.css"), source).is_empty());
+    assert!(with_source(Path::new("src/a.css"), source, check).is_empty());
 }

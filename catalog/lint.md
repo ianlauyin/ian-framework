@@ -16,9 +16,10 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/files.rs` | The file tree and the file kinds | |
 | `lint/src/rule/mod.rs` | The two rule sets | |
 | `lint/src/rule/ruleset.rs` | The rules in each ruleset | `FRAMEWORK` and `PROJECT` each hold `css`, `ts`, and `rs`. The `framework` ruleset runs `FRAMEWORK`. The `project` ruleset runs `PROJECT`. |
-| `lint/src/rule/finder.rs` | The diagnostics for one file | |
+| `lint/src/rule/report.rs` | The diagnostics of one rule in one file | |
 | `lint/src/rule/fe/mod.rs` | The frontend rules | |
 | `lint/src/rule/fe/css/mod.rs` | The CSS rules | A class selector, an id selector, and descending specificity are not checked. |
+| `lint/src/rule/fe/css/file.rs` | The CSS source and statements for one file | |
 | `lint/src/rule/fe/css/parse.rs` | The CSS statements | |
 | `lint/src/rule/fe/css/rule_empty_line_before.rs` | An empty line before a rule | The first node of a file is not checked. The first child of a block has no empty line before it. A rule after a single-line comment has no empty line before it. |
 | `lint/src/rule/fe/css/selector_nested_pattern.rs` | A nested selector | Each selector in a list is checked on its own. A rule in an at-rule is not checked. |
@@ -27,11 +28,13 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/fe/folder/root_reexport.rs` | The root index re-exports each feature | A nested index can leave out an export for a sibling file. |
 | `lint/src/rule/fe/folder/test_path.rs` | The test path matches the source path | A source file does not need a test file. |
 | `lint/src/rule/fe/ts/mod.rs` | The TypeScript rules | |
+| `lint/src/rule/fe/ts/file.rs` | The TypeScript source and syntax tree for one file | |
 | `lint/src/rule/fe/ts/declaration_order.rs` | The declaration order | A private `let` is in the same group as a constant. |
 | `lint/src/rule/fe/ts/no_comments.rs` | A comment | |
 | `lint/src/rule/fe/ts/no_default_export.rs` | No default export | |
 | `lint/src/rule/fe/ts/no_restricted_imports.rs` | The import path rule | |
 | `lint/src/rule/rs/mod.rs` | The Rust rules | |
+| `lint/src/rule/rs/file.rs` | The Rust source and syntax tree for one file | |
 | `lint/src/rule/rs/env_name.rs` | An env value and an env-name literal | A test file can read an env value and can contain an env-name literal. |
 | `lint/src/rule/rs/exception_code.rs` | A string literal error code in `exception!` | |
 | `lint/src/rule/rs/exception_new.rs` | `Exception::__new` outside `exception.rs` | |

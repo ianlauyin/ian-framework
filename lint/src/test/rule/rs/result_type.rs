@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::rule::rs::result_type::check_source;
+use crate::rule::rs::file::with_source;
+use crate::rule::rs::result_type::check;
 
 #[test]
 fn a_result_of_exception_passes() {
@@ -27,7 +28,7 @@ fn fine() -> i32 {
     1
 }
 ";
-    assert!(check_source(Path::new("api/src/tube.rs"), source).is_empty());
+    assert!(with_source(Path::new("api/src/tube.rs"), source, &[], check).is_empty());
 }
 
 #[test]
@@ -45,7 +46,7 @@ impl Tube {
     }
 }
 ";
-    let found = check_source(Path::new("api/src/tube.rs"), source);
+    let found = with_source(Path::new("api/src/tube.rs"), source, &[], check);
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].line, 1);
     assert_eq!(found[0].rule, "result-type");
@@ -64,5 +65,5 @@ impl Tube {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/tube.rs"), "fn (").is_empty());
+    assert!(with_source(Path::new("api/src/tube.rs"), "fn (", &[], check).is_empty());
 }

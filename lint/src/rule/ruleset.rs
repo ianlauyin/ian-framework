@@ -4,21 +4,24 @@ use crate::config::Ruleset;
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
 use crate::rule::fe;
+use crate::rule::fe::css::file::CssFile;
+use crate::rule::fe::ts::file::TsFile;
 use crate::rule::rs;
+use crate::rule::rs::file::RsFile;
 
 pub(crate) struct Rules {
-    pub(crate) css: &'static [fn(&Path) -> Vec<Diagnostic>],
+    pub(crate) css: &'static [fn(&CssFile<'_>) -> Vec<Diagnostic>],
     pub(crate) ts: &'static [TsRule],
     pub(crate) rs: &'static [RsRule],
 }
 
 pub(crate) enum TsRule {
-    File(fn(&Path) -> Vec<Diagnostic>),
+    File(fn(&TsFile<'_>) -> Vec<Diagnostic>),
     Folder(fn(&Path, &FileSet, &[PathBuf]) -> Vec<Diagnostic>),
 }
 
 pub(crate) enum RsRule {
-    File(fn(&Path, &[PathBuf]) -> Vec<Diagnostic>),
+    File(fn(&RsFile<'_>) -> Vec<Diagnostic>),
     Folder(fn(&Path, &FileSet, &[PathBuf]) -> Vec<Diagnostic>),
 }
 

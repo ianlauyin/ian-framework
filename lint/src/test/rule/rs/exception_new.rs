@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::rule::rs::exception_new::check_source;
+use crate::rule::rs::exception_new::check;
+use crate::rule::rs::file::with_source;
 
 fn srcs() -> Vec<PathBuf> {
     vec![PathBuf::from("api/src")]
@@ -13,14 +14,14 @@ fn build() {
     let _ = Exception::__new(1, 2, 3, 4, 5);
 }
 ";
-    assert!(check_source(Path::new("api/src/exception.rs"), source, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/exception.rs"), source, &srcs(), check).is_empty());
     let other = "\
 fn build() {
     Exception::new();
     let _ = \"Exception::__new\";
 }
 ";
-    assert!(check_source(Path::new("api/src/app.rs"), other, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/app.rs"), other, &srcs(), check).is_empty());
 }
 
 #[test]
@@ -31,7 +32,7 @@ fn build() {
     crate::exception::Exception::__new(1, 2, 3, 4, 5);
 }
 ";
-    let found = check_source(Path::new("api/src/app.rs"), source, &srcs());
+    let found = with_source(Path::new("api/src/app.rs"), source, &srcs(), check);
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].line, 2);
     assert_eq!(found[0].rule, "exception-new");
@@ -47,5 +48,5 @@ fn build() {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/app.rs"), "fn (", &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/app.rs"), "fn (", &srcs(), check).is_empty());
 }

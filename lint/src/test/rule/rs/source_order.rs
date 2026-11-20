@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::rule::rs::source_order::check_source;
+use crate::rule::rs::file::with_source;
+use crate::rule::rs::source_order::check;
 
 const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants, then public items, then private items.";
 
@@ -38,7 +39,7 @@ impl fmt::Debug for Name {
 
 fn helper() {}
 ";
-    assert!(check_source(Path::new("api/src/name.rs"), source).is_empty());
+    assert!(with_source(Path::new("api/src/name.rs"), source, &[], check).is_empty());
 }
 
 #[test]
@@ -54,7 +55,7 @@ fn helper() {}
 
 pub fn run() {}
 ";
-    let found = check_source(Path::new("api/src/name.rs"), source);
+    let found = with_source(Path::new("api/src/name.rs"), source, &[], check);
     let lines: Vec<_> = found.iter().map(|item| item.line).collect();
     assert_eq!(lines, vec![3, 5, 9]);
     assert_eq!(found[0].rule, "source-order");
@@ -66,5 +67,5 @@ pub fn run() {}
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/name.rs"), "fn (").is_empty());
+    assert!(with_source(Path::new("api/src/name.rs"), "fn (", &[], check).is_empty());
 }

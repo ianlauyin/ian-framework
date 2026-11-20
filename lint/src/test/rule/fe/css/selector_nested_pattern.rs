@@ -2,10 +2,11 @@ use std::path::Path;
 use std::{env, process};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::fe::css::selector_nested_pattern::{check, check_source};
+use crate::rule::fe::css::file::with_source;
+use crate::rule::fe::css::selector_nested_pattern::check;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
-    check_source(Path::new("src/a.css"), source)
+    with_source(Path::new("src/a.css"), source, check)
 }
 
 #[test]
@@ -214,5 +215,11 @@ fn a_file_that_cannot_be_read_has_no_diagnostic() {
         "ian-lint-selector-nested-missing-{}",
         process::id()
     ));
-    assert!(check(&path).is_empty());
+    assert!(
+        crate::rule::fe::check(
+            &path.with_extension("css"),
+            crate::config::Ruleset::Framework
+        )
+        .is_empty()
+    );
 }

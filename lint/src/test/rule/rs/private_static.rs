@@ -1,19 +1,11 @@
-use std::{env, fs, process};
+use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
+use crate::rule::rs::file::with_source;
 use crate::rule::rs::private_static::check;
 
-fn lint(name: &str, source: &str) -> Vec<Diagnostic> {
-    let root = env::temp_dir().join(format!("ian-lint-private-static-{name}-{}", process::id()));
-    if root.exists() {
-        fs::remove_dir_all(&root).expect("old test folder is removed");
-    }
-    fs::create_dir_all(&root).expect("test folder is created");
-    let path = root.join("lib.rs");
-    fs::write(&path, source).expect("file is written");
-    let found = check(&path, &[]);
-    fs::remove_dir_all(root).expect("test folder is removed");
-    found
+fn lint(source: &str) -> Vec<Diagnostic> {
+    with_source(Path::new("src/lib.rs"), source, &[], check)
 }
 
 #[test]
@@ -25,7 +17,7 @@ fn sample() {
     static LOCAL: i32 = 2;
 }
 ";
-    assert!(lint("private", source).is_empty());
+    assert!(lint(source).is_empty());
 }
 
 #[test]
@@ -40,7 +32,7 @@ extern \"C\" {
     pub static FOREIGN: i32;
 }
 ";
-    let found = lint("public", source);
+    let found = lint(source);
     assert_eq!(found.len(), 4);
     assert_eq!(found[0].line, 1);
     assert_eq!(found[0].column, 1);
@@ -60,5 +52,5 @@ extern \"C\" {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(lint("invalid", "pub static").is_empty());
+    assert!(lint("pub static").is_empty());
 }

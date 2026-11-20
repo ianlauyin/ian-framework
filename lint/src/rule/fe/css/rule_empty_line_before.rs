@@ -4,29 +4,21 @@
 // Remove the empty line before the rule.
 // Why a lint rule: An empty line separates a rule from the node before it. The first child of a block and a rule after a single-line comment stay on the next line.
 
-use std::path::Path;
-
 use crate::diagnostic::Diagnostic;
+use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Item, Kind};
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
 
 const RULE: &str = "rule-empty-line-before";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
-    let Some(source) = crate::rule::fe::css::parse::read(path) else {
-        return Vec::new();
-    };
-    check_source(path, &source)
+pub fn check(file: &CssFile) -> Vec<Diagnostic> {
+    let lines = Lines::new(file.source);
+    let mut report = Report::new(file.path, file.source, RULE);
+    walk(file.items, None, file.source, &lines, &mut report);
+    report.finish()
 }
 
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    let lines = Lines::new(source);
-    Finder::css_source(path, source, RULE, |items, finder| {
-        walk(items, None, source, &lines, finder);
-    })
-}
-
-fn walk(items: &[Item], brace: Option<u32>, source: &str, lines: &Lines, finder: &mut Finder<'_>) {
+fn walk(items: &[Item], brace: Option<u32>, source: &str, lines: &Lines, report: &mut Report<'_>) {
     for (index, item) in items.iter().enumerate() {
         match &item.kind {
             Kind::Rule {
@@ -34,27 +26,27 @@ fn walk(items: &[Item], brace: Option<u32>, source: &str, lines: &Lines, finder:
                 children,
             } => {
                 if brace.is_some() || index != 0 {
-                    report(item, items, index, brace, source, lines, finder);
+                    report_rule(item, items, index, brace, source, lines, report);
                 }
-                walk(children, Some(*selector_end), source, lines, finder);
+                walk(children, Some(*selector_end), source, lines, report);
             }
             Kind::AtRule {
                 brace: Some(at_brace),
                 children,
-            } => walk(children, Some(*at_brace), source, lines, finder),
+            } => walk(children, Some(*at_brace), source, lines, report),
             Kind::AtRule { .. } | Kind::Comment | Kind::Declaration => {}
         }
     }
 }
 
-fn report(
+fn report_rule(
     item: &Item,
     items: &[Item],
     index: usize,
     brace: Option<u32>,
     source: &str,
     lines: &Lines,
-    finder: &mut Finder<'_>,
+    report: &mut Report<'_>,
 ) {
     let expect_empty = !is_first_nested(source, items, index, brace, lines)
         && !is_after_single_line_comment(source, items, index, brace, lines);
@@ -63,14 +55,14 @@ fn report(
         return;
     }
     if expect_empty {
-        finder.report(
+        report.at_offset(
             item.start,
             "The rule has no empty line before it.",
             "Add an empty line before the rule.",
         );
         return;
     }
-    finder.report(
+    report.at_offset(
         item.start,
         "The rule has an empty line before it.",
         "Remove the empty line before the rule.",

@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::rule::rs::exception_code::check_source;
+use crate::rule::rs::exception_code::check;
+use crate::rule::rs::file::with_source;
 
 #[test]
 fn a_constant_error_code_passes() {
@@ -12,7 +13,7 @@ fn build(err: Error) {
     let _ = exception!(code = CODE, \"message\", source = exception!(code = OTHER, \"inner\"));
 }
 ";
-    assert!(check_source(Path::new("api/src/app.rs"), source).is_empty());
+    assert!(with_source(Path::new("api/src/app.rs"), source, &[], check).is_empty());
 }
 
 #[test]
@@ -28,7 +29,7 @@ fn build() {
     let _ = exception!(code = CODE, \"message\", source = exception!(code = \"INNER\", \"inner\"));
 }
 ";
-    let found = check_source(Path::new("api/src/app.rs"), source);
+    let found = with_source(Path::new("api/src/app.rs"), source, &[], check);
     assert_eq!(found.len(), 3);
     assert_eq!(found[0].line, 2);
     assert_eq!(found[0].rule, "exception-code");
@@ -45,5 +46,5 @@ fn build() {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/app.rs"), "fn (").is_empty());
+    assert!(with_source(Path::new("api/src/app.rs"), "fn (", &[], check).is_empty());
 }

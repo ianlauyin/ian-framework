@@ -1,10 +1,11 @@
 use std::path::Path;
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::fe::ts::no_default_export::check_source;
+use crate::rule::fe::ts::file::with_source;
+use crate::rule::fe::ts::no_default_export::check;
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
-    check_source(Path::new("src/a.ts"), source)
+    with_source(Path::new("src/a.ts"), source, check)
 }
 
 #[test]

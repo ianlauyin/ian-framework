@@ -3,30 +3,25 @@
 // Why a lint rule: The caller uses the re-export. The child module stays private to the crate.
 
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
 
 use syn::{Item, UseTree, Visibility};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 
 const RULE: &str = "reexport-mod";
 
-pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let Some(ast) = file.ast else {
         return Vec::new();
     };
-    check_source(path, &source)
+    let mut report = Report::new(file.path, file.source, RULE);
+    walk(&ast.items, &mut report);
+    report.finish()
 }
 
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        walk(&file.items, finder);
-    })
-}
-
-fn walk(items: &[Item], finder: &mut Finder<'_>) {
+fn walk(items: &[Item], report: &mut Report<'_>) {
     let mut exported = BTreeSet::new();
     for item in items {
         if let Item::Use(item) = item
@@ -39,14 +34,14 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
         if let Item::Mod(module) = item {
             let name = module.ident.to_string();
             if exported.contains(&name) && !is_pub_crate(&module.vis) {
-                finder.at_span(
+                report.at_span(
                     module.ident.span(),
                     format!("`{name}` is re-exported and is not `pub(crate) mod`."),
                     format!("Declare `{name}` as `pub(crate) mod`."),
                 );
             }
             if let Some((_, nested)) = &module.content {
-                walk(nested, finder);
+                walk(nested, report);
             }
         }
     }

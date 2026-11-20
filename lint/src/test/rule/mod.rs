@@ -1,4 +1,4 @@
 mod fe;
-mod finder;
+mod report;
 mod rs;
 mod ruleset;

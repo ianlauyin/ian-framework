@@ -6,11 +6,13 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use oxc_allocator::Allocator;
 use oxc_ast::ast::Statement;
 
 use crate::diagnostic::Diagnostic;
 use crate::files::FileSet;
-use crate::rule::finder::Finder;
+use crate::rule::fe::ts::file;
+use crate::rule::report::Report;
 
 const RULE: &str = "root-reexport";
 
@@ -59,15 +61,15 @@ fn report_missing(
         .filter(|name| !exported.contains(*name))
         .collect();
     missing.sort_unstable();
-    let mut finder = Finder::new(path, source, RULE);
+    let mut report = Report::new(path, source, RULE);
     for name in missing {
-        finder.report(
+        report.at_offset(
             0,
             format!("`./{name}` is missing from the index."),
             format!("Re-export `./{name}` from the index."),
         );
     }
-    finder.finish()
+    report.finish()
 }
 
 fn index_paths(dir: &Path, files: &FileSet) -> Vec<PathBuf> {
@@ -119,23 +121,25 @@ fn is_ts_file(path: &Path) -> bool {
 }
 
 fn exported_names(path: &Path, source: &str) -> BTreeSet<String> {
+    let allocator = Allocator::default();
+    let Some(program) = file::parse(&allocator, path, source) else {
+        return BTreeSet::new();
+    };
     let mut names = BTreeSet::new();
-    Finder::typescript_source(path, source, RULE, |program, _finder| {
-        for statement in &program.body {
-            let specifier = match statement {
-                Statement::ExportAllDeclaration(declaration) => declaration.source.value.as_str(),
-                Statement::ExportFromDeclaration(declaration) => declaration.source.value.as_str(),
-                _ => None,
-            };
-            let Some(specifier) = specifier else {
-                continue;
-            };
-            let Some(name) = module_name(specifier) else {
-                continue;
-            };
-            names.insert(name);
-        }
-    });
+    for statement in &program.body {
+        let specifier = match statement {
+            Statement::ExportAllDeclaration(declaration) => declaration.source.value.as_str(),
+            Statement::ExportFromDeclaration(declaration) => declaration.source.value.as_str(),
+            _ => None,
+        };
+        let Some(specifier) = specifier else {
+            continue;
+        };
+        let Some(name) = module_name(specifier) else {
+            continue;
+        };
+        names.insert(name);
+    }
     names
 }
 

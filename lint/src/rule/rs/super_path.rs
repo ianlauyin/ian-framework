@@ -2,34 +2,30 @@
 // Use a `crate::` path.
 // Why a lint rule: A `super::super` path breaks when the module moves.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Path as SynPath, UseTree};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 
 const RULE: &str = "super-path";
 
-pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let Some(ast) = file.ast else {
         return Vec::new();
     };
-    check_source(path, &source)
-}
-
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        let mut pass = Pass { finder };
-        pass.visit_file(file);
-    })
+    let mut report = Report::new(file.path, file.source, RULE);
+    let mut pass = Pass {
+        report: &mut report,
+    };
+    pass.visit_file(ast);
+    report.finish()
 }
 
 struct Pass<'a, 'b> {
-    finder: &'b mut Finder<'a>,
+    report: &'b mut Report<'a>,
 }
 
 impl Visit<'_> for Pass<'_, '_> {
@@ -38,7 +34,7 @@ impl Visit<'_> for Pass<'_, '_> {
         for segment in &path.segments {
             let is_super = segment.ident == "super";
             if previous && is_super {
-                report(self.finder, path.span());
+                report_super(self.report, path.span());
                 break;
             }
             previous = is_super;
@@ -47,40 +43,40 @@ impl Visit<'_> for Pass<'_, '_> {
     }
 
     fn visit_use_tree(&mut self, tree: &UseTree) {
-        report_use(tree, false, self.finder);
+        report_use(tree, false, self.report);
     }
 }
 
-fn report_use(tree: &UseTree, previous: bool, finder: &mut Finder<'_>) {
+fn report_use(tree: &UseTree, previous: bool, report: &mut Report<'_>) {
     match tree {
         UseTree::Path(path) => {
             let is_super = path.ident == "super";
             if previous && is_super {
-                report(finder, path.ident.span());
+                report_super(report, path.ident.span());
             }
-            report_use(&path.tree, is_super, finder);
+            report_use(&path.tree, is_super, report);
         }
         UseTree::Group(group) => {
             for item in &group.items {
-                report_use(item, previous, finder);
+                report_use(item, previous, report);
             }
         }
         UseTree::Name(name) => {
             if previous && name.ident == "super" {
-                report(finder, name.ident.span());
+                report_super(report, name.ident.span());
             }
         }
         UseTree::Rename(name) => {
             if previous && name.ident == "super" {
-                report(finder, name.ident.span());
+                report_super(report, name.ident.span());
             }
         }
         UseTree::Glob(_) => {}
     }
 }
 
-fn report(finder: &mut Finder<'_>, span: proc_macro2::Span) {
-    finder.at_span(
+fn report_super(report: &mut Report<'_>, span: proc_macro2::Span) {
+    report.at_span(
         span,
         "The path uses `super::super`.",
         "Use a `crate::` path.",

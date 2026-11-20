@@ -2,10 +2,11 @@ use std::path::Path;
 use std::{env, process};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::fe::ts::no_comments::{check, check_source};
+use crate::rule::fe::ts::file::with_source;
+use crate::rule::fe::ts::no_comments::check;
 
 fn diagnostics(name: &str, source: &str) -> Vec<Diagnostic> {
-    check_source(Path::new(name), source)
+    with_source(Path::new(name), source, check)
 }
 
 #[test]
@@ -74,5 +75,5 @@ fn a_file_extension_oxc_does_not_accept_has_no_diagnostic() {
 #[test]
 fn a_file_that_cannot_be_read_has_no_diagnostic() {
     let path = env::temp_dir().join(format!("ian-lint-no-comments-ts-missing-{}", process::id()));
-    assert!(check(&path).is_empty());
+    assert!(crate::rule::fe::check(&path, crate::config::Ruleset::Framework).is_empty());
 }

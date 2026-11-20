@@ -5,8 +5,6 @@
 // Why a lint rule: The library does not choose an app env name.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::{Path, PathBuf};
 
 use proc_macro2::Span;
 use syn::spanned::Spanned;
@@ -14,7 +12,8 @@ use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprLit, ExprMacro, Ident, Item, Lit, UseTree};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 use crate::rule::rs::place::Place;
 
 const RULE: &str = "env-name";
@@ -22,34 +21,30 @@ const READS: &[&str] = &["var", "var_os", "vars", "vars_os"];
 const HELPERS: &[&str] = &["optional", "required"];
 const GOOGLE: &[&str] = &["GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"];
 
-pub fn check(path: &Path, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    check_source(path, &source, srcs)
-}
-
-pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let place = Place::new(path, srcs);
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let place = Place::new(file.path, file.srcs);
     if place.in_test() {
         return Vec::new();
     }
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        let mut pass = Pass {
-            finder,
-            place,
-            consts: const_values(&file.items),
-            reads: BTreeSet::new(),
-            helpers: BTreeSet::new(),
-            reported: BTreeSet::new(),
-        };
-        collect_uses(&file.items, &mut pass.reads, &mut pass.helpers);
-        pass.visit_file(file);
-    })
+    let Some(ast) = file.ast else {
+        return Vec::new();
+    };
+    let mut report = Report::new(file.path, file.source, RULE);
+    let mut pass = Pass {
+        report: &mut report,
+        place,
+        consts: const_values(&ast.items),
+        reads: BTreeSet::new(),
+        helpers: BTreeSet::new(),
+        reported: BTreeSet::new(),
+    };
+    collect_uses(&ast.items, &mut pass.reads, &mut pass.helpers);
+    pass.visit_file(ast);
+    report.finish()
 }
 
 struct Pass<'a, 'b> {
-    finder: &'b mut Finder<'a>,
+    report: &'b mut Report<'a>,
     place: Place,
     consts: BTreeMap<String, (String, Span)>,
     reads: BTreeSet<String>,
@@ -151,7 +146,7 @@ impl Pass<'_, '_> {
         if !self.reported.insert(offset) {
             return;
         }
-        self.finder.at_span(span, problem, fix);
+        self.report.at_span(span, problem, fix);
     }
 }
 

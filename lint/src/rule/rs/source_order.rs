@@ -3,14 +3,13 @@
 // Why a lint rule: That order keeps each kind of item in one place.
 
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 
 const RULE: &str = "source-order";
 const MOD: u8 = 0;
@@ -23,32 +22,28 @@ const PUBLIC: u8 = 6;
 const PRIVATE: u8 = 7;
 const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants, then public items, then private items.";
 
-pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let Some(ast) = file.ast else {
         return Vec::new();
     };
-    check_source(path, &source)
+    let mut report = Report::new(file.path, file.source, RULE);
+    walk(&ast.items, &mut report);
+    report.finish()
 }
 
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        walk(&file.items, finder);
-    })
-}
-
-fn walk(items: &[Item], finder: &mut Finder<'_>) {
+fn walk(items: &[Item], report: &mut Report<'_>) {
     let private_types = private_type_names(items);
     let mut last: Option<u8> = None;
     for item in items {
         let group = group(item, &private_types);
         if last.is_some_and(|previous| group < previous) {
-            finder.at_span(item.span(), "This item is out of source order.", FIX);
+            report.at_span(item.span(), "This item is out of source order.", FIX);
         }
         last = Some(last.map_or(group, |previous| previous.max(group)));
         if let Item::Mod(module) = item
             && let Some((_, nested)) = &module.content
         {
-            walk(nested, finder);
+            walk(nested, report);
         }
     }
 }

@@ -3,30 +3,25 @@
 // Why a lint rule: The type and its methods stay in one file. A trait impl can be in another file.
 
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::{Item, Type};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 
 const RULE: &str = "inherent-impl";
 
-pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let Some(ast) = file.ast else {
         return Vec::new();
     };
-    check_source(path, &source)
-}
-
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        let mut defined = BTreeSet::new();
-        collect_types(&file.items, &mut defined);
-        walk(&file.items, &defined, finder);
-    })
+    let mut report = Report::new(file.path, file.source, RULE);
+    let mut defined = BTreeSet::new();
+    collect_types(&ast.items, &mut defined);
+    walk(&ast.items, &defined, &mut report);
+    report.finish()
 }
 
 fn collect_types(items: &[Item], defined: &mut BTreeSet<String>) {
@@ -51,14 +46,14 @@ fn collect_types(items: &[Item], defined: &mut BTreeSet<String>) {
     }
 }
 
-fn walk(items: &[Item], defined: &BTreeSet<String>, finder: &mut Finder<'_>) {
+fn walk(items: &[Item], defined: &BTreeSet<String>, report: &mut Report<'_>) {
     for item in items {
         if let Item::Impl(item) = item
             && item.trait_.is_none()
             && let Some(name) = type_name(&item.self_ty)
             && !defined.contains(&name)
         {
-            finder.at_span(
+            report.at_span(
                 item.span(),
                 format!("The inherent impl of `{name}` is outside the file that defines `{name}`."),
                 format!("Move the inherent impl into the file that defines `{name}`."),
@@ -67,7 +62,7 @@ fn walk(items: &[Item], defined: &BTreeSet<String>, finder: &mut Finder<'_>) {
         if let Item::Mod(item) = item
             && let Some((_, nested)) = &item.content
         {
-            walk(nested, defined, finder);
+            walk(nested, defined, report);
         }
     }
 }

@@ -1,19 +1,12 @@
-use std::{env, fs, process};
+use std::path::Path;
+use std::{env, process};
 
 use crate::diagnostic::Diagnostic;
+use crate::rule::rs::file::with_source;
 use crate::rule::rs::no_comments::check;
 
-fn lint(name: &str, source: &str) -> Vec<Diagnostic> {
-    let root = env::temp_dir().join(format!("ian-lint-no-comments-{name}-{}", process::id()));
-    if root.exists() {
-        fs::remove_dir_all(&root).expect("old test folder is removed");
-    }
-    fs::create_dir_all(&root).expect("test folder is created");
-    let path = root.join("lib.rs");
-    fs::write(&path, source).expect("file is written");
-    let found = check(&path, &[]);
-    fs::remove_dir_all(root).expect("test folder is removed");
-    found
+fn lint(source: &str) -> Vec<Diagnostic> {
+    with_source(Path::new("src/lib.rs"), source, &[], check)
 }
 
 #[test]
@@ -24,7 +17,7 @@ fn sample() {
     let value = 1;
 }
 ";
-    assert!(lint("plain", source).is_empty());
+    assert!(lint(source).is_empty());
 }
 
 #[test]
@@ -41,7 +34,7 @@ fn sample() {
     /*! note */
 }
 ";
-    let found = lint("comment", source);
+    let found = lint(source);
     assert_eq!(found.len(), 7);
     assert_eq!(found[0].line, 2);
     assert_eq!(found[0].column, 17);
@@ -81,7 +74,7 @@ fn sample() {
     let byte_mark = b'/';
 }
 ";
-    assert!(lint("string", source).is_empty());
+    assert!(lint(source).is_empty());
 }
 
 #[test]
@@ -92,11 +85,20 @@ fn an_attribute_passes() {
 #[doc = \"/* kept */ // kept\"]
 fn sample() {}
 ";
-    assert!(lint("attribute", source).is_empty());
+    assert!(lint(source).is_empty());
+}
+
+#[test]
+fn a_comment_in_a_file_that_is_not_valid_rust_fails() {
+    let found = lint("fn {\n// note\n");
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 2);
+    assert_eq!(found[0].column, 1);
+    assert_eq!(found[0].rule, "no-comments");
 }
 
 #[test]
 fn a_file_that_cannot_be_read_has_no_diagnostic() {
     let path = env::temp_dir().join(format!("ian-lint-no-comments-missing-{}", process::id()));
-    assert!(check(&path, &[]).is_empty());
+    assert!(crate::rule::rs::check(&path, &[], crate::config::Ruleset::Framework).is_empty());
 }

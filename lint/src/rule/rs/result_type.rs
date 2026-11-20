@@ -2,39 +2,33 @@
 // Return `Result<T, Exception>`.
 // Why a lint rule: A failure is an `Exception`. A trait impl keeps the trait's error type.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use syn::spanned::Spanned;
 use syn::{GenericArgument, ImplItem, Item, PathArguments, ReturnType, Type};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 
 const RULE: &str = "result-type";
 
-pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let Some(ast) = file.ast else {
         return Vec::new();
     };
-    check_source(path, &source)
+    let mut report = Report::new(file.path, file.source, RULE);
+    walk(&ast.items, &mut report);
+    report.finish()
 }
 
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        walk(&file.items, finder);
-    })
-}
-
-fn walk(items: &[Item], finder: &mut Finder<'_>) {
+fn walk(items: &[Item], report: &mut Report<'_>) {
     for item in items {
         match item {
             Item::Fn(item) => {
-                report(
+                report_return(
                     &item.sig.output,
                     &item.sig.ident.to_string(),
                     item.span(),
-                    finder,
+                    report,
                 );
             }
             Item::Impl(item) if item.trait_.is_none() => {
@@ -42,17 +36,17 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
                     let ImplItem::Fn(method) = impl_item else {
                         continue;
                     };
-                    report(
+                    report_return(
                         &method.sig.output,
                         &method.sig.ident.to_string(),
                         method.span(),
-                        finder,
+                        report,
                     );
                 }
             }
             Item::Mod(item) => {
                 if let Some((_, nested)) = &item.content {
-                    walk(nested, finder);
+                    walk(nested, report);
                 }
             }
             _ => {}
@@ -60,7 +54,12 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
     }
 }
 
-fn report(output: &ReturnType, name: &str, span: proc_macro2::Span, finder: &mut Finder<'_>) {
+fn report_return(
+    output: &ReturnType,
+    name: &str,
+    span: proc_macro2::Span,
+    report: &mut Report<'_>,
+) {
     let ReturnType::Type(_, ty) = output else {
         return;
     };
@@ -70,7 +69,7 @@ fn report(output: &ReturnType, name: &str, span: proc_macro2::Span, finder: &mut
     if !is_result(ty) {
         return;
     }
-    finder.at_span(
+    report.at_span(
         span,
         format!("`{name}` does not return `Result<T, Exception>`."),
         "Return `Result<T, Exception>`.",

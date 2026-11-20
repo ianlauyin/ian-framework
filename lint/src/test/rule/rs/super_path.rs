@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::rule::rs::super_path::check_source;
+use crate::rule::rs::file::with_source;
+use crate::rule::rs::super_path::check;
 
 #[test]
 fn a_crate_path_passes() {
@@ -13,7 +14,7 @@ fn sample() {
     super::child();
 }
 ";
-    assert!(check_source(Path::new("api/src/child.rs"), source).is_empty());
+    assert!(with_source(Path::new("api/src/child.rs"), source, &[], check).is_empty());
 }
 
 #[test]
@@ -25,7 +26,7 @@ fn sample() {
     super::super::child();
 }
 ";
-    let found = check_source(Path::new("api/src/child.rs"), source);
+    let found = with_source(Path::new("api/src/child.rs"), source, &[], check);
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].line, 1);
     assert_eq!(found[0].rule, "super-path");
@@ -38,5 +39,5 @@ fn sample() {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/child.rs"), "fn (").is_empty());
+    assert!(with_source(Path::new("api/src/child.rs"), "fn (", &[], check).is_empty());
 }

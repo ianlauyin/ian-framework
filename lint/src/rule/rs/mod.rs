@@ -1,6 +1,7 @@
 pub(crate) mod env_name;
 pub(crate) mod exception_code;
 pub(crate) mod exception_new;
+pub(crate) mod file;
 pub(crate) mod folder;
 pub(crate) mod impl_order;
 pub(crate) mod inherent_impl;
@@ -15,6 +16,7 @@ pub(crate) mod source_order;
 pub(crate) mod super_path;
 pub(crate) mod test_attr;
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::config::Ruleset;
@@ -23,12 +25,17 @@ use crate::files::FileSet;
 use crate::rule::ruleset::{RsRule, rules};
 
 pub(crate) fn check(path: &Path, srcs: &[PathBuf], ruleset: Ruleset) -> Vec<Diagnostic> {
+    let Ok(source) = fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let ast = file::parse(&source);
+    let file = file::RsFile::new(path, &source, ast.as_ref(), srcs);
     let mut diagnostics = Vec::new();
     for rule in rules(ruleset).rs {
         let RsRule::File(check) = rule else {
             continue;
         };
-        diagnostics.extend(check(path, srcs));
+        diagnostics.extend(check(&file));
     }
     diagnostics
 }

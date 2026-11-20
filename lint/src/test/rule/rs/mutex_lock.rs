@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::rule::rs::mutex_lock::check_source;
+use crate::rule::rs::file::with_source;
+use crate::rule::rs::mutex_lock::check;
 
 fn srcs() -> Vec<PathBuf> {
     vec![PathBuf::from("api/src")]
@@ -15,14 +16,14 @@ fn sample(lock: Lock) {
     let _ = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 }
 ";
-    assert!(check_source(Path::new("api/src/work.rs"), source, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/work.rs"), source, &srcs(), check).is_empty());
     let allowed = "\
 fn sample(lock: Lock) {
     let _ = lock.lock().unwrap();
     let _ = lock.lock().unwrap_or(1);
 }
 ";
-    assert!(check_source(Path::new("api/src/mutex.rs"), allowed, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/mutex.rs"), allowed, &srcs(), check).is_empty());
 }
 
 #[test]
@@ -33,7 +34,7 @@ fn sample(lock: Lock) {
     let _ = lock.lock().unwrap_or(1);
 }
 ";
-    let found = check_source(Path::new("api/src/work.rs"), source, &srcs());
+    let found = with_source(Path::new("api/src/work.rs"), source, &srcs(), check);
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].line, 2);
     assert_eq!(found[0].rule, "mutex-lock");
@@ -49,5 +50,5 @@ fn sample(lock: Lock) {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/work.rs"), "fn (", &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/work.rs"), "fn (", &srcs(), check).is_empty());
 }

@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::rule::rs::env_name::check_source;
+use crate::rule::rs::env_name::check;
+use crate::rule::rs::file::with_source;
 
 fn srcs() -> Vec<PathBuf> {
     vec![PathBuf::from("api/src")]
@@ -21,7 +22,7 @@ pub fn required(name: &str) -> Result<String, Exception> {
 
 const CODE: &str = \"APP_KEY\";
 ";
-    assert!(check_source(Path::new("api/src/env.rs"), helper, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/env.rs"), helper, &srcs(), check).is_empty());
     let gcp = "\
 const PROJECT_ENV: &str = \"GOOGLE_CLOUD_PROJECT\";
 const CREDENTIALS_ENV: &str = \"GOOGLE_APPLICATION_CREDENTIALS\";
@@ -38,14 +39,14 @@ fn temp() {
 
 const CODE: &str = \"APP_KEY\";
 ";
-    assert!(check_source(Path::new("api/src/gcp/project.rs"), gcp, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/gcp/project.rs"), gcp, &srcs(), check).is_empty());
     let test = "\
 fn read() {
     let _ = std::env::var(\"REDIS_URL\");
     let _ = env!(\"APP_KEY\");
 }
 ";
-    assert!(check_source(Path::new("api/src/test/read.rs"), test, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/test/read.rs"), test, &srcs(), check).is_empty());
 }
 
 #[test]
@@ -63,7 +64,7 @@ fn read() {
     let _ = env!(\"BUILT\");
 }
 ";
-    let found = check_source(Path::new("api/src/app.rs"), source, &srcs());
+    let found = with_source(Path::new("api/src/app.rs"), source, &srcs(), check);
     assert_eq!(found.len(), 5);
     assert_eq!(found[0].rule, "env-name");
     assert_eq!(found[0].problem, "An env value is read outside `env.rs`.");
@@ -86,7 +87,7 @@ fn read() {
     let _ = env::optional(\"GOOGLE_CLOUD_PROJECT\");
 }
 ";
-    let found = check_source(Path::new("api/src/app.rs"), source, &srcs());
+    let found = with_source(Path::new("api/src/app.rs"), source, &srcs(), check);
     assert_eq!(found.len(), 1);
     assert_eq!(
         found[0].problem,
@@ -96,5 +97,5 @@ fn read() {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/app.rs"), "fn (", &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/app.rs"), "fn (", &srcs(), check).is_empty());
 }

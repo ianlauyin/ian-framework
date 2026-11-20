@@ -14,7 +14,8 @@ use syn::{Attribute, Item, Meta};
 
 use crate::diagnostic::Diagnostic;
 use crate::files::{FileSet, file_name, without_dot};
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file;
 
 const RULE: &str = "test-tree";
 
@@ -103,29 +104,32 @@ fn cfg_mismatch(test_file: &Path, source_file: &Path) -> Vec<Diagnostic> {
     let Ok(source_source) = fs::read_to_string(source_file) else {
         return Vec::new();
     };
-    let Ok(source_file_ast) = syn::parse_file(&source_source) else {
+    let Some(source_file_ast) = file::parse(&source_source) else {
+        return Vec::new();
+    };
+    let Some(test_ast) = file::parse(&test_source) else {
         return Vec::new();
     };
     let source_mods = mod_cfgs(&source_file_ast.items);
-    Finder::rust_source(test_file, &test_source, RULE, |test_ast, finder| {
-        for item in &test_ast.items {
-            let Item::Mod(module) = item else {
-                continue;
-            };
-            let name = module.ident.to_string();
-            let Some(expected) = source_mods.get(&name) else {
-                continue;
-            };
-            if &cfg_keys(&module.attrs) == expected {
-                continue;
-            }
-            finder.at_span(
-                module.ident.span(),
-                format!("The cfg on `{name}` does not match the source module."),
-                "Use the same `#[cfg(...)]` as the source module.",
-            );
+    let mut report = Report::new(test_file, &test_source, RULE);
+    for item in &test_ast.items {
+        let Item::Mod(module) = item else {
+            continue;
+        };
+        let name = module.ident.to_string();
+        let Some(expected) = source_mods.get(&name) else {
+            continue;
+        };
+        if &cfg_keys(&module.attrs) == expected {
+            continue;
         }
-    })
+        report.at_span(
+            module.ident.span(),
+            format!("The cfg on `{name}` does not match the source module."),
+            "Use the same `#[cfg(...)]` as the source module.",
+        );
+    }
+    report.finish()
 }
 
 fn mod_cfgs(items: &[Item]) -> BTreeMap<String, Vec<String>> {

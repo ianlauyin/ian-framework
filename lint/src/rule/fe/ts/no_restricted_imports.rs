@@ -2,9 +2,6 @@
 // Import the package by its name.
 // Why a lint rule: A `node_modules` path is an install path. The package name is the import path.
 
-use std::fs;
-use std::path::Path;
-
 use oxc_ast::ast::{
     ExportAllDeclaration, ExportFromDeclaration, Expression, ImportDeclaration, ImportExpression,
     StringLiteral, TSExternalModuleReference,
@@ -13,26 +10,25 @@ use oxc_ast_visit::Visit;
 use oxc_ast_visit::walk::walk_import_expression;
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::fe::ts::file::TsFile;
+use crate::rule::report::Report;
 
 const RULE: &str = "no-restricted-imports";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
+pub fn check(file: &TsFile) -> Vec<Diagnostic> {
+    let Some(program) = file.program else {
         return Vec::new();
     };
-    check_source(path, &source)
-}
-
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::typescript_source(path, source, RULE, |program, finder| {
-        let mut imports = Imports { finder };
-        imports.visit_program(program);
-    })
+    let mut report = Report::new(file.path, file.source, RULE);
+    let mut imports = Imports {
+        report: &mut report,
+    };
+    imports.visit_program(program);
+    report.finish()
 }
 
 struct Imports<'a, 'b> {
-    finder: &'b mut Finder<'a>,
+    report: &'b mut Report<'a>,
 }
 
 impl<'ast> Visit<'ast> for Imports<'_, '_> {
@@ -68,7 +64,7 @@ impl Imports<'_, '_> {
         if !one_segment_after_node_modules(text) {
             return;
         }
-        self.finder.report(
+        self.report.at_offset(
             literal.span.start,
             format!("`{text}` goes through `node_modules`."),
             "Import the package by its name.",

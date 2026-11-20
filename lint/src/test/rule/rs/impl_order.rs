@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::rule::rs::impl_order::check_source;
+use crate::rule::rs::file::with_source;
+use crate::rule::rs::impl_order::check;
 
 #[test]
 fn an_inherent_impl_before_a_trait_impl_passes() {
@@ -39,7 +40,7 @@ impl Hidden {
     }
 }
 ";
-    assert!(check_source(Path::new("api/src/tube.rs"), source).is_empty());
+    assert!(with_source(Path::new("api/src/tube.rs"), source, &[], check).is_empty());
 }
 
 #[test]
@@ -59,7 +60,7 @@ impl Tube {
     }
 }
 ";
-    let found = check_source(Path::new("api/src/tube.rs"), source);
+    let found = with_source(Path::new("api/src/tube.rs"), source, &[], check);
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].line, 9);
     assert_eq!(found[0].rule, "impl-order");
@@ -75,5 +76,5 @@ impl Tube {
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/tube.rs"), "fn (").is_empty());
+    assert!(with_source(Path::new("api/src/tube.rs"), "fn (", &[], check).is_empty());
 }

@@ -2,25 +2,17 @@
 // Use a class, an id, a `&` suffix, or a `>`, `+`, or `~` combinator.
 // Why a lint rule: A nested rule names a child by class or id, extends the parent with `&`, or uses a `>`, `+`, or `~` combinator. `&:where(&)` is not a nested selector.
 
-use std::path::Path;
-
 use crate::diagnostic::Diagnostic;
+use crate::rule::fe::css::file::CssFile;
 use crate::rule::fe::css::parse::{Kind, is_css_whitespace};
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
 
 const RULE: &str = "selector-nested-pattern";
 
-pub fn check(path: &Path) -> Vec<Diagnostic> {
-    let Some(source) = crate::rule::fe::css::parse::read(path) else {
-        return Vec::new();
-    };
-    check_source(path, &source)
-}
-
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::css_source(path, source, RULE, |items, finder| {
-        walk(items, false, source, finder);
-    })
+pub fn check(file: &CssFile) -> Vec<Diagnostic> {
+    let mut report = Report::new(file.path, file.source, RULE);
+    walk(file.items, false, file.source, &mut report);
+    report.finish()
 }
 
 fn is_nested_selector(selector: &str) -> bool {
@@ -74,7 +66,7 @@ fn walk(
     items: &[crate::rule::fe::css::parse::Item],
     parent_is_rule: bool,
     source: &str,
-    finder: &mut Finder<'_>,
+    report: &mut Report<'_>,
 ) {
     for item in items {
         match &item.kind {
@@ -83,24 +75,24 @@ fn walk(
                 children,
             } => {
                 if parent_is_rule {
-                    check_selector(source, item.start, *selector_end, finder);
+                    check_selector(source, item.start, *selector_end, report);
                 }
-                walk(children, true, source, finder);
+                walk(children, true, source, report);
             }
-            Kind::AtRule { children, .. } => walk(children, false, source, finder),
+            Kind::AtRule { children, .. } => walk(children, false, source, report),
             Kind::Comment | Kind::Declaration => {}
         }
     }
 }
 
-fn check_selector(source: &str, start: u32, selector_end: u32, finder: &mut Finder<'_>) {
+fn check_selector(source: &str, start: u32, selector_end: u32, report: &mut Report<'_>) {
     let raw = &source[start as usize..selector_end as usize];
     let selector = raw.trim_end_matches(is_css_ws_char);
     for (offset, text) in selectors(selector) {
         if is_nested_selector(text) {
             continue;
         }
-        finder.report(
+        report.at_offset(
             start + offset as u32,
             format!("`{text}` is not a nested selector."),
             "Use a class, an id, a `&` suffix, or a `>`, `+`, or `~` combinator.",

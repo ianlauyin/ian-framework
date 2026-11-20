@@ -3,31 +3,26 @@
 // Why a lint rule: The methods of a public type come before the trait impls.
 
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 
 const RULE: &str = "impl-order";
 
-pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let Some(ast) = file.ast else {
         return Vec::new();
     };
-    check_source(path, &source)
+    let mut report = Report::new(file.path, file.source, RULE);
+    walk(&ast.items, &mut report);
+    report.finish()
 }
 
-pub(crate) fn check_source(path: &Path, source: &str) -> Vec<Diagnostic> {
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        walk(&file.items, finder);
-    })
-}
-
-fn walk(items: &[Item], finder: &mut Finder<'_>) {
+fn walk(items: &[Item], report: &mut Report<'_>) {
     let public = public_types(items);
     let mut trait_seen = BTreeSet::new();
     for item in items {
@@ -37,7 +32,7 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
         {
             if imp.trait_.is_none() {
                 if trait_seen.contains(&name) {
-                    finder.at_span(
+                    report.at_span(
                         imp.span(),
                         format!("The inherent impl of `{name}` comes after a trait impl."),
                         "Put the inherent impl before the trait impls.",
@@ -50,7 +45,7 @@ fn walk(items: &[Item], finder: &mut Finder<'_>) {
         if let Item::Mod(module) = item
             && let Some((_, nested)) = &module.content
         {
-            walk(nested, finder);
+            walk(nested, report);
         }
     }
 }

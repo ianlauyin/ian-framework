@@ -2,53 +2,47 @@
 // Move it out of `mod.rs`.
 // Why a lint rule: A `mod.rs` holds module declarations and `pub use` re-exports, plus the item named after the folder and that item's private items and impl blocks.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
 
 use crate::diagnostic::Diagnostic;
 use crate::files::file_name;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 use crate::rule::rs::place::Place;
 
 const RULE: &str = "mod-file";
 
-pub fn check(path: &Path, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    check_source(path, &source, srcs)
-}
-
-pub(crate) fn check_source(path: &Path, source: &str, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    if file_name(path) != "mod.rs" || Place::new(path, srcs).in_test() {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    if file_name(file.path) != "mod.rs" || Place::new(file.path, file.srcs).in_test() {
         return Vec::new();
     }
-    let Some(folder) = path.parent().and_then(|parent| parent.file_name()) else {
+    let Some(folder) = file.path.parent().and_then(|parent| parent.file_name()) else {
         return Vec::new();
     };
     let Some(folder) = folder.to_str() else {
         return Vec::new();
     };
+    let Some(ast) = file.ast else {
+        return Vec::new();
+    };
     let pascal = pascal_case(folder);
-    Finder::rust_source(path, source, RULE, |file, finder| {
-        let has_folder_item = file
-            .items
-            .iter()
-            .any(|item| is_folder_item(item, &pascal, folder));
-        for item in &file.items {
-            if is_allowed(item, &pascal, folder, has_folder_item) {
-                continue;
-            }
-            finder.at_span(
-                item.span(),
-                format!("`{}` is not allowed in `mod.rs`.", item_label(item)),
-                "Move it out of `mod.rs`.",
-            );
+    let has_folder_item = ast
+        .items
+        .iter()
+        .any(|item| is_folder_item(item, &pascal, folder));
+    let mut report = Report::new(file.path, file.source, RULE);
+    for item in &ast.items {
+        if is_allowed(item, &pascal, folder, has_folder_item) {
+            continue;
         }
-    })
+        report.at_span(
+            item.span(),
+            format!("`{}` is not allowed in `mod.rs`.", item_label(item)),
+            "Move it out of `mod.rs`.",
+        );
+    }
+    report.finish()
 }
 
 fn is_allowed(item: &Item, pascal: &str, snake: &str, has_folder_item: bool) -> bool {

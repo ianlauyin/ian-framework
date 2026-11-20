@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::rule::rs::mod_file::check_source;
+use crate::rule::rs::file::with_source;
+use crate::rule::rs::mod_file::check;
 
 fn srcs() -> Vec<PathBuf> {
     vec![PathBuf::from("api/src")]
@@ -34,25 +35,27 @@ const LABEL: &str = \"a\";
 
 fn helper() {}
 ";
-    assert!(check_source(Path::new("api/src/logger/mod.rs"), source, &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/logger/mod.rs"), source, &srcs(), check).is_empty());
     let trait_source = "\
 pub(crate) mod http_log_shipper;
 
 pub trait LogShipper {}
 ";
     assert!(
-        check_source(
+        with_source(
             Path::new("api/src/log_shipper/mod.rs"),
             trait_source,
-            &srcs()
+            &srcs(),
+            check
         )
         .is_empty()
     );
     assert!(
-        check_source(
+        with_source(
             Path::new("api/src/test/logger/mod.rs"),
             "pub struct Other;\nfn helper() {}\n",
-            &srcs()
+            &srcs(),
+            check
         )
         .is_empty()
     );
@@ -65,7 +68,7 @@ pub struct Other;
 
 fn helper() {}
 ";
-    let found = check_source(Path::new("api/src/logger/mod.rs"), source, &srcs());
+    let found = with_source(Path::new("api/src/logger/mod.rs"), source, &srcs(), check);
     assert_eq!(found.len(), 2);
     assert_eq!(found[0].line, 1);
     assert_eq!(found[0].rule, "mod-file");
@@ -78,5 +81,5 @@ fn helper() {}
 
 #[test]
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
-    assert!(check_source(Path::new("api/src/logger/mod.rs"), "fn (", &srcs()).is_empty());
+    assert!(with_source(Path::new("api/src/logger/mod.rs"), "fn (", &srcs(), check).is_empty());
 }

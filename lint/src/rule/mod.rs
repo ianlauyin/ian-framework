@@ -1,4 +1,4 @@
 pub mod fe;
-pub mod finder;
+pub mod report;
 pub mod rs;
 pub(crate) mod ruleset;

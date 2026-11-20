@@ -2,29 +2,24 @@
 // Put the decision in the catalog. Or add a test that prevents that reason.
 // Why a lint rule: A comment hides a decision that belongs in the catalog.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use ra_ap_rustc_lexer::{FrontmatterAllowed, TokenKind, strip_shebang, tokenize};
 
 use crate::diagnostic::Diagnostic;
-use crate::rule::finder::Finder;
+use crate::rule::report::Report;
+use crate::rule::rs::file::RsFile;
 
 const RULE: &str = "no-comments";
 
-pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let Ok(source) = fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    let mut finder = Finder::new(path, &source, RULE);
-    let skipped = strip_shebang(&source).unwrap_or(0);
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let mut report = Report::new(file.path, file.source, RULE);
+    let skipped = strip_shebang(file.source).unwrap_or(0);
     let mut offset = skipped as u32;
-    for token in tokenize(&source[skipped..], FrontmatterAllowed::Yes) {
+    for token in tokenize(&file.source[skipped..], FrontmatterAllowed::Yes) {
         if matches!(
             token.kind,
             TokenKind::LineComment { .. } | TokenKind::BlockComment { .. }
         ) {
-            finder.report(
+            report.at_offset(
                 offset,
                 "The file has a comment.",
                 "Put the decision in the catalog. Or add a test that prevents that reason.",
@@ -32,5 +27,5 @@ pub fn check(path: &Path, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
         }
         offset += token.len;
     }
-    finder.finish()
+    report.finish()
 }
