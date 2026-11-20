@@ -27,6 +27,16 @@ fn sample(lock: Lock) {
 }
 
 #[test]
+fn lock_unwrap_in_a_test_file_passes() {
+    let source = "\
+fn sample(lock: Lock) {
+    let _ = lock.lock().unwrap();
+}
+";
+    assert!(with_source(Path::new("api/src/test/work.rs"), source, &srcs(), check).is_empty());
+}
+
+#[test]
 fn lock_unwrap_outside_mutex_rs_fails() {
     let source = "\
 fn sample(lock: Lock) {

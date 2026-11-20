@@ -32,6 +32,17 @@ fn fine() -> i32 {
 }
 
 #[test]
+fn a_result_with_another_error_in_a_test_file_passes() {
+    let source = "\
+fn read() -> Result<String, std::io::Error> {
+    Ok(String::new())
+}
+";
+    let srcs = [std::path::PathBuf::from("api/src")];
+    assert!(with_source(Path::new("api/src/test/tube.rs"), source, &srcs, check).is_empty());
+}
+
+#[test]
 fn a_result_with_another_error_fails() {
     let source = "\
 fn read() -> Result<String, std::io::Error> {

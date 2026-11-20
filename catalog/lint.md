@@ -48,15 +48,15 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/rule.rs` | The Rust rule type. A rule checks one file or one folder. | |
 | `lint/src/rule/rs/file/mod.rs` | The Rust file rules | |
 | `lint/src/rule/rs/file/env_name.rs` | An env value and an env-name literal | A test file can read an env value and can contain an env-name literal. The framework ruleset allows `GOOGLE_CLOUD_PROJECT` under `gcp`. |
-| `lint/src/rule/rs/file/exception_code.rs` | A string literal error code in `exception!` | |
+| `lint/src/rule/rs/file/exception_code.rs` | A string literal error code in `exception!` | A test file is not checked. |
 | `lint/src/rule/rs/file/exception_new.rs` | `Exception::__new` outside `exception.rs` | The framework ruleset allows `exception.rs`. The project ruleset checks every file. |
 | `lint/src/rule/rs/file/impl_order.rs` | The inherent impl before trait impls | |
 | `lint/src/rule/rs/file/inherent_impl.rs` | An inherent impl outside the file that defines the type | |
 | `lint/src/rule/rs/file/mod_file.rs` | The items in a `mod.rs` | A `use` can be in `mod.rs`. A test file is not checked. |
-| `lint/src/rule/rs/file/mutex_lock.rs` | `lock().unwrap` on a standard mutex | |
+| `lint/src/rule/rs/file/mutex_lock.rs` | `lock().unwrap` on a standard mutex | `mutex.rs` is not checked. A test file is not checked. |
 | `lint/src/rule/rs/file/no_comments.rs` | A comment | |
 | `lint/src/rule/rs/file/private_static.rs` | A private static | |
-| `lint/src/rule/rs/file/result_type.rs` | A fallible function returns `Result<T, Exception>` | |
+| `lint/src/rule/rs/file/result_type.rs` | A fallible function returns `Result<T, Exception>` | A test file is not checked. |
 | `lint/src/rule/rs/file/source_order.rs` | The source order | A private `macro_rules!` is in the same group as a constant. A `macro_rules!` must come before the items that use it. |
 | `lint/src/rule/rs/file/super_path.rs` | A `super::super` path | |
 | `lint/src/rule/rs/file/test_attr.rs` | A test outside the test folder | `mod test` in `lib.rs` or `main.rs` stays. |

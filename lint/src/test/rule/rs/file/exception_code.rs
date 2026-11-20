@@ -17,6 +17,17 @@ fn build(err: Error) {
 }
 
 #[test]
+fn a_string_literal_error_code_in_a_test_file_passes() {
+    let source = "\
+fn build() {
+    let _ = exception!(code = \"CODE\", \"message\");
+}
+";
+    let srcs = [std::path::PathBuf::from("api/src")];
+    assert!(with_source(Path::new("api/src/test/app.rs"), source, &srcs, check).is_empty());
+}
+
+#[test]
 fn a_string_literal_error_code_fails() {
     let source = "\
 fn build() {

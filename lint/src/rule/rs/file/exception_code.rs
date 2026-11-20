@@ -10,6 +10,7 @@ use syn::{Expr, ExprLit, ExprMacro, ItemMacro, Lit};
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
+use crate::rule::rs::place::Place;
 use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
@@ -18,6 +19,9 @@ const RULE: &str = "exception-code";
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+    if Place::new(file.path, file.srcs).in_test() {
+        return Vec::new();
+    }
     let Some(ast) = file.ast else {
         return Vec::new();
     };
