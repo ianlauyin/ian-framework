@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::OnceLock;
 use std::{env, fs, process};
 
 fn temp_root(name: &str) -> PathBuf {
@@ -13,12 +14,34 @@ fn temp_root(name: &str) -> PathBuf {
     root
 }
 
-fn ian_lint() -> PathBuf {
-    let exe = env::current_exe().expect("test executable");
-    exe.ancestors()
-        .map(|dir| dir.join("ian-lint"))
-        .find(|path| path.is_file())
-        .expect("ian-lint is built")
+fn ian_lint() -> &'static Path {
+    static BINARY: OnceLock<PathBuf> = OnceLock::new();
+    BINARY.get_or_init(build)
+}
+
+fn build() -> PathBuf {
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "build",
+            "--quiet",
+            "--bin",
+            "ian-lint",
+            "--message-format=json",
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("cargo runs");
+    assert!(
+        output.status.success(),
+        "ian-lint is built: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter(|message| message["reason"] == "compiler-artifact")
+        .find_map(|message| message["executable"].as_str().map(PathBuf::from))
+        .expect("cargo reports the ian-lint executable")
 }
 
 fn run(root: &Path, vars: &[(&str, &str)]) -> Output {
