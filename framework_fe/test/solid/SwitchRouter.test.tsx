@@ -1,3 +1,4 @@
+import { type RouteSectionProps } from "@solidjs/router";
 import { render } from "@solidjs/web";
 import { createSignal, flush } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,6 +25,15 @@ function AdminHome() {
     return <p>admin home</p>;
 }
 
+function Shell(props: RouteSectionProps) {
+    return (
+        <div>
+            <p>shell</p>
+            {props.children}
+        </div>
+    );
+}
+
 function groups(): KeyedRoutes<Area>[] {
     return [
         { key: Area.Protected, routes: [{ path: "/", component: ProtectedHome }] },
@@ -41,14 +51,14 @@ describe("SwitchRouter", () => {
     it("shows the routes for the active key", () => {
         window.history.pushState({}, "", "/");
         const root = document.createElement("div");
-        dispose = render(() => <SwitchRouter active={Area.Protected} routes={groups()} unknown={() => "/missing"} />, root);
+        dispose = render(() => <SwitchRouter active={Area.Protected} keyed={groups()} />, root);
         expect(root.textContent).toContain("protected home");
     });
 
     it("shows another key from the same route list", () => {
         window.history.pushState({}, "", "/");
         const root = document.createElement("div");
-        dispose = render(() => <SwitchRouter active={Area.Admin} routes={groups()} unknown={() => "/missing"} />, root);
+        dispose = render(() => <SwitchRouter active={Area.Admin} keyed={groups()} />, root);
         expect(root.textContent).toContain("admin home");
     });
 
@@ -56,34 +66,18 @@ describe("SwitchRouter", () => {
         window.history.pushState({}, "", "/");
         const [active, setActive] = createSignal(Area.Public);
         const root = document.createElement("div");
-        dispose = render(() => <SwitchRouter active={active()} routes={groups()} unknown={() => "/missing"} />, root);
+        dispose = render(() => <SwitchRouter active={active()} keyed={groups()} />, root);
         expect(root.textContent).toContain("public home");
         setActive(Area.Protected);
         flush();
         expect(root.textContent).toContain("protected home");
     });
 
-    it("moves an unknown path to the path from unknown", () => {
-        window.history.pushState({}, "", "/no-such-page");
-        const seen: Area[] = [];
+    it("shows the common route around the active routes", () => {
+        window.history.pushState({}, "", "/");
         const root = document.createElement("div");
-        dispose = render(
-            () => (
-                <SwitchRouter
-                    active={Area.Public}
-                    routes={[
-                        { key: Area.Protected, routes: [{ path: "/home", component: ProtectedHome }] },
-                        { key: Area.Public, routes: [{ path: "/home", component: PublicHome }] },
-                    ]}
-                    unknown={(key) => {
-                        seen.push(key);
-                        return "/home";
-                    }}
-                />
-            ),
-            root,
-        );
-        expect(seen).toEqual([Area.Public]);
+        dispose = render(() => <SwitchRouter active={Area.Public} keyed={groups()} common={{ component: Shell }} />, root);
+        expect(root.textContent).toContain("shell");
         expect(root.textContent).toContain("public home");
     });
 });
