@@ -4,10 +4,7 @@
 // Remove the empty line before the rule.
 // Why a lint rule: An empty line separates a rule from the node before it. The first child of a block and a rule after a single-line comment stay on the next line.
 
-use std::path::Path;
-
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::edit::Edit;
 use crate::rule::fe::css::parse::{Item, Kind};
 use crate::rule::fe::css::rule::CssRule;
 use crate::rule::fe::css::source::CssFile;
@@ -15,30 +12,13 @@ use crate::rule::report::RuleReport;
 
 const RULE: &str = "rule-empty-line-before";
 
-pub(crate) const CSS_RULE: CssRule = CssRule::new(check, Some(edit));
+pub(crate) const CSS_RULE: CssRule = CssRule::new(check);
 
 pub(crate) fn check(file: &CssFile) -> Vec<Diagnostic> {
-    scan(file).0
-}
-
-pub(crate) fn edit(file: &CssFile) -> Vec<Edit> {
-    scan(file).1
-}
-
-fn scan(file: &CssFile) -> (Vec<Diagnostic>, Vec<Edit>) {
     let lines = Lines::new(file.source);
     let mut report = RuleReport::new(file.path, file.source, RULE);
-    let mut edits = Vec::new();
-    walk(
-        file.items,
-        None,
-        file.source,
-        &lines,
-        file.path,
-        &mut report,
-        &mut edits,
-    );
-    (report.finish(), edits)
+    walk(file.items, None, file.source, &lines, &mut report);
+    report.finish()
 }
 
 fn walk(
@@ -46,9 +26,7 @@ fn walk(
     brace: Option<u32>,
     source: &str,
     lines: &Lines,
-    path: &Path,
     report: &mut RuleReport<'_>,
-    edits: &mut Vec<Edit>,
 ) {
     for (index, item) in items.iter().enumerate() {
         match &item.kind {
@@ -57,32 +35,14 @@ fn walk(
                 children,
             } => {
                 if brace.is_some() || index != 0 {
-                    report_rule(
-                        item, items, index, brace, source, lines, path, report, edits,
-                    );
+                    report_rule(item, items, index, brace, source, lines, report);
                 }
-                walk(
-                    children,
-                    Some(*selector_end),
-                    source,
-                    lines,
-                    path,
-                    report,
-                    edits,
-                );
+                walk(children, Some(*selector_end), source, lines, report);
             }
             Kind::AtRule {
                 brace: Some(at_brace),
                 children,
-            } => walk(
-                children,
-                Some(*at_brace),
-                source,
-                lines,
-                path,
-                report,
-                edits,
-            ),
+            } => walk(children, Some(*at_brace), source, lines, report),
             Kind::AtRule { .. } | Kind::Comment | Kind::Declaration => {}
         }
     }
@@ -95,32 +55,13 @@ fn report_rule(
     brace: Option<u32>,
     source: &str,
     lines: &Lines,
-    path: &Path,
     report: &mut RuleReport<'_>,
-    edits: &mut Vec<Edit>,
 ) {
     let expect_empty = !is_first_nested(source, items, index, brace, lines)
         && !is_after_single_line_comment(source, items, index, brace, lines);
-    let gap_text = gap(source, items, index, brace);
-    let has_empty = has_empty_line(gap_text);
+    let has_empty = has_empty_line(gap(source, items, index, brace));
     if expect_empty == has_empty {
         return;
-    }
-    let (from, to) = gap_range(items, index, brace);
-    if from <= to && (to as usize) <= source.len() {
-        let text = if expect_empty {
-            with_empty_line(gap_text)
-        } else {
-            without_empty_line(gap_text)
-        };
-        if text != gap_text {
-            edits.push(Edit {
-                path: path.to_path_buf(),
-                start: from,
-                end: to,
-                text,
-            });
-        }
     }
     if expect_empty {
         report.at_offset(
@@ -135,42 +76,6 @@ fn report_rule(
         "The rule has an empty line before it.",
         "Remove the empty line before the rule.",
     );
-}
-
-fn with_empty_line(gap: &str) -> String {
-    let indent = indent_of(gap);
-    let head = &gap[..gap.len() - indent.len()];
-    let line_break = line_break(gap);
-    let mut text = String::new();
-    text.push_str(head);
-    if !head.ends_with('\n') {
-        text.push_str(line_break);
-    }
-    text.push_str(line_break);
-    text.push_str(indent);
-    text
-}
-
-fn without_empty_line(gap: &str) -> String {
-    let mut text = String::new();
-    if gap.contains('\n') {
-        text.push_str(line_break(gap));
-    }
-    text.push_str(indent_of(gap));
-    text
-}
-
-fn indent_of(gap: &str) -> &str {
-    let bytes = gap.as_bytes();
-    let mut index = bytes.len();
-    while index > 0 && matches!(bytes[index - 1], b' ' | b'\t') {
-        index -= 1;
-    }
-    &gap[index..]
-}
-
-fn line_break(gap: &str) -> &str {
-    if gap.contains("\r\n") { "\r\n" } else { "\n" }
 }
 
 fn is_first_nested(

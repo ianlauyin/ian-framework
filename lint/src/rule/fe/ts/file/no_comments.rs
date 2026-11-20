@@ -9,7 +9,7 @@ use crate::rule::report::RuleReport;
 
 const RULE: &str = "no-comments";
 
-pub(crate) const TS_RULE: TsRule = TsRule::file(check, None);
+pub(crate) const TS_RULE: TsRule = TsRule::file(check);
 
 pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {

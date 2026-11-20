@@ -13,7 +13,7 @@ use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "test-attr";
 
-pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
+pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let place = Place::new(file.path, file.srcs);

@@ -12,7 +12,7 @@ use crate::rule::fe::ts::rule::TsRule;
 
 const RULE: &str = "test-path";
 
-pub(crate) const TS_RULE: TsRule = TsRule::folder(check, None);
+pub(crate) const TS_RULE: TsRule = TsRule::folder(check);
 
 pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let mut diagnostics = source_tests(path, files);

@@ -10,7 +10,7 @@ use crate::rule::report::RuleReport;
 
 const RULE: &str = "selector-nested-pattern";
 
-pub(crate) const CSS_RULE: CssRule = CssRule::new(check, None);
+pub(crate) const CSS_RULE: CssRule = CssRule::new(check);
 
 pub(crate) fn check(file: &CssFile) -> Vec<Diagnostic> {
     let mut report = RuleReport::new(file.path, file.source, RULE);

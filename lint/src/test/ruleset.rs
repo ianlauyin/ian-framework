@@ -110,22 +110,6 @@ fn the_project_ruleset_skips_a_missing_root_reexport() {
 }
 
 #[test]
-fn the_framework_ruleset_formats_source_order_and_the_project_ruleset_does_not() {
-    let source = "\
-fn helper() {}
-
-pub fn run() {}
-";
-    let path = env::temp_dir().join(format!("ian-lint-ruleset-order-{}.rs", process::id()));
-    fs::write(&path, source).expect("file is written");
-    let framework = crate::rule::rs::run::preview(&path, Ruleset::Framework).expect("preview");
-    let project = crate::rule::rs::run::preview(&path, Ruleset::Project).expect("preview");
-    fs::remove_file(&path).unwrap();
-    assert!(framework.find("pub fn run()").unwrap() < framework.find("fn helper()").unwrap());
-    assert_eq!(project, source);
-}
-
-#[test]
 fn the_framework_ruleset_reports_a_missing_root_reexport() {
     let root = temp_root("reexport-fw");
     let src = root.join("src");

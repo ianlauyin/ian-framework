@@ -11,7 +11,7 @@ use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "no-comments";
 
-pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
+pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let mut report = RuleReport::new(file.path, file.source, RULE);

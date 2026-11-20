@@ -6,78 +6,19 @@ use oxc_ast::ast::Statement;
 use oxc_span::GetSpan;
 
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::edit::{Edit, piece_ranges};
 use crate::rule::fe::ts::rule::TsRule;
 use crate::rule::fe::ts::source::TsFile;
 use crate::rule::report::RuleReport;
 
 const RULE: &str = "declaration-order";
 
-pub(crate) const TS_RULE: TsRule = TsRule::file(check, Some(edit));
+pub(crate) const TS_RULE: TsRule = TsRule::file(check);
 
 const IMPORT: u8 = 0;
 const PRIVATE_TYPE_OR_CONSTANT: u8 = 1;
 const EXPORT: u8 = 2;
 const PRIVATE_INTERFACE: u8 = 3;
 const PRIVATE_FUNCTION: u8 = 4;
-
-pub(crate) fn edit(file: &TsFile) -> Vec<Edit> {
-    let Some(program) = file.program else {
-        return Vec::new();
-    };
-    if program.body.is_empty()
-        || program
-            .body
-            .iter()
-            .any(|statement| group(statement).is_none())
-    {
-        return Vec::new();
-    }
-    let spans: Vec<(usize, usize)> = program
-        .body
-        .iter()
-        .map(|statement| {
-            let span = statement.span();
-            (span.start as usize, span.end as usize)
-        })
-        .collect();
-    let Some((start, end, ranges)) = piece_ranges(file.source, &spans) else {
-        return Vec::new();
-    };
-    let mut pieces = Vec::with_capacity(program.body.len());
-    for (index, statement) in program.body.iter().enumerate() {
-        let Some(group) = group(statement) else {
-            return Vec::new();
-        };
-        let (from, to) = ranges[index];
-        pieces.push(Piece {
-            group,
-            index,
-            text: file.source[from..to].to_owned(),
-        });
-    }
-    pieces.sort_by(|left, right| {
-        left.group
-            .cmp(&right.group)
-            .then(left.index.cmp(&right.index))
-    });
-    let text: String = pieces.iter().map(|piece| piece.text.as_str()).collect();
-    if text == file.source[start..end] {
-        return Vec::new();
-    }
-    vec![Edit {
-        path: file.path.to_path_buf(),
-        start: start as u32,
-        end: end as u32,
-        text,
-    }]
-}
-
-struct Piece {
-    group: u8,
-    index: usize,
-    text: String,
-}
 
 pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {

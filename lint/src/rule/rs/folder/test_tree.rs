@@ -20,7 +20,7 @@ use crate::rule::rs::source;
 
 const RULE: &str = "test-tree";
 
-pub(crate) const RS_RULE: RsRule = RsRule::folder(check, None);
+pub(crate) const RS_RULE: RsRule = RsRule::folder(check);
 
 pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {

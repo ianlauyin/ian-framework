@@ -19,7 +19,7 @@ use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "env-name";
 
-pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
+pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 const READS: &[&str] = &["var", "var_os", "vars", "vars_os"];
 const HELPERS: &[&str] = &["optional", "required"];
 const GOOGLE: &[&str] = &["GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"];

@@ -9,23 +9,12 @@ use syn::{Item, Type, Visibility};
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
-use crate::rule::rs::file::source_order::Sort;
 use crate::rule::rs::rule::RsRule;
 use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "impl-order";
 
-pub(crate) const RS_RULE: RsRule = RsRule::file(check, Some(edit));
-
-pub(crate) enum Kind {
-    Other,
-    Inherent(String),
-    Trait(String),
-}
-
-pub(crate) fn edit(file: &RsFile) -> Vec<crate::rule::edit::Edit> {
-    crate::rule::rs::file::source_order::reorder(file, Sort::Impl)
-}
+pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {
@@ -64,7 +53,7 @@ fn walk(items: &[Item], report: &mut RuleReport<'_>) {
     }
 }
 
-pub(crate) fn public_types(items: &[Item]) -> BTreeSet<String> {
+fn public_types(items: &[Item]) -> BTreeSet<String> {
     items
         .iter()
         .filter_map(|item| {
@@ -81,23 +70,6 @@ pub(crate) fn public_types(items: &[Item]) -> BTreeSet<String> {
             }
         })
         .collect()
-}
-
-pub(crate) fn kind(item: &Item, public: &BTreeSet<String>) -> Kind {
-    let Item::Impl(item) = item else {
-        return Kind::Other;
-    };
-    let Some(name) = type_name(&item.self_ty) else {
-        return Kind::Other;
-    };
-    if !public.contains(&name) {
-        return Kind::Other;
-    }
-    if item.trait_.is_none() {
-        Kind::Inherent(name)
-    } else {
-        Kind::Trait(name)
-    }
 }
 
 fn type_name(ty: &Type) -> Option<String> {

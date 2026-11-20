@@ -4,7 +4,6 @@ mod test;
 pub(crate) mod check;
 pub(crate) mod config;
 pub(crate) mod files;
-pub(crate) mod format;
 pub(crate) mod rule;
 pub(crate) mod ruleset;
 
@@ -37,13 +36,7 @@ fn main() -> ExitCode {
     let out_color = use_color(stdout().is_terminal());
     let err_color = use_color(stderr().is_terminal());
     let report = match args() {
-        Ok((root, side, format)) => {
-            if format {
-                crate::format::format(&root, side)
-            } else {
-                crate::check::check(&root, side)
-            }
-        }
+        Ok((root, side)) => crate::check::check(&root, side),
         Err(output) => Report {
             diagnostics: Vec::new(),
             failures: vec![Failure { output }],
@@ -86,10 +79,9 @@ fn main() -> ExitCode {
     }
 }
 
-fn args() -> Result<(PathBuf, Side, bool), String> {
+fn args() -> Result<(PathBuf, Side), String> {
     let mut root = None;
     let mut side = None;
-    let mut format = false;
     for arg in env::args_os().skip(1) {
         let text = arg.as_os_str();
         if text == "fe" || text == "rs" {
@@ -97,13 +89,6 @@ fn args() -> Result<(PathBuf, Side, bool), String> {
                 return Err("The side is set two times.".to_owned());
             }
             side = Some(side_arg(text));
-            continue;
-        }
-        if text == "format" {
-            if format {
-                return Err("The format is set two times.".to_owned());
-            }
-            format = true;
             continue;
         }
         if root.is_some() {
@@ -114,7 +99,6 @@ fn args() -> Result<(PathBuf, Side, bool), String> {
     Ok((
         root.unwrap_or_else(|| PathBuf::from(".")),
         side.unwrap_or(Side::All),
-        format,
     ))
 }
 

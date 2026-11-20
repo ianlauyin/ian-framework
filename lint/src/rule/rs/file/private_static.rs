@@ -11,7 +11,7 @@ use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "private-static";
 
-pub(crate) const RS_RULE: RsRule = RsRule::file(check, None);
+pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {

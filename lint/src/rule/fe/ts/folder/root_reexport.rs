@@ -17,7 +17,7 @@ use crate::rule::report::RuleReport;
 
 const RULE: &str = "root-reexport";
 
-pub(crate) const TS_RULE: TsRule = TsRule::folder(check, None);
+pub(crate) const TS_RULE: TsRule = TsRule::folder(check);
 
 pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
