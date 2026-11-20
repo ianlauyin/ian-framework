@@ -2,37 +2,43 @@ import { createRouter, type RouteDefinition, type RouteSectionProps, useNavigate
 import type { JSX } from "@solidjs/web";
 import { Match, Switch } from "solid-js";
 
-export interface SwitchRouterProps {
-    protectedRoutes: readonly RouteDefinition[];
-    publicRoutes: readonly RouteDefinition[];
-    isProtected: boolean;
-    unknown: (isProtected: boolean) => string;
+export interface KeyedRoutes<Key extends string> {
+    key: Key;
+    routes: readonly RouteDefinition[];
+}
+
+export interface SwitchRouterProps<Key extends string> {
+    routes: readonly KeyedRoutes<Key>[];
+    active: Key;
+    unknown: (key: Key) => string;
     children?: (props: RouteSectionProps) => JSX.Element;
 }
 
-export function SwitchRouter(props: SwitchRouterProps): JSX.Element {
-    const ProtectedRouter = createRouter({
-        routes: [...props.protectedRoutes, catchAll(() => props.unknown(true))],
-    });
-    const PublicRouter = createRouter({
-        routes: [...props.publicRoutes, catchAll(() => props.unknown(false))],
-    });
+export function SwitchRouter<Key extends string>(props: SwitchRouterProps<Key>): JSX.Element {
+    const groups = props.routes.map((group) => ({
+        key: group.key,
+        Router: createRouter({
+            routes: [...group.routes, catchAll(() => props.unknown(group.key))],
+        }),
+    }));
 
     return (
-        <Switch>
-            <Match when={props.isProtected}>
-                <ProtectedRouter>{(route) => section(props, route)}</ProtectedRouter>
-            </Match>
-            <Match when={!props.isProtected}>
-                <PublicRouter>{(route) => section(props, route)}</PublicRouter>
-            </Match>
+        <Switch fallback={null}>
+            {groups.map((group) => {
+                const Router = group.Router;
+                return (
+                    <Match when={props.active === group.key}>
+                        <Router>{(route) => section(props.children, route)}</Router>
+                    </Match>
+                );
+            })}
         </Switch>
     );
 }
 
-function section(props: SwitchRouterProps, route: RouteSectionProps): JSX.Element {
-    if (!props.children) return route.children;
-    return props.children(route);
+function section(children: ((props: RouteSectionProps) => JSX.Element) | undefined, route: RouteSectionProps): JSX.Element {
+    if (!children) return route.children;
+    return children(route);
 }
 
 function catchAll(path: () => string): RouteDefinition {
