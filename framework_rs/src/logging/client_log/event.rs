@@ -61,6 +61,25 @@ pub struct ClientLogEvent {
     pub(crate) extra: BTreeMap<String, LogValue>,
 }
 
+pub(crate) fn snake_case(key: &str) -> String {
+    let chars: Vec<char> = key.chars().collect();
+    let mut result = String::with_capacity(key.len() + 4);
+    for (index, &ch) in chars.iter().enumerate() {
+        if ch.is_ascii_uppercase() && index > 0 {
+            let previous = chars[index - 1];
+            let next_is_lower = chars.get(index + 1).is_some_and(char::is_ascii_lowercase);
+            if previous.is_ascii_lowercase()
+                || previous.is_ascii_digit()
+                || (previous.is_ascii_uppercase() && next_is_lower)
+            {
+                result.push('_');
+            }
+        }
+        result.push(ch.to_ascii_lowercase());
+    }
+    result
+}
+
 fn client_event(event: &ClientLogEvent, ip: &str, user_agent: &str) -> LogEvent {
     let now = hkt_now();
     let mut context = client_fields(&event.context);
@@ -129,25 +148,6 @@ fn client_fields(extra: &BTreeMap<String, LogValue>) -> BTreeMap<String, LogValu
         kept.insert(snake_case(key), value.clone());
     }
     kept
-}
-
-pub(crate) fn snake_case(key: &str) -> String {
-    let chars: Vec<char> = key.chars().collect();
-    let mut result = String::with_capacity(key.len() + 4);
-    for (index, &ch) in chars.iter().enumerate() {
-        if ch.is_ascii_uppercase() && index > 0 {
-            let previous = chars[index - 1];
-            let next_is_lower = chars.get(index + 1).is_some_and(char::is_ascii_lowercase);
-            if previous.is_ascii_lowercase()
-                || previous.is_ascii_digit()
-                || (previous.is_ascii_uppercase() && next_is_lower)
-            {
-                result.push('_');
-            }
-        }
-        result.push(ch.to_ascii_lowercase());
-    }
-    result
 }
 
 fn extra_key_ok(key: &str) -> bool {

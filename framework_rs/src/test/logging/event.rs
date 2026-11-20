@@ -69,7 +69,7 @@ fn empty_http_fields_are_null_or_empty() {
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(value.get("app").is_none());
     assert!(value.get("project").is_none());
-    crate::test::logging::helpers::assert_uuid_v7(value["id"].as_str().unwrap());
+    crate::test::logging::assert_uuid_v7(value["id"].as_str().unwrap());
     assert!(value["context"].as_object().unwrap().is_empty());
     assert_eq!(value["action"], "");
     assert!(value.get("request").is_none());
@@ -148,7 +148,7 @@ fn constructors_set_the_level_and_the_message() {
     let error = LogEvent::error("a", "boom");
     assert_eq!(error.level(), LogLevel::Error);
     assert_eq!(error.error_message(), Some("boom"));
-    crate::test::logging::helpers::assert_uuid_v7(error.id());
+    crate::test::logging::assert_uuid_v7(error.id());
     assert!(error.context.is_empty());
     assert!(error.extra.is_empty());
 }

@@ -1,5 +1,5 @@
 use crate::logging::*;
-use crate::test::logging::helpers::{buffered_events, global_logger};
+use crate::test::logging::{buffered_events, global_logger};
 
 #[tokio::test]
 async fn it_returns_the_output_and_records_the_event_with_the_latency() {

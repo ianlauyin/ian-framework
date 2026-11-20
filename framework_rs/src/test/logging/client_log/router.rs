@@ -6,7 +6,7 @@ use crate::logging::LogLevel;
 
 use crate::http::middleware::access_log;
 use crate::logging::client_log::router::*;
-use crate::test::logging::helpers::{
+use crate::test::logging::{
     REFUSED_ACTION, assert_uuid_v7, buffered_events, global_logger, shipped_batches, wait_for,
 };
 use axum::body::Body;

@@ -9,7 +9,7 @@ use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::middleware::access_log::*;
 use crate::logging::{LogEvent, LogLevel};
-use crate::test::logging::helpers;
+use crate::test::logging::{assert_uuid_v7, buffered_events, global_logger};
 
 async fn status_from_path(
     axum::extract::Path(code): axum::extract::Path<u16>,
@@ -42,7 +42,7 @@ async fn client_error() -> Result<(), Exception> {
 }
 
 fn app() -> axum::Router {
-    helpers::global_logger();
+    global_logger();
     axum::Router::new()
         .route("/status/{code}", axum::routing::get(status_from_path))
         .route("/echo", axum::routing::post(echo))
@@ -53,7 +53,7 @@ fn app() -> axum::Router {
 }
 
 fn recorded(request_url: &str) -> LogEvent {
-    let mut events: Vec<_> = helpers::buffered_events(helpers::global_logger())
+    let mut events: Vec<_> = buffered_events(global_logger())
         .into_iter()
         .filter(|event| {
             event
@@ -123,7 +123,7 @@ async fn middleware_records_the_request_schema() {
     assert_eq!(response.status(), axum::http::StatusCode::NO_CONTENT);
     assert!(response.headers().get("x-request-id").is_none());
     let event = recorded("/status/204?***");
-    helpers::assert_uuid_v7(&event.id);
+    assert_uuid_v7(&event.id);
     assert_eq!(event.action, "API/GET:/status/204");
     assert_eq!(event.context["ip"], "-");
     assert_eq!(event.context["user_agent"], "-");
@@ -132,7 +132,7 @@ async fn middleware_records_the_request_schema() {
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(value.get("app").is_none());
     assert!(value.get("project").is_none());
-    helpers::assert_uuid_v7(value["id"].as_str().unwrap());
+    assert_uuid_v7(value["id"].as_str().unwrap());
     assert_eq!(value["action"], "API/GET:/status/204");
     assert!(!json.contains("req-1"));
     assert!(value.get("request").is_none());

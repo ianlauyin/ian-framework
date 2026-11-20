@@ -5,8 +5,21 @@ use serde_json;
 use crate::logging::client_log::event::snake_case;
 use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::{ClientLog, LogEvent, LogLevel};
-use crate::test::logging::helpers;
+use crate::test::logging::{assert_uuid_v7, client_log_event};
 use crate::time::hkt_now;
+
+impl ClientChecked for LogEvent {
+    fn client_checked(&self) -> LogEvent {
+        let log = ClientLog {
+            events: vec![client_log_event(self)],
+        };
+        log.log_events(&HeaderMap::new()).unwrap().remove(0)
+    }
+}
+
+trait ClientChecked {
+    fn client_checked(&self) -> LogEvent;
+}
 
 #[test]
 fn log_events_rejects_an_empty_list() {
@@ -20,15 +33,15 @@ fn log_events_rejects_an_empty_list() {
 fn log_events_returns_sanitized_events() {
     let log = ClientLog {
         events: vec![
-            helpers::client_log_event(&LogEvent::info("/a?x=1")),
-            helpers::client_log_event(&LogEvent::error("#frag", "boom")),
+            client_log_event(&LogEvent::info("/a?x=1")),
+            client_log_event(&LogEvent::error("#frag", "boom")),
         ],
     };
     let stored = log.log_events(&HeaderMap::new()).unwrap();
     assert_eq!(stored.len(), 2);
     assert_eq!(stored[0].action, "/a?x=1");
     assert_eq!(stored[0].level, LogLevel::Info);
-    helpers::assert_uuid_v7(&stored[0].id);
+    assert_uuid_v7(&stored[0].id);
     assert_eq!(stored[0].context.len(), 2);
     assert_eq!(stored[0].context["ip"], "");
     assert_eq!(stored[0].latency_ms, 0);
@@ -39,36 +52,23 @@ fn log_events_returns_sanitized_events() {
 #[test]
 fn log_events_accepts_a_list_at_the_ship_chunk() {
     let events: Vec<_> = (0..SHIP_CHUNK)
-        .map(|_| helpers::client_log_event(&LogEvent::info("/ok")))
+        .map(|_| client_log_event(&LogEvent::info("/ok")))
         .collect();
     let stored = ClientLog { events }.log_events(&HeaderMap::new()).unwrap();
     assert_eq!(stored.len(), SHIP_CHUNK);
-    helpers::assert_uuid_v7(&stored[0].id);
+    assert_uuid_v7(&stored[0].id);
 }
 
 #[test]
 fn log_events_rejects_a_list_above_the_ship_chunk() {
     let events: Vec<_> = (0..=SHIP_CHUNK)
-        .map(|_| helpers::client_log_event(&LogEvent::info("/ok")))
+        .map(|_| client_log_event(&LogEvent::info("/ok")))
         .collect();
     assert_eq!(events.len(), SHIP_CHUNK + 1);
     let err = ClientLog { events }
         .log_events(&HeaderMap::new())
         .unwrap_err();
     assert_eq!(err.code(), "BAD_REQUEST");
-}
-
-trait ClientChecked {
-    fn client_checked(&self) -> LogEvent;
-}
-
-impl ClientChecked for LogEvent {
-    fn client_checked(&self) -> LogEvent {
-        let log = ClientLog {
-            events: vec![helpers::client_log_event(self)],
-        };
-        log.log_events(&HeaderMap::new()).unwrap().remove(0)
-    }
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn new_drops_untrusted_fields() {
     let stored = event.client_checked();
     let after = hkt_now();
     assert_eq!(event.id, "client-id");
-    helpers::assert_uuid_v7(&stored.id);
+    assert_uuid_v7(&stored.id);
     assert_ne!(stored.id, event.id);
     assert_eq!(stored.context.len(), 2);
     assert_eq!(stored.context["ip"], "");

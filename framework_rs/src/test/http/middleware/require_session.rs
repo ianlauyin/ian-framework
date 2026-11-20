@@ -3,7 +3,7 @@ use tower::ServiceExt;
 
 use crate::auth::{Session, SessionStore};
 use crate::http::middleware::require_session::*;
-use crate::test::auth::helpers::store_or_skip;
+use crate::test::auth::store_or_skip;
 
 fn router(store: SessionStore, status: axum::http::StatusCode, set_cookie: bool) -> axum::Router {
     axum::Router::new()

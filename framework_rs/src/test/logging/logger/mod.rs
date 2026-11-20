@@ -8,9 +8,7 @@ use crate::logging::log_shipper::SHIP_CHUNK;
 use crate::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
 use crate::logging::{HttpLogShipper, LogEvent, LogRequest, Logger};
 use crate::shutdown::ShutdownReceiver;
-use crate::test::logging::helpers::{
-    buffered_events, default_shipper, global_logger, http_shipper, logger,
-};
+use crate::test::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
 
 const LIMIT: usize = CAPACITY / 5 * 4;
 

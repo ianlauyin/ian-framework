@@ -16,6 +16,24 @@ pub fn spa_router() -> Router {
     Router::new().fallback(spa)
 }
 
+pub(crate) fn static_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|ext| ext.to_str()).unwrap_or("") {
+        "html" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" => "text/javascript; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "woff2" => "font/woff2",
+        "json" => "application/json",
+        "webmanifest" => "application/manifest+json",
+        "ico" => "image/x-icon",
+        "txt" => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
 async fn spa(request: Request<Body>) -> Response {
     let dist = Path::new(DIST);
     let root = match dist.canonicalize() {
@@ -40,24 +58,6 @@ async fn spa(request: Request<Body>) -> Response {
         .header(header::CONTENT_TYPE, static_type(&target))
         .body(Body::from(bytes))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-}
-
-pub(crate) fn static_type(path: &Path) -> &'static str {
-    match path.extension().and_then(|ext| ext.to_str()).unwrap_or("") {
-        "html" => "text/html; charset=utf-8",
-        "css" => "text/css; charset=utf-8",
-        "js" => "text/javascript; charset=utf-8",
-        "svg" => "image/svg+xml",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        "woff2" => "font/woff2",
-        "json" => "application/json",
-        "webmanifest" => "application/manifest+json",
-        "ico" => "image/x-icon",
-        "txt" => "text/plain; charset=utf-8",
-        _ => "application/octet-stream",
-    }
 }
 
 fn internal_error(
