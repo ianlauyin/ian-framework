@@ -10,7 +10,7 @@ use syn::{Item, Type, Visibility};
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
-use crate::rule::rs::source_order::{self, Sort};
+use crate::rule::rs::source_order::Sort;
 
 const RULE: &str = "impl-order";
 
@@ -21,7 +21,7 @@ pub(crate) enum Kind {
 }
 
 pub(crate) fn edit(file: &RsFile) -> Vec<crate::rule::edit::Edit> {
-    source_order::reorder(file, Sort::Impl)
+    crate::rule::rs::source_order::reorder(file, Sort::Impl)
 }
 
 pub fn check(file: &RsFile) -> Vec<Diagnostic> {

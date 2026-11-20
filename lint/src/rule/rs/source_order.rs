@@ -11,7 +11,7 @@ use crate::rule::diagnostic::Diagnostic;
 use crate::rule::edit::Edit;
 use crate::rule::report::Report;
 use crate::rule::rs::file::RsFile;
-use crate::rule::rs::impl_order::{self, Kind};
+use crate::rule::rs::impl_order::Kind;
 
 const RULE: &str = "source-order";
 const MOD: u8 = 0;
@@ -191,7 +191,7 @@ fn rewrite(source: &str, items: &[Item], sort: Sort) -> Option<(usize, usize, St
         return None;
     }
     let private_types = private_type_names(items);
-    let public_types = impl_order::public_types(items);
+    let public_types = crate::rule::rs::impl_order::public_types(items);
     let spans: Vec<(usize, usize)> = items.iter().map(item_bounds).collect();
     let (start, end, ranges) = crate::rule::edit::piece_ranges(source, &spans)?;
     let mut pieces = Vec::with_capacity(items.len());
@@ -203,7 +203,7 @@ fn rewrite(source: &str, items: &[Item], sort: Sort) -> Option<(usize, usize, St
             0
         };
         let kind = if sort == Sort::Impl {
-            impl_order::kind(item, &public_types)
+            crate::rule::rs::impl_order::kind(item, &public_types)
         } else {
             Kind::Other
         };
