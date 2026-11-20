@@ -1,4 +1,4 @@
-import { createRouter, type RouteDefinition, type RouteSectionProps, useNavigate } from "@solidjs/router";
+import { createRouter, type RouteDefinition, type RouteSectionProps } from "@solidjs/router";
 import type { JSX } from "@solidjs/web";
 import { Match, Switch } from "solid-js";
 
@@ -8,17 +8,17 @@ export interface KeyedRoutes<Key extends string> {
 }
 
 export interface SwitchRouterProps<Key extends string> {
-    routes: readonly KeyedRoutes<Key>[];
+    keyed: readonly KeyedRoutes<Key>[];
     active: Key;
-    unknown: (key: Key) => string;
+    common?: RouteDefinition;
     children?: (props: RouteSectionProps) => JSX.Element;
 }
 
 export function SwitchRouter<Key extends string>(props: SwitchRouterProps<Key>): JSX.Element {
-    const groups = props.routes.map((group) => ({
+    const groups = props.keyed.map((group) => ({
         key: group.key,
         Router: createRouter({
-            routes: [...group.routes, catchAll(() => props.unknown(group.key))],
+            routes: routeList(props.common, group.routes),
         }),
     }));
 
@@ -41,15 +41,7 @@ function section(children: ((props: RouteSectionProps) => JSX.Element) | undefin
     return children(route);
 }
 
-function catchAll(path: () => string): RouteDefinition {
-    return {
-        path: "*404",
-        component: () => <UnknownPage path={path()} />,
-    };
-}
-
-function UnknownPage(props: { path: string }): JSX.Element {
-    const navigate = useNavigate();
-    navigate(props.path);
-    return null;
+function routeList(common: RouteDefinition | undefined, routes: readonly RouteDefinition[]): RouteDefinition[] {
+    if (!common) return [...routes];
+    return [{ ...common, children: [...routes] }];
 }
