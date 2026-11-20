@@ -1,6 +1,7 @@
 // An env value is read outside `env.rs`.
 // Read the env value through `env.rs`.
 // The env name `{name}` is not allowed.
+// Let the caller pass the name.
 // Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.
 // Why a lint rule: The library does not choose an app env name.
 
@@ -20,11 +21,23 @@ use crate::rule::rs::source::RsFile;
 const RULE: &str = "env-name";
 
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
+pub(crate) const FRAMEWORK_RS_RULE: RsRule = RsRule::file(check_framework);
 const READS: &[&str] = &["var", "var_os", "vars", "vars_os"];
 const HELPERS: &[&str] = &["optional", "required"];
 const GOOGLE: &[&str] = &["GOOGLE_CLOUD_PROJECT"];
+const FIX: &str = "Let the caller pass the name.";
+const FRAMEWORK_FIX: &str =
+    "Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.";
 
 pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+    check_file(file, false)
+}
+
+pub(crate) fn check_framework(file: &RsFile) -> Vec<Diagnostic> {
+    check_file(file, true)
+}
+
+fn check_file(file: &RsFile, allow_google: bool) -> Vec<Diagnostic> {
     let place = Place::new(file.path, file.srcs);
     if place.in_test() {
         return Vec::new();
@@ -36,6 +49,7 @@ pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
     let mut pass = Pass {
         report: &mut report,
         place,
+        allow_google,
         consts: const_values(&ast.items),
         reads: BTreeSet::new(),
         helpers: BTreeSet::new(),
@@ -49,6 +63,7 @@ pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
 struct Pass<'a, 'b> {
     report: &'b mut RuleReport<'a>,
     place: Place,
+    allow_google: bool,
     consts: BTreeMap<String, (String, Span)>,
     reads: BTreeSet<String>,
     helpers: BTreeSet<String>,
@@ -134,14 +149,15 @@ impl Pass<'_, '_> {
         let Some((name, span)) = literal(arg, &self.consts) else {
             return;
         };
-        if self.place.in_gcp() && GOOGLE.contains(&name.as_str()) {
+        if self.allow_google && self.place.in_gcp() && GOOGLE.contains(&name.as_str()) {
             return;
         }
-        self.report(
-            span,
-            format!("The env name `{name}` is not allowed."),
-            "Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.",
-        );
+        let fix = if self.allow_google {
+            FRAMEWORK_FIX
+        } else {
+            FIX
+        };
+        self.report(span, format!("The env name `{name}` is not allowed."), fix);
     }
 
     fn report(&mut self, span: Span, problem: impl Into<String>, fix: impl Into<String>) {

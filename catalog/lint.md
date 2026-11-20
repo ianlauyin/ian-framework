@@ -47,7 +47,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/place.rs` | The src-relative place of a Rust file | |
 | `lint/src/rule/rs/rule.rs` | The Rust rule type. A rule checks one file or one folder. | |
 | `lint/src/rule/rs/file/mod.rs` | The Rust file rules | |
-| `lint/src/rule/rs/file/env_name.rs` | An env value and an env-name literal | A test file can read an env value and can contain an env-name literal. The framework ruleset allows `GOOGLE_CLOUD_PROJECT` under `gcp`. |
+| `lint/src/rule/rs/file/env_name.rs` | An env value and an env-name literal | A test file can read an env value and can contain an env-name literal. The framework ruleset allows `GOOGLE_CLOUD_PROJECT` under `gcp`. The project ruleset allows no env name. |
 | `lint/src/rule/rs/file/exception_code.rs` | A string literal error code in `exception!` | A test file is not checked. |
 | `lint/src/rule/rs/file/exception_new.rs` | `Exception::__new` outside `exception.rs` | The framework ruleset allows `exception.rs`. The project ruleset checks every file. |
 | `lint/src/rule/rs/file/impl_order.rs` | The inherent impl before trait impls | |

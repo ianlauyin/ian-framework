@@ -45,13 +45,6 @@ fn temp_root(name: &str) -> PathBuf {
 
 #[test]
 fn the_project_ruleset_skips_a_framework_rule() {
-    let env_read = "fn read() {\n    let _ = std::env::var(\"APP_PORT\");\n}\n";
-    assert!(rust_file("env", "app.rs", env_read, Ruleset::Project).is_empty());
-    let order = "use std::fs;\n\nmod child;\n";
-    assert!(rust_file("order", "app.rs", order, Ruleset::Project).is_empty());
-    assert!(rust_file("mod", "http/mod.rs", "fn routes() {}\n", Ruleset::Project).is_empty());
-    let export = "export default function view() {}\n";
-    assert!(typescript_file("export", export, Ruleset::Project).is_empty());
     let files = FileSet::from_paths([PathBuf::from("app/src/view.ts")]);
     let srcs = [PathBuf::from("app/src")];
     assert!(check_fe_folder(Path::new("app/src"), &files, &srcs, Ruleset::Project).is_empty());
@@ -102,6 +95,15 @@ fn the_project_ruleset_reports_exception_new_in_exception_rs() {
 }
 
 #[test]
+fn only_the_framework_ruleset_allows_the_google_env_name_under_gcp() {
+    let source = "fn read() {\n    let _ = env::optional(\"GOOGLE_CLOUD_PROJECT\");\n}\n";
+    let allowed = rust_file("google-fw", "gcp/project.rs", source, Ruleset::Framework);
+    assert!(allowed.iter().all(|item| item.rule != "env-name"));
+    let found = rust_file("google", "gcp/project.rs", source, Ruleset::Project);
+    assert!(found.iter().any(|item| item.rule == "env-name"));
+}
+
+#[test]
 fn the_project_ruleset_reports_a_shared_rule() {
     let found = rust_file(
         "comment",
@@ -110,6 +112,21 @@ fn the_project_ruleset_reports_a_shared_rule() {
         Ruleset::Project,
     );
     assert!(found.iter().any(|item| item.rule == "no-comments"));
+    let env_read = "fn read() {\n    let _ = std::env::var(\"APP_PORT\");\n}\n";
+    let env_found = rust_file("env", "app.rs", env_read, Ruleset::Project);
+    assert!(env_found.iter().any(|item| item.rule == "env-name"));
+    let export = "export default function view() {}\n";
+    let export_found = typescript_file("export", export, Ruleset::Project);
+    assert!(
+        export_found
+            .iter()
+            .any(|item| item.rule == "no-default-export")
+    );
+    let order = "use std::fs;\n\nmod child;\n";
+    let order_found = rust_file("order", "app.rs", order, Ruleset::Project);
+    assert!(order_found.iter().any(|item| item.rule == "source-order"));
+    let mod_found = rust_file("mod", "http/mod.rs", "fn routes() {}\n", Ruleset::Project);
+    assert!(mod_found.iter().any(|item| item.rule == "mod-file"));
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::rule::rs::file::env_name::check;
+use crate::rule::rs::file::env_name::{check, check_framework};
 use crate::test::rule::rs::source::with_source;
 
 fn srcs() -> Vec<PathBuf> {
@@ -37,7 +37,15 @@ fn temp() {
 
 const CODE: &str = \"APP_KEY\";
 ";
-    assert!(with_source(Path::new("api/src/gcp/project.rs"), gcp, &srcs(), check).is_empty());
+    assert!(
+        with_source(
+            Path::new("api/src/gcp/project.rs"),
+            gcp,
+            &srcs(),
+            check_framework,
+        )
+        .is_empty()
+    );
     let test = "\
 fn read() {
     let _ = std::env::var(\"REDIS_URL\");
@@ -68,10 +76,7 @@ fn read() {
     assert_eq!(found[0].problem, "An env value is read outside `env.rs`.");
     assert_eq!(found[0].fix, "Read the env value through `env.rs`.");
     assert_eq!(found[1].problem, "The env name `APP_PORT` is not allowed.");
-    assert_eq!(
-        found[1].fix,
-        "Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name."
-    );
+    assert_eq!(found[1].fix, "Let the caller pass the name.");
     assert_eq!(found[2].problem, "The env name `APP_KEY` is not allowed.");
     assert_eq!(found[3].problem, "An env value is read outside `env.rs`.");
     assert_eq!(found[4].problem, "An env value is read outside `env.rs`.");
@@ -79,7 +84,7 @@ fn read() {
 }
 
 #[test]
-fn google_application_credentials_under_gcp_fails() {
+fn google_application_credentials_under_gcp_fails_in_the_framework() {
     let source = "\
 const CREDENTIALS_ENV: &str = \"GOOGLE_APPLICATION_CREDENTIALS\";
 
@@ -88,7 +93,12 @@ fn read() {
     let _ = env::optional(CREDENTIALS_ENV);
 }
 ";
-    let found = with_source(Path::new("api/src/gcp/project.rs"), source, &srcs(), check);
+    let found = with_source(
+        Path::new("api/src/gcp/project.rs"),
+        source,
+        &srcs(),
+        check_framework,
+    );
     assert_eq!(found.len(), 2);
     assert_eq!(
         found[0].problem,
@@ -103,18 +113,39 @@ fn read() {
 }
 
 #[test]
-fn a_google_env_name_outside_gcp_fails() {
+fn a_google_env_name_outside_gcp_fails_in_the_framework() {
     let source = "\
 fn read() {
     let _ = env::optional(\"GOOGLE_CLOUD_PROJECT\");
 }
 ";
-    let found = with_source(Path::new("api/src/app.rs"), source, &srcs(), check);
+    let found = with_source(
+        Path::new("api/src/app.rs"),
+        source,
+        &srcs(),
+        check_framework,
+    );
     assert_eq!(found.len(), 1);
     assert_eq!(
         found[0].problem,
         "The env name `GOOGLE_CLOUD_PROJECT` is not allowed."
     );
+}
+
+#[test]
+fn a_google_env_name_under_gcp_fails_in_a_project() {
+    let source = "\
+fn read() {
+    let _ = env::optional(\"GOOGLE_CLOUD_PROJECT\");
+}
+";
+    let found = with_source(Path::new("api/src/gcp/project.rs"), source, &srcs(), check);
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].problem,
+        "The env name `GOOGLE_CLOUD_PROJECT` is not allowed."
+    );
+    assert_eq!(found[0].fix, "Let the caller pass the name.");
 }
 
 #[test]
