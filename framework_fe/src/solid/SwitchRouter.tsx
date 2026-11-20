@@ -1,6 +1,6 @@
 import { createRouter, type RouteDefinition, type RouteSectionProps, useNavigate } from "@solidjs/router";
 import type { JSX } from "@solidjs/web";
-import { Show } from "solid-js";
+import { Match, Switch } from "solid-js";
 
 export interface SwitchRouterProps {
     protectedRoutes: readonly RouteDefinition[];
@@ -19,10 +19,20 @@ export function SwitchRouter(props: SwitchRouterProps): JSX.Element {
     });
 
     return (
-        <Show when={props.isProtected} fallback={<PublicRouter>{(route) => (props.children ? props.children(route) : route.children)}</PublicRouter>}>
-            <ProtectedRouter>{(route) => (props.children ? props.children(route) : route.children)}</ProtectedRouter>
-        </Show>
+        <Switch>
+            <Match when={props.isProtected}>
+                <ProtectedRouter>{(route) => section(props, route)}</ProtectedRouter>
+            </Match>
+            <Match when={!props.isProtected}>
+                <PublicRouter>{(route) => section(props, route)}</PublicRouter>
+            </Match>
+        </Switch>
     );
+}
+
+function section(props: SwitchRouterProps, route: RouteSectionProps): JSX.Element {
+    if (!props.children) return route.children;
+    return props.children(route);
 }
 
 function catchAll(path: () => string): RouteDefinition {
