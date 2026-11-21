@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[path = "../test/mod.rs"]
 mod test;
 
 pub(crate) mod mutex;
