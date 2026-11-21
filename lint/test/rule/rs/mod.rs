@@ -11,4 +11,3 @@ mod result_type;
 mod run;
 mod source_order;
 mod super_path;
-mod test_attr;

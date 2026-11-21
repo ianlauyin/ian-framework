@@ -12,7 +12,7 @@ pub(crate) enum Ruleset {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Side {
+pub enum Side {
     All,
     Fe,
     Rs,

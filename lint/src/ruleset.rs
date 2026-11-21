@@ -30,7 +30,6 @@ const FRAMEWORK: Rules = Rules {
         rs::private_static::RS_RULE,
         rs::no_comments::RS_RULE,
         rs::super_path::RS_RULE,
-        rs::test_attr::RS_RULE,
         rs::env_name::FRAMEWORK_RS_RULE,
         rs::exception_new::FRAMEWORK_RS_RULE,
         rs::exception_code::RS_RULE,
@@ -45,6 +44,8 @@ const FRAMEWORK: Rules = Rules {
         folder::fe_index_file::FOLDER_RULE,
         folder::fe_root_reexport::FOLDER_RULE,
         folder::fe_test_path::FOLDER_RULE,
+        folder::fe_test_tree::FOLDER_RULE,
+        folder::rs_test_path::FOLDER_RULE,
         folder::rs_test_tree::FOLDER_RULE,
     ],
 };
@@ -65,7 +66,6 @@ const PROJECT: Rules = Rules {
         rs::private_static::RS_RULE,
         rs::no_comments::RS_RULE,
         rs::super_path::RS_RULE,
-        rs::test_attr::RS_RULE,
         rs::mod_file::RS_RULE,
         rs::source_order::RS_RULE,
         rs::exception_new::RS_RULE,
@@ -77,6 +77,8 @@ const PROJECT: Rules = Rules {
     ],
     folder: &[
         folder::fe_test_path::FOLDER_RULE,
+        folder::fe_test_tree::FOLDER_RULE,
+        folder::rs_test_path::FOLDER_RULE,
         folder::rs_test_tree::FOLDER_RULE,
     ],
 };

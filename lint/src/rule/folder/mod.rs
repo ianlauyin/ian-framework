@@ -7,6 +7,8 @@ use crate::rule::diagnostic::Diagnostic;
 pub(crate) mod fe_index_file;
 pub(crate) mod fe_root_reexport;
 pub(crate) mod fe_test_path;
+pub(crate) mod fe_test_tree;
+pub(crate) mod rs_test_path;
 pub(crate) mod rs_test_tree;
 
 pub(crate) struct FolderRule {

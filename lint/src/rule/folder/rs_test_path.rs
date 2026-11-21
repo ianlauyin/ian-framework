@@ -2,28 +2,47 @@
 // Move the test under the test folder.
 // Why a lint rule: Tests live in the test folder. `mod test` in `lib.rs` or `main.rs` stays.
 
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use syn::spanned::Spanned;
 use syn::{Attribute, ImplItem, Item, Meta, TraitItem};
 
+use crate::config::Side;
 use crate::file::rs::place::Place;
-use crate::file::rs::source::RsFile;
+use crate::file::rs::source;
+use crate::files::{FileSet, file_name};
 use crate::rule::diagnostic::Diagnostic;
+use crate::rule::folder::FolderRule;
 use crate::rule::report::RuleReport;
-use crate::rule::rs::RsRule;
 
 const RULE: &str = "test-attr";
 
-pub(crate) const RS_RULE: RsRule = RsRule::file(check);
+pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Rs, check);
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
-    let place = Place::new(file.path, file.srcs);
+pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for file in files.files() {
+        if file.parent() != Some(path) || !file_name(file).ends_with(".rs") {
+            continue;
+        }
+        diagnostics.extend(check_file(file, srcs));
+    }
+    diagnostics
+}
+
+fn check_file(path: &Path, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+    let place = Place::new(path, srcs);
     if place.in_folder("test") {
         return Vec::new();
     }
-    let Some(ast) = file.ast else {
+    let Ok(source_text) = fs::read_to_string(path) else {
         return Vec::new();
     };
-    let mut report = RuleReport::new(file.path, file.source, RULE);
+    let Some(ast) = source::parse(&source_text) else {
+        return Vec::new();
+    };
+    let mut report = RuleReport::new(path, &source_text, RULE);
     report_attrs(&ast.attrs, false, &mut report);
     walk(&ast.items, &place, &mut report);
     report.finish()

@@ -9,9 +9,10 @@ This file is the catalog of the linter in `lint/`.
 | Path | Description | Decision |
 | --- | --- | --- |
 | `lint/Cargo.toml` | The crate `ian-lint` | |
+| `lint/src/lib.rs` | The exported check, the report, and the failure | |
 | `lint/src/config.rs` | The configuration file and the side | `ruleset` is `framework` or `project`. A side checks the frontend, Rust, or both. |
 | `lint/src/check.rs` | The check of one root folder | A file that the linter cannot read is a failure. A TypeScript or Rust file that does not parse is a failure. The rules do not check that file. |
-| `lint/src/main.rs` | The `ian-lint` program, the report, and the failure | `fe` checks only the frontend. `rs` checks only Rust. No side argument checks both. The other argument is the root. The root is `.` when it is omitted. The arguments can be in either order. Two roots, or two sides, stops the run. |
+| `lint/src/main.rs` | The `ian-lint` program | `fe` checks only the frontend. `rs` checks only Rust. No side argument checks both. The other argument is the root. The root is `.` when it is omitted. The arguments can be in either order. Two roots, or two sides, stops the run. |
 | `lint/src/files.rs` | The file tree and the file kinds | |
 | `lint/src/ruleset.rs` | The rules in each ruleset | `FRAMEWORK` and `PROJECT` each hold `css`, `ts`, `rs`, and `folder`. The `framework` ruleset runs `FRAMEWORK`. The `project` ruleset runs `PROJECT`. |
 | `lint/src/file/mod.rs` | The data for one source file | |
@@ -32,7 +33,9 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/folder/mod.rs` | The folder rules and the folder rule type | |
 | `lint/src/rule/folder/fe_index_file.rs` | Each source folder has an `index.ts` or an `index.tsx` | |
 | `lint/src/rule/folder/fe_root_reexport.rs` | The root index re-exports each feature | A nested index can leave out an export for a sibling file. |
-| `lint/src/rule/folder/fe_test_path.rs` | The test path matches the source path | A source file does not need a test file. |
+| `lint/src/rule/folder/fe_test_path.rs` | A test file is in the source folder | |
+| `lint/src/rule/folder/fe_test_tree.rs` | The test tree matches the source tree | A source file does not need a test file. |
+| `lint/src/rule/folder/rs_test_path.rs` | A test outside the test folder | `mod test` in `lib.rs` or `main.rs` stays. |
 | `lint/src/rule/folder/rs_test_tree.rs` | The test tree matches the crate | A source file does not need a test file. The test root `mod.rs` follows `lib.rs`. When `lib.rs` is absent, it follows `main.rs`. |
 | `lint/src/rule/css/mod.rs` | The CSS rules and the CSS rule type | A class selector, an id selector, and descending specificity are not checked. |
 | `lint/src/rule/css/empty_line_before.rs` | An empty line before a rule | The first node of a file is not checked. The first child of a block has no empty line before it. A rule after a single-line comment has no empty line before it. |
@@ -57,4 +60,3 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/result_type.rs` | A fallible function returns `Result<T, Exception>` | A test file is not checked. |
 | `lint/src/rule/rs/source_order.rs` | The source order | A private `macro_rules!` is in the same group as a constant. A `macro_rules!` must come before the items that use it. |
 | `lint/src/rule/rs/super_path.rs` | A `super::super` path | |
-| `lint/src/rule/rs/test_attr.rs` | A test outside the test folder | `mod test` in `lib.rs` or `main.rs` stays. |

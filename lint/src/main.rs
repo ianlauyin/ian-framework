@@ -1,31 +1,10 @@
-#[cfg(test)]
-mod test;
-
-pub(crate) mod check;
-pub(crate) mod config;
-pub(crate) mod file;
-pub(crate) mod files;
-pub(crate) mod rule;
-pub(crate) mod ruleset;
-
 use std::env;
 use std::ffi::OsStr;
 use std::io::{IsTerminal as _, stderr, stdout};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use config::Side;
-use rule::diagnostic::Diagnostic;
-
-pub(crate) struct Report {
-    pub(crate) diagnostics: Vec<Diagnostic>,
-    pub(crate) failures: Vec<Failure>,
-}
-
-#[derive(Debug)]
-pub(crate) struct Failure {
-    pub(crate) output: String,
-}
+use ian_lint::{Diagnostic, Failure, Report, Side};
 
 const RED: &str = "38;2;220;107;106";
 const YELLOW: &str = "38;2;255;215;1";
@@ -37,7 +16,7 @@ fn main() -> ExitCode {
     let out_color = use_color(stdout().is_terminal());
     let err_color = use_color(stderr().is_terminal());
     let report = match args() {
-        Ok((root, side)) => crate::check::check(&root, side),
+        Ok((root, side)) => ian_lint::check(&root, side),
         Err(output) => Report {
             diagnostics: Vec::new(),
             failures: vec![Failure { output }],

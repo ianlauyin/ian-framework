@@ -4,7 +4,6 @@
 - Do not write a comment in the code. Put a decision in `catalog/lint.md`. When the text is a reason and not a decision, write a test that prevents that reason.
 - Do not put a name of a project in the code or in a test. Use a generic name.
 - The comment at the top of the file is the text of the rule. It has a line that starts with `Why a lint rule:`.
-- Put each test in `lint/src/test/`, on the same path as the tested file. The tests of `lint/src/a/b.rs` are in `lint/src/test/a/b.rs`. 
 - Do not put a test in the source file of the tested item.
 - A test reaches the tested item with a `crate::` path. When a test needs a private item, change the visibility of the item to `pub(crate)`. Do not use `pub` for this.
 - For each rule, test a case that passes and a case that fails.

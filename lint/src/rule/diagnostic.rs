@@ -2,13 +2,13 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Diagnostic {
-    pub(crate) path: PathBuf,
-    pub(crate) line: u32,
-    pub(crate) column: u32,
-    pub(crate) rule: &'static str,
-    pub(crate) problem: String,
-    pub(crate) fix: String,
+pub struct Diagnostic {
+    pub path: PathBuf,
+    pub line: u32,
+    pub column: u32,
+    pub rule: &'static str,
+    pub problem: String,
+    pub fix: String,
 }
 
 impl Diagnostic {

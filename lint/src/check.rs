@@ -5,7 +5,7 @@ use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
 use crate::{Failure, Report};
 
-pub(crate) fn check(root: &Path, side: Side) -> Report {
+pub fn check(root: &Path, side: Side) -> Report {
     let config = match crate::config::load(root) {
         Ok(config) => config,
         Err(output) => {
