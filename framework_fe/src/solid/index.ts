@@ -1,4 +1,5 @@
 export * from "./AppBuilder";
+export * from "./ErrorBoundary";
 export * from "./locale";
 export * from "./KeyedRouter";
 export * from "./Module";
