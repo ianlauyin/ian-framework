@@ -34,12 +34,12 @@ describe("ErrorBoundary", () => {
         const [{ ErrorBoundary }, { Logger }] = await Promise.all([import("../../src/solid/ErrorBoundary"), import("../../src/logger")]);
         Logger.init([]);
         const root = document.createElement("div");
-        let args: unknown[] = [];
+        let props: { reset: () => void } | undefined;
         dispose = render(
             () => (
                 <ErrorBoundary
-                    fallback={(...received) => {
-                        args = received;
+                    fallback={(received) => {
+                        props = received;
                         return <p>fallback text</p>;
                     }}
                 >
@@ -50,8 +50,7 @@ describe("ErrorBoundary", () => {
         );
 
         expect(root.textContent).toContain("fallback text");
-        expect(args).toHaveLength(1);
-        expect(typeof args[0]).toBe("function");
+        expect(typeof props?.reset).toBe("function");
 
         await vi.advanceTimersByTimeAsync(60_000);
         const events = await sentEvents();

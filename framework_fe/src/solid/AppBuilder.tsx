@@ -1,14 +1,14 @@
 import { type JSX, render } from "@solidjs/web";
 import { createStore, type Store, type StoreSetter } from "solid-js";
 import { Logger } from "../logger";
-import { ErrorBoundary } from "./ErrorBoundary";
+import { ErrorBoundary, type ErrorBoundaryProps } from "./ErrorBoundary";
 
 export abstract class AppBuilder<State extends object> {
     private readonly state: Store<State>;
     protected readonly setState: StoreSetter<State>;
-    private readonly errorFallback: (reset: () => void) => JSX.Element;
+    private readonly errorFallback: ErrorBoundaryProps["fallback"];
 
-    constructor(initialState: State extends Function ? never : State, errorFallback: (reset: () => void) => JSX.Element) {
+    constructor(initialState: State extends Function ? never : State, errorFallback: ErrorBoundaryProps["fallback"]) {
         [this.state, this.setState] = createStore<State>(initialState);
         this.errorFallback = errorFallback;
     }

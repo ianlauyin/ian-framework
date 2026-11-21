@@ -20,8 +20,8 @@ async function load() {
         fail = false;
 
         constructor() {
-            super({ count: 0 }, (reset) => (
-                <button type="button" onClick={reset}>
+            super({ count: 0 }, (props) => (
+                <button type="button" onClick={props.reset}>
                     fallback text
                 </button>
             ));
