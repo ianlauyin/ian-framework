@@ -15,8 +15,7 @@ This file is the catalog of the frontend library in `framework_fe/`.
 | `framework_fe/src/storage.ts` | Typed storage | |
 | `framework_fe/src/util/sleep.ts` | `sleep` | |
 | `framework_fe/src/solid/ErrorBoundary.tsx` | App error boundary | |
-| `framework_fe/src/solid/NavigationLogger.tsx` | Navigation logger for the SolidJS router | |
 | `framework_fe/src/solid/AccessRouter.tsx` | Router for a route list where each top-level route can have a `canAccess` check | A route with no `canAccess` is open. A route whose `canAccess` returns false is not in the router, so a later route with the same path can match. A path that no open route matches goes to `fallbackPath` and replaces the history entry. When `fallbackPath` also has no open route, the router renders nothing. A change of a `canAccess` result makes a new router. `canAccess` on a child route has no effect. |
-| `framework_fe/src/logger/` | Browser logger | A failed script, style, or image load does not bubble, so the listener uses the capture phase. The logger cannot read a beacon after the browser accepts it. |
+| `framework_fe/src/logger/` | Browser logger | A failed script, style, or image load does not bubble, so the listener uses the capture phase. The logger cannot read a beacon after the browser accepts it. `trackNavigation` wraps `history.pushState` and `history.replaceState`, because the browser sends no event for those calls. It does not use a router. It stores the page URL in the context `requestUrl` and records no event. In that URL, a parameter whose key matches a mask pattern keeps the key and has a masked value. |
 | `framework_fe/src/util/time.ts` | Hong Kong time `hktIsoString` | |
 | `framework_fe/src/solid/locale.ts` | Locale helper `createLocale` | `setLocale` flushes the store before it returns, so the caller reads the new locale. Solid 2 shows a store write after the batch flushes. |

@@ -11,6 +11,7 @@ export class Logger {
     private static buffer: ClientLogEvent[] = [];
     private static mask = new Mask([]);
     private static context: LogFields = {};
+    private static tracking = false;
 
     public static init(patterns: RegExp[]): void {
         if (Logger.initialized) return;
@@ -26,12 +27,26 @@ export class Logger {
         setInterval(() => Logger.send(), SEND_INTERVAL);
     }
 
-    public static addContext(key: string, value: string | number | boolean): void {
-        Logger.context = { ...Logger.context, [key]: value };
+    public static trackNavigation(): void {
+        if (Logger.tracking) return;
+        Logger.tracking = true;
+        Logger.navigated();
+        const history = window.history;
+        const pushState = history.pushState.bind(history);
+        const replaceState = history.replaceState.bind(history);
+        history.pushState = (...args) => {
+            pushState(...args);
+            Logger.navigated();
+        };
+        history.replaceState = (...args) => {
+            replaceState(...args);
+            Logger.navigated();
+        };
+        window.addEventListener("popstate", () => Logger.navigated());
     }
 
-    public static maskText(text: string): string {
-        return Logger.mask.text(text);
+    public static addContext(key: string, value: string | number | boolean): void {
+        Logger.context = { ...Logger.context, [key]: value };
     }
 
     public static removeContext(...keys: string[]): void {
@@ -110,6 +125,10 @@ export class Logger {
         if (level === "info" || error === undefined) return null;
         const text = level === "error" && error.message.trim() === "" ? UNKNOWN_ERROR : error.message;
         return Logger.mask.text(text);
+    }
+
+    private static navigated(): void {
+        Logger.addContext("requestUrl", Logger.mask.url(window.location.href));
     }
 
     private static watchWindowError(): void {

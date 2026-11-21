@@ -251,6 +251,80 @@ describe("Logger", () => {
         expect(events.map((event: { errorMessage: string }) => event.errorMessage)).toEqual(["unknown error", "unknown error", "unknown error"]);
     });
 
+    describe("trackNavigation", () => {
+        let popstate: (() => void) | undefined;
+        let location: { href: string };
+
+        function go(url: string): void {
+            location.href = `https://app.example${url}`;
+        }
+
+        beforeEach(() => {
+            popstate = undefined;
+            location = { href: "https://app.example/home?a=1" };
+            vi.stubGlobal("window", {
+                location,
+                history: {
+                    pushState: (_data: unknown, _unused: string, url: string) => go(url),
+                    replaceState: (_data: unknown, _unused: string, url: string) => go(url),
+                },
+                addEventListener(type: string, listener: () => void) {
+                    if (type === "popstate") popstate = listener;
+                },
+            });
+        });
+
+        async function requestUrl(Logger: Awaited<ReturnType<typeof loadLogger>>, call: number): Promise<string> {
+            Logger.info("later");
+            hidePage();
+            return sentEvents(call)[0].context.requestUrl;
+        }
+
+        it("stores the page URL and records no event", async () => {
+            const Logger = await loadLogger();
+            Logger.init([]);
+            Logger.trackNavigation();
+            window.history.pushState({}, "", "/next");
+            Logger.info("later");
+            hidePage();
+
+            expect(sentEvents(0).map((event: { action: string }) => event.action)).toEqual(["later"]);
+        });
+
+        it("stores the new page URL after pushState, replaceState and popstate", async () => {
+            const Logger = await loadLogger();
+            Logger.init([]);
+            Logger.trackNavigation();
+            expect(await requestUrl(Logger, 0)).toBe("https://app.example/home?a=1");
+            window.history.pushState({}, "", "/next");
+            expect(await requestUrl(Logger, 1)).toBe("https://app.example/next");
+            window.history.replaceState({}, "", "/other");
+            expect(await requestUrl(Logger, 2)).toBe("https://app.example/other");
+            go("/home");
+            popstate?.();
+            expect(await requestUrl(Logger, 3)).toBe("https://app.example/home");
+        });
+
+        it("masks the value of a secret parameter in the page URL", async () => {
+            go("/home?token=abc");
+            const Logger = await loadLogger();
+            Logger.init([/token/i]);
+            Logger.trackNavigation();
+
+            expect(await requestUrl(Logger, 0)).toBe("https://app.example/home?token=***");
+        });
+
+        it("wraps history one time when it is called two times", async () => {
+            const Logger = await loadLogger();
+            Logger.init([]);
+            Logger.trackNavigation();
+            const pushState = window.history.pushState;
+            Logger.trackNavigation();
+
+            expect(window.history.pushState).toBe(pushState);
+        });
+    });
+
     describe("capture", () => {
         it("records an info event with the latency and returns the output", async () => {
             const Logger = await loadLogger();
