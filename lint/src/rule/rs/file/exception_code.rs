@@ -8,11 +8,11 @@ use proc_macro2::{Span, TokenStream, TokenTree};
 use syn::visit::Visit;
 use syn::{Expr, ExprLit, ExprMacro, ItemMacro, Lit};
 
+use crate::parser::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
 use crate::rule::rs::place::Place;
 use crate::rule::rs::rule::RsRule;
-use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "exception-code";
 

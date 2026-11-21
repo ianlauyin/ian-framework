@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Ruleset;
 use crate::files::FileSet;
+use crate::parser::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::rs::rule::RsRule;
-use crate::rule::rs::source::RsFile;
 use crate::ruleset::rules;
 
 pub(crate) fn check(

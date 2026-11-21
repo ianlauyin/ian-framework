@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::files::FileSet;
+use crate::parser::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::rs::source::RsFile;
 
 pub(crate) struct RsFileRule {
     pub(crate) check: fn(&RsFile<'_>) -> Vec<Diagnostic>,

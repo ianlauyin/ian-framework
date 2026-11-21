@@ -5,11 +5,11 @@
 use syn::spanned::Spanned;
 use syn::{GenericArgument, ImplItem, Item, PathArguments, ReturnType, Type};
 
+use crate::parser::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
 use crate::rule::rs::place::Place;
 use crate::rule::rs::rule::RsRule;
-use crate::rule::rs::source::RsFile;
 
 const RULE: &str = "result-type";
 

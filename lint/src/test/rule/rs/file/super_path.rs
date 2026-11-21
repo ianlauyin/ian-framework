@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::rule::rs::file::super_path::check;
-use crate::test::rule::rs::source::with_source;
+use crate::test::parser::rs::source::with_source;
 
 #[test]
 fn a_crate_path_passes() {

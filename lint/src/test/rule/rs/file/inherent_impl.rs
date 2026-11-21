@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::rule::rs::file::inherent_impl::check;
-use crate::test::rule::rs::source::with_source;
+use crate::test::parser::rs::source::with_source;
 
 #[test]
 fn an_inherent_impl_in_the_defining_file_passes() {

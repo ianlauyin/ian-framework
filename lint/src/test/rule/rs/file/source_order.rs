@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::rule::rs::file::source_order::check;
-use crate::test::rule::rs::source::with_source;
+use crate::test::parser::rs::source::with_source;
 
 const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants and private `macro_rules!`, then public items, then private items.";
 

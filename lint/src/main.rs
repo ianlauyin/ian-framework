@@ -4,6 +4,7 @@ mod test;
 pub(crate) mod check;
 pub(crate) mod config;
 pub(crate) mod files;
+pub(crate) mod parser;
 pub(crate) mod rule;
 pub(crate) mod ruleset;
 

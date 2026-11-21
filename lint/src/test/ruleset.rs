@@ -4,8 +4,8 @@ use std::{env, fs, process};
 use crate::config::Ruleset;
 use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::fe::run::{check as check_fe_file, check_folder as check_fe_folder};
 use crate::rule::rs::run::check as check_rs_file;
+use crate::rule::run::{check as check_fe_file, check_folder as check_fe_folder};
 
 fn rust_file(name: &str, relative: &str, source: &str, ruleset: Ruleset) -> Vec<Diagnostic> {
     let root = env::temp_dir().join(format!("ian-lint-ruleset-rs-{name}-{}", process::id()));

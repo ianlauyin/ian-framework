@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::rule::rs::file::exception_new::{check, check_framework};
-use crate::test::rule::rs::source::with_source;
+use crate::test::parser::rs::source::with_source;
 
 fn srcs() -> Vec<PathBuf> {
     vec![PathBuf::from("api/src")]

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::rs::file::private_static::check;
-use crate::test::rule::rs::source::with_source;
+use crate::test::parser::rs::source::with_source;
 
 fn lint(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/lib.rs"), source, &[], check)

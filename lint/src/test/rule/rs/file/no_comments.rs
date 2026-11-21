@@ -3,7 +3,7 @@ use std::{env, process};
 
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::rs::file::no_comments::check;
-use crate::test::rule::rs::source::with_source;
+use crate::test::parser::rs::source::with_source;
 
 fn lint(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/lib.rs"), source, &[], check)
