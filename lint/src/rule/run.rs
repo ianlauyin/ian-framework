@@ -10,7 +10,7 @@ use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
 use crate::ruleset::rules;
 
-pub(crate) fn check(path: &Path, ruleset: Ruleset) -> Result<Vec<Diagnostic>, String> {
+pub fn check(path: &Path, ruleset: Ruleset) -> Result<Vec<Diagnostic>, String> {
     let rules = rules(ruleset);
     let source =
         fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;

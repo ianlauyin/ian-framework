@@ -16,9 +16,9 @@ const RULE: &str = "mutex-lock";
 
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     let place = Place::new(file.path, file.srcs);
-    if place.is_file("mutex.rs") || place.in_folder("test") {
+    if place.is_file("mutex.rs") || place.in_folder("tests") {
         return Vec::new();
     }
     let Some(ast) = file.ast else {

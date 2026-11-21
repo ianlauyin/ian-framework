@@ -29,17 +29,17 @@ const FIX: &str = "Let the caller pass the name.";
 const FRAMEWORK_FIX: &str =
     "Use `GOOGLE_CLOUD_PROJECT` under `gcp`, or let the caller pass the name.";
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     check_file(file, false)
 }
 
-pub(crate) fn check_framework(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check_framework(file: &RsFile) -> Vec<Diagnostic> {
     check_file(file, true)
 }
 
 fn check_file(file: &RsFile, allow_google: bool) -> Vec<Diagnostic> {
     let place = Place::new(file.path, file.srcs);
-    if place.in_folder("test") {
+    if place.in_folder("tests") {
         return Vec::new();
     }
     let Some(ast) = file.ast else {

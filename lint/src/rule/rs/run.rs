@@ -6,11 +6,7 @@ use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::ruleset::rules;
 
-pub(crate) fn check(
-    path: &Path,
-    srcs: &[PathBuf],
-    ruleset: Ruleset,
-) -> Result<Vec<Diagnostic>, String> {
+pub fn check(path: &Path, srcs: &[PathBuf], ruleset: Ruleset) -> Result<Vec<Diagnostic>, String> {
     let source =
         fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let ast = syn::parse_file(&source).map_err(|error| {

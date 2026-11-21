@@ -13,7 +13,7 @@ const RULE: &str = "no-comments";
 
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     let mut report = RuleReport::new(file.path, file.source, RULE);
     let skipped = strip_shebang(file.source).unwrap_or(0);
     let mut offset = skipped as u32;

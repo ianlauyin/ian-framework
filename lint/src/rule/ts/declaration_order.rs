@@ -20,7 +20,7 @@ const EXPORT: u8 = 2;
 const PRIVATE_INTERFACE: u8 = 3;
 const PRIVATE_FUNCTION: u8 = 4;
 
-pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
+pub fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {
         return Vec::new();
     };

@@ -4,7 +4,7 @@ use std::path::{Component, Path, PathBuf};
 use ignore::WalkBuilder;
 
 #[derive(Default)]
-pub(crate) struct FileSet {
+pub struct FileSet {
     files: BTreeSet<PathBuf>,
     dirs: BTreeSet<PathBuf>,
 }
@@ -43,7 +43,7 @@ impl FileSet {
         (set, errors)
     }
 
-    pub(crate) fn from_paths(paths: impl IntoIterator<Item = PathBuf>) -> Self {
+    pub fn from_paths(paths: impl IntoIterator<Item = PathBuf>) -> Self {
         let mut set = Self::default();
         for path in paths {
             for dir in path.ancestors().skip(1) {

@@ -5,7 +5,7 @@ use crate::file::css::position::Map;
 use crate::file::css::scan::{Bounds, bounds, char_len, comment_end, skip_ws, starts_comment};
 use crate::file::css::sheet::child_items;
 
-pub(crate) struct Item {
+pub struct Item {
     pub(crate) kind: Kind,
     pub(crate) start: u32,
     pub(crate) end: u32,
@@ -30,7 +30,7 @@ impl Item {
     }
 }
 
-pub(crate) fn parse(source: &str) -> Vec<Item> {
+pub fn parse(source: &str) -> Vec<Item> {
     let bom = if source.starts_with('\u{feff}') {
         '\u{feff}'.len_utf8()
     } else {

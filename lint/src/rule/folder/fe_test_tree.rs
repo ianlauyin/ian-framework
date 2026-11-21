@@ -13,11 +13,11 @@ const RULE: &str = "test-tree";
 
 pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Fe, check);
 
-pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
         return Vec::new();
     }
-    let Some(test_root) = path.parent().map(|parent| parent.join("test")) else {
+    let Some(test_root) = path.parent().map(|parent| parent.join("tests")) else {
         return Vec::new();
     };
     let mut diagnostics = Vec::new();

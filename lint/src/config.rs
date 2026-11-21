@@ -6,7 +6,7 @@ use serde::Deserialize;
 pub(crate) const FILE_NAME: &str = "lint.config.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Ruleset {
+pub enum Ruleset {
     Framework,
     Project,
 }

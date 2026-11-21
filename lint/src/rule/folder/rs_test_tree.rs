@@ -1,4 +1,4 @@
-// The test folder has no `mod.rs`.
+// The `tests` folder has no `mod.rs`.
 // Add a `mod.rs` that declares the child modules.
 // The test file has no source file `{path}`.
 // Give the test the same path as the source file.
@@ -23,11 +23,11 @@ const RULE: &str = "test-tree";
 
 pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Rs, check);
 
-pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
         return Vec::new();
     }
-    let test_root = path.join("test");
+    let test_root = path.join("tests");
     if !files.has_dir(&test_root) && !files.has_file(&test_root.join("mod.rs")) {
         return Vec::new();
     }
@@ -44,7 +44,7 @@ pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagn
             1,
             1,
             RULE,
-            "The test folder has no `mod.rs`.",
+            "The `tests` folder has no `mod.rs`.",
             "Add a `mod.rs` that declares the child modules.",
         ));
     }

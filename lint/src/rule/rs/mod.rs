@@ -1,19 +1,19 @@
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 
-pub(crate) mod env_name;
-pub(crate) mod exception_code;
-pub(crate) mod exception_new;
-pub(crate) mod impl_order;
-pub(crate) mod inherent_impl;
-pub(crate) mod mod_file;
-pub(crate) mod mutex_lock;
-pub(crate) mod no_comments;
-pub(crate) mod private_static;
-pub(crate) mod result_type;
-pub(crate) mod run;
-pub(crate) mod source_order;
-pub(crate) mod super_path;
+pub mod env_name;
+pub mod exception_code;
+pub mod exception_new;
+pub mod impl_order;
+pub mod inherent_impl;
+pub mod mod_file;
+pub mod mutex_lock;
+pub mod no_comments;
+pub mod private_static;
+pub mod result_type;
+pub mod run;
+pub mod source_order;
+pub mod super_path;
 
 pub(crate) struct RsRule {
     pub(crate) check: fn(&RsFile<'_>) -> Vec<Diagnostic>,

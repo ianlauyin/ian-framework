@@ -1,5 +1,5 @@
 // A test file is in the source folder.
-// Move the test to the test folder.
+// Move the test to the `tests` folder.
 // Why a lint rule: A test stays out of the source folder.
 
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ const RULE: &str = "test-path";
 
 pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Fe, check);
 
-pub(crate) fn check(path: &Path, files: &FileSet, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
+pub fn check(path: &Path, files: &FileSet, _srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for file in files.files() {
         if file.parent() != Some(path) {
@@ -28,7 +28,7 @@ pub(crate) fn check(path: &Path, files: &FileSet, _srcs: &[PathBuf]) -> Vec<Diag
             1,
             RULE,
             "A test file is in the source folder.",
-            "Move the test to the test folder.",
+            "Move the test to the `tests` folder.",
         ));
     }
     diagnostics

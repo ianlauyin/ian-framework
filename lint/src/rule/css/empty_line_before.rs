@@ -14,7 +14,7 @@ const RULE: &str = "rule-empty-line-before";
 
 pub(crate) const CSS_RULE: CssRule = CssRule::new(check);
 
-pub(crate) fn check(file: &CssFile) -> Vec<Diagnostic> {
+pub fn check(file: &CssFile) -> Vec<Diagnostic> {
     let lines = Lines::new(file.source);
     let mut report = RuleReport::new(file.path, file.source, RULE);
     walk(file.items, None, file.source, &lines, &mut report);

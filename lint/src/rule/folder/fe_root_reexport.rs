@@ -20,7 +20,7 @@ const RULE: &str = "root-reexport";
 
 pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Fe, check);
 
-pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
         return Vec::new();
     }
@@ -47,7 +47,7 @@ pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagn
     }
 }
 
-pub(crate) fn check_source(path: &Path, source: &str, children: &[&str]) -> Vec<Diagnostic> {
+pub fn check_source(path: &Path, source: &str, children: &[&str]) -> Vec<Diagnostic> {
     let exported = exported_names(path, source);
     let children: Vec<String> = children.iter().map(|name| (*name).to_string()).collect();
     report_missing(path, source, &children, &exported)

@@ -17,11 +17,11 @@ const RULE: &str = "exception-new";
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 pub(crate) const FRAMEWORK_RS_RULE: RsRule = RsRule::file(check_framework);
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     check_file(file, false)
 }
 
-pub(crate) fn check_framework(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check_framework(file: &RsFile) -> Vec<Diagnostic> {
     check_file(file, true)
 }
 

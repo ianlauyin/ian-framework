@@ -7,14 +7,14 @@ use oxc_span::SourceType;
 
 use crate::rule::diagnostic::line_column;
 
-pub(crate) struct TsFile<'a> {
+pub struct TsFile<'a> {
     pub(crate) path: &'a Path,
     pub(crate) source: &'a str,
     pub(crate) program: Option<&'a Program<'a>>,
 }
 
 impl<'a> TsFile<'a> {
-    pub(crate) fn new(path: &'a Path, source: &'a str, program: Option<&'a Program<'a>>) -> Self {
+    pub fn new(path: &'a Path, source: &'a str, program: Option<&'a Program<'a>>) -> Self {
         Self {
             path,
             source,
@@ -23,11 +23,7 @@ impl<'a> TsFile<'a> {
     }
 }
 
-pub(crate) fn parse<'a>(
-    allocator: &'a Allocator,
-    path: &Path,
-    source: &'a str,
-) -> Option<Program<'a>> {
+pub fn parse<'a>(allocator: &'a Allocator, path: &Path, source: &'a str) -> Option<Program<'a>> {
     let source_type = SourceType::from_path(path).ok()?;
     Some(Parser::new(allocator, source, source_type).parse().program)
 }

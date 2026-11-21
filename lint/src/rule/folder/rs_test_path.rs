@@ -1,6 +1,6 @@
-// A test is outside the test folder.
-// Move the test under the test folder.
-// Why a lint rule: Tests live in the test folder. `mod test` in `lib.rs` or `main.rs` stays.
+// A test is outside the `tests` folder.
+// Move the test under the `tests` folder.
+// Why a lint rule: Tests live in the `tests` folder. `mod tests` in `lib.rs` or `main.rs` stays.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,7 +20,7 @@ const RULE: &str = "test-attr";
 
 pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Rs, check);
 
-pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
+pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for file in files.files() {
         if file.parent() != Some(path) || !file_name(file).ends_with(".rs") {
@@ -33,7 +33,7 @@ pub(crate) fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagn
 
 fn check_file(path: &Path, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     let place = Place::new(path, srcs);
-    if place.in_folder("test") {
+    if place.in_folder("tests") {
         return Vec::new();
     }
     let Ok(source_text) = fs::read_to_string(path) else {
@@ -81,8 +81,8 @@ fn report_attrs(attrs: &[Attribute], keep_cfg_test: bool, report: &mut RuleRepor
         if is_test_attr(attr) {
             report.at_span(
                 attr.span(),
-                "A test is outside the test folder.",
-                "Move the test under the test folder.",
+                "A test is outside the `tests` folder.",
+                "Move the test under the `tests` folder.",
             );
         }
     }
@@ -93,7 +93,7 @@ fn is_crate_root(place: &Place) -> bool {
 }
 
 fn is_mod_test(item: &Item) -> bool {
-    matches!(item, Item::Mod(module) if module.ident == "test")
+    matches!(item, Item::Mod(module) if module.ident == "tests")
 }
 
 fn is_test_attr(attr: &Attribute) -> bool {

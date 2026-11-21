@@ -18,7 +18,7 @@ const RULE: &str = "no-restricted-imports";
 
 pub(crate) const TS_RULE: TsRule = TsRule::file(check);
 
-pub(crate) fn check(file: &TsFile) -> Vec<Diagnostic> {
+pub fn check(file: &TsFile) -> Vec<Diagnostic> {
     let Some(program) = file.program else {
         return Vec::new();
     };

@@ -15,8 +15,8 @@ const RULE: &str = "result-type";
 
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
-    if Place::new(file.path, file.srcs).in_folder("test") {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    if Place::new(file.path, file.srcs).in_folder("tests") {
         return Vec::new();
     }
     let Some(ast) = file.ast else {

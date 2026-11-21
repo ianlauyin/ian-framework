@@ -15,7 +15,7 @@ const RULE: &str = "super-path";
 
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {
         return Vec::new();
     };

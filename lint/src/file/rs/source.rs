@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-pub(crate) struct RsFile<'a> {
+pub struct RsFile<'a> {
     pub(crate) path: &'a Path,
     pub(crate) source: &'a str,
     pub(crate) ast: Option<&'a syn::File>,
@@ -8,7 +8,7 @@ pub(crate) struct RsFile<'a> {
 }
 
 impl<'a> RsFile<'a> {
-    pub(crate) fn new(
+    pub fn new(
         path: &'a Path,
         source: &'a str,
         ast: Option<&'a syn::File>,
@@ -23,6 +23,6 @@ impl<'a> RsFile<'a> {
     }
 }
 
-pub(crate) fn parse(source: &str) -> Option<syn::File> {
+pub fn parse(source: &str) -> Option<syn::File> {
     syn::parse_file(source).ok()
 }

@@ -26,7 +26,7 @@ const PUBLIC: u8 = 6;
 const PRIVATE: u8 = 7;
 const FIX: &str = "Put `mod` and `pub(crate) mod` first, then `use`, then `pub mod`, then `pub use` and `pub(crate) use`, then a private `static`, then constants and private `macro_rules!`, then public items, then private items.";
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     let Some(ast) = file.ast else {
         return Vec::new();
     };

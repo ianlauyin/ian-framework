@@ -16,8 +16,8 @@ const RULE: &str = "mod-file";
 
 pub(crate) const RS_RULE: RsRule = RsRule::file(check);
 
-pub(crate) fn check(file: &RsFile) -> Vec<Diagnostic> {
-    if file_name(file.path) != "mod.rs" || Place::new(file.path, file.srcs).in_folder("test") {
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    if file_name(file.path) != "mod.rs" || Place::new(file.path, file.srcs).in_folder("tests") {
         return Vec::new();
     }
     let Some(folder) = file.path.parent().and_then(|parent| parent.file_name()) else {
