@@ -10,7 +10,7 @@ export default defineConfig({
                 test: {
                     name: "solid",
                     environment: "happy-dom",
-                    include: ["test/solid/**/*.tsx"],
+                    include: ["tests/solid/**/*.tsx"],
                 },
             },
             {
@@ -18,7 +18,7 @@ export default defineConfig({
                 test: {
                     name: "node",
                     environment: "node",
-                    include: ["test/**/*.test.ts"],
+                    include: ["tests/**/*.test.ts"],
                 },
             },
         ],

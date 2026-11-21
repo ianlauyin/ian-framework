@@ -12,5 +12,5 @@
         "jsxImportSource": "@solidjs/web",
         "types": []
     },
-    "include": ["src", "test"]
+    "include": ["src", "tests"]
 }
