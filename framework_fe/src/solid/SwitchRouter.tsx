@@ -1,4 +1,4 @@
-import { createRouter, type RouteDefinition, type RouteSectionProps, useLocation } from "@solidjs/router";
+import { createRouter, type RouteDefinition, useLocation } from "@solidjs/router";
 import type { JSX } from "@solidjs/web";
 import { createEffect, Match, Switch } from "solid-js";
 
@@ -11,16 +11,15 @@ export interface KeyedRoutes<Key extends string> {
 export interface SwitchRouterProps<Key extends string> {
     active: Key;
     keyed: readonly KeyedRoutes<Key>[];
-    common?: readonly RouteDefinition[];
+    shared?: readonly RouteDefinition[];
     unknown: () => void;
-    children?: (props: RouteSectionProps) => JSX.Element;
 }
 
 export function SwitchRouter<Key extends string>(props: SwitchRouterProps<Key>): JSX.Element {
     const groups = props.keyed.map((group) => ({
         key: group.key,
         Router: createRouter({
-            routes: [...routeList(props.common, group.routes), { path: "*", component: () => <Mismatch onMismatch={group.onMismatch} /> }],
+            routes: [...routeList(props.shared, group.routes), { path: "*", component: () => <Mismatch onMismatch={group.onMismatch} /> }],
         }),
     }));
 
@@ -30,7 +29,7 @@ export function SwitchRouter<Key extends string>(props: SwitchRouterProps<Key>):
                 const Router = group.Router;
                 return (
                     <Match when={props.active === group.key}>
-                        <Router>{(route) => section(props.children, route)}</Router>
+                        <Router />
                     </Match>
                 );
             })}
@@ -59,17 +58,12 @@ function Unknown(props: { active: string; unknown: () => void }): JSX.Element {
     return null;
 }
 
-function section(children: ((props: RouteSectionProps) => JSX.Element) | undefined, route: RouteSectionProps): JSX.Element {
-    if (!children) return route.children;
-    return children(route);
+function routeList(shared: readonly RouteDefinition[] | undefined, routes: readonly RouteDefinition[]): RouteDefinition[] {
+    if (!shared || shared.length === 0) return [...routes];
+    return wrap(shared, 0, [...routes]);
 }
 
-function routeList(common: readonly RouteDefinition[] | undefined, routes: readonly RouteDefinition[]): RouteDefinition[] {
-    if (!common || common.length === 0) return [...routes];
-    return wrap(common, 0, [...routes]);
-}
-
-function wrap(common: readonly RouteDefinition[], index: number, routes: RouteDefinition[]): RouteDefinition[] {
-    if (index >= common.length) return routes;
-    return [{ ...common[index], children: wrap(common, index + 1, routes) }];
+function wrap(shared: readonly RouteDefinition[], index: number, routes: RouteDefinition[]): RouteDefinition[] {
+    if (index >= shared.length) return routes;
+    return [{ ...shared[index], children: wrap(shared, index + 1, routes) }];
 }

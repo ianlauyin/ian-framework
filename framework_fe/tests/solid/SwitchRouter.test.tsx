@@ -84,18 +84,18 @@ describe("SwitchRouter", () => {
         expect(root.textContent).toContain("protected home");
     });
 
-    it("shows the common route around the active routes", () => {
+    it("shows the shared route around the active routes", () => {
         window.history.pushState({}, "", "/");
         const root = document.createElement("div");
-        dispose = render(() => <SwitchRouter active={Area.Public} keyed={groups()} unknown={unknown} common={[{ component: Shell }]} />, root);
+        dispose = render(() => <SwitchRouter active={Area.Public} keyed={groups()} unknown={unknown} shared={[{ component: Shell }]} />, root);
         expect(root.textContent).toContain("shell");
         expect(root.textContent).toContain("public home");
     });
 
-    it("nests common routes with the first route outside", () => {
+    it("nests shared routes with the first route outside", () => {
         window.history.pushState({}, "", "/");
         const root = document.createElement("div");
-        dispose = render(() => <SwitchRouter active={Area.Public} keyed={groups()} unknown={unknown} common={[{ component: Shell }, { component: Inner }]} />, root);
+        dispose = render(() => <SwitchRouter active={Area.Public} keyed={groups()} unknown={unknown} shared={[{ component: Shell }, { component: Inner }]} />, root);
         const text = root.textContent ?? "";
         expect(text.indexOf("shell")).toBeLessThan(text.indexOf("inner"));
         expect(text.indexOf("inner")).toBeLessThan(text.indexOf("public home"));
@@ -105,7 +105,7 @@ describe("SwitchRouter", () => {
         window.history.pushState({}, "", "/missing");
         const mismatched: Area[] = [];
         const root = document.createElement("div");
-        dispose = render(() => <SwitchRouter active={Area.Public} keyed={groups((key) => mismatched.push(key))} unknown={unknown} common={[{ component: Shell }]} />, root);
+        dispose = render(() => <SwitchRouter active={Area.Public} keyed={groups((key) => mismatched.push(key))} unknown={unknown} shared={[{ component: Shell }]} />, root);
         flush();
         expect(mismatched).toEqual([Area.Public]);
         expect(root.textContent).not.toContain("shell");
