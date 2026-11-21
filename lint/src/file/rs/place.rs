@@ -14,9 +14,12 @@ impl Place {
             .iter()
             .filter_map(|src| {
                 let src = without_dot(src);
-                path.strip_prefix(&src)
-                    .ok()
-                    .map(|rel| (src.components().count(), rel.to_path_buf()))
+                let rel = path.strip_prefix(&src).ok().or_else(|| {
+                    path.strip_prefix(src.parent()?)
+                        .ok()
+                        .filter(|rel| rel.starts_with("tests"))
+                })?;
+                Some((src.components().count(), rel.to_path_buf()))
             })
             .max_by_key(|(depth, _)| *depth)
             .map(|(_, rel)| rel)

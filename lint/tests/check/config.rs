@@ -12,7 +12,7 @@ fn load_text(name: &str, text: &str) -> Result<Config, String> {
 }
 
 #[test]
-fn a_config_with_two_src_folders_passes() {
+fn a_config_with_two_package_folders_passes() {
     let root = project("config-ok", &[("lint.config.json", CONFIG.as_bytes())]);
     let config = load(&root);
     fs::remove_dir_all(&root).expect("test folder is removed");
@@ -20,13 +20,13 @@ fn a_config_with_two_src_folders_passes() {
         config,
         Ok(Config {
             ruleset: Ruleset::Project,
-            fe: vec![root.join("web/src")],
-            be: vec![root.join("api/src")],
+            fe: vec![root.join("web")],
+            be: vec![root.join("api")],
         })
     );
     let framework = CONFIG
         .replace("project", "framework")
-        .replace("web/src", "./web/src");
+        .replace("\"web\"", "\"./web\"");
     let config = load_text("config-framework", &framework).expect("config is loaded");
     assert_eq!(config.ruleset, Ruleset::Framework);
     let empty = "{\"ruleset\":\"project\",\"fe\":{\"paths\":[]},\"be\":{\"paths\":[]}}";
@@ -55,19 +55,22 @@ fn a_key_that_is_not_known_fails() {
 }
 
 #[test]
-fn a_src_path_that_is_not_a_folder_fails() {
+fn a_package_path_that_is_not_a_folder_fails() {
     assert_eq!(
-        load_text("config-folder", &CONFIG.replace("api/src", "api/scr")),
-        Err("lint.config.json: `api/scr` is not a folder".to_owned())
+        load_text("config-folder", &CONFIG.replace("\"api\"", "\"apx\"")),
+        Err("lint.config.json: `apx` is not a folder".to_owned())
     );
 }
 
 #[test]
-fn a_src_path_outside_the_root_fails() {
-    for path in ["../api/src", "/api/src", ""] {
+fn a_package_path_outside_the_root_fails() {
+    for path in ["../api", "/api", ""] {
         assert_eq!(
-            load_text("config-outside", &CONFIG.replace("api/src", path)),
-            Err(format!("lint.config.json: `{path}` is not a src path"))
+            load_text(
+                "config-outside",
+                &CONFIG.replace("\"api\"", &format!("\"{path}\""))
+            ),
+            Err(format!("lint.config.json: `{path}` is not a package path"))
         );
     }
 }

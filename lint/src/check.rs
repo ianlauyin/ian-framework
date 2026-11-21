@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::config::{Config, Side};
-use crate::files::FileSet;
+use crate::files::{FileSet, src_folders};
 use crate::rule::diagnostic::Diagnostic;
 use crate::{Failure, Report};
 
@@ -37,12 +37,14 @@ fn check_files(
     side: Side,
     failures: &mut Vec<Failure>,
 ) -> Vec<Diagnostic> {
+    let fe = src_folders(&config.fe);
+    let be = src_folders(&config.be);
     let mut diagnostics = Vec::new();
     for path in files.files() {
-        let result = if side.checks_fe() && crate::files::is_frontend_source(path, &config.fe) {
-            crate::rule::run::check(path, config.ruleset)
-        } else if side.checks_be() && crate::files::is_rust_source(path, &config.be) {
-            crate::rule::rs::run::check(path, &config.be, config.ruleset)
+        let result = if side.checks_fe() && crate::files::is_frontend_source(path, &fe) {
+            crate::rule::run::check(path, &fe, config.ruleset)
+        } else if side.checks_be() && crate::files::is_rust_source(path, &be) {
+            crate::rule::rs::run::check(path, &be, config.ruleset)
         } else {
             continue;
         };
@@ -55,12 +57,14 @@ fn check_files(
 }
 
 fn check_folders(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnostic> {
+    let fe = src_folders(&config.fe);
+    let be = src_folders(&config.be);
     let mut diagnostics = Vec::new();
     for path in files.dirs() {
         for rule in crate::ruleset::rules(config.ruleset).folder {
             let (checked, srcs) = match rule.side {
-                Side::Fe => (side.checks_fe(), &config.fe),
-                Side::Be => (side.checks_be(), &config.be),
+                Side::Fe => (side.checks_fe(), &fe),
+                Side::Be => (side.checks_be(), &be),
                 Side::All => continue,
             };
             if checked && crate::files::in_src(path, srcs) {

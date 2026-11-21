@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::{env, fs, process};
 
 pub(crate) const CONFIG: &str =
-    "{\"ruleset\":\"project\",\"fe\":{\"paths\":[\"web/src\"]},\"be\":{\"paths\":[\"api/src\"]}}";
+    "{\"ruleset\":\"project\",\"fe\":{\"paths\":[\"web\"]},\"be\":{\"paths\":[\"api\"]}}";
 
 pub(crate) fn project(name: &str, files: &[(&str, &[u8])]) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-check-{name}-{}", process::id()));

@@ -84,20 +84,39 @@ pub(crate) fn in_src(path: &Path, srcs: &[PathBuf]) -> bool {
     srcs.iter().any(|src| path.starts_with(without_dot(src)))
 }
 
+pub(crate) fn in_tests(path: &Path, srcs: &[PathBuf]) -> bool {
+    let path = without_dot(path);
+    srcs.iter()
+        .filter_map(|src| {
+            without_dot(src)
+                .parent()
+                .map(|package| package.join("tests"))
+        })
+        .any(|tests| path.starts_with(tests))
+}
+
+pub(crate) fn src_folders(packages: &[PathBuf]) -> Vec<PathBuf> {
+    packages.iter().map(|package| package.join("src")).collect()
+}
+
+fn in_package(path: &Path, srcs: &[PathBuf]) -> bool {
+    in_src(path, srcs) || in_tests(path, srcs)
+}
+
 pub(crate) fn is_ts_name(name: &str) -> bool {
     (name.ends_with(".ts") || name.ends_with(".tsx")) && !name.ends_with(".d.ts")
 }
 
 pub(crate) fn is_style_file(path: &Path, srcs: &[PathBuf]) -> bool {
-    in_src(path, srcs) && file_name(path).ends_with(".css")
+    in_package(path, srcs) && file_name(path).ends_with(".css")
 }
 
 pub(crate) fn is_frontend_source(path: &Path, srcs: &[PathBuf]) -> bool {
-    (in_src(path, srcs) && is_ts_name(file_name(path))) || is_style_file(path, srcs)
+    (in_package(path, srcs) && is_ts_name(file_name(path))) || is_style_file(path, srcs)
 }
 
 pub(crate) fn is_rust_source(path: &Path, srcs: &[PathBuf]) -> bool {
-    in_src(path, srcs) && file_name(path).ends_with(".rs")
+    in_package(path, srcs) && file_name(path).ends_with(".rs")
 }
 
 pub(crate) fn without_dot(path: &Path) -> PathBuf {

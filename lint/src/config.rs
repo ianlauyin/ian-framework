@@ -54,8 +54,8 @@ pub fn load(root: &Path) -> Result<Config, String> {
     };
     Ok(Config {
         ruleset,
-        fe: src_paths(root, &file.fe.paths)?,
-        be: src_paths(root, &file.be.paths)?,
+        fe: package_paths(root, &file.fe.paths)?,
+        be: package_paths(root, &file.be.paths)?,
     })
 }
 
@@ -73,25 +73,25 @@ struct Paths {
     paths: Vec<String>,
 }
 
-fn src_paths(root: &Path, paths: &[String]) -> Result<Vec<PathBuf>, String> {
-    let mut srcs = Vec::new();
+fn package_paths(root: &Path, paths: &[String]) -> Result<Vec<PathBuf>, String> {
+    let mut packages = Vec::new();
     for path in paths {
-        srcs.push(src_path(root, path)?);
+        packages.push(package_path(root, path)?);
     }
-    Ok(srcs)
+    Ok(packages)
 }
 
-fn src_path(root: &Path, path: &str) -> Result<PathBuf, String> {
+fn package_path(root: &Path, path: &str) -> Result<PathBuf, String> {
     let relative = Path::new(path);
     if path.is_empty() || relative.is_absolute() {
-        return Err(format!("{FILE_NAME}: `{path}` is not a src path"));
+        return Err(format!("{FILE_NAME}: `{path}` is not a package path"));
     }
     let mut out = root.to_path_buf();
     for part in relative.components() {
         match part {
             Component::Normal(name) => out.push(name),
             Component::CurDir => {}
-            _ => return Err(format!("{FILE_NAME}: `{path}` is not a src path")),
+            _ => return Err(format!("{FILE_NAME}: `{path}` is not a package path")),
         }
     }
     if !out.is_dir() {

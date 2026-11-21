@@ -9,10 +9,18 @@ pub mod test_path;
 
 pub(crate) struct TsRule {
     pub(crate) check: fn(&TsFile<'_>) -> Vec<Diagnostic>,
+    pub(crate) tests: bool,
 }
 
 impl TsRule {
     pub(crate) const fn file(check: fn(&TsFile<'_>) -> Vec<Diagnostic>) -> Self {
-        Self { check }
+        Self { check, tests: true }
+    }
+
+    pub(crate) const fn source(check: fn(&TsFile<'_>) -> Vec<Diagnostic>) -> Self {
+        Self {
+            check,
+            tests: false,
+        }
     }
 }

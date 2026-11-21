@@ -25,6 +25,7 @@ fn build() {
 ";
     let srcs = [std::path::PathBuf::from("api/src")];
     assert!(with_source(Path::new("api/src/tests/app.rs"), source, &srcs, check).is_empty());
+    assert!(with_source(Path::new("api/tests/app.rs"), source, &srcs, check).is_empty());
 }
 
 #[test]

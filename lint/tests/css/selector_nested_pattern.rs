@@ -218,6 +218,7 @@ fn a_file_that_cannot_be_read_is_a_failure() {
     assert!(
         ian_lint::rule::run::check(
             &path.with_extension("css"),
+            &[],
             ian_lint::config::Ruleset::Framework
         )
         .is_err()

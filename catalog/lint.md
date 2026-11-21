@@ -11,8 +11,8 @@ This file is the catalog of the linter in `lint/`.
 | `lint/Cargo.toml` | The crate `ian-lint` | |
 | `lint/src/lib.rs` | The exported check, the report, and the failure | `args`, `config`, `file`, `files`, and `rule` are public. |
 | `lint/tests/` | The tests | A test is in `check`, `css`, `folder`, `rs`, or `ts`. |
-| `lint/src/config.rs` | The configuration file and the side | `ruleset` is `framework` or `project`. A side checks the frontend, Rust, or both. The key of the frontend src paths is `fe`. The key of the Rust src paths is `be`. A src path that is not a folder is a failure. |
-| `lint/src/check.rs` | The check of one root folder | A file that the linter cannot read is a failure. A TypeScript or Rust file that does not parse is a failure. The rules do not check that file. |
+| `lint/src/config.rs` | The configuration file and the side | `ruleset` is `framework` or `project`. A side checks the frontend, Rust, or both. A path is a package folder. The key of the frontend package paths is `fe`. The key of the Rust package paths is `be`. A package path that is not a folder is a failure. |
+| `lint/src/check.rs` | The check of one root folder | The linter checks the files in `src` and in `tests` of each package. It does not check the other files in a package. A folder rule starts only at a folder in `src`. A file that the linter cannot read is a failure. A TypeScript or Rust file that does not parse is a failure. The rules do not check that file. |
 | `lint/src/main.rs` | The `ian-lint` program | |
 | `lint/src/args.rs` | The arguments of the `ian-lint` program | `fe` checks only the frontend. `be` checks only Rust. No side argument checks both. The other argument is the root. The root is `.` when it is omitted. The arguments can be in either order. Two roots, or two sides, stops the run. `-h` or `--help` gives the usage. A different argument that starts with `-` stops the run. |
 | `lint/src/files.rs` | The file tree and the file kinds | |
@@ -29,7 +29,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/file/rs/mod.rs` | The Rust parser | |
 | `lint/src/file/rs/item.rs` | The type name and the visibility of a Rust item | |
 | `lint/src/file/rs/macro_body.rs` | The code in a macro call | The arguments are read as expressions with commas between them. When that fails, the arguments are read as statements. When the two fail, the code in the macro call is not checked. The rules `env-name`, `exception-code`, `exception-new`, `mutex-lock`, and `super-path` check the code in a macro call. |
-| `lint/src/file/rs/place.rs` | The src-relative place of a Rust file | |
+| `lint/src/file/rs/place.rs` | The src-relative place of a Rust file | A file in `tests` adjacent to the src folder has a place in the `tests` folder. |
 | `lint/src/file/rs/source.rs` | The Rust source and syntax tree for one file | |
 | `lint/src/rule/mod.rs` | The rule modules | The `mod.rs` in `lint/src/rule/css/`, `lint/src/rule/ts/`, `lint/src/rule/rs/`, and `lint/src/rule/folder/` holds the module declarations and the rule type. Each other `mod.rs` holds only module declarations. The rules that check one file are in `lint/src/rule/css/`, `lint/src/rule/ts/`, and `lint/src/rule/rs/`. The rules that check one folder are in `lint/src/rule/folder/`. CSS has no folder rule. The CSS file data is in `lint/src/file/css/`. The TypeScript file data is in `lint/src/file/ts/`. The Rust file data is in `lint/src/file/rs/`. There is no `support` folder. |
 | `lint/src/rule/diagnostic.rs` | One error | |
@@ -42,7 +42,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/css/mod.rs` | The CSS rules and the CSS rule type | A class selector, an id selector, and descending specificity are not checked. |
 | `lint/src/rule/css/empty_line_before.rs` | An empty line before a rule | The first node of a file is not checked. The first child of a block has no empty line before it. A rule after a single-line comment has no empty line before it. |
 | `lint/src/rule/css/selector_nested_pattern.rs` | A nested selector | Each selector in a list is checked on its own. A rule in an at-rule is not checked. |
-| `lint/src/rule/run.rs` | The run of the frontend rules on one file | |
+| `lint/src/rule/run.rs` | The run of the frontend rules on one file | A TypeScript file in `tests` adjacent to the src folder is a test file. The rules `declaration-order` and `test-path` do not check a test file. |
 | `lint/src/rule/ts/mod.rs` | The TypeScript rules and the TypeScript file rule type | |
 | `lint/src/rule/ts/declaration_order.rs` | The declaration order | A private `let` is in the same group as a constant. A statement that has no group is an error with a different message. |
 | `lint/src/rule/ts/no_comments.rs` | A comment | |

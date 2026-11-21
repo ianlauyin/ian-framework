@@ -9,7 +9,7 @@ use crate::rule::ts::TsRule;
 
 const RULE: &str = "test-path";
 
-pub(crate) const TS_RULE: TsRule = TsRule::file(check);
+pub(crate) const TS_RULE: TsRule = TsRule::source(check);
 
 pub fn check(file: &TsFile) -> Vec<Diagnostic> {
     let name = file_name(file.path);

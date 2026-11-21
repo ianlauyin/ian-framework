@@ -14,7 +14,7 @@ use crate::rule::ts::TsRule;
 
 const RULE: &str = "declaration-order";
 
-pub(crate) const TS_RULE: TsRule = TsRule::file(check);
+pub(crate) const TS_RULE: TsRule = TsRule::source(check);
 
 const IMPORT: u8 = 0;
 const PRIVATE_TYPE_OR_CONSTANT: u8 = 1;

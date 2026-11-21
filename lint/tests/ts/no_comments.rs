@@ -75,5 +75,5 @@ fn a_file_extension_oxc_does_not_accept_has_no_diagnostic() {
 #[test]
 fn a_file_that_cannot_be_read_is_a_failure() {
     let path = env::temp_dir().join(format!("ian-lint-no-comments-ts-missing-{}", process::id()));
-    assert!(ian_lint::rule::run::check(&path, ian_lint::config::Ruleset::Framework).is_err());
+    assert!(ian_lint::rule::run::check(&path, &[], ian_lint::config::Ruleset::Framework).is_err());
 }
