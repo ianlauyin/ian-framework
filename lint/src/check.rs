@@ -66,12 +66,12 @@ fn check_folders(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnostic
             ));
         }
         if side.checks_rs() && crate::files::in_src(path, &config.be) {
-            diagnostics.extend(crate::rule::rs::run::check_folder(
-                path,
-                files,
-                &config.be,
-                config.ruleset,
-            ));
+            for rule in crate::ruleset::rules(config.ruleset).folder {
+                if rule.side != Side::Rs {
+                    continue;
+                }
+                diagnostics.extend((rule.check)(path, files, &config.be));
+            }
         }
     }
     diagnostics

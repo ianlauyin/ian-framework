@@ -1,4 +1,0 @@
-mod declaration_order;
-mod no_comments;
-mod no_default_export;
-mod no_restricted_imports;

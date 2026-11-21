@@ -2,10 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::config::Ruleset;
-use crate::files::FileSet;
-use crate::parser::rs::source::RsFile;
+use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::rs::rule::RsRule;
 use crate::ruleset::rules;
 
 pub(crate) fn check(
@@ -27,26 +25,7 @@ pub(crate) fn check(
     let file = RsFile::new(path, &source, Some(&ast), srcs);
     let mut diagnostics = Vec::new();
     for rule in rules(ruleset).rs {
-        let RsRule::File(rule) = rule else {
-            continue;
-        };
         diagnostics.extend((rule.check)(&file));
     }
     Ok(diagnostics)
-}
-
-pub(crate) fn check_folder(
-    path: &Path,
-    files: &FileSet,
-    srcs: &[PathBuf],
-    ruleset: Ruleset,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    for rule in rules(ruleset).rs {
-        let RsRule::Folder(rule) = rule else {
-            continue;
-        };
-        diagnostics.extend((rule.check)(path, files, srcs));
-    }
-    diagnostics
 }
