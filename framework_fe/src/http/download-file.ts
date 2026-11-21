@@ -1,8 +1,8 @@
-import { networkError } from "./network";
+import {networkError} from "./network";
 
 export async function downloadFile(url: string, name: string): Promise<void> {
     try {
-        const response = await fetch(url, { credentials: "same-origin" });
+        const response = await fetch(url, {credentials: "same-origin"});
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const link = document.createElement("a");

@@ -1,6 +1,6 @@
-import { hktIsoString } from "../util/time";
-import { Mask } from "./mask";
-import type { ClientLogEvent, LogFields, LogLevel } from "./types";
+import {hktIsoString} from "../util/time";
+import {Mask} from "./mask";
+import type {ClientLogEvent, LogFields, LogLevel} from "./types";
 
 const LOG_URL = "/log";
 const SEND_INTERVAL = 60_000;
@@ -46,11 +46,11 @@ export class Logger {
     }
 
     public static addContext(key: string, value: string | number | boolean): void {
-        Logger.context = { ...Logger.context, [key]: value };
+        Logger.context = {...Logger.context, [key]: value};
     }
 
     public static removeContext(...keys: string[]): void {
-        const kept = { ...Logger.context };
+        const kept = {...Logger.context};
         for (const key of keys) delete kept[key];
         Logger.context = kept;
     }
@@ -62,7 +62,7 @@ export class Logger {
             latencyMs: null,
             level: "info",
             errorMessage: null,
-            context: { ...Logger.context },
+            context: {...Logger.context},
             extra: Logger.mask.fields(extra),
         });
     }
@@ -74,7 +74,7 @@ export class Logger {
             latencyMs: null,
             level: "warn",
             errorMessage: Logger.errorMessage("warn", error),
-            context: { ...Logger.context },
+            context: {...Logger.context},
             extra: Logger.mask.fields(extra),
         });
     }
@@ -86,7 +86,7 @@ export class Logger {
             latencyMs: null,
             level: "error",
             errorMessage: Logger.errorMessage("error", error),
-            context: { ...Logger.context },
+            context: {...Logger.context},
             extra: Logger.mask.fields(extra),
         });
     }
@@ -102,7 +102,7 @@ export class Logger {
                 latencyMs: Math.round(performance.now() - start),
                 level: "info",
                 errorMessage: null,
-                context: { ...Logger.context },
+                context: {...Logger.context},
                 extra: Logger.mask.fields(extra),
             });
             return output;
@@ -114,7 +114,7 @@ export class Logger {
                 latencyMs: Math.round(performance.now() - start),
                 level: "error",
                 errorMessage,
-                context: { ...Logger.context },
+                context: {...Logger.context},
                 extra: Logger.mask.fields(extra),
             });
             throw error;
@@ -134,7 +134,7 @@ export class Logger {
     private static watchWindowError(): void {
         window.addEventListener(
             "error",
-            (event) => {
+            event => {
                 if (event.error instanceof Error) {
                     Logger.error("WINDOW/error", event.error);
                     return;
@@ -142,9 +142,9 @@ export class Logger {
                 const message = event.message || Logger.domSourceMessage(event.target) || "window error";
                 Logger.error("WINDOW/error", new Error(message));
             },
-            true,
+            true
         );
-        window.addEventListener("unhandledrejection", (event) => {
+        window.addEventListener("unhandledrejection", event => {
             const reason = event.reason;
             const error = reason instanceof Error ? reason : new Error("unhandled rejection");
             Logger.error("WINDOW/unhandledrejection", error);
@@ -162,7 +162,7 @@ export class Logger {
 
         const events = Logger.buffer;
         Logger.buffer = [];
-        const body = new Blob([JSON.stringify({ events })], { type: "application/json" });
+        const body = new Blob([JSON.stringify({events})], {type: "application/json"});
         if (!navigator.sendBeacon(LOG_URL, body)) Logger.buffer = [...events, ...Logger.buffer];
     }
 }

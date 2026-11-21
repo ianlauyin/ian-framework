@@ -1,4 +1,4 @@
-import type { LogFields } from "./types";
+import type {LogFields} from "./types";
 
 const MASK = "***";
 
@@ -6,7 +6,7 @@ export class Mask {
     private readonly patterns: RegExp[];
 
     constructor(patterns: RegExp[]) {
-        this.patterns = patterns.map((pattern) => new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`));
+        this.patterns = patterns.map(pattern => new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`));
     }
 
     public text(text: string): string {
@@ -40,6 +40,6 @@ export class Mask {
     }
 
     private matches(key: string): boolean {
-        return this.patterns.some((pattern) => key.search(pattern) !== -1);
+        return this.patterns.some(pattern => key.search(pattern) !== -1);
     }
 }

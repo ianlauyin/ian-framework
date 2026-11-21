@@ -1,4 +1,4 @@
-import { ApiError, type ErrorBody, NetworkConnectionException, networkError } from "./network";
+import {ApiError, type ErrorBody, NetworkConnectionException, networkError} from "./network";
 
 const NETWORK_ERROR_STATUS_CODES = [0, 502, 504];
 
@@ -8,7 +8,7 @@ export async function rawSend(url: string, init: RequestInit): Promise<any> {
     let response: Response;
     let body: string;
     try {
-        response = await fetch(url, { ...init, credentials: "same-origin" });
+        response = await fetch(url, {...init, credentials: "same-origin"});
         body = await response.text();
     } catch (error) {
         throw networkError(error, url);

@@ -1,4 +1,4 @@
-import { createStore, type Store, type StoreSetter } from "solid-js";
+import {createStore, type Store, type StoreSetter} from "solid-js";
 
 export abstract class Module<State extends object> {
     private readonly state: Store<State>;

@@ -1,4 +1,4 @@
-import { ApiError, NetworkConnectionException } from "./network";
+import {ApiError, NetworkConnectionException} from "./network";
 
 let initialized = false;
 let handlerRunning = false;
@@ -21,6 +21,6 @@ export function setupExceptionHandler(handler: ExceptionHandler): void {
         }
     };
 
-    window.addEventListener("error", (event) => void handle(event.error));
-    window.addEventListener("unhandledrejection", (event) => void handle(event.reason));
+    window.addEventListener("error", event => void handle(event.error));
+    window.addEventListener("unhandledrejection", event => void handle(event.reason));
 }

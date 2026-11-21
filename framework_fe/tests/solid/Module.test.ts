@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { flush } from "solid-js";
-import { Module } from "../../src/solid/Module";
+import {describe, expect, it} from "vitest";
+import {flush} from "solid-js";
+import {Module} from "../../src/solid/Module";
 
-class TestModule extends Module<{ count: number }> {
+class TestModule extends Module<{count: number}> {
     constructor() {
-        super({ count: 0 });
+        super({count: 0});
     }
 
     add() {
-        this.setState((state) => {
+        this.setState(state => {
             state.count += 1;
         });
     }

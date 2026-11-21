@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { type RouteSectionProps, useNavigate } from "@solidjs/router";
-import { render } from "@solidjs/web";
-import { createSignal, flush } from "solid-js";
+import {afterEach, describe, expect, it} from "vitest";
+import {type RouteSectionProps, useNavigate} from "@solidjs/router";
+import {render} from "@solidjs/web";
+import {createSignal, flush} from "solid-js";
 
-import { KeyedRouter, type KeyedRoutes } from "../../src/solid/KeyedRouter";
+import {KeyedRouter, type KeyedRoutes} from "../../src/solid/KeyedRouter";
 
 let dispose: (() => void) | undefined;
 let navigate: ((path: string) => void) | undefined;
@@ -33,9 +33,9 @@ function Layout(props: RouteSectionProps) {
 type Key = "user" | "non-user" | "open";
 
 const keyed: KeyedRoutes<Key>[] = [
-    { key: "user", routes: [{ path: "/", component: Layout, children: [{ path: "/", component: Home }] }] },
-    { key: "non-user", routes: [{ path: "/login", component: Login }] },
-    { key: "open", routes: [{ path: "/landing", component: Landing }] },
+    {key: "user", routes: [{path: "/", component: Layout, children: [{path: "/", component: Home}]}]},
+    {key: "non-user", routes: [{path: "/login", component: Login}]},
+    {key: "open", routes: [{path: "/landing", component: Landing}]},
 ];
 
 function activeKeys(signedIn: boolean): Key[] {
@@ -51,7 +51,7 @@ function mount(path: string, signedIn: () => boolean): HTMLElement {
 }
 
 async function settle() {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise(resolve => setTimeout(resolve, 20));
     flush();
 }
 

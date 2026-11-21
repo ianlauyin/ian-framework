@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 type FakeDocument = {
     visibilityState: DocumentVisibilityState;
@@ -11,7 +11,7 @@ let sendBeacon: ReturnType<typeof vi.fn>;
 
 function hidePage(): void {
     fakeDocument.visibilityState = "hidden";
-    fakeDocument.listeners.forEach((listener) => {
+    fakeDocument.listeners.forEach(listener => {
         listener();
     });
 }
@@ -21,7 +21,7 @@ function sentEvents(call: number) {
 }
 
 async function loadLogger() {
-    const { Logger } = await import("../../src/logger/logger");
+    const {Logger} = await import("../../src/logger/logger");
     return Logger;
 }
 
@@ -38,16 +38,16 @@ beforeEach(() => {
     };
     sendBeacon = vi.fn().mockReturnValue(true);
     vi.stubGlobal("document", fakeDocument);
-    vi.stubGlobal("location", { pathname: "/home", href: "https://app.example/home?a=1" });
-    vi.stubGlobal("navigator", { sendBeacon });
+    vi.stubGlobal("location", {pathname: "/home", href: "https://app.example/home?a=1"});
+    vi.stubGlobal("navigator", {sendBeacon});
     vi.stubGlobal(
         "Blob",
         class {
             constructor(
                 public parts: string[],
-                public options: { type: string },
+                public options: {type: string}
             ) {}
-        },
+        }
     );
 });
 
@@ -61,14 +61,14 @@ describe("Logger", () => {
         const Logger = await loadLogger();
         Logger.init([]);
         Logger.info("started");
-        Logger.error("boom", new Error("it broke"), { code: 42 });
+        Logger.error("boom", new Error("it broke"), {code: 42});
         await vi.advanceTimersByTimeAsync(59_999);
         expect(sendBeacon).not.toHaveBeenCalled();
 
         await vi.advanceTimersByTimeAsync(1);
         expect(sendBeacon).toHaveBeenCalledTimes(1);
         expect(sendBeacon.mock.calls[0][0]).toBe("/log");
-        expect(sendBeacon.mock.calls[0][1].options).toEqual({ type: "application/json" });
+        expect(sendBeacon.mock.calls[0][1].options).toEqual({type: "application/json"});
         expect(sentEvents(0)).toEqual([
             {
                 ts: "2026-10-25T20:00:00.000+08:00",
@@ -84,7 +84,7 @@ describe("Logger", () => {
                 errorMessage: "it broke",
                 action: "boom",
                 context: {},
-                extra: { code: 42 },
+                extra: {code: 42},
             }),
         ]);
 
@@ -131,9 +131,9 @@ describe("Logger", () => {
     it("keeps the extra values when no mask pattern is set", async () => {
         const Logger = await loadLogger();
         Logger.init([]);
-        Logger.info("login", { password: "hunter2" });
+        Logger.info("login", {password: "hunter2"});
         hidePage();
-        expect(sentEvents(0)[0].extra).toEqual({ password: "hunter2" });
+        expect(sentEvents(0)[0].extra).toEqual({password: "hunter2"});
     });
 
     it("sends the events again after a refused beacon, before the newer events", async () => {
@@ -145,7 +145,7 @@ describe("Logger", () => {
         Logger.info("second");
         await vi.advanceTimersByTimeAsync(60_000);
         expect(sendBeacon).toHaveBeenCalledTimes(2);
-        expect(sentEvents(1).map((event: { action: string }) => event.action)).toEqual(["first", "second"]);
+        expect(sentEvents(1).map((event: {action: string}) => event.action)).toEqual(["first", "second"]);
     });
 
     it("sends the queue on pagehide", async () => {
@@ -174,12 +174,12 @@ describe("Logger", () => {
         });
         const Logger = await loadLogger();
         Logger.init([]);
-        windowListeners.error({ message: "boom" });
-        windowListeners.error({ message: "" });
-        windowListeners.unhandledrejection({ reason: new Error("rejected") });
-        windowListeners.unhandledrejection({ reason: 42 });
+        windowListeners.error({message: "boom"});
+        windowListeners.error({message: ""});
+        windowListeners.unhandledrejection({reason: new Error("rejected")});
+        windowListeners.unhandledrejection({reason: 42});
         hidePage();
-        const sent = sentEvents(0).map((event: { level: string; action: string; errorMessage: string }) => [event.level, event.action, event.errorMessage]);
+        const sent = sentEvents(0).map((event: {level: string; action: string; errorMessage: string}) => [event.level, event.action, event.errorMessage]);
         expect(sent).toEqual([
             ["error", "WINDOW/error", "boom"],
             ["error", "WINDOW/error", "window error"],
@@ -204,7 +204,7 @@ describe("Logger", () => {
         });
         const Logger = await loadLogger();
         Logger.init([]);
-        windowListeners.error({ message: "", target: new FakeElement() });
+        windowListeners.error({message: "", target: new FakeElement()});
         hidePage();
         expect(sentEvents(0)[0].errorMessage).toBe("DOM source error: <script> /assets/app.js");
     });
@@ -218,7 +218,7 @@ describe("Logger", () => {
         });
         const Logger = await loadLogger();
         Logger.init([/secret-\d+/]);
-        windowListeners.error({ message: `bad secret-42 ${"x".repeat(5000)}` });
+        windowListeners.error({message: `bad secret-42 ${"x".repeat(5000)}`});
         hidePage();
         const [event] = sentEvents(0);
         expect(event.action).toBe("WINDOW/error");
@@ -229,13 +229,13 @@ describe("Logger", () => {
     it("records warn with the error text and masks the call extra", async () => {
         const Logger = await loadLogger();
         Logger.init([/^token$/]);
-        Logger.warn("slow", { token: "abc", step: 1 }, new Error("timeout"));
+        Logger.warn("slow", {token: "abc", step: 1}, new Error("timeout"));
         Logger.warn("odd", {}, new Error("plain"));
         Logger.warn("none");
         hidePage();
         const [first, second, third] = sentEvents(0);
-        expect(first).toMatchObject({ level: "warn", errorMessage: "timeout" });
-        expect(first.extra).toEqual({ token: "***", step: 1 });
+        expect(first).toMatchObject({level: "warn", errorMessage: "timeout"});
+        expect(first.extra).toEqual({token: "***", step: 1});
         expect(second.errorMessage).toBe("plain");
         expect(third.errorMessage).toBeNull();
     });
@@ -248,12 +248,12 @@ describe("Logger", () => {
         Logger.error("c", new Error(""));
         hidePage();
         const events = sentEvents(0);
-        expect(events.map((event: { errorMessage: string }) => event.errorMessage)).toEqual(["unknown error", "unknown error", "unknown error"]);
+        expect(events.map((event: {errorMessage: string}) => event.errorMessage)).toEqual(["unknown error", "unknown error", "unknown error"]);
     });
 
     describe("trackNavigation", () => {
         let popstate: (() => void) | undefined;
-        let location: { href: string };
+        let location: {href: string};
 
         function go(url: string): void {
             location.href = `https://app.example${url}`;
@@ -261,7 +261,7 @@ describe("Logger", () => {
 
         beforeEach(() => {
             popstate = undefined;
-            location = { href: "https://app.example/home?a=1" };
+            location = {href: "https://app.example/home?a=1"};
             vi.stubGlobal("window", {
                 location,
                 history: {
@@ -288,7 +288,7 @@ describe("Logger", () => {
             Logger.info("later");
             hidePage();
 
-            expect(sentEvents(0).map((event: { action: string }) => event.action)).toEqual(["later"]);
+            expect(sentEvents(0).map((event: {action: string}) => event.action)).toEqual(["later"]);
         });
 
         it("stores the new page URL after pushState, replaceState and popstate", async () => {
@@ -329,8 +329,8 @@ describe("Logger", () => {
         it("records an info event with the latency and returns the output", async () => {
             const Logger = await loadLogger();
             Logger.init([]);
-            const pending = Logger.capture("cart/count", async (extra) => {
-                await new Promise((resolve) => setTimeout(resolve, 25));
+            const pending = Logger.capture("cart/count", async extra => {
+                await new Promise(resolve => setTimeout(resolve, 25));
                 extra.count = 7;
                 return 7;
             });
@@ -340,8 +340,8 @@ describe("Logger", () => {
             hidePage();
             const events = sentEvents(0);
             expect(events).toHaveLength(1);
-            expect(events[0]).toMatchObject({ action: "cart/count", level: "info", latencyMs: 25, errorMessage: null });
-            expect(events[0].extra).toEqual({ count: 7 });
+            expect(events[0]).toMatchObject({action: "cart/count", level: "info", latencyMs: 25, errorMessage: null});
+            expect(events[0].extra).toEqual({count: 7});
         });
 
         it("records an error event and rethrows when the work rejects", async () => {
@@ -351,7 +351,7 @@ describe("Logger", () => {
             await expect(Logger.capture("save", () => Promise.reject(new Error("")))).rejects.toThrow();
             hidePage();
             const events = sentEvents(0);
-            expect(events.map((event: { level: string; errorMessage: string }) => [event.level, event.errorMessage])).toEqual([
+            expect(events.map((event: {level: string; errorMessage: string}) => [event.level, event.errorMessage])).toEqual([
                 ["error", "denied"],
                 ["error", "unknown error"],
             ]);
@@ -371,7 +371,7 @@ describe("Logger", () => {
 
             const events = sentEvents(0);
             expect(events[0].context).toEqual({});
-            expect(events[1].context).toEqual({ user: "u2", beta: "on" });
+            expect(events[1].context).toEqual({user: "u2", beta: "on"});
         });
 
         it("removes the named keys", async () => {
@@ -383,7 +383,7 @@ describe("Logger", () => {
             Logger.info("after");
             vi.advanceTimersByTime(60_000);
 
-            expect(sentEvents(0)[0].context).toEqual({ beta: "on" });
+            expect(sentEvents(0)[0].context).toEqual({beta: "on"});
         });
     });
 });

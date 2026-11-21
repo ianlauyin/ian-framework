@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { render } from "@solidjs/web";
-import { flush } from "solid-js";
-import { PageContext } from "../../src/solid/PageContext";
+import {afterEach, describe, expect, it} from "vitest";
+import {render} from "@solidjs/web";
+import {flush} from "solid-js";
+import {PageContext} from "../../src/solid/PageContext";
 
-class TestPage extends PageContext<{ name: string }> {
+class TestPage extends PageContext<{name: string}> {
     constructor(name: string) {
-        super({ name });
+        super({name});
     }
 
     get name() {
@@ -13,13 +13,13 @@ class TestPage extends PageContext<{ name: string }> {
     }
 
     rename(name: string) {
-        this.setState((state) => {
+        this.setState(state => {
             state.name = name;
         });
     }
 }
 
-function Name(props: { page: TestPage }) {
+function Name(props: {page: TestPage}) {
     const page = props.page.use();
     return <p>name {page.name}</p>;
 }
@@ -55,9 +55,9 @@ describe("PageContext", () => {
                             <Name page={outer} />
                             <Name page={inner} />
                         </>
-                    )),
+                    ))
                 ),
-            root,
+            root
         );
         expect(root.textContent).toContain("name outer");
         expect(root.textContent).toContain("name inner");

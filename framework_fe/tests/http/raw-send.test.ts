@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 
-import { type ApiError, NetworkConnectionException } from "../../src/http/network";
-import { rawSend } from "../../src/http/raw-send";
+import {type ApiError, NetworkConnectionException} from "../../src/http/network";
+import {rawSend} from "../../src/http/raw-send";
 
 describe("rawSend", () => {
     afterEach(() => {
@@ -14,11 +14,11 @@ describe("rawSend", () => {
             vi.fn().mockResolvedValue({
                 ok: false,
                 status: 404,
-                text: async () => JSON.stringify({ message: "Item not found" }),
-            }),
+                text: async () => JSON.stringify({message: "Item not found"}),
+            })
         );
 
-        await expect(rawSend("/item/missing", { method: "DELETE" })).rejects.toMatchObject({
+        await expect(rawSend("/item/missing", {method: "DELETE"})).rejects.toMatchObject({
             name: "Error",
             message: "Item not found",
             code: 404,
@@ -32,10 +32,10 @@ describe("rawSend", () => {
                 ok: false,
                 status: 401,
                 text: async () => "",
-            }),
+            })
         );
 
-        await expect(rawSend("/item", { method: "GET" })).rejects.toMatchObject({
+        await expect(rawSend("/item", {method: "GET"})).rejects.toMatchObject({
             message: "Unknown error",
             code: 401,
         } satisfies Partial<ApiError>);
@@ -50,7 +50,7 @@ describe("rawSend", () => {
             status: 500,
             text: async () => "<html><body>Server error</body></html>",
         });
-        await expect(rawSend("/item", { method: "GET" })).rejects.toMatchObject({
+        await expect(rawSend("/item", {method: "GET"})).rejects.toMatchObject({
             name: "Error",
             message: "Unknown error",
             code: 500,
@@ -61,7 +61,7 @@ describe("rawSend", () => {
             status: 401,
             text: async () => "Unauthorized",
         });
-        await expect(rawSend("/item", { method: "GET" })).rejects.toMatchObject({
+        await expect(rawSend("/item", {method: "GET"})).rejects.toMatchObject({
             message: "Unknown error",
             code: 401,
         } satisfies Partial<ApiError>);
@@ -73,11 +73,11 @@ describe("rawSend", () => {
             vi.fn().mockResolvedValue({
                 ok: false,
                 status: 403,
-                text: async () => JSON.stringify({ message: "Invalid username or password" }),
-            }),
+                text: async () => JSON.stringify({message: "Invalid username or password"}),
+            })
         );
 
-        await expect(rawSend("/login", { method: "POST" })).rejects.toMatchObject({
+        await expect(rawSend("/login", {method: "POST"})).rejects.toMatchObject({
             message: "Invalid username or password",
             code: 403,
         } satisfies Partial<ApiError>);
@@ -87,13 +87,13 @@ describe("rawSend", () => {
         const fetchMock = vi.fn();
         vi.stubGlobal("fetch", fetchMock);
 
-        for (const body of [{}, { message: 7 }]) {
+        for (const body of [{}, {message: 7}]) {
             fetchMock.mockResolvedValueOnce({
                 ok: false,
                 status: 400,
                 text: async () => JSON.stringify(body),
             });
-            await expect(rawSend("/item", { method: "GET" })).rejects.toMatchObject({
+            await expect(rawSend("/item", {method: "GET"})).rejects.toMatchObject({
                 message: "Unknown error",
                 code: 400,
             } satisfies Partial<ApiError>);
@@ -107,10 +107,10 @@ describe("rawSend", () => {
                 ok: true,
                 status: 204,
                 text: async () => "",
-            }),
+            })
         );
 
-        await expect(rawSend("/login", { method: "POST" })).resolves.toBeNull();
+        await expect(rawSend("/login", {method: "POST"})).resolves.toBeNull();
     });
 
     it("throws NetworkConnectionException when a 2xx body is not JSON", async () => {
@@ -120,16 +120,16 @@ describe("rawSend", () => {
                 ok: true,
                 status: 200,
                 text: async () => "<html>gateway page</html>",
-            }),
+            })
         );
 
-        await expect(rawSend("/item", { method: "GET" })).rejects.toBeInstanceOf(NetworkConnectionException);
+        await expect(rawSend("/item", {method: "GET"})).rejects.toBeInstanceOf(NetworkConnectionException);
     });
 
-    it.each([0, 502, 504])("throws NetworkConnectionException for the status %i", async (status) => {
-        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status, text: async () => "" }));
+    it.each([0, 502, 504])("throws NetworkConnectionException for the status %i", async status => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok: false, status, text: async () => ""}));
 
-        await expect(rawSend("/item", { method: "GET" })).rejects.toMatchObject({
+        await expect(rawSend("/item", {method: "GET"})).rejects.toMatchObject({
             message: `HTTP ${status}`,
             requestURL: "/item",
         });
@@ -141,11 +141,11 @@ describe("rawSend", () => {
             vi.fn().mockResolvedValue({
                 ok: false,
                 status: 503,
-                text: async () => JSON.stringify({ message: "maintenance" }),
-            }),
+                text: async () => JSON.stringify({message: "maintenance"}),
+            })
         );
 
-        await expect(rawSend("/item", { method: "GET" })).rejects.toMatchObject({
+        await expect(rawSend("/item", {method: "GET"})).rejects.toMatchObject({
             code: 503,
             message: "maintenance",
         });
@@ -154,7 +154,7 @@ describe("rawSend", () => {
     it("throws NetworkConnectionException when fetch fails", async () => {
         vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
-        await expect(rawSend("/item", { method: "GET" })).rejects.toMatchObject({
+        await expect(rawSend("/item", {method: "GET"})).rejects.toMatchObject({
             message: "Failed to fetch",
             requestURL: "/item",
         });
@@ -170,12 +170,12 @@ describe("rawSend", () => {
                     JSON.stringify({
                         at: "2026-10-25T20:00:00+08:00",
                         day: "2026-10-25",
-                        nested: [{ at: "2026-10-25T12:00:00.123Z" }],
+                        nested: [{at: "2026-10-25T12:00:00.123Z"}],
                     }),
-            }),
+            })
         );
 
-        const result: any = await rawSend("/item", { method: "GET" });
+        const result: any = await rawSend("/item", {method: "GET"});
 
         expect(result.at).toEqual(new Date("2026-10-25T12:00:00Z"));
         expect(result.day).toBe("2026-10-25");

@@ -1,10 +1,10 @@
-import { rawSend } from "./raw-send";
+import {rawSend} from "./raw-send";
 
 type PathParams = Record<string, any> | null;
 type AJAXRequest = Record<string, any> | null;
 type AJAXResponse = Record<string, any> | null;
 
-type PathParamValues<Url extends string> = Url extends `${string}{${infer Name}}${infer Rest}` ? { [Key in Name | keyof PathParamValues<Rest>]: string | number | boolean } : Record<never, never>;
+type PathParamValues<Url extends string> = Url extends `${string}{${infer Name}}${infer Rest}` ? {[Key in Name | keyof PathParamValues<Rest>]: string | number | boolean} : Record<never, never>;
 
 type PathParamsArgument<Url extends string> = keyof PathParamValues<Url> extends never ? [pathParams?: PathParams] : [pathParams: PathParamValues<Url>];
 

@@ -1,17 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 
-import { downloadFile, NetworkConnectionException } from "../../src/http";
+import {downloadFile, NetworkConnectionException} from "../../src/http";
 
 function stubDownloadPage() {
     const createObjectURL = vi.fn(() => "blob:file");
     const click = vi.fn();
     const appendChild = vi.fn();
-    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL: vi.fn() });
+    vi.stubGlobal("URL", {createObjectURL, revokeObjectURL: vi.fn()});
     vi.stubGlobal("document", {
-        createElement: () => ({ click, remove: vi.fn() }),
-        body: { appendChild },
+        createElement: () => ({click, remove: vi.fn()}),
+        body: {appendChild},
     });
-    return { createObjectURL, click, appendChild };
+    return {createObjectURL, click, appendChild};
 }
 
 describe("downloadFile", () => {
@@ -29,7 +29,7 @@ describe("downloadFile", () => {
                     ok: false,
                     status,
                     blob: async () => new Blob(["denied"]),
-                }),
+                })
             );
 
             await expect(downloadFile("/file", "report.pdf")).rejects.toBeInstanceOf(NetworkConnectionException);

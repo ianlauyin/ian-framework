@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render } from "@solidjs/web";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
+import {render} from "@solidjs/web";
 
 function Boom(): never {
     throw new Error("boom");
@@ -8,7 +8,7 @@ function Boom(): never {
 async function sentEvents() {
     const body = sendBeacon.mock.calls.at(-1)?.[1] as Blob;
     const text = await body.text();
-    return JSON.parse(text).events as { action: string; errorMessage: string | null }[];
+    return JSON.parse(text).events as {action: string; errorMessage: string | null}[];
 }
 
 let sendBeacon: ReturnType<typeof vi.fn>;
@@ -19,7 +19,7 @@ beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-25T12:00:00Z"));
     sendBeacon = vi.fn().mockReturnValue(true);
-    vi.stubGlobal("navigator", { sendBeacon });
+    vi.stubGlobal("navigator", {sendBeacon});
 });
 
 afterEach(() => {
@@ -31,14 +31,14 @@ afterEach(() => {
 
 describe("ErrorBoundary", () => {
     it("shows the fallback and logs the error", async () => {
-        const [{ ErrorBoundary }, { Logger }] = await Promise.all([import("../../src/solid/ErrorBoundary"), import("../../src/logger")]);
+        const [{ErrorBoundary}, {Logger}] = await Promise.all([import("../../src/solid/ErrorBoundary"), import("../../src/logger")]);
         Logger.init([]);
         const root = document.createElement("div");
-        let props: { reset: () => void } | undefined;
+        let props: {reset: () => void} | undefined;
         dispose = render(
             () => (
                 <ErrorBoundary
-                    fallback={(received) => {
+                    fallback={received => {
                         props = received;
                         return <p>fallback text</p>;
                     }}
@@ -46,7 +46,7 @@ describe("ErrorBoundary", () => {
                     <Boom />
                 </ErrorBoundary>
             ),
-            root,
+            root
         );
 
         expect(root.textContent).toContain("fallback text");
@@ -54,7 +54,7 @@ describe("ErrorBoundary", () => {
 
         await vi.advanceTimersByTimeAsync(60_000);
         const events = await sentEvents();
-        const logged = events.find((event) => event.action === "ERROR-BOUNDARY/caughtError");
+        const logged = events.find(event => event.action === "ERROR-BOUNDARY/caughtError");
         expect(logged?.errorMessage).toContain("boom");
     });
 });

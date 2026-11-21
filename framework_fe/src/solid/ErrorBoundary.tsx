@@ -1,11 +1,11 @@
-import type { JSX } from "@solidjs/web";
-import { Errored, type Component } from "solid-js";
+import type {JSX} from "@solidjs/web";
+import {Errored, type Component} from "solid-js";
 
-import { Logger } from "../logger";
+import {Logger} from "../logger";
 
 export interface ErrorBoundaryProps {
     children: JSX.Element;
-    fallback: Component<{ reset: () => void }>;
+    fallback: Component<{reset: () => void}>;
 }
 
 export function ErrorBoundary(props: ErrorBoundaryProps): JSX.Element {

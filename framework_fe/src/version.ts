@@ -27,7 +27,7 @@ export class VersionChecker {
     }
 
     public static async reload(): Promise<void> {
-        await fetch(location.href, { cache: "reload" }).catch(() => undefined);
+        await fetch(location.href, {cache: "reload"}).catch(() => undefined);
         location.reload();
     }
 
@@ -39,7 +39,7 @@ export class VersionChecker {
             });
             if (!response.ok) return;
 
-            const body: { version: string } = await response.json();
+            const body: {version: string} = await response.json();
             if (VersionChecker.currentVersion === null) {
                 VersionChecker.currentVersion = body.version;
                 return;

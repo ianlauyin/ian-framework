@@ -1,5 +1,5 @@
-import type { JSX } from "@solidjs/web";
-import { type Context, createContext, createStore, type Store, type StoreSetter, useContext } from "solid-js";
+import type {JSX} from "@solidjs/web";
+import {type Context, createContext, createStore, type Store, type StoreSetter, useContext} from "solid-js";
 
 export abstract class PageContext<State extends object> {
     private readonly context: Context<this> = createContext<this>();

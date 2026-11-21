@@ -1,4 +1,4 @@
-import { createStore, flush, untrack } from "solid-js";
+import {createStore, flush, untrack} from "solid-js";
 
 export type Locales<Locale extends string, Dictionary extends object> = Record<Locale, Dictionary>;
 
@@ -9,14 +9,14 @@ export interface LocaleState<Locale extends string, Dictionary extends object> {
 }
 
 export function createLocale<Locale extends string, Dictionary extends object>(locales: Locales<Locale, Dictionary>, initial: NoInfer<Locale>): LocaleState<Locale, Dictionary> {
-    const [current, setCurrent] = createStore({ locale: initial });
+    const [current, setCurrent] = createStore({locale: initial});
     return {
         locale: () => current.locale,
         dict: () => locales[current.locale],
         setLocale(locale) {
             if (!(locale in locales)) return;
             if (locale === untrack(() => current.locale)) return;
-            setCurrent((state) => {
+            setCurrent(state => {
                 state.locale = locale;
             });
             flush();

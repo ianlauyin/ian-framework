@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 
-import { createStorage } from "../src/storage";
+import {createStorage} from "../src/storage";
 
-type Schema = { user: { name: string }; count: number };
+type Schema = {user: {name: string}; count: number};
 
 function fakeStorage(overrides: Partial<Storage> = {}) {
     const data = new Map<string, string>();
@@ -23,14 +23,14 @@ afterEach(() => {
 
 describe("createStorage", () => {
     it("keeps JSON values under the key with the prefix", () => {
-        const { data, storage } = fakeStorage();
+        const {data, storage} = fakeStorage();
         vi.stubGlobal("localStorage", storage);
         const store = createStorage<Schema>("app");
 
-        store.set("user", { name: "Alice" });
+        store.set("user", {name: "Alice"});
 
         expect(data.get("app:user")).toBe('{"name":"Alice"}');
-        expect(store.get("user")).toEqual({ name: "Alice" });
+        expect(store.get("user")).toEqual({name: "Alice"});
         store.remove("user");
         expect(store.get("user")).toBeNull();
     });
@@ -48,7 +48,7 @@ describe("createStorage", () => {
     });
 
     it("gives null for a value that is not JSON", () => {
-        const { data, storage } = fakeStorage();
+        const {data, storage} = fakeStorage();
         vi.stubGlobal("localStorage", storage);
         data.set("app:count", "{broken");
 
@@ -59,7 +59,7 @@ describe("createStorage", () => {
         const blocked = () => {
             throw new Error("blocked");
         };
-        const { storage } = fakeStorage({ getItem: blocked, setItem: blocked, removeItem: blocked });
+        const {storage} = fakeStorage({getItem: blocked, setItem: blocked, removeItem: blocked});
         vi.stubGlobal("localStorage", storage);
         const store = createStorage<Schema>("app");
 

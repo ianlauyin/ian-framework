@@ -1,8 +1,8 @@
 import solidPlugin from "@solidjs/vite-plugin";
-import { defineConfig } from "vitest/config";
+import {defineConfig} from "vitest/config";
 
 export default defineConfig({
-    plugins: [solidPlugin({ ssr: false })],
+    plugins: [solidPlugin({ssr: false})],
     test: {
         projects: [
             {

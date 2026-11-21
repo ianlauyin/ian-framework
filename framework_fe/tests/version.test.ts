@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
 type FakeDocument = {
     visibilityState: DocumentVisibilityState;
@@ -10,22 +10,22 @@ let fakeDocument: FakeDocument;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function respondWith(version: string): void {
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ version }) });
+    fetchMock.mockResolvedValueOnce({ok: true, json: async () => ({version})});
 }
 
 function showPage(): void {
     fakeDocument.visibilityState = "visible";
-    fakeDocument.listeners.forEach((listener) => {
+    fakeDocument.listeners.forEach(listener => {
         listener();
     });
 }
 
 async function flush(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
 }
 
 async function loadChecker() {
-    const { VersionChecker } = await import("../src/version");
+    const {VersionChecker} = await import("../src/version");
     return VersionChecker;
 }
 
@@ -54,7 +54,7 @@ describe("VersionChecker", () => {
         const handler = vi.fn();
 
         respondWith("a");
-        VersionChecker.init({ onUpdated: handler });
+        VersionChecker.init({onUpdated: handler});
         await flush();
         expect(fetchMock).toHaveBeenCalledWith("/version", {
             method: "GET",
@@ -75,13 +75,13 @@ describe("VersionChecker", () => {
     it("checks only when the page becomes visible", async () => {
         const VersionChecker = await loadChecker();
         respondWith("a");
-        VersionChecker.init({ onUpdated: vi.fn() });
-        VersionChecker.init({ onUpdated: vi.fn() });
+        VersionChecker.init({onUpdated: vi.fn()});
+        VersionChecker.init({onUpdated: vi.fn()});
         await flush();
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
         fakeDocument.visibilityState = "hidden";
-        fakeDocument.listeners.forEach((listener) => {
+        fakeDocument.listeners.forEach(listener => {
             listener();
         });
         await flush();
@@ -93,13 +93,13 @@ describe("VersionChecker", () => {
         const handler = vi.fn();
 
         respondWith("a");
-        VersionChecker.init({ onUpdated: handler });
+        VersionChecker.init({onUpdated: handler});
         await flush();
 
         fetchMock.mockRejectedValueOnce(new Error("offline"));
         showPage();
         await flush();
-        fetchMock.mockResolvedValueOnce({ ok: false });
+        fetchMock.mockResolvedValueOnce({ok: false});
         showPage();
         await flush();
         expect(handler).not.toHaveBeenCalled();
@@ -111,7 +111,7 @@ describe("VersionChecker", () => {
         const handler = vi.fn();
 
         respondWith("a");
-        VersionChecker.init({ onUpdated: handler, checkInterval: 1000 });
+        VersionChecker.init({onUpdated: handler, checkInterval: 1000});
         await vi.advanceTimersByTimeAsync(0);
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -131,7 +131,7 @@ describe("VersionChecker", () => {
         const VersionChecker = await loadChecker();
 
         respondWith("a");
-        VersionChecker.init({ onUpdated: vi.fn() });
+        VersionChecker.init({onUpdated: vi.fn()});
         await vi.advanceTimersByTimeAsync(60_000);
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
@@ -139,11 +139,11 @@ describe("VersionChecker", () => {
     it("reload bypasses the cache before it reloads", async () => {
         const VersionChecker = await loadChecker();
         const reload = vi.fn();
-        vi.stubGlobal("location", { href: "/folder?x=1", reload });
+        vi.stubGlobal("location", {href: "/folder?x=1", reload});
 
         fetchMock.mockRejectedValueOnce(new Error("offline"));
         await VersionChecker.reload();
-        expect(fetchMock).toHaveBeenLastCalledWith("/folder?x=1", { cache: "reload" });
+        expect(fetchMock).toHaveBeenLastCalledWith("/folder?x=1", {cache: "reload"});
         expect(reload).toHaveBeenCalledTimes(1);
     });
 });

@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest";
+import {describe, expect, it} from "vitest";
 
-import { createLocale, type Locales } from "../../src/solid/locale";
+import {createLocale, type Locales} from "../../src/solid/locale";
 
-type TestDictionary = { action: { save: string; cancel: string }; state: { loading: string } };
+type TestDictionary = {action: {save: string; cancel: string}; state: {loading: string}};
 
 const locales: Locales<"en" | "zh-Hant", TestDictionary> = {
-    en: { action: { save: "Save", cancel: "Cancel" }, state: { loading: "Loading" } },
-    "zh-Hant": { action: { save: "儲存", cancel: "取消" }, state: { loading: "載入中" } },
+    en: {action: {save: "Save", cancel: "Cancel"}, state: {loading: "Loading"}},
+    "zh-Hant": {action: {save: "儲存", cancel: "取消"}, state: {loading: "載入中"}},
 };
 
 describe("createLocale", () => {
