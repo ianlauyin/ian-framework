@@ -16,7 +16,7 @@ This file is the catalog of the frontend library in `framework_fe/`.
 | `framework_fe/src/util/sleep.ts` | `sleep` | |
 | `framework_fe/src/solid/ErrorBoundary.tsx` | App error boundary | |
 | `framework_fe/src/solid/NavigationLogger.tsx` | Navigation logger for the SolidJS router | |
-| `framework_fe/src/solid/SwitchRouter.tsx` | Router switch for keyed route groups under optional shared routes | The active key selects the first group with that key. The first shared route is the outer route. A path that no route of the active group matches calls that group's `onMismatch` once for each pathname, and the shared routes do not render for it. An active key that no group has calls `unknown` once for each key and renders nothing. |
+| `framework_fe/src/solid/AccessRouter.tsx` | Router for a route list where each top-level route can have a `canAccess` check | A route with no `canAccess` is open. A route whose `canAccess` returns false is not in the router, so a later route with the same path can match. A path that no open route matches goes to `fallbackPath` and replaces the history entry. When `fallbackPath` also has no open route, the router renders nothing. A change of a `canAccess` result makes a new router. `canAccess` on a child route has no effect. |
 | `framework_fe/src/logger/` | Browser logger | A failed script, style, or image load does not bubble, so the listener uses the capture phase. The logger cannot read a beacon after the browser accepts it. |
 | `framework_fe/src/util/time.ts` | Hong Kong time `hktIsoString` | |
 | `framework_fe/src/solid/locale.ts` | Locale helper `createLocale` | `setLocale` flushes the store before it returns, so the caller reads the new locale. Solid 2 shows a store write after the batch flushes. |
