@@ -16,7 +16,7 @@ This file is the catalog of the frontend library in `framework_fe/`.
 | `framework_fe/src/util/sleep.ts` | `sleep` | |
 | `framework_fe/src/solid/ErrorBoundary.tsx` | App error boundary | |
 | `framework_fe/src/solid/NavigationLogger.tsx` | Navigation logger for the SolidJS router | |
-| `framework_fe/src/solid/SwitchRouter.tsx` | Router switch for keyed route groups under an optional common route | The active key selects the first group with that key. |
+| `framework_fe/src/solid/SwitchRouter.tsx` | Router switch for keyed route groups under optional common routes | The active key selects the first group with that key. The first common route is the outer route. |
 | `framework_fe/src/logger/` | Browser logger | A failed script, style, or image load does not bubble, so the listener uses the capture phase. The logger cannot read a beacon after the browser accepts it. |
 | `framework_fe/src/util/time.ts` | Hong Kong time `hktIsoString` | |
 | `framework_fe/src/solid/locale.ts` | Locale helper `createLocale` | `setLocale` flushes the store before it returns, so the caller reads the new locale. Solid 2 shows a store write after the batch flushes. |

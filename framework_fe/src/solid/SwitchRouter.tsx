@@ -10,7 +10,7 @@ export interface KeyedRoutes<Key extends string> {
 export interface SwitchRouterProps<Key extends string> {
     keyed: readonly KeyedRoutes<Key>[];
     active: Key;
-    common?: RouteDefinition;
+    common?: readonly RouteDefinition[];
     children?: (props: RouteSectionProps) => JSX.Element;
 }
 
@@ -41,7 +41,12 @@ function section(children: ((props: RouteSectionProps) => JSX.Element) | undefin
     return children(route);
 }
 
-function routeList(common: RouteDefinition | undefined, routes: readonly RouteDefinition[]): RouteDefinition[] {
-    if (!common) return [...routes];
-    return [{ ...common, children: [...routes] }];
+function routeList(common: readonly RouteDefinition[] | undefined, routes: readonly RouteDefinition[]): RouteDefinition[] {
+    if (!common || common.length === 0) return [...routes];
+    return wrap(common, 0, [...routes]);
+}
+
+function wrap(common: readonly RouteDefinition[], index: number, routes: RouteDefinition[]): RouteDefinition[] {
+    if (index >= common.length) return routes;
+    return [{ ...common[index], children: wrap(common, index + 1, routes) }];
 }
