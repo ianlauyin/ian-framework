@@ -65,6 +65,7 @@ const PROJECT: Rules = Rules {
         ts::no_default_export::TS_RULE,
         ts::test_path::TS_RULE,
         ts::import_order::TS_RULE,
+        ts::no_arrow_method::TS_RULE,
     ],
     rs: &[
         rs::env_name::RS_RULE,

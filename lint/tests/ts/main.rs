@@ -1,5 +1,6 @@
 mod declaration_order;
 mod import_order;
+mod no_arrow_method;
 mod no_comments;
 mod no_default_export;
 mod no_restricted_imports;

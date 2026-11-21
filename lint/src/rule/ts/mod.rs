@@ -3,6 +3,7 @@ use crate::rule::diagnostic::Diagnostic;
 
 pub mod declaration_order;
 pub mod import_order;
+pub mod no_arrow_method;
 pub mod no_comments;
 pub mod no_default_export;
 pub mod no_restricted_imports;
