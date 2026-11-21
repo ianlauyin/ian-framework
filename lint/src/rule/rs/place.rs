@@ -24,14 +24,9 @@ impl Place {
         Self { rel }
     }
 
-    pub(crate) fn in_test(&self) -> bool {
+    pub(crate) fn in_folder(&self, name: &str) -> bool {
         let mut parts = self.rel.components();
-        parts.next().is_some_and(|part| part.as_os_str() == "test") && parts.next().is_some()
-    }
-
-    pub(crate) fn in_gcp(&self) -> bool {
-        let mut parts = self.rel.components();
-        parts.next().is_some_and(|part| part.as_os_str() == "gcp") && parts.next().is_some()
+        parts.next().is_some_and(|part| part.as_os_str() == name) && parts.next().is_some()
     }
 
     pub(crate) fn is_file(&self, name: &str) -> bool {

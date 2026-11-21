@@ -39,7 +39,7 @@ pub(crate) fn check_framework(file: &RsFile) -> Vec<Diagnostic> {
 
 fn check_file(file: &RsFile, allow_google: bool) -> Vec<Diagnostic> {
     let place = Place::new(file.path, file.srcs);
-    if place.in_test() {
+    if place.in_folder("test") {
         return Vec::new();
     }
     let Some(ast) = file.ast else {
@@ -149,7 +149,7 @@ impl Pass<'_, '_> {
         let Some((name, span)) = literal(arg, &self.consts) else {
             return;
         };
-        if self.allow_google && self.place.in_gcp() && GOOGLE.contains(&name.as_str()) {
+        if self.allow_google && self.place.in_folder("gcp") && GOOGLE.contains(&name.as_str()) {
             return;
         }
         let fix = if self.allow_google {
