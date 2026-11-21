@@ -41,6 +41,8 @@ const FRAMEWORK: Rules = Rules {
         rs::inherent_impl::RS_RULE,
         rs::result_type::RS_RULE,
         rs::test_attr::RS_RULE,
+        rs::import_order::RS_RULE,
+        rs::no_nested_import::RS_RULE,
     ],
     folder: &[
         folder::fe_index_file::FOLDER_RULE,
@@ -76,6 +78,8 @@ const PROJECT: Rules = Rules {
         rs::inherent_impl::RS_RULE,
         rs::result_type::RS_RULE,
         rs::test_attr::RS_RULE,
+        rs::import_order::RS_RULE,
+        rs::no_nested_import::RS_RULE,
     ],
     folder: &[
         folder::fe_test_tree::FOLDER_RULE,

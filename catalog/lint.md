@@ -55,10 +55,12 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/exception_code.rs` | A string literal error code in `exception!` | A test file is not checked. |
 | `lint/src/rule/rs/exception_new.rs` | `Exception::__new` outside `exception.rs` | The framework ruleset allows `exception.rs`. The project ruleset checks every file. |
 | `lint/src/rule/rs/impl_order.rs` | The inherent impl before trait impls | |
+| `lint/src/rule/rs/import_order.rs` | The import order | The groups are the other crates, then `ian_framework_rs`, then `super`, `self`, and the child modules, then `crate`. A child module is a `mod` in the same item list. A private `use` and a re-export are each checked on their own. A `use` in an inline module is checked. A `use` in a function body is not checked. A `use` that starts with braces or with `*` is not checked. The order in one group is not checked. An empty line between the groups is not checked. |
 | `lint/src/rule/rs/inherent_impl.rs` | An inherent impl outside the file that defines the type | |
 | `lint/src/rule/rs/mod_file.rs` | The items in a `mod.rs` | A `use` can be in `mod.rs`. A test file is not checked. |
 | `lint/src/rule/rs/mutex_lock.rs` | `lock().unwrap`, `lock().unwrap_or`, or `lock().expect` on a standard mutex | `mutex.rs` is not checked. A test file is not checked. |
 | `lint/src/rule/rs/no_comments.rs` | A comment | |
+| `lint/src/rule/rs/no_nested_import.rs` | A path or braces in the braces of a `use` | A name, a rename, and `*` can be in the braces. Each `use` is checked, also a `use` in a function body. |
 | `lint/src/rule/rs/private_static.rs` | A private static | |
 | `lint/src/rule/rs/result_type.rs` | A fallible function returns `Result<T, Exception>` | A test file is not checked. A `Result` with no type argument is an error. |
 | `lint/src/rule/rs/source_order.rs` | The source order | A private `macro_rules!` is in the same group as a constant. A `macro_rules!` must come before the items that use it. |
