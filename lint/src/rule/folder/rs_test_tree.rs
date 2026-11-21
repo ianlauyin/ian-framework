@@ -21,19 +21,26 @@ use crate::rule::report::RuleReport;
 
 const RULE: &str = "test-tree";
 
-pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Rs, check);
+pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Be, check);
 
 pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
     if !srcs.iter().any(|src| without_dot(src) == without_dot(path)) {
         return Vec::new();
     }
-    let test_root = path.join("tests");
-    if !files.has_dir(&test_root) && !files.has_file(&test_root.join("mod.rs")) {
+    let mut diagnostics = check_tree(path, &path.join("tests"), false, files);
+    if let Some(parent) = path.parent() {
+        diagnostics.extend(check_tree(path, &parent.join("tests"), true, files));
+    }
+    diagnostics
+}
+
+fn check_tree(src: &Path, test_root: &Path, sibling: bool, files: &FileSet) -> Vec<Diagnostic> {
+    if !files.has_dir(test_root) && (sibling || !files.has_file(&test_root.join("mod.rs"))) {
         return Vec::new();
     }
     let mut diagnostics = Vec::new();
     for dir in files.dirs() {
-        if !dir.starts_with(&test_root) {
+        if !dir.starts_with(test_root) || (sibling && dir == test_root) {
             continue;
         }
         if files.has_file(&dir.join("mod.rs")) {
@@ -48,22 +55,21 @@ pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> 
             "Add a `mod.rs` that declares the child modules.",
         ));
     }
-    let mut rust_files = Vec::new();
+    let mut pairs = Vec::new();
     for file in files.files() {
-        if file.strip_prefix(&test_root).is_err() || !file_name(file).ends_with(".rs") {
-            continue;
-        }
-        rust_files.push(file);
-    }
-    for file in &rust_files {
-        let Ok(relative) = file.strip_prefix(&test_root) else {
+        let Ok(relative) = file.strip_prefix(test_root) else {
             continue;
         };
-        if relative == Path::new("mod.rs") {
+        if !file_name(file).ends_with(".rs") {
             continue;
         }
-        let source = path.join(relative);
+        if is_root(relative, sibling) {
+            pairs.push((file, crate_root(src, files)));
+            continue;
+        }
+        let source = source_file(src, relative, sibling, files);
         if files.has_file(&source) {
+            pairs.push((file, source));
             continue;
         }
         diagnostics.push(Diagnostic::new(
@@ -75,21 +81,34 @@ pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> 
             "Give the test the same path as the source file.",
         ));
     }
-    for file in rust_files {
-        let Ok(relative) = file.strip_prefix(&test_root) else {
-            continue;
-        };
-        let source = if relative == Path::new("mod.rs") {
-            crate_root(path, files)
-        } else {
-            path.join(relative)
-        };
-        if !files.has_file(&source) {
-            continue;
+    for (file, source) in pairs {
+        if files.has_file(&source) {
+            diagnostics.extend(cfg_mismatch(file, &source));
         }
-        diagnostics.extend(cfg_mismatch(file, &source));
     }
     diagnostics
+}
+
+fn is_root(relative: &Path, sibling: bool) -> bool {
+    if sibling {
+        relative.components().count() == 1
+    } else {
+        relative == Path::new("mod.rs")
+    }
+}
+
+fn source_file(src: &Path, relative: &Path, sibling: bool, files: &FileSet) -> PathBuf {
+    let source = src.join(relative);
+    if !sibling || files.has_file(&source) || file_name(relative) != "mod.rs" {
+        return source;
+    }
+    let Some(folder) = relative.parent() else {
+        return source;
+    };
+    let mut file = src.join(folder).into_os_string();
+    file.push(".rs");
+    let file = PathBuf::from(file);
+    if files.has_file(&file) { file } else { source }
 }
 
 fn crate_root(path: &Path, files: &FileSet) -> PathBuf {

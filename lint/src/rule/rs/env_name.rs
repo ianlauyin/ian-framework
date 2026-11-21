@@ -10,8 +10,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use proc_macro2::Span;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprCall, ExprLit, ExprMacro, Ident, Item, Lit, UseTree};
+use syn::{Expr, ExprCall, ExprLit, Ident, Item, Lit, Macro, UseTree};
 
+use crate::file::rs::macro_body::stmts;
 use crate::file::rs::place::Place;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
@@ -82,18 +83,14 @@ impl Visit<'_> for Pass<'_, '_> {
         syn::visit::visit_expr_call(self, call);
     }
 
-    fn visit_expr_macro(&mut self, mac: &ExprMacro) {
-        let segments: Vec<_> = mac
-            .mac
-            .path
-            .segments
-            .iter()
-            .map(|segment| segment.ident.to_string())
-            .collect();
-        if segments.len() == 1 && (segments[0] == "env" || segments[0] == "option_env") {
+    fn visit_macro(&mut self, mac: &Macro) {
+        if mac.path.is_ident("env") || mac.path.is_ident("option_env") {
             self.report_read(mac.span());
         }
-        syn::visit::visit_expr_macro(self, mac);
+        syn::visit::visit_macro(self, mac);
+        for stmt in &stmts(mac) {
+            self.visit_stmt(stmt);
+        }
     }
 }
 

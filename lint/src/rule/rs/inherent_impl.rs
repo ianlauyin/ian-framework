@@ -4,9 +4,10 @@
 
 use std::collections::BTreeSet;
 
+use syn::Item;
 use syn::spanned::Spanned;
-use syn::{Item, Type};
 
+use crate::file::rs::item::type_name;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
@@ -67,18 +68,5 @@ fn walk(items: &[Item], defined: &BTreeSet<String>, report: &mut RuleReport<'_>)
         {
             walk(nested, defined, report);
         }
-    }
-}
-
-fn type_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Path(path) => path
-            .path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string()),
-        Type::Group(ty) => type_name(&ty.elem),
-        Type::Paren(ty) => type_name(&ty.elem),
-        _ => None,
     }
 }

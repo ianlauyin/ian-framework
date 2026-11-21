@@ -3,8 +3,9 @@
 // Why a lint rule: A `mod.rs` holds module declarations and `pub use` re-exports, plus the item named after the folder and that item's private items and impl blocks.
 
 use syn::spanned::Spanned;
-use syn::{Item, Type, Visibility};
+use syn::{Item, Visibility};
 
+use crate::file::rs::item::{type_name, vis_of};
 use crate::file::rs::place::Place;
 use crate::file::rs::source::RsFile;
 use crate::files::file_name;
@@ -66,7 +67,6 @@ fn is_folder_item(item: &Item, pascal: &str, snake: &str) -> bool {
         Item::Trait(item) => item.ident == pascal,
         Item::Type(item) => item.ident == pascal,
         Item::Fn(item) => item.sig.ident == snake,
-        Item::Const(item) => item.ident == snake,
         _ => false,
     }
 }
@@ -103,37 +103,6 @@ fn item_label(item: &Item) -> String {
             .map(|name| format!("impl {name}"))
             .unwrap_or_else(|| "impl".to_string()),
         _ => "This item".to_string(),
-    }
-}
-
-fn type_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Path(path) => path
-            .path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string()),
-        Type::Group(ty) => type_name(&ty.elem),
-        Type::Paren(ty) => type_name(&ty.elem),
-        _ => None,
-    }
-}
-
-fn vis_of(item: &Item) -> Option<&Visibility> {
-    match item {
-        Item::Const(item) => Some(&item.vis),
-        Item::Enum(item) => Some(&item.vis),
-        Item::ExternCrate(item) => Some(&item.vis),
-        Item::Fn(item) => Some(&item.vis),
-        Item::Mod(item) => Some(&item.vis),
-        Item::Static(item) => Some(&item.vis),
-        Item::Struct(item) => Some(&item.vis),
-        Item::Trait(item) => Some(&item.vis),
-        Item::TraitAlias(item) => Some(&item.vis),
-        Item::Type(item) => Some(&item.vis),
-        Item::Union(item) => Some(&item.vis),
-        Item::Use(item) => Some(&item.vis),
-        _ => None,
     }
 }
 

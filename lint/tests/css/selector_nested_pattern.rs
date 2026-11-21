@@ -247,3 +247,16 @@ fn a_comma_after_a_stray_close_paren_splits_the_selector() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].problem, "`div` is not a nested selector.");
 }
+
+#[test]
+fn a_custom_property_with_a_block_value_passes() {
+    let source = "\
+.block {
+  --theme: { a: b };
+  --empty: {};
+
+  .name {}
+}
+";
+    assert!(diagnostics(source).is_empty());
+}

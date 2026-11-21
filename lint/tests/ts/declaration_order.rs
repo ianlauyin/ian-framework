@@ -51,3 +51,28 @@ interface Hidden {
     assert!(found.iter().all(|item| item.problem == found[0].problem));
     assert!(found.iter().all(|item| item.fix == found[0].fix));
 }
+
+#[test]
+fn a_statement_with_no_group_fails() {
+    let source = "\
+class Local {}
+enum Kind {
+  A,
+}
+run();
+";
+    let found = diagnostics(source);
+    let lines: Vec<_> = found.iter().map(|item| item.line).collect();
+    assert_eq!(lines, vec![1, 2, 5]);
+    assert_eq!(found[0].rule, "declaration-order");
+    assert_eq!(
+        found[0].problem,
+        "This statement is not allowed at the top level of the file."
+    );
+    assert_eq!(
+        found[0].fix,
+        "Use an import, a type, a constant, an export, an interface, or a function."
+    );
+    assert!(found.iter().all(|item| item.problem == found[0].problem));
+    assert!(found.iter().all(|item| item.fix == found[0].fix));
+}

@@ -2,47 +2,30 @@
 // Move the test under the `tests` folder.
 // Why a lint rule: Tests live in the `tests` folder. `mod tests` in `lib.rs` or `main.rs` stays.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
+use proc_macro2::{TokenStream, TokenTree};
 use syn::spanned::Spanned;
 use syn::{Attribute, ImplItem, Item, Meta, TraitItem};
 
-use crate::config::Side;
 use crate::file::rs::place::Place;
-use crate::file::rs::source;
-use crate::files::{FileSet, file_name};
+use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
-use crate::rule::folder::FolderRule;
 use crate::rule::report::RuleReport;
+use crate::rule::rs::RsRule;
 
 const RULE: &str = "test-attr";
 
-pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Rs, check);
+pub(crate) const RS_RULE: RsRule = RsRule::file(check);
+const TEST_ATTRS: &[&str] = &["test", "rstest", "test_case"];
 
-pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    for file in files.files() {
-        if file.parent() != Some(path) || !file_name(file).ends_with(".rs") {
-            continue;
-        }
-        diagnostics.extend(check_file(file, srcs));
-    }
-    diagnostics
-}
-
-fn check_file(path: &Path, srcs: &[PathBuf]) -> Vec<Diagnostic> {
-    let place = Place::new(path, srcs);
+pub fn check(file: &RsFile) -> Vec<Diagnostic> {
+    let place = Place::new(file.path, file.srcs);
     if place.in_folder("tests") {
         return Vec::new();
     }
-    let Ok(source_text) = fs::read_to_string(path) else {
+    let Some(ast) = file.ast else {
         return Vec::new();
     };
-    let Some(ast) = source::parse(&source_text) else {
-        return Vec::new();
-    };
-    let mut report = RuleReport::new(path, &source_text, RULE);
+    let mut report = RuleReport::new(file.path, file.source, RULE);
     report_attrs(&ast.attrs, false, &mut report);
     walk(&ast.items, &place, &mut report);
     report.finish()
@@ -50,7 +33,7 @@ fn check_file(path: &Path, srcs: &[PathBuf]) -> Vec<Diagnostic> {
 
 fn walk(items: &[Item], place: &Place, report: &mut RuleReport<'_>) {
     for item in items {
-        let keep_cfg_test = is_crate_root(&place) && is_mod_test(item);
+        let keep_cfg_test = is_crate_root(place) && is_mod_test(item);
         report_attrs(item_attrs(item), keep_cfg_test, report);
         match item {
             Item::Mod(module) => {
@@ -97,16 +80,12 @@ fn is_mod_test(item: &Item) -> bool {
 }
 
 fn is_test_attr(attr: &Attribute) -> bool {
-    if attr.path().is_ident("test") || is_cfg_test(attr) {
-        return true;
-    }
-    let segments: Vec<_> = attr
-        .path()
-        .segments
-        .iter()
-        .map(|segment| segment.ident.to_string())
-        .collect();
-    segments == ["tokio", "test"]
+    is_cfg_test(attr)
+        || attr
+            .path()
+            .segments
+            .last()
+            .is_some_and(|segment| TEST_ATTRS.iter().any(|name| segment.ident == name))
 }
 
 fn is_cfg_test(attr: &Attribute) -> bool {
@@ -114,9 +93,31 @@ fn is_cfg_test(attr: &Attribute) -> bool {
         return false;
     }
     match &attr.meta {
-        Meta::List(list) => list.tokens.to_string() == "test",
+        Meta::List(list) => names_test(list.tokens.clone()),
         _ => false,
     }
+}
+
+fn names_test(tokens: TokenStream) -> bool {
+    let mut negated = false;
+    for tree in tokens {
+        match tree {
+            TokenTree::Ident(ident) => {
+                if ident == "test" {
+                    return true;
+                }
+                negated = ident == "not";
+            }
+            TokenTree::Group(group) => {
+                if !negated && names_test(group.stream()) {
+                    return true;
+                }
+                negated = false;
+            }
+            _ => negated = false,
+        }
+    }
+    false
 }
 
 fn item_attrs(item: &Item) -> &[Attribute] {
@@ -136,7 +137,6 @@ fn item_attrs(item: &Item) -> &[Attribute] {
         Item::Type(item) => &item.attrs,
         Item::Union(item) => &item.attrs,
         Item::Use(item) => &item.attrs,
-        Item::Verbatim(_) => &[],
         _ => &[],
     }
 }
@@ -147,7 +147,6 @@ fn impl_attrs(item: &ImplItem) -> &[Attribute] {
         ImplItem::Fn(item) => &item.attrs,
         ImplItem::Type(item) => &item.attrs,
         ImplItem::Macro(item) => &item.attrs,
-        ImplItem::Verbatim(_) => &[],
         _ => &[],
     }
 }
@@ -158,7 +157,6 @@ fn trait_attrs(item: &TraitItem) -> &[Attribute] {
         TraitItem::Fn(item) => &item.attrs,
         TraitItem::Type(item) => &item.attrs,
         TraitItem::Macro(item) => &item.attrs,
-        TraitItem::Verbatim(_) => &[],
         _ => &[],
     }
 }

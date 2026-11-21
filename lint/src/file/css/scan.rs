@@ -25,6 +25,9 @@ pub(crate) fn bounds(source: &str, start: usize, limit: usize) -> Bounds {
             cursor.consume_string(byte);
             continue;
         }
+        if byte == b'(' && cursor.consume_url() {
+            continue;
+        }
         if cursor.starts_comment() {
             cursor.consume_comment();
             continue;
@@ -117,6 +120,31 @@ impl<'a> Cursor<'a> {
         }
     }
 
+    fn consume_url(&mut self) -> bool {
+        let bytes = self.source.as_bytes();
+        if self.index < 3 || !bytes[self.index - 3..self.index].eq_ignore_ascii_case(b"url") {
+            return false;
+        }
+        let mut index = skip_ws(self.source, self.index + 1, self.end);
+        if index >= self.end || matches!(bytes[index], b'"' | b'\'') {
+            return false;
+        }
+        while index < self.end {
+            if bytes[index] == b')' {
+                self.index = index + 1;
+                return true;
+            }
+            if bytes[index] == b'\\' {
+                index += 1;
+            }
+            if index < self.end {
+                index += char_len(self.source, index);
+            }
+        }
+        self.index = self.end;
+        true
+    }
+
     fn skip_escape(&mut self) {
         self.bump();
         if self.eof() {
@@ -141,6 +169,9 @@ impl<'a> Cursor<'a> {
             }
             if byte == b'"' || byte == b'\'' {
                 self.consume_string(byte);
+                continue;
+            }
+            if byte == b'(' && self.consume_url() {
                 continue;
             }
             if self.starts_comment() {
@@ -196,6 +227,12 @@ pub(crate) fn comment_end(source: &str, start: usize, end: usize) -> usize {
         index += char_len(source, index);
     }
     end
+}
+
+pub(crate) fn string_end(source: &str, start: usize, end: usize) -> usize {
+    let mut cursor = Cursor::new(source, start, end);
+    cursor.consume_string(source.as_bytes()[start]);
+    cursor.index
 }
 
 pub(crate) fn char_len(source: &str, index: usize) -> usize {

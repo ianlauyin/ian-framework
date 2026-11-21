@@ -1,12 +1,11 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use oxc_allocator::Allocator;
 
-use crate::config::{Ruleset, Side};
+use crate::config::Ruleset;
 use crate::file::css::source::CssFile;
 use crate::file::ts::source::TsFile;
-use crate::files::FileSet;
 use crate::rule::diagnostic::Diagnostic;
 use crate::ruleset::rules;
 
@@ -30,20 +29,4 @@ pub fn check(path: &Path, ruleset: Ruleset) -> Result<Vec<Diagnostic>, String> {
         }
     }
     Ok(diagnostics)
-}
-
-pub(crate) fn check_folder(
-    path: &Path,
-    files: &FileSet,
-    srcs: &[PathBuf],
-    ruleset: Ruleset,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = Vec::new();
-    for rule in rules(ruleset).folder {
-        if rule.side != Side::Fe {
-            continue;
-        }
-        diagnostics.extend((rule.check)(path, files, srcs));
-    }
-    diagnostics
 }

@@ -41,7 +41,7 @@ fn check_files(
     for path in files.files() {
         let result = if side.checks_fe() && crate::files::is_frontend_source(path, &config.fe) {
             crate::rule::run::check(path, config.ruleset)
-        } else if side.checks_rs() && crate::files::is_rust_source(path, &config.be) {
+        } else if side.checks_be() && crate::files::is_rust_source(path, &config.be) {
             crate::rule::rs::run::check(path, &config.be, config.ruleset)
         } else {
             continue;
@@ -57,20 +57,14 @@ fn check_files(
 fn check_folders(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     for path in files.dirs() {
-        if side.checks_fe() && crate::files::in_src(path, &config.fe) {
-            diagnostics.extend(crate::rule::run::check_folder(
-                path,
-                files,
-                &config.fe,
-                config.ruleset,
-            ));
-        }
-        if side.checks_rs() && crate::files::in_src(path, &config.be) {
-            for rule in crate::ruleset::rules(config.ruleset).folder {
-                if rule.side != Side::Rs {
-                    continue;
-                }
-                diagnostics.extend((rule.check)(path, files, &config.be));
+        for rule in crate::ruleset::rules(config.ruleset).folder {
+            let (checked, srcs) = match rule.side {
+                Side::Fe => (side.checks_fe(), &config.fe),
+                Side::Be => (side.checks_be(), &config.be),
+                Side::All => continue,
+            };
+            if checked && crate::files::in_src(path, srcs) {
+                diagnostics.extend((rule.check)(path, files, srcs));
             }
         }
     }

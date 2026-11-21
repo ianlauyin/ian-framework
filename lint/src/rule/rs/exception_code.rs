@@ -6,8 +6,9 @@ use std::collections::BTreeSet;
 
 use proc_macro2::{Span, TokenStream, TokenTree};
 use syn::visit::Visit;
-use syn::{Expr, ExprLit, ExprMacro, ItemMacro, Lit};
+use syn::{Expr, ExprLit, Lit, Macro};
 
+use crate::file::rs::macro_body::stmts;
 use crate::file::rs::place::Place;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
@@ -40,18 +41,14 @@ struct Pass<'a, 'b> {
 }
 
 impl Visit<'_> for Pass<'_, '_> {
-    fn visit_expr_macro(&mut self, mac: &ExprMacro) {
-        if is_exception(&mac.mac.path) {
-            self.scan(mac.mac.tokens.clone());
+    fn visit_macro(&mut self, mac: &Macro) {
+        if is_exception(&mac.path) {
+            self.scan(mac.tokens.clone());
         }
-        syn::visit::visit_expr_macro(self, mac);
-    }
-
-    fn visit_item_macro(&mut self, mac: &ItemMacro) {
-        if mac.ident.is_none() && is_exception(&mac.mac.path) {
-            self.scan(mac.mac.tokens.clone());
+        syn::visit::visit_macro(self, mac);
+        for stmt in &stmts(mac) {
+            self.visit_stmt(stmt);
         }
-        syn::visit::visit_item_macro(self, mac);
     }
 }
 

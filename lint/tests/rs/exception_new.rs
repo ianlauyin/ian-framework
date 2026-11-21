@@ -79,3 +79,15 @@ fn build() {
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
     assert!(with_source(Path::new("api/src/app.rs"), "fn (", &srcs(), check).is_empty());
 }
+
+#[test]
+fn exception_new_in_a_macro_call_fails() {
+    let source = "\
+fn build() {
+    let _ = vec![Exception::__new(1, 2, 3, 4, 5)];
+}
+";
+    let found = with_source(Path::new("api/src/work.rs"), source, &srcs(), check);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 2);
+}

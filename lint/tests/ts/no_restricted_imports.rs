@@ -49,14 +49,28 @@ import g from \"node_modules\\/pkg\";
 }
 
 #[test]
-fn an_import_with_two_segments_after_node_modules_passes() {
+fn an_import_with_no_segment_after_node_modules_passes() {
+    let source = "\
+import a from \"node_modules\";
+import b from \"foo/node_modules/\";
+import c from \"my_node_modules/pkg\";
+";
+    assert!(diagnostics(source).is_empty());
+}
+
+#[test]
+fn an_import_with_two_segments_after_node_modules_fails() {
     let source = "\
 import a from \"node_modules/pkg/sub\";
 import b from \"foo/node_modules/bar/baz\";
-import c from \"node_modules\";
+import c from \"../node_modules/@scope/pkg\";
 import d from \"node_modules/pkg/\";
 ";
-    assert!(diagnostics(source).is_empty());
+    let lines: Vec<_> = diagnostics(source)
+        .into_iter()
+        .map(|item| item.line)
+        .collect();
+    assert_eq!(lines, vec![1, 2, 3, 4]);
 }
 
 #[test]

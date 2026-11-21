@@ -3,6 +3,7 @@
 // Why a lint rule: A nested rule names a child by class or id, extends the parent with `&`, or uses a `>`, `+`, or `~` combinator. `&:where(&)` is not a nested selector.
 
 use crate::file::css::parse::{Kind, is_css_whitespace};
+use crate::file::css::scan::{char_len, comment_end, string_end};
 use crate::file::css::source::CssFile;
 use crate::rule::css::CssRule;
 use crate::rule::diagnostic::Diagnostic;
@@ -127,11 +128,11 @@ fn split_commas(selector: &str) -> Vec<(usize, &str)> {
             continue;
         }
         if byte == b'"' || byte == b'\'' {
-            index = skip_string(selector, index);
+            index = string_end(selector, index, selector.len());
             continue;
         }
         if byte == b'/' && index + 1 < bytes.len() && bytes[index + 1] == b'*' {
-            index = skip_comment(selector, index);
+            index = comment_end(selector, index, selector.len());
             continue;
         }
         if paren == 0 && bracket == 0 && byte == b',' {
@@ -186,15 +187,7 @@ fn strip_leading_comment(text: &str) -> Option<&str> {
     if !text.starts_with("/*") {
         return None;
     }
-    let bytes = text.as_bytes();
-    let mut index = 2;
-    while index + 1 < bytes.len() {
-        if bytes[index] == b'*' && bytes[index + 1] == b'/' {
-            return Some(&text[index + 2..]);
-        }
-        index += char_len(text, index);
-    }
-    Some("")
+    Some(&text[comment_end(text, 0, text.len())..])
 }
 
 fn strip_trailing_comment(text: &str) -> Option<&str> {
@@ -206,12 +199,12 @@ fn strip_trailing_comment(text: &str) -> Option<&str> {
     let mut comment_start = None;
     while index + 1 < bytes.len() {
         if bytes[index] == b'"' || bytes[index] == b'\'' {
-            index = skip_string(text, index);
+            index = string_end(text, index, text.len());
             continue;
         }
         if bytes[index] == b'/' && bytes[index + 1] == b'*' {
             let start = index;
-            index = skip_comment(text, index);
+            index = comment_end(text, index, text.len());
             if index == bytes.len() {
                 comment_start = Some(start);
                 break;
@@ -221,45 +214,6 @@ fn strip_trailing_comment(text: &str) -> Option<&str> {
         index += char_len(text, index);
     }
     comment_start.map(|start| &text[..start])
-}
-
-fn skip_string(text: &str, start: usize) -> usize {
-    let bytes = text.as_bytes();
-    let quote = bytes[start];
-    let mut index = start + 1;
-    while index < bytes.len() {
-        if bytes[index] == b'\\' {
-            index += 1;
-            if index < bytes.len() {
-                index += char_len(text, index);
-            }
-            continue;
-        }
-        if bytes[index] == quote {
-            return index + 1;
-        }
-        if bytes[index] == b'\n' || bytes[index] == b'\r' {
-            return index;
-        }
-        index += char_len(text, index);
-    }
-    text.len()
-}
-
-fn skip_comment(text: &str, start: usize) -> usize {
-    let bytes = text.as_bytes();
-    let mut index = start + 2;
-    while index + 1 < bytes.len() {
-        if bytes[index] == b'*' && bytes[index + 1] == b'/' {
-            return index + 2;
-        }
-        index += char_len(text, index);
-    }
-    text.len()
-}
-
-fn char_len(text: &str, index: usize) -> usize {
-    text[index..].chars().next().map_or(1, char::len_utf8)
 }
 
 fn is_css_ws_char(char: char) -> bool {

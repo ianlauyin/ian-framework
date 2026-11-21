@@ -41,3 +41,15 @@ fn sample() {
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
     assert!(with_source(Path::new("api/src/child.rs"), "fn (", &[], check).is_empty());
 }
+
+#[test]
+fn a_super_super_path_in_a_macro_call_fails() {
+    let source = "\
+fn sample() {
+    assert!(super::super::child());
+}
+";
+    let found = with_source(Path::new("api/src/child.rs"), source, &[], check);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 2);
+}

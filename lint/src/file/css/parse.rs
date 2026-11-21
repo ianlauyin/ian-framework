@@ -118,6 +118,11 @@ fn parse_gap(map: &Map<'_>, from: usize, to: usize) -> Vec<Item> {
                 start: index as u32,
                 end: end as u32,
             },
+            Bounds::Block { end, .. } if !at && map.source[index..].starts_with("--") => Item {
+                kind: Kind::Declaration,
+                start: index as u32,
+                end: declaration_end(map.source, end, to) as u32,
+            },
             Bounds::Block {
                 brace,
                 inner_end,
@@ -145,6 +150,15 @@ fn parse_gap(map: &Map<'_>, from: usize, to: usize) -> Vec<Item> {
         items.push(item);
     }
     items
+}
+
+fn declaration_end(source: &str, mut end: usize, limit: usize) -> usize {
+    loop {
+        match bounds(source, end, limit) {
+            Bounds::Statement { end: next } => return next.max(end),
+            Bounds::Block { end: next, .. } => end = next,
+        }
+    }
 }
 
 fn shift(items: &mut [Item], by: u32) {

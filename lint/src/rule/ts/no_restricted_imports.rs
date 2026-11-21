@@ -64,7 +64,7 @@ impl Imports<'_, '_> {
         let Some(text) = literal.value.as_str() else {
             return;
         };
-        if !one_segment_after_node_modules(text) {
+        if !through_node_modules(text) {
             return;
         }
         self.report.at_offset(
@@ -75,9 +75,9 @@ impl Imports<'_, '_> {
     }
 }
 
-fn one_segment_after_node_modules(specifier: &str) -> bool {
+fn through_node_modules(specifier: &str) -> bool {
     let parts: Vec<&str> = specifier.split('/').collect();
-    parts.iter().enumerate().any(|(index, part)| {
-        *part == "node_modules" && parts.len() == index + 2 && !parts[index + 1].is_empty()
-    })
+    parts
+        .windows(2)
+        .any(|pair| pair[0] == "node_modules" && !pair[1].is_empty())
 }

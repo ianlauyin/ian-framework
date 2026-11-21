@@ -14,6 +14,7 @@ pub mod result_type;
 pub mod run;
 pub mod source_order;
 pub mod super_path;
+pub mod test_attr;
 
 pub(crate) struct RsRule {
     pub(crate) check: fn(&RsFile<'_>) -> Vec<Diagnostic>,

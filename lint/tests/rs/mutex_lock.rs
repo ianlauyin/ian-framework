@@ -62,3 +62,42 @@ fn sample(lock: Lock) {
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
     assert!(with_source(Path::new("api/src/work.rs"), "fn (", &srcs(), check).is_empty());
 }
+
+#[test]
+fn lock_expect_fails() {
+    let source = "\
+fn sample(lock: Lock) {
+    let _ = lock.lock().expect(\"the lock is free\");
+}
+";
+    let found = with_source(Path::new("api/src/work.rs"), source, &srcs(), check);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 2);
+    assert_eq!(found[0].problem, "`lock().expect` locks a standard mutex.");
+}
+
+#[test]
+fn lock_unwrap_in_a_macro_call_fails() {
+    let source = "\
+fn sample(lock: Lock) {
+    assert!(lock.lock().unwrap().is_empty());
+    let _ = vec![lock.lock().unwrap(); 2];
+    println!(\"{}\", format!(\"{:?}\", lock.lock().unwrap()));
+}
+";
+    let lines: Vec<_> = with_source(Path::new("api/src/work.rs"), source, &srcs(), check)
+        .into_iter()
+        .map(|item| item.line)
+        .collect();
+    assert_eq!(lines, vec![2, 3, 4]);
+}
+
+#[test]
+fn a_macro_call_that_is_not_rust_code_has_no_diagnostic() {
+    let source = "\
+fn sample(lock: Lock) {
+    custom!(lock => lock().unwrap() ;; @);
+}
+";
+    assert!(with_source(Path::new("api/src/work.rs"), source, &srcs(), check).is_empty());
+}

@@ -11,11 +11,11 @@ pub enum Ruleset {
     Project,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     All,
     Fe,
-    Rs,
+    Be,
 }
 
 impl Side {
@@ -23,19 +23,19 @@ impl Side {
         matches!(self, Self::All | Self::Fe)
     }
 
-    pub(crate) fn checks_rs(self) -> bool {
-        matches!(self, Self::All | Self::Rs)
+    pub(crate) fn checks_be(self) -> bool {
+        matches!(self, Self::All | Self::Be)
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Config {
-    pub(crate) ruleset: Ruleset,
-    pub(crate) fe: Vec<PathBuf>,
-    pub(crate) be: Vec<PathBuf>,
+pub struct Config {
+    pub ruleset: Ruleset,
+    pub fe: Vec<PathBuf>,
+    pub be: Vec<PathBuf>,
 }
 
-pub(crate) fn load(root: &Path) -> Result<Config, String> {
+pub fn load(root: &Path) -> Result<Config, String> {
     let path = root.join(FILE_NAME);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
@@ -93,6 +93,9 @@ fn src_path(root: &Path, path: &str) -> Result<PathBuf, String> {
             Component::CurDir => {}
             _ => return Err(format!("{FILE_NAME}: `{path}` is not a src path")),
         }
+    }
+    if !out.is_dir() {
+        return Err(format!("{FILE_NAME}: `{path}` is not a folder"));
     }
     Ok(out)
 }

@@ -11,3 +11,4 @@ mod result_type;
 pub(crate) mod source;
 mod source_order;
 mod super_path;
+mod test_attr;

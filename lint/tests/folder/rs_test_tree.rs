@@ -242,6 +242,89 @@ pub mod auth;
     );
 }
 
+#[test]
+fn a_matching_test_tree_beside_src_passes() {
+    let files = tree(&[
+        "api/src/lib.rs",
+        "api/src/a.rs",
+        "api/src/b/mod.rs",
+        "api/src/b/c.rs",
+        "api/src/d.rs",
+        "api/tests/all.rs",
+        "api/tests/a/mod.rs",
+        "api/tests/b/mod.rs",
+        "api/tests/b/c.rs",
+        "api/tests/d/mod.rs",
+    ]);
+    let srcs = [PathBuf::from("api/src")];
+    assert!(check(Path::new("api/src"), &files, &srcs).is_empty());
+}
+
+#[test]
+fn a_test_file_beside_src_with_no_source_file_fails() {
+    let files = tree(&[
+        "api/src/lib.rs",
+        "api/src/a.rs",
+        "api/tests/all.rs",
+        "api/tests/a/mod.rs",
+        "api/tests/a/missing.rs",
+        "api/tests/b/mod.rs",
+        "api/tests/c/d.rs",
+    ]);
+    let srcs = [PathBuf::from("api/src")];
+    let found = check(Path::new("api/src"), &files, &srcs);
+    let problems: Vec<_> = found.iter().map(|item| item.problem.as_str()).collect();
+    assert_eq!(
+        problems,
+        vec![
+            "The `tests` folder has no `mod.rs`.",
+            "The test file has no source file `api/src/a/missing.rs`.",
+            "The test file has no source file `api/src/b/mod.rs`.",
+            "The test file has no source file `api/src/c/d.rs`.",
+        ]
+    );
+    assert_eq!(found[0].path, PathBuf::from("api/tests/c"));
+    assert!(found.iter().all(|item| item.rule == "test-tree"));
+}
+
+#[test]
+fn the_test_root_beside_src_follows_lib_rs() {
+    let root = temp_root("sibling-cfg");
+    let src = root.join("api/src");
+    write(
+        &src,
+        "lib.rs",
+        "#[cfg(feature = \"auth\")]\npub mod auth;\npub mod time;\n",
+    );
+    write(&src, "auth.rs", "pub mod token;\n");
+    write(&src, "time.rs", "");
+    write(&root.join("api/tests"), "all.rs", "mod auth;\nmod time;\n");
+    write(
+        &root.join("api/tests"),
+        "auth/mod.rs",
+        "#[cfg(unix)]\nmod token;\n",
+    );
+    write(&root.join("api/tests"), "time/mod.rs", "");
+    let files = FileSet::from_paths([
+        src.join("lib.rs"),
+        src.join("auth.rs"),
+        src.join("time.rs"),
+        root.join("api/tests/all.rs"),
+        root.join("api/tests/auth/mod.rs"),
+        root.join("api/tests/time/mod.rs"),
+    ]);
+    let found = check(&src, &files, &[src.clone()]);
+    fs::remove_dir_all(root).unwrap();
+    let problems: Vec<_> = found.iter().map(|item| item.problem.as_str()).collect();
+    assert_eq!(
+        problems,
+        vec![
+            "The cfg on `auth` does not match the source module.",
+            "The cfg on `token` does not match the source module.",
+        ]
+    );
+}
+
 fn temp_root(name: &str) -> PathBuf {
     let root = env::temp_dir().join(format!("ian-lint-test-tree-{name}-{}", process::id()));
     if root.exists() {

@@ -3,7 +3,7 @@
 // Why a lint rule: A failure is an `Exception`. A trait impl keeps the trait's error type.
 
 use syn::spanned::Spanned;
-use syn::{GenericArgument, ImplItem, Item, PathArguments, ReturnType, Type};
+use syn::{GenericArgument, ImplItem, Item, PathArguments, PathSegment, ReturnType, Type};
 
 use crate::file::rs::place::Place;
 use crate::file::rs::source::RsFile;
@@ -70,10 +70,10 @@ fn report_return(
     let ReturnType::Type(_, ty) = output else {
         return;
     };
-    if returns_exception(ty) {
+    let Some(result) = result_segment(ty) else {
         return;
-    }
-    if !is_result(ty) {
+    };
+    if returns_exception(result) {
         return;
     }
     report.at_span(
@@ -83,46 +83,29 @@ fn report_return(
     );
 }
 
-fn returns_exception(ty: &Type) -> bool {
-    let Some(error) = result_error(ty) else {
+fn result_segment(ty: &Type) -> Option<&PathSegment> {
+    let Type::Path(path) = bare(ty) else {
+        return None;
+    };
+    path.path
+        .segments
+        .last()
+        .filter(|segment| segment.ident == "Result")
+}
+
+fn returns_exception(result: &PathSegment) -> bool {
+    let PathArguments::AngleBracketed(args) = &result.arguments else {
         return false;
     };
-    is_exception(error)
-}
-
-fn is_result(ty: &Type) -> bool {
-    result_path(bare(ty)).is_some()
-}
-
-fn result_error(ty: &Type) -> Option<&Type> {
-    let args = result_path(bare(ty))?;
     let types: Vec<&Type> = args
+        .args
         .iter()
         .filter_map(|arg| match arg {
             GenericArgument::Type(ty) => Some(ty),
             _ => None,
         })
         .collect();
-    match types.as_slice() {
-        [_, error] => Some(*error),
-        [_] => Some(bare(ty)),
-        _ => None,
-    }
-}
-
-fn result_path(ty: &Type) -> Option<&syn::punctuated::Punctuated<GenericArgument, syn::Token![,]>> {
-    let Type::Path(path) = ty else {
-        return None;
-    };
-    let segment = path.path.segments.last()?;
-    if segment.ident != "Result" {
-        return None;
-    }
-    match &segment.arguments {
-        PathArguments::AngleBracketed(args) => Some(&args.args),
-        PathArguments::None => None,
-        PathArguments::Parenthesized(_) => None,
-    }
+    matches!(types.as_slice(), [_, error] if is_exception(error))
 }
 
 fn is_exception(ty: &Type) -> bool {

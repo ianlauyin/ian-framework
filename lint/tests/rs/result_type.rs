@@ -78,3 +78,18 @@ impl Tube {
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
     assert!(with_source(Path::new("api/src/tube.rs"), "fn (", &[], check).is_empty());
 }
+
+#[test]
+fn a_result_alias_with_no_type_argument_fails() {
+    let source = "\
+fn show() -> fmt::Result {
+    Ok(())
+}
+";
+    let found = with_source(Path::new("api/src/tube.rs"), source, &[], check);
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].problem,
+        "`show` does not return `Result<T, Exception>`."
+    );
+}

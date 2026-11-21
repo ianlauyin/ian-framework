@@ -152,3 +152,19 @@ fn read() {
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
     assert!(with_source(Path::new("api/src/app.rs"), "fn (", &srcs(), check).is_empty());
 }
+
+#[test]
+fn an_env_read_in_a_macro_call_fails() {
+    let source = "\
+fn read() {
+    let _ = format!(\"{:?}\", std::env::var(\"APP_KEY\"));
+    assert!(env::required(\"APP_KEY\").is_ok());
+    env!(\"APP_KEY\");
+}
+";
+    let lines: Vec<_> = with_source(Path::new("api/src/work.rs"), source, &srcs(), check)
+        .into_iter()
+        .map(|item| item.line)
+        .collect();
+    assert_eq!(lines, vec![2, 3, 4]);
+}

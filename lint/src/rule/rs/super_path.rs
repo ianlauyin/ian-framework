@@ -4,8 +4,9 @@
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Path as SynPath, UseTree};
+use syn::{Macro, Path as SynPath, UseTree};
 
+use crate::file::rs::macro_body::stmts;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
@@ -47,6 +48,13 @@ impl Visit<'_> for Pass<'_, '_> {
 
     fn visit_use_tree(&mut self, tree: &UseTree) {
         report_use(tree, false, self.report);
+    }
+
+    fn visit_macro(&mut self, mac: &Macro) {
+        syn::visit::visit_macro(self, mac);
+        for stmt in &stmts(mac) {
+            self.visit_stmt(stmt);
+        }
     }
 }
 

@@ -59,3 +59,18 @@ fn build() {
 fn a_file_that_is_not_valid_rust_has_no_diagnostic() {
     assert!(with_source(Path::new("api/src/app.rs"), "fn (", &[], check).is_empty());
 }
+
+#[test]
+fn a_string_literal_error_code_in_another_macro_call_fails() {
+    let source = "\
+fn build() {
+    let _ = vec![exception!(code = \"CODE\", \"message\")];
+    exception!(code = \"CODE\", \"message\");
+}
+";
+    let lines: Vec<_> = with_source(Path::new("api/src/app.rs"), source, &[], check)
+        .into_iter()
+        .map(|item| item.line)
+        .collect();
+    assert_eq!(lines, vec![2, 3]);
+}

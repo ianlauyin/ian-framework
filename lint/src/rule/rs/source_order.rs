@@ -5,8 +5,9 @@
 use std::collections::BTreeSet;
 
 use syn::spanned::Spanned;
-use syn::{Item, Type, Visibility};
+use syn::{Item, Visibility};
 
+use crate::file::rs::item::{type_name, vis_of};
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
@@ -122,37 +123,6 @@ fn type_item(item: &Item) -> Option<(String, &Visibility)> {
         Item::Struct(item) => Some((item.ident.to_string(), &item.vis)),
         Item::Enum(item) => Some((item.ident.to_string(), &item.vis)),
         Item::Union(item) => Some((item.ident.to_string(), &item.vis)),
-        _ => None,
-    }
-}
-
-fn type_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Path(path) => path
-            .path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string()),
-        Type::Group(ty) => type_name(&ty.elem),
-        Type::Paren(ty) => type_name(&ty.elem),
-        _ => None,
-    }
-}
-
-fn vis_of(item: &Item) -> Option<&Visibility> {
-    match item {
-        Item::Const(item) => Some(&item.vis),
-        Item::Enum(item) => Some(&item.vis),
-        Item::ExternCrate(item) => Some(&item.vis),
-        Item::Fn(item) => Some(&item.vis),
-        Item::Mod(item) => Some(&item.vis),
-        Item::Static(item) => Some(&item.vis),
-        Item::Struct(item) => Some(&item.vis),
-        Item::Trait(item) => Some(&item.vis),
-        Item::TraitAlias(item) => Some(&item.vis),
-        Item::Type(item) => Some(&item.vis),
-        Item::Union(item) => Some(&item.vis),
-        Item::Use(item) => Some(&item.vis),
         _ => None,
     }
 }

@@ -1,3 +1,4 @@
+pub mod args;
 pub(crate) mod check;
 pub mod config;
 pub mod file;

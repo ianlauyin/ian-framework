@@ -305,3 +305,49 @@ fn a_file_that_cannot_be_read_is_a_failure() {
         .is_err()
     );
 }
+
+#[test]
+fn a_rule_after_a_url_with_a_comment_start_passes() {
+    let source = "\
+a {
+  background: url(img/*.png);
+
+  .b {}
+}
+
+c {
+  background: URL( img/*.png );
+}
+
+d {}
+";
+    assert!(diagnostics(source).is_empty());
+}
+
+#[test]
+fn a_rule_with_no_empty_line_after_a_url_with_a_comment_start_fails() {
+    let source = "\
+a {
+  background: url(img/*.png);
+  .b {}
+}
+c {}
+";
+    let lines: Vec<_> = diagnostics(source)
+        .into_iter()
+        .map(|item| item.line)
+        .collect();
+    assert_eq!(lines, vec![3, 5]);
+}
+
+#[test]
+fn a_rule_after_a_custom_property_with_a_block_value_passes() {
+    let source = "\
+a {
+  --theme: { a: b };
+
+  .b {}
+}
+";
+    assert!(diagnostics(source).is_empty());
+}

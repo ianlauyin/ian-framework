@@ -5,8 +5,9 @@
 use std::collections::BTreeSet;
 
 use syn::spanned::Spanned;
-use syn::{Item, Type, Visibility};
+use syn::{Item, Visibility};
 
+use crate::file::rs::item::type_name;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
@@ -70,17 +71,4 @@ fn public_types(items: &[Item]) -> BTreeSet<String> {
             }
         })
         .collect()
-}
-
-fn type_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Path(path) => path
-            .path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string()),
-        Type::Group(ty) => type_name(&ty.elem),
-        Type::Paren(ty) => type_name(&ty.elem),
-        _ => None,
-    }
 }

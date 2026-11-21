@@ -2,10 +2,11 @@
 // Build the `Exception` with `exception!`.
 // Why a lint rule: The `exception!` macro builds an `Exception`.
 
-use syn::Path as SynPath;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
+use syn::{Macro, Path as SynPath};
 
+use crate::file::rs::macro_body::stmts;
 use crate::file::rs::place::Place;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
@@ -60,5 +61,12 @@ impl Visit<'_> for Pass<'_, '_> {
             previous = name;
         }
         syn::visit::visit_path(self, path);
+    }
+
+    fn visit_macro(&mut self, mac: &Macro) {
+        syn::visit::visit_macro(self, mac);
+        for stmt in &stmts(mac) {
+            self.visit_stmt(stmt);
+        }
     }
 }
