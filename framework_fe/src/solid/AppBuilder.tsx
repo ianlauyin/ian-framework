@@ -3,7 +3,7 @@ import { createStore, type Store, type StoreSetter } from "solid-js";
 import { Logger } from "../logger";
 import { ErrorBoundary } from "./ErrorBoundary";
 
-export abstract class App<State extends object> {
+export abstract class AppBuilder<State extends object> {
     private readonly state: Store<State>;
     protected readonly setState: StoreSetter<State>;
     private readonly errorFallback: (reset: () => void) => JSX.Element;
@@ -13,15 +13,15 @@ export abstract class App<State extends object> {
         this.errorFallback = errorFallback;
     }
 
-    protected abstract onStart: () => Promise<void>;
+    protected abstract onStarting: () => Promise<void>;
 
     store(): Store<State> {
         return this.state;
     }
 
     protected start(root: HTMLElement, children: () => JSX.Element): () => void {
+        Logger.capture("APP/start", () => this.onStarting()).catch(() => {});
         const dispose = render(() => <ErrorBoundary fallback={this.errorFallback}>{children()}</ErrorBoundary>, root);
-        Logger.capture("APP/start", () => this.onStart()).catch(() => {});
         return dispose;
     }
 }

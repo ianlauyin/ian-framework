@@ -1,4 +1,4 @@
-export * from "./App";
+export * from "./AppBuilder";
 export * from "./ErrorBoundary";
 export * from "./locale";
 export * from "./KeyedRouter";

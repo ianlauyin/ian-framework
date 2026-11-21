@@ -12,10 +12,10 @@ async function sentEvents() {
 }
 
 async function load() {
-    const [{ App }, { Logger }] = await Promise.all([import("../../src/solid/App"), import("../../src/logger")]);
+    const [{ AppBuilder }, { Logger }] = await Promise.all([import("../../src/solid/AppBuilder"), import("../../src/logger")]);
     Logger.init([]);
 
-    class TestApp extends App<{ count: number }> {
+    class TestApp extends AppBuilder<{ count: number }> {
         started = 0;
         fail = false;
 
@@ -27,7 +27,7 @@ async function load() {
             ));
         }
 
-        protected onStart = async () => {
+        protected onStarting = async () => {
             this.started += 1;
             if (this.fail) throw new Error("start failed");
             this.setState((state) => {
@@ -61,17 +61,16 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe("App", () => {
-    it("renders the children, calls onStart one time, and logs the start", async () => {
+describe("AppBuilder", () => {
+    it("calls onStarting one time before the render, renders the children, and logs the start", async () => {
         const app = await load();
         const root = document.createElement("div");
         dispose = app.mount(root, () => <p>count {app.store().count}</p>);
 
-        expect(root.textContent).toContain("count 0");
+        expect(root.textContent).toContain("count 1");
         expect(app.started).toBe(1);
 
         await vi.advanceTimersByTimeAsync(60_000);
-        expect(root.textContent).toContain("count 1");
         const events = await sentEvents();
         expect(events.find((event) => event.action === "APP/start")?.level).toBe("info");
     });
@@ -88,7 +87,7 @@ describe("App", () => {
         expect(events.find((event) => event.action === "ERROR-BOUNDARY/caughtError")?.errorMessage).toContain("boom");
     });
 
-    it("logs the error and keeps the page when onStart fails", async () => {
+    it("logs the error and keeps the page when onStarting fails", async () => {
         const app = await load();
         app.fail = true;
         const root = document.createElement("div");
