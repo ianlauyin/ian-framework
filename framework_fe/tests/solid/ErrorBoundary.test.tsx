@@ -1,5 +1,5 @@
-import { render } from "@solidjs/web";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render } from "@solidjs/web";
 
 function Boom(): never {
     throw new Error("boom");

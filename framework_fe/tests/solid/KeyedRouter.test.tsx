@@ -1,7 +1,7 @@
+import { afterEach, describe, expect, it } from "vitest";
 import { type RouteSectionProps, useNavigate } from "@solidjs/router";
 import { render } from "@solidjs/web";
 import { createSignal, flush } from "solid-js";
-import { afterEach, describe, expect, it } from "vitest";
 
 import { KeyedRouter, type KeyedRoutes } from "../../src/solid/KeyedRouter";
 
