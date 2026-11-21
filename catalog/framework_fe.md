@@ -14,7 +14,7 @@ This file is the catalog of the frontend library in `framework_fe/`.
 | `framework_fe/src/http/upload.ts`, `framework_fe/src/http/download-file.ts` | File upload and file download | |
 | `framework_fe/src/storage.ts` | Typed storage | |
 | `framework_fe/src/util/sleep.ts` | `sleep` | |
-| `framework_fe/src/solid/ErrorBoundary.tsx` | App error boundary | |
+| `framework_fe/src/solid/ErrorBoundary.tsx` | App error boundary, used by `AppBuilder` and not exported from `framework_fe/src/solid/index.ts` | |
 | `framework_fe/src/solid/KeyedRouter.tsx` | Router for keyed route groups, where a list of active keys selects the groups | The router has the routes of each group whose key is in `activeKeys`, in the order of `keyed`. A path that no route of an active group matches goes to `fallbackPath` and replaces the history entry. When `fallbackPath` also has no route of an active group, the router renders nothing. A change of the active groups makes a new router. |
 | `framework_fe/src/logger/` | Browser logger | A failed script, style, or image load does not bubble, so the listener uses the capture phase. The logger cannot read a beacon after the browser accepts it. `trackNavigation` wraps `history.pushState` and `history.replaceState`, because the browser sends no event for those calls. It does not use a router. It stores the page URL in the context `requestUrl` and records no event. In that URL, a parameter whose key matches a mask pattern keeps the key and has a masked value. |
 | `framework_fe/src/util/time.ts` | Hong Kong time `hktIsoString` | |
