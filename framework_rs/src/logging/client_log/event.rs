@@ -51,17 +51,17 @@ impl ClientLog {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientLogEvent {
-    pub(crate) ts: DateTime<FixedOffset>,
-    pub(crate) action: String,
-    pub(crate) latency_ms: Option<u64>,
-    pub(crate) level: LogLevel,
+    pub ts: DateTime<FixedOffset>,
+    pub action: String,
+    pub latency_ms: Option<u64>,
+    pub level: LogLevel,
     #[serde(default)]
-    pub(crate) error_message: Option<String>,
-    pub(crate) context: BTreeMap<String, LogValue>,
-    pub(crate) extra: BTreeMap<String, LogValue>,
+    pub error_message: Option<String>,
+    pub context: BTreeMap<String, LogValue>,
+    pub extra: BTreeMap<String, LogValue>,
 }
 
-pub(crate) fn snake_case(key: &str) -> String {
+pub fn snake_case(key: &str) -> String {
     let chars: Vec<char> = key.chars().collect();
     let mut result = String::with_capacity(key.len() + 4);
     for (index, &ch) in chars.iter().enumerate() {

@@ -10,7 +10,7 @@ const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/pr
 const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
 const METADATA_TIMEOUT: Duration = Duration::from_secs(2);
 
-pub(crate) async fn resolve_project() -> Result<Option<String>, Exception> {
+pub async fn resolve_project() -> Result<Option<String>, Exception> {
     let project = match env::optional(PROJECT_ENV)? {
         Some(project) => project,
         None => match fetch_metadata_project().await {
@@ -28,7 +28,7 @@ pub(crate) async fn resolve_project() -> Result<Option<String>, Exception> {
     Ok(Some(project.to_string()))
 }
 
-pub(crate) fn is_safe_name(segment: &str) -> bool {
+pub fn is_safe_name(segment: &str) -> bool {
     !segment.is_empty()
         && segment
             .bytes()

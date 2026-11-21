@@ -1,13 +1,13 @@
 use crate::logging::LogEvent;
 
-pub(crate) struct Alert {
+pub struct Alert {
     action: &'static str,
     threshold_percent: f64,
     active: bool,
 }
 
 impl Alert {
-    pub(crate) fn new(action: &'static str, threshold_percent: f64) -> Self {
+    pub fn new(action: &'static str, threshold_percent: f64) -> Self {
         Self {
             action,
             threshold_percent,
@@ -15,7 +15,7 @@ impl Alert {
         }
     }
 
-    pub(crate) fn check(&mut self, percent: f64) -> Option<LogEvent> {
+    pub fn check(&mut self, percent: f64) -> Option<LogEvent> {
         if percent < self.threshold_percent {
             self.active = false;
             return None;

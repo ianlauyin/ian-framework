@@ -10,8 +10,8 @@ use crate::http::error_code;
 pub const PASSWORD_HASH_FAILED: &str = "PASSWORD_HASH_FAILED";
 pub const PASSWORD_HASH_INVALID: &str = "PASSWORD_HASH_INVALID";
 
-pub(crate) const MIN_PASSWORD_BYTES: usize = 8;
-pub(crate) const MAX_PASSWORD_BYTES: usize = 256;
+pub const MIN_PASSWORD_BYTES: usize = 8;
+pub const MAX_PASSWORD_BYTES: usize = 256;
 
 pub async fn hash_password(password: &str) -> Result<String, Exception> {
     validate_password(password)?;
@@ -41,7 +41,7 @@ pub async fn verify_password(password: &str, hash: &str) -> Result<bool, Excepti
         .is_ok())
 }
 
-pub(crate) fn validate_password(password: &str) -> Result<(), Exception> {
+pub fn validate_password(password: &str) -> Result<(), Exception> {
     if password.len() < MIN_PASSWORD_BYTES {
         return Err(exception!(
             severity = Severity::Warn,

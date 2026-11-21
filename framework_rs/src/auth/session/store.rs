@@ -106,20 +106,20 @@ impl SessionStore {
         self.inner.config.ttl_secs
     }
 
-    pub(crate) fn cookie_name(&self) -> &str {
+    pub fn cookie_name(&self) -> &str {
         &self.inner.config.cookie_name
     }
 
-    pub(crate) fn conn(&self) -> ConnectionManager {
+    pub fn conn(&self) -> ConnectionManager {
         self.inner.conn.clone()
     }
 
-    pub(crate) fn key(&self, token: &str) -> String {
+    pub fn key(&self, token: &str) -> String {
         let hash = hex::encode(Sha256::digest(token.as_bytes()));
         format!("{}{hash}", self.inner.config.prefix)
     }
 
-    pub(crate) fn subject_key(&self, subject: &str) -> String {
+    pub fn subject_key(&self, subject: &str) -> String {
         let hash = hex::encode(Sha256::digest(subject.as_bytes()));
         format!("{}subject:{hash}", self.inner.config.prefix)
     }

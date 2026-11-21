@@ -1,0 +1,50 @@
+mod config;
+mod store;
+mod token;
+
+use axum::extract::{FromRequestParts, OptionalFromRequestParts};
+use axum::http::Request;
+use axum::http::request::Parts;
+
+use ian_framework_rs::auth::session::*;
+
+fn parts(change: impl FnOnce(&mut Parts)) -> Parts {
+    let (mut parts, _) = Request::new(()).into_parts();
+    change(&mut parts);
+    parts
+}
+
+fn session() -> Session {
+    Session {
+        token: "a".repeat(64),
+        subject: "7".to_string(),
+    }
+}
+
+async fn required(parts: &mut Parts) -> Result<Session, &'static str> {
+    <Session as FromRequestParts<()>>::from_request_parts(parts, &())
+        .await
+        .map_err(|err| err.code())
+}
+
+async fn optional(parts: &mut Parts) -> Result<Option<Session>, &'static str> {
+    <Session as OptionalFromRequestParts<()>>::from_request_parts(parts, &())
+        .await
+        .map_err(|err| err.code())
+}
+
+#[tokio::test]
+async fn a_loaded_session_is_given_to_the_handler() {
+    let mut loaded = parts(|parts| {
+        parts.extensions.insert(session());
+    });
+    assert_eq!(required(&mut loaded).await, Ok(session()));
+    assert_eq!(optional(&mut loaded).await, Ok(Some(session())));
+}
+
+#[tokio::test]
+async fn no_session_is_unauthorized_only_when_required() {
+    let mut empty = parts(|_| {});
+    assert_eq!(required(&mut empty).await, Err("UNAUTHORIZED"));
+    assert_eq!(optional(&mut empty).await, Ok(None));
+}

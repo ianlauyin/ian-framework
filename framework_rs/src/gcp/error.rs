@@ -17,11 +17,11 @@ const RPC_DEADLINE_EXCEEDED: i32 = 4;
 const RPC_RESOURCE_EXHAUSTED: i32 = 8;
 const RPC_UNAVAILABLE: i32 = 14;
 
-pub(crate) fn to_exception(message: &'static str, err: Error) -> Exception {
+pub fn to_exception(message: &'static str, err: Error) -> Exception {
     exception!(code = error_code(&err), message, source = err)
 }
 
-pub(crate) fn error_code(err: &Error) -> &'static str {
+pub fn error_code(err: &Error) -> &'static str {
     if err.is_authentication() {
         return AUTH_FAILED;
     }

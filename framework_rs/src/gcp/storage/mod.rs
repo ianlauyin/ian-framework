@@ -1,9 +1,9 @@
-pub(crate) mod client;
-pub(crate) mod list;
-pub(crate) mod object;
-pub(crate) mod put_request;
-pub(crate) mod signed_url;
-pub(crate) mod validate;
+pub mod client;
+pub mod list;
+pub mod object;
+pub mod put_request;
+pub mod signed_url;
+pub mod validate;
 
 pub use super::error::{CLIENT_BUILD_FAILED, RESOURCE_NOT_FOUND};
 pub use client::{

@@ -17,14 +17,14 @@ use crate::mutex;
 
 pub const RATE_LIMIT_PRUNE_AT_INVALID: &str = "RATE_LIMIT_PRUNE_AT_INVALID";
 
-pub(crate) const UNKNOWN_WAIT: Duration = Duration::from_secs(3600);
+pub const UNKNOWN_WAIT: Duration = Duration::from_secs(3600);
 
 #[derive(Clone)]
 pub struct RateLimiter {
     capacity: f64,
     refill_per_sec: f64,
     prune_at: usize,
-    pub(crate) buckets: Arc<Mutex<HashMap<Option<IpAddr>, Bucket>>>,
+    pub buckets: Arc<Mutex<HashMap<Option<IpAddr>, Bucket>>>,
 }
 
 impl RateLimiter {
@@ -43,7 +43,7 @@ impl RateLimiter {
         })
     }
 
-    pub(crate) fn check(&self, key: Option<IpAddr>, now: Instant) -> Result<(), Exception> {
+    pub fn check(&self, key: Option<IpAddr>, now: Instant) -> Result<(), Exception> {
         let mut buckets = mutex::lock(&self.buckets);
         self.make_room(&mut buckets, key, now);
         let bucket = buckets.entry(key).or_insert(Bucket {
@@ -62,7 +62,7 @@ impl RateLimiter {
         Ok(())
     }
 
-    pub(crate) fn retry_after(&self, key: Option<IpAddr>, now: Instant) -> Duration {
+    pub fn retry_after(&self, key: Option<IpAddr>, now: Instant) -> Duration {
         if self.refill_per_sec <= 0.0 {
             return UNKNOWN_WAIT;
         }
@@ -108,7 +108,7 @@ impl RateLimiter {
         );
     }
 
-    pub(crate) fn evict_count(&self) -> usize {
+    pub fn evict_count(&self) -> usize {
         (self.prune_at / 10).max(1)
     }
 
@@ -138,12 +138,12 @@ pub async fn rate_limit(
     }
 }
 
-pub(crate) struct Bucket {
+pub struct Bucket {
     tokens: f64,
     updated: Instant,
 }
 
-pub(crate) fn limit_key(ip: &str) -> Option<IpAddr> {
+pub fn limit_key(ip: &str) -> Option<IpAddr> {
     match ip.parse::<IpAddr>().ok()? {
         IpAddr::V6(v6) => {
             let mut octets = v6.octets();

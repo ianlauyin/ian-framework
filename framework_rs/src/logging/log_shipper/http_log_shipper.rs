@@ -12,7 +12,7 @@ pub const HTTP_CLIENT_BUILD_FAILED: &str = "HTTP_CLIENT_BUILD_FAILED";
 pub const LOG_ENCODE_FAILED: &str = "LOG_ENCODE_FAILED";
 pub const LOG_SHIP_FAILED: &str = "LOG_SHIP_FAILED";
 
-pub(crate) const SHIP_CHUNK: usize = 1_000;
+pub const SHIP_CHUNK: usize = 1_000;
 
 const SHIP_TIMEOUT: Duration = Duration::from_secs(10);
 

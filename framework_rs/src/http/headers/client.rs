@@ -10,7 +10,7 @@ pub fn user_agent(headers: &HeaderMap) -> Option<&str> {
     header_text(headers, "user-agent")
 }
 
-pub(crate) fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+pub fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     let value = headers.get(name)?.to_str().ok()?.trim();
     if value.is_empty() { None } else { Some(value) }
 }

@@ -18,7 +18,7 @@ pub const SIGNED_URL_LIFETIME_TOO_SHORT: &str = "SIGNED_URL_LIFETIME_TOO_SHORT";
 const MAX_SIGNED_URL_SECONDS: u64 = 604_800;
 const HEX: &[u8; 16] = b"0123456789ABCDEF";
 
-pub(crate) fn validate_lifetime(expires_in: Duration) -> Result<Duration, Exception> {
+pub fn validate_lifetime(expires_in: Duration) -> Result<Duration, Exception> {
     let seconds = expires_in.as_secs();
     if seconds == 0 {
         return Err(exception!(
@@ -35,7 +35,7 @@ pub(crate) fn validate_lifetime(expires_in: Duration) -> Result<Duration, Except
     Ok(Duration::from_secs(seconds))
 }
 
-pub(crate) fn content_disposition_value(filename: &str) -> Result<String, Exception> {
+pub fn content_disposition_value(filename: &str) -> Result<String, Exception> {
     if filename.is_empty() {
         return Err(exception!(
             code = ATTACHMENT_FILENAME_EMPTY,
@@ -58,12 +58,12 @@ pub(crate) fn content_disposition_value(filename: &str) -> Result<String, Except
     ))
 }
 
-pub(crate) struct SignedGet {
+pub struct SignedGet {
     pub string_to_sign: String,
     pub url: String,
 }
 
-pub(crate) fn signed_get(
+pub fn signed_get(
     bucket: &str,
     object: &str,
     client_email: &str,
@@ -95,15 +95,15 @@ pub(crate) fn signed_get(
     }
 }
 
-pub(crate) fn percent_encode(segment: &str) -> String {
+pub fn percent_encode(segment: &str) -> String {
     encode(segment, false)
 }
 
-pub(crate) fn encode_path(object: &str) -> String {
+pub fn encode_path(object: &str) -> String {
     encode(object, true)
 }
 
-pub(crate) fn build_signer(signer_email: Option<&str>) -> Result<Signer, Exception> {
+pub fn build_signer(signer_email: Option<&str>) -> Result<Signer, Exception> {
     let build_failed = |err| {
         exception!(
             code = URL_SIGNER_BUILD_FAILED,

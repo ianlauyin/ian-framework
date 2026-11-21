@@ -1,6 +1,6 @@
 use crate::logging::{LogEvent, LogLevel};
 
-pub(crate) fn trace_event(log_event: &LogEvent) {
+pub fn trace_event(log_event: &LogEvent) {
     let context = serde_json::to_string(&log_event.context).unwrap_or_default();
     match log_event.level {
         LogLevel::Info => tracing::info!(action = %log_event.action, context = %context),

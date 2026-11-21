@@ -43,7 +43,7 @@ impl From<Object> for ObjectMeta {
 }
 
 pub struct ObjectReader {
-    pub(crate) response: ReadObjectResponse,
+    pub response: ReadObjectResponse,
 }
 
 impl ObjectReader {

@@ -16,7 +16,7 @@ pub fn spa_router() -> Router {
     Router::new().fallback(spa)
 }
 
-pub(crate) fn static_type(path: &Path) -> &'static str {
+pub fn static_type(path: &Path) -> &'static str {
     match path.extension().and_then(|ext| ext.to_str()).unwrap_or("") {
         "html" => "text/html; charset=utf-8",
         "css" => "text/css; charset=utf-8",

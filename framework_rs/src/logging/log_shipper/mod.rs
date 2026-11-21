@@ -1,11 +1,11 @@
-pub(crate) mod http_log_shipper;
-
 use std::future::Future;
 
 use crate::exception::Exception;
 use crate::logging::LogEvent;
 
-pub(crate) use http_log_shipper::SHIP_CHUNK;
+pub mod http_log_shipper;
+
+pub use http_log_shipper::SHIP_CHUNK;
 pub use http_log_shipper::{
     API_KEY_HEADER_INVALID, HTTP_CLIENT_BUILD_FAILED, HttpLogShipper, LOG_ENCODE_FAILED,
     LOG_SHIP_FAILED,

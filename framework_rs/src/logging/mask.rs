@@ -4,7 +4,7 @@ use crate::exception::Exception;
 
 pub const MASK_PATTERN_INVALID: &str = "MASK_PATTERN_INVALID";
 
-pub(crate) const MASK: &str = "***";
+pub const MASK: &str = "***";
 
 pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
     r"(?i)password",
@@ -16,13 +16,13 @@ pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
     r"(?i)cookie",
 ];
 
-pub(crate) struct Masks {
+pub struct Masks {
     plains: Vec<regex::Regex>,
     pairs: Vec<regex::Regex>,
 }
 
 impl Masks {
-    pub(crate) fn new(patterns: &[String]) -> Result<Self, Exception> {
+    pub fn new(patterns: &[String]) -> Result<Self, Exception> {
         let plains = patterns
             .iter()
             .map(|pattern| compile(pattern, pattern))
@@ -34,7 +34,7 @@ impl Masks {
         Ok(Self { plains, pairs })
     }
 
-    pub(crate) fn mask_event(&self, event: &mut LogEvent) {
+    pub fn mask_event(&self, event: &mut LogEvent) {
         for (key, value) in event.context.iter_mut() {
             self.mask_entry(key, value);
         }

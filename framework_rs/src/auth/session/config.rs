@@ -3,7 +3,7 @@ use crate::exception::Exception;
 
 pub const SESSION_CONFIG_INVALID: &str = "SESSION_CONFIG_INVALID";
 
-pub(crate) const MAX_TTL_SECS: u64 = 400 * 24 * 60 * 60;
+pub const MAX_TTL_SECS: u64 = 400 * 24 * 60 * 60;
 
 const COOKIE_ATTRIBUTES: &str = "HttpOnly; Secure; SameSite=Lax; Path=/";
 
@@ -16,7 +16,7 @@ pub struct SessionConfig {
 }
 
 impl SessionConfig {
-    pub(crate) fn check(&self) -> Result<(), Exception> {
+    pub fn check(&self) -> Result<(), Exception> {
         if self.ttl_secs == 0 {
             return Err(exception!(
                 code = SESSION_CONFIG_INVALID,
@@ -44,14 +44,14 @@ impl SessionConfig {
         Ok(())
     }
 
-    pub(crate) fn cookie(&self, token: &str) -> String {
+    pub fn cookie(&self, token: &str) -> String {
         format!(
             "{}={token}; {COOKIE_ATTRIBUTES}; Max-Age={}",
             self.cookie_name, self.ttl_secs
         )
     }
 
-    pub(crate) fn clear_cookie(&self) -> String {
+    pub fn clear_cookie(&self) -> String {
         format!("{}=; {COOKIE_ATTRIBUTES}; Max-Age=0", self.cookie_name)
     }
 }

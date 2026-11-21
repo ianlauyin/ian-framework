@@ -8,7 +8,7 @@ static LOGGER: OnceLock<Logger> = OnceLock::new();
 
 pub const LOGGER_ALREADY_SET: &str = "LOGGER_ALREADY_SET";
 
-pub(crate) fn set(logger: Logger) -> Result<(), Exception> {
+pub fn set(logger: Logger) -> Result<(), Exception> {
     if LOGGER.set(logger).is_err() {
         return Err(exception!(
             code = LOGGER_ALREADY_SET,
@@ -18,6 +18,6 @@ pub(crate) fn set(logger: Logger) -> Result<(), Exception> {
     Ok(())
 }
 
-pub(crate) fn get() -> Option<&'static Logger> {
+pub fn get() -> Option<&'static Logger> {
     LOGGER.get()
 }

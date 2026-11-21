@@ -18,7 +18,7 @@ pub struct ListPage {
 }
 
 impl ListPage {
-    pub(crate) fn from_response(response: ListObjectsResponse) -> Self {
+    pub fn from_response(response: ListObjectsResponse) -> Self {
         Self {
             objects: response.objects.into_iter().map(ObjectMeta::from).collect(),
             prefixes: response.prefixes,

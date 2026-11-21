@@ -13,7 +13,7 @@ use crate::http::middleware::require_same_origin;
 use crate::logging::{ClientLog, Logger};
 
 const CLIENT_LOG_PATH: &str = "/log";
-pub(crate) const BODY_LIMIT: usize = 1024 * 1024;
+pub const BODY_LIMIT: usize = 1024 * 1024;
 
 pub fn client_log_router() -> Router {
     Router::new().route(

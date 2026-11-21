@@ -56,15 +56,27 @@ impl From<f64> for LogValue {
     }
 }
 
+impl PartialEq<&str> for LogValue {
+    fn eq(&self, other: &&str) -> bool {
+        matches!(self, LogValue::String(text) if text == other)
+    }
+}
+
+impl PartialEq<serde_json::Value> for LogValue {
+    fn eq(&self, other: &serde_json::Value) -> bool {
+        serde_json::to_value(self).is_ok_and(|value| &value == other)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
-    pub(crate) ts: DateTime<FixedOffset>,
-    pub(crate) id: String,
-    pub(crate) action: String,
-    pub(crate) latency_ms: u64,
-    pub(crate) level: LogLevel,
+    pub ts: DateTime<FixedOffset>,
+    pub id: String,
+    pub action: String,
+    pub latency_ms: u64,
+    pub level: LogLevel,
     #[serde(default)]
-    pub(crate) error_message: Option<String>,
+    pub error_message: Option<String>,
     pub context: BTreeMap<String, LogValue>,
     pub extra: BTreeMap<String, LogValue>,
 }

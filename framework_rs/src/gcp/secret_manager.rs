@@ -65,7 +65,7 @@ impl SecretManager {
     }
 }
 
-pub(crate) fn parse_secret_value(data: &[u8]) -> Result<String, Exception> {
+pub fn parse_secret_value(data: &[u8]) -> Result<String, Exception> {
     let value = std::str::from_utf8(data)
         .map_err(|_| exception!(code = SECRET_VALUE_NOT_UTF8, "secret value is not UTF-8"))?
         .trim();

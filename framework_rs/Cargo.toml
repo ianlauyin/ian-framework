@@ -55,5 +55,11 @@ redis = { version = "*", features = ["connection-manager", "tokio-comp"], option
 rustix = { version = "*", features = ["fs"], optional = true }
 
 [dev-dependencies]
+axum = "*"
+chrono = { version = "*", default-features = false, features = ["clock"] }
+getrandom = "*"
+hex = "*"
+serde_json = "*"
 tokio = { version = "*", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 tower = { version = "*", features = ["util"] }
+uuid = { version = "*", features = ["v7"] }

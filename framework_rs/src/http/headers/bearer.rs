@@ -14,7 +14,7 @@ pub fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     Some(token)
 }
 
-pub(crate) fn key_matches(token: &str, key: &str) -> bool {
+pub fn key_matches(token: &str, key: &str) -> bool {
     if key.is_empty() {
         return false;
     }

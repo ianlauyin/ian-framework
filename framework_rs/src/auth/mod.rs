@@ -1,5 +1,5 @@
-pub(crate) mod password;
-pub(crate) mod session;
+pub mod password;
+pub mod session;
 
 pub use password::{PASSWORD_HASH_FAILED, PASSWORD_HASH_INVALID, hash_password, verify_password};
 pub use session::{

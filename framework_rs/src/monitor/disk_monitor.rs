@@ -68,7 +68,7 @@ impl DiskMonitor {
     }
 }
 
-pub(crate) fn read_usage() -> Option<f64> {
+pub fn read_usage() -> Option<f64> {
     let stat = rustix::fs::statvfs("/").ok()?;
     let used = stat.f_blocks.checked_sub(stat.f_bfree)?;
     let total = used.checked_add(stat.f_bavail)?;

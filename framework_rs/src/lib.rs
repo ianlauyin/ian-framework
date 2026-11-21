@@ -1,9 +1,4 @@
-#[cfg(test)]
-#[path = "../test/mod.rs"]
-mod test;
-
-pub(crate) mod mutex;
-
+pub mod mutex;
 pub mod env;
 pub mod exception;
 pub mod http;

@@ -1,9 +1,3 @@
-pub(crate) mod inner;
-pub(crate) mod installed;
-pub(crate) mod log_buffer;
-pub(crate) mod ship;
-pub(crate) mod trace_event;
-
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::sync;
@@ -14,6 +8,12 @@ use crate::logging::mask::Masks;
 use crate::logging::{LogEvent, LogValue};
 use crate::mutex;
 use crate::shutdown::ShutdownReceiver;
+
+pub mod inner;
+pub mod installed;
+pub mod log_buffer;
+pub mod ship;
+pub mod trace_event;
 
 pub use installed::LOGGER_ALREADY_SET;
 
@@ -108,15 +108,15 @@ impl Logger {
         })
     }
 
-    pub(crate) fn lock_buffer(&self) -> sync::MutexGuard<'_, log_buffer::LogBuffer> {
+    pub fn lock_buffer(&self) -> sync::MutexGuard<'_, log_buffer::LogBuffer> {
         mutex::lock(&self.inner.buffer)
     }
 
-    pub(crate) fn buffered_len(&self) -> usize {
+    pub fn buffered_len(&self) -> usize {
         self.lock_buffer().len()
     }
 
-    pub(crate) async fn send_buffer(&self) {
+    pub async fn send_buffer(&self) {
         let _shipping = self.inner.shipping.lock().await;
         let batch = self.lock_buffer().take_chunk(SHIP_CHUNK);
         if batch.is_empty() {

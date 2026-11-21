@@ -3,7 +3,7 @@ use crate::exception::Exception;
 
 pub const RANDOM_SOURCE_FAILED: &str = "RANDOM_SOURCE_FAILED";
 
-pub(crate) fn random_token() -> Result<String, Exception> {
+pub fn random_token() -> Result<String, Exception> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|err| {
         exception!(
@@ -15,7 +15,7 @@ pub(crate) fn random_token() -> Result<String, Exception> {
     Ok(hex::encode(bytes))
 }
 
-pub(crate) fn is_token(value: &str) -> bool {
+pub fn is_token(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()

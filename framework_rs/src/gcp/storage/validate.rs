@@ -7,9 +7,9 @@ pub const BUCKET_NAME_INVALID: &str = "BUCKET_NAME_INVALID";
 pub const METADATA_INVALID: &str = "METADATA_INVALID";
 pub const OBJECT_NAME_INVALID: &str = "OBJECT_NAME_INVALID";
 
-pub(crate) const MAX_OBJECT_NAME_BYTES: usize = 1024;
+pub const MAX_OBJECT_NAME_BYTES: usize = 1024;
 
-pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {
+pub fn validate_object_name(name: &str) -> Result<(), Exception> {
     if name.is_empty()
         || name.len() > MAX_OBJECT_NAME_BYTES
         || name == "."
@@ -24,7 +24,7 @@ pub(crate) fn validate_object_name(name: &str) -> Result<(), Exception> {
     Ok(())
 }
 
-pub(crate) fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(), Exception> {
+pub fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(), Exception> {
     for (key, value) in metadata {
         if key.is_empty() || key.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
             return Err(exception!(
@@ -36,7 +36,7 @@ pub(crate) fn validate_metadata(metadata: &BTreeMap<String, String>) -> Result<(
     Ok(())
 }
 
-pub(crate) fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
+pub fn validate_bucket(bucket_name: &str) -> Result<(), Exception> {
     if bucket_name.is_empty()
         || bucket_name.contains(['/', '\\', ' ', '\r', '\n'])
         || !bucket_name.is_ascii()

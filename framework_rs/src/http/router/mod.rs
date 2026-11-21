@@ -1,6 +1,6 @@
-pub(crate) mod health;
-pub(crate) mod spa;
-pub(crate) mod version;
+pub mod health;
+pub mod spa;
+pub mod version;
 
 pub use health::health_router;
 pub use spa::spa_router;

@@ -15,8 +15,8 @@ pub const CPU_USAGE_INVALID: &str = "CPU_USAGE_INVALID";
 
 #[derive(Debug, Clone)]
 pub struct CpuMonitor {
-    pub(crate) threshold_percent: f64,
-    pub(crate) interval: Duration,
+    pub threshold_percent: f64,
+    pub interval: Duration,
 }
 
 impl CpuMonitor {
@@ -48,7 +48,7 @@ impl CpuMonitor {
         }))
     }
 
-    pub(crate) async fn run<F, S>(self, shutdown: ShutdownReceiver, sink: F, mut sample: S)
+    pub async fn run<F, S>(self, shutdown: ShutdownReceiver, sink: F, mut sample: S)
     where
         F: Fn(LogEvent),
         S: FnMut() -> Option<CpuSample>,
@@ -97,12 +97,12 @@ impl CpuMonitor {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct CpuSample {
-    pub(crate) idle: u64,
-    pub(crate) total: u64,
+pub struct CpuSample {
+    pub idle: u64,
+    pub total: u64,
 }
 
-pub(crate) fn parse_sample(stat: &str) -> Result<CpuSample, Exception> {
+pub fn parse_sample(stat: &str) -> Result<CpuSample, Exception> {
     let Some(line) = stat.lines().next() else {
         return Err(exception!(code = CPU_STAT_INVALID, "cpu stat is not valid"));
     };
@@ -132,7 +132,7 @@ pub(crate) fn parse_sample(stat: &str) -> Result<CpuSample, Exception> {
     Ok(CpuSample { idle, total })
 }
 
-pub(crate) fn usage_percent(previous: CpuSample, current: CpuSample) -> Result<f64, Exception> {
+pub fn usage_percent(previous: CpuSample, current: CpuSample) -> Result<f64, Exception> {
     let Some(total) = current.total.checked_sub(previous.total) else {
         return Err(exception!(
             code = CPU_USAGE_INVALID,

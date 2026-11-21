@@ -1,0 +1,70 @@
+use ian_framework_rs::http::error_code;
+
+use ian_framework_rs::auth::password::*;
+
+#[tokio::test]
+async fn hash_round_trips_and_uses_a_new_salt() {
+    let first = hash_password("correct horse 1").await.unwrap();
+    let second = hash_password("correct horse 1").await.unwrap();
+    assert!(first.starts_with("$argon2id$"));
+    assert_ne!(first, second);
+    assert!(verify_password("correct horse 1", &first).await.unwrap());
+    assert!(!verify_password("wrong horse 1", &first).await.unwrap());
+    let error = verify_password("correct horse 1", "not a phc string")
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), PASSWORD_HASH_INVALID);
+    assert_eq!(error.message(), "password hash is not valid");
+}
+
+#[tokio::test]
+async fn invalid_passwords_are_refused_by_hash_and_verify() {
+    let hash = hash_password("correct horse 1").await.unwrap();
+    assert!(hash_password("short1").await.is_err());
+    assert!(hash_password("onlyletters").await.is_err());
+    let short = verify_password("short1", &hash).await.unwrap_err();
+    assert_eq!(short.code(), error_code::VALIDATION_ERROR);
+    assert_eq!(short.message(), "password must not be shorter than 8 bytes");
+    let letters = verify_password("onlyletters", &hash).await.unwrap_err();
+    assert_eq!(letters.code(), error_code::VALIDATION_ERROR);
+    assert_eq!(
+        letters.message(),
+        "password must mix english letters with digits"
+    );
+}
+
+#[test]
+fn validate_accepts_the_length_limits() {
+    assert!(validate_password("abcdefg1").is_ok());
+    assert!(validate_password(&format!("{}1", "a".repeat(MAX_PASSWORD_BYTES - 1))).is_ok());
+}
+
+#[test]
+fn validate_refuses_short_passwords() {
+    let error = validate_password("abcdef1").unwrap_err();
+    assert_eq!(error.code(), error_code::VALIDATION_ERROR);
+    assert_eq!(error.message(), "password must not be shorter than 8 bytes");
+}
+
+#[test]
+fn validate_refuses_long_passwords() {
+    let long = format!("{}1", "a".repeat(MAX_PASSWORD_BYTES));
+    let error = validate_password(&long).unwrap_err();
+    assert_eq!(error.code(), error_code::VALIDATION_ERROR);
+    assert_eq!(
+        error.message(),
+        "password must not be longer than 256 bytes"
+    );
+}
+
+#[test]
+fn validate_refuses_passwords_without_a_letter_or_a_digit() {
+    for password in ["12345678", "abcdefgh", "密码密码密码1"] {
+        let error = validate_password(password).unwrap_err();
+        assert_eq!(error.code(), error_code::VALIDATION_ERROR);
+        assert_eq!(
+            error.message(),
+            "password must mix english letters with digits"
+        );
+    }
+}

@@ -1,6 +1,6 @@
-pub(crate) mod error;
-pub(crate) mod project;
-pub(crate) mod secret_manager;
+pub mod error;
+pub mod project;
+pub mod secret_manager;
 
 #[cfg(feature = "gcs")]
 pub mod storage;

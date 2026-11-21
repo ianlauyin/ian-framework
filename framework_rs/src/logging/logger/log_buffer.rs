@@ -2,27 +2,27 @@ use std::collections::VecDeque;
 
 use crate::logging::LogEvent;
 
-pub(crate) const CAPACITY: usize = 20_000;
-pub(crate) const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";
+pub const CAPACITY: usize = 20_000;
+pub const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";
 
-pub(crate) struct LogBuffer {
-    pub(crate) events: VecDeque<LogEvent>,
+pub struct LogBuffer {
+    pub events: VecDeque<LogEvent>,
     capacity_warned: bool,
 }
 
 impl LogBuffer {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             events: VecDeque::new(),
             capacity_warned: false,
         }
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.events.len()
     }
 
-    pub(crate) fn push(&mut self, event: LogEvent) {
+    pub fn push(&mut self, event: LogEvent) {
         while self.events.len() >= CAPACITY {
             self.events.pop_front();
         }
@@ -36,12 +36,12 @@ impl LogBuffer {
         }
     }
 
-    pub(crate) fn take_chunk(&mut self, max: usize) -> Vec<LogEvent> {
+    pub fn take_chunk(&mut self, max: usize) -> Vec<LogEvent> {
         let count = max.min(self.events.len());
         self.events.drain(..count).collect()
     }
 
-    pub(crate) fn restore(&mut self, batch: Vec<LogEvent>) {
+    pub fn restore(&mut self, batch: Vec<LogEvent>) {
         for event in batch.into_iter().rev() {
             self.events.push_front(event);
         }
@@ -50,7 +50,7 @@ impl LogBuffer {
         }
     }
 
-    pub(crate) fn shipped(&mut self) {
+    pub fn shipped(&mut self) {
         if !self.meets_capacity_warn() {
             self.capacity_warned = false;
         }

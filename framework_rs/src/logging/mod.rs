@@ -1,10 +1,10 @@
-pub(crate) mod client_log;
-pub(crate) mod event;
-pub(crate) mod log_request;
-pub(crate) mod log_shipper;
-pub(crate) mod logger;
-pub(crate) mod mask;
-pub(crate) mod with_log;
+pub mod client_log;
+pub mod event;
+pub mod log_request;
+pub mod log_shipper;
+pub mod logger;
+pub mod mask;
+pub mod with_log;
 
 pub use client_log::{ClientLog, ClientLogEvent, client_log_router};
 pub use event::{LogEvent, LogLevel, LogValue};

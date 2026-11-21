@@ -349,7 +349,7 @@ impl fmt::Debug for GcsClient {
     }
 }
 
-pub(crate) fn operation_log_event(
+pub fn operation_log_event(
     operation: &str,
     object: &str,
     bucket: &str,
@@ -363,7 +363,7 @@ pub(crate) fn operation_log_event(
     Some(event)
 }
 
-pub(crate) fn none_if_not_found<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
+pub fn none_if_not_found<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {
     match result {
         Ok(value) => Ok(Some(value)),
         Err(err) if err.code() == RESOURCE_NOT_FOUND => Ok(None),
