@@ -4,7 +4,7 @@ use crate::source::with_source;
 use ian_lint::rule::diagnostic::Diagnostic;
 use ian_lint::rule::ts::import_order::check;
 
-const FIX: &str = "Put the other packages first, then `ian-framework-fe`, then the relative paths.";
+const FIX: &str = "Put the other packages first, then `solid-js` and `@solidjs`, then `ian-framework-fe`, then the relative paths, then the imports with no names.";
 
 fn diagnostics(source: &str) -> Vec<Diagnostic> {
     with_source(Path::new("src/a.ts"), source, check)
@@ -13,8 +13,10 @@ fn diagnostics(source: &str) -> Vec<Diagnostic> {
 #[test]
 fn imports_in_import_order_pass() {
     let source = "\
-import { a } from \"solid-js\";
-import type { B } from \"@solidjs/web\";
+import { a } from \"vitest\";
+
+import { b } from \"solid-js\";
+import type { C } from \"@solidjs/web\";
 
 import { c } from \"ian-framework-fe\";
 import { d } from \"ian-framework-fe/http\";
@@ -22,6 +24,9 @@ import { d } from \"ian-framework-fe/http\";
 import { e } from \"../util\";
 import { f } from \"./f\";
 import { g } from \".\";
+
+import \"./style.css\";
+import {} from \"vitest\";
 
 export { h } from \"solid-js\";
 export * from \"./i\";
@@ -83,13 +88,36 @@ export { d } from \"ian-framework-fe\";
 }
 
 #[test]
-fn a_side_effect_import_is_not_checked() {
+fn a_solid_import_after_a_framework_import_fails() {
     let source = "\
-import { a } from \"./a\";
-import \"solid-js\";
-import { b } from \"./b\";
+import { a } from \"ian-framework-fe\";
+import { b } from \"@solidjs/router\";
+import { c } from \"solid-js/store\";
 ";
-    assert!(diagnostics(source).is_empty());
+    let lines: Vec<_> = diagnostics(source).iter().map(|item| item.line).collect();
+    assert_eq!(lines, vec![2, 3]);
+}
+
+#[test]
+fn another_package_after_a_solid_import_fails() {
+    let source = "\
+import { a } from \"solid-js\";
+import { b } from \"vitest\";
+import { c } from \"solid-js-extra\";
+";
+    let lines: Vec<_> = diagnostics(source).iter().map(|item| item.line).collect();
+    assert_eq!(lines, vec![2, 3]);
+}
+
+#[test]
+fn an_import_after_an_import_with_no_names_fails() {
+    let source = "\
+import \"./style.css\";
+import { a } from \"./a\";
+";
+    let found = diagnostics(source);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].line, 2);
 }
 
 #[test]
