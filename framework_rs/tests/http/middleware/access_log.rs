@@ -4,12 +4,13 @@ use axum;
 use serde_json;
 use tower::ServiceExt;
 
-use crate::logging::{assert_uuid_v7, buffered_events, global_logger};
 use ian_framework_rs::exception;
 use ian_framework_rs::exception::Exception;
 use ian_framework_rs::http::error_code;
 use ian_framework_rs::http::middleware::access_log::*;
 use ian_framework_rs::logging::{LogEvent, LogLevel};
+
+use crate::logging::{assert_uuid_v7, buffered_events, global_logger};
 
 async fn status_from_path(
     axum::extract::Path(code): axum::extract::Path<u16>,

@@ -1,15 +1,15 @@
 use std::time::Duration;
 
-use axum::extract::Request;
-use axum::http::StatusCode;
-use axum::response::Response;
-
 use axum::Router;
 use axum::body::{Body, to_bytes};
+use axum::extract::Request;
+use axum::http::StatusCode;
 use axum::middleware::from_fn_with_state;
+use axum::response::Response;
 use axum::routing::get;
-use ian_framework_rs::http::middleware::request_timeout::*;
 use tower::ServiceExt;
+
+use ian_framework_rs::http::middleware::request_timeout::*;
 
 async fn send(handler_ms: u64) -> Response {
     let router = Router::new()

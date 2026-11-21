@@ -1,11 +1,10 @@
 use std::time::Duration;
 
-use ian_framework_rs::shutdown::ShutdownReceiver;
+use serde_json::json;
 
 use ian_framework_rs::logging::LogLevel;
 use ian_framework_rs::monitor::disk_monitor::*;
-
-use serde_json::json;
+use ian_framework_rs::shutdown::ShutdownReceiver;
 
 const INTERVAL: Duration = Duration::from_secs(60);
 

@@ -1,13 +1,13 @@
-use axum::extract::Request;
-use axum::http::header;
-use axum::response::Response;
-
 use axum::Router;
 use axum::body::Body;
+use axum::extract::Request;
+use axum::http::header;
 use axum::middleware::from_fn;
+use axum::response::Response;
 use axum::routing::get;
-use ian_framework_rs::http::middleware::security_headers::*;
 use tower::ServiceExt;
+
+use ian_framework_rs::http::middleware::security_headers::*;
 
 async fn send(router: Router) -> Response {
     let request = Request::builder().uri("/").body(Body::empty()).unwrap();

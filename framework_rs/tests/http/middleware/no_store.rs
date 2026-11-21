@@ -1,12 +1,12 @@
-use axum::extract::Request;
-use axum::http::header;
-
 use axum::Router;
 use axum::body::Body;
+use axum::extract::Request;
+use axum::http::header;
 use axum::middleware::from_fn;
 use axum::routing::get;
-use ian_framework_rs::http::middleware::no_store::*;
 use tower::ServiceExt;
+
+use ian_framework_rs::http::middleware::no_store::*;
 
 async fn cache_control(router: Router) -> String {
     let request = Request::builder().uri("/").body(Body::empty()).unwrap();

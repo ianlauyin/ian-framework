@@ -1,12 +1,11 @@
 use std::time::Duration;
 
-use ian_framework_rs::shutdown::ShutdownReceiver;
+use serde_json::json;
 
 use ian_framework_rs::logging::LogLevel;
 use ian_framework_rs::monitor::cpu_monitor::*;
 use ian_framework_rs::mutex;
-
-use serde_json::json;
+use ian_framework_rs::shutdown::ShutdownReceiver;
 
 const INTERVAL: Duration = Duration::from_secs(30);
 

@@ -1,5 +1,6 @@
-use crate::logging::{buffered_events, global_logger};
 use ian_framework_rs::logging::*;
+
+use crate::logging::{buffered_events, global_logger};
 
 #[tokio::test]
 async fn it_returns_the_output_and_records_the_event_with_the_latency() {

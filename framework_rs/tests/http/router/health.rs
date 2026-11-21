@@ -1,7 +1,8 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use ian_framework_rs::http::router::health::*;
 use tower::ServiceExt;
+
+use ian_framework_rs::http::router::health::*;
 
 #[tokio::test]
 async fn health_is_ok() {

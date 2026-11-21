@@ -1,7 +1,7 @@
 use std::future::Future;
+use std::time::Duration;
 
 use ian_framework_rs::shutdown::*;
-use std::time::Duration;
 
 async fn resolves(wait: impl Future<Output = ()>) -> bool {
     tokio::time::timeout(Duration::from_millis(100), wait)

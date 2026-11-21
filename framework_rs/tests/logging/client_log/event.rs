@@ -2,11 +2,12 @@ use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, FixedOffset};
 use serde_json;
 
-use crate::logging::{assert_uuid_v7, client_log_event};
 use ian_framework_rs::logging::client_log::event::snake_case;
 use ian_framework_rs::logging::log_shipper::SHIP_CHUNK;
 use ian_framework_rs::logging::{ClientLog, LogEvent, LogLevel};
 use ian_framework_rs::time::hkt_now;
+
+use crate::logging::{assert_uuid_v7, client_log_event};
 
 impl ClientChecked for LogEvent {
     fn client_checked(&self) -> LogEvent {

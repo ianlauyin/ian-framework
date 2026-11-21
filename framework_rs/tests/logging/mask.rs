@@ -1,5 +1,6 @@
-use crate::logging::{buffered_events, default_shipper, http_shipper, logger};
 use ian_framework_rs::logging::{LogEvent, Logger};
+
+use crate::logging::{buffered_events, default_shipper, http_shipper, logger};
 
 fn buffered() -> Logger {
     logger(http_shipper("api", "https://logs.example"))

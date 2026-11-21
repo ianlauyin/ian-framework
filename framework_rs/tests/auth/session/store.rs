@@ -1,6 +1,7 @@
-use crate::auth::{LIMIT, connection, store_or_skip};
 use ian_framework_rs::auth::session::config::SessionConfig;
 use ian_framework_rs::auth::session::store::*;
+
+use crate::auth::{LIMIT, connection, store_or_skip};
 
 async fn subject_of(store: &SessionStore, token: &str) -> Option<String> {
     store

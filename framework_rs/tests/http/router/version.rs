@@ -1,10 +1,10 @@
 use axum::Router;
-use axum::http::StatusCode;
-
 use axum::body::{Body, to_bytes};
 use axum::http::Request;
-use ian_framework_rs::http::router::version::*;
+use axum::http::StatusCode;
 use tower::ServiceExt;
+
+use ian_framework_rs::http::router::version::*;
 
 async fn read_version(router: Router) -> String {
     let response = router

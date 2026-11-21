@@ -3,12 +3,13 @@ mod log_buffer;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use crate::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
 use ian_framework_rs::exception;
 use ian_framework_rs::logging::log_shipper::SHIP_CHUNK;
 use ian_framework_rs::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
 use ian_framework_rs::logging::{HttpLogShipper, LogEvent, LogRequest, Logger};
 use ian_framework_rs::shutdown::ShutdownReceiver;
+
+use crate::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
 
 const LIMIT: usize = CAPACITY / 5 * 4;
 

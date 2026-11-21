@@ -1,7 +1,7 @@
+use serde_json::json;
+
 use ian_framework_rs::logging::LogLevel;
 use ian_framework_rs::monitor::alert::Alert;
-
-use serde_json::json;
 
 #[test]
 fn alert_gives_one_event_for_each_rise() {

@@ -1,8 +1,8 @@
-pub mod mutex;
 pub mod env;
 pub mod exception;
 pub mod http;
 pub mod logging;
+pub mod mutex;
 pub mod shutdown;
 pub mod time;
 pub mod token;

@@ -1,9 +1,10 @@
 use axum;
 use tower::ServiceExt;
 
-use crate::auth::store_or_skip;
 use ian_framework_rs::auth::{Session, SessionStore};
 use ian_framework_rs::http::middleware::require_session::*;
+
+use crate::auth::store_or_skip;
 
 fn router(store: SessionStore, status: axum::http::StatusCode, set_cookie: bool) -> axum::Router {
     axum::Router::new()

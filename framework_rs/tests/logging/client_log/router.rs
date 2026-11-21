@@ -1,18 +1,18 @@
 use axum::Router;
+use axum::body::Body;
 use axum::extract::Request;
 use axum::http::StatusCode;
+use axum::middleware::from_fn;
+use serde_json;
+use tower::ServiceExt;
 
+use ian_framework_rs::http::middleware::access_log;
 use ian_framework_rs::logging::LogLevel;
+use ian_framework_rs::logging::client_log::router::*;
 
 use crate::logging::{
     REFUSED_ACTION, assert_uuid_v7, buffered_events, global_logger, shipped_batches, wait_for,
 };
-use axum::body::Body;
-use axum::middleware::from_fn;
-use ian_framework_rs::http::middleware::access_log;
-use ian_framework_rs::logging::client_log::router::*;
-use serde_json;
-use tower::ServiceExt;
 
 fn client_event(action: &str) -> serde_json::Value {
     serde_json::json!({
