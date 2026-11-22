@@ -2,7 +2,7 @@
 
 After a refactor,
 1. Run `cargo fmt` in `framework_rs/` after you change the code.
-2. run `cargo run --manifest-path lint/Cargo.toml --quiet -- rs` on root, fix all the errors that they show.
+2. run `cargo run --manifest-path lint/Cargo.toml --quiet -- be` on root, fix all the errors that they show.
 
 ## General
 
