@@ -77,6 +77,8 @@ describe("Logger", () => {
                 latencyMs: null,
                 level: "info",
                 errorMessage: null,
+                errorName: null,
+                stack: null,
                 context: {},
                 extra: {},
             },
@@ -463,5 +465,41 @@ describe("Logger", () => {
 
             expect(sentEvents(0)[0].context).toEqual({beta: "on"});
         });
+    });
+
+    it("sends the name and the masked stack of an error, without the header line", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: [/secret-\w+/]});
+        const error = new TypeError("it broke");
+        error.stack = "TypeError: it broke\n    at load (app.js:1:2)\n    at secret-abc (app.js:3:4)";
+        Logger.error("typed", error);
+        const plain = new Error("plain");
+        plain.stack = `at only (app.js:5:6)${"x".repeat(5000)}`;
+        Logger.warn("plain", plain);
+        hidePage();
+        const [typed, warned] = sentEvents(0);
+        expect(typed.errorName).toBe("TypeError");
+        expect(typed.stack).toBe("    at load (app.js:1:2)\n    at *** (app.js:3:4)");
+        expect(warned.errorName).toBeNull();
+        expect(warned.stack).toHaveLength(4096);
+        expect(warned.stack.startsWith("at only (app.js:5:6)")).toBe(true);
+    });
+
+    it("sends no stack for a thrown value that is not an Error, and no name or stack without an error", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: []});
+        await expect(
+            Logger.capture("work", async () => {
+                throw "text";
+            })
+        ).rejects.toBe("text");
+        Logger.warn("no error");
+        hidePage();
+        const [thrown, warned] = sentEvents(0);
+        expect(thrown.errorMessage).toBe("text");
+        expect(thrown.errorName).toBeNull();
+        expect(thrown.stack).toBeNull();
+        expect(warned.errorName).toBeNull();
+        expect(warned.stack).toBeNull();
     });
 });

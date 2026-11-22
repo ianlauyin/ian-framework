@@ -7,6 +7,8 @@ export type ClientLogEvent = {
     latencyMs: number | null;
     level: LogLevel;
     errorMessage: string | null;
+    errorName: string | null;
+    stack: string | null;
     context: LogFields;
     extra: LogFields;
 };
