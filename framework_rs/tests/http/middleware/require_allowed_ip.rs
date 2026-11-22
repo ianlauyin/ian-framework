@@ -64,3 +64,60 @@ fn new_rejects_an_invalid_ip() {
     let err = AllowedIps::new(["192.0.2.1", "not-an-ip"]).unwrap_err();
     assert_eq!(err.code(), ALLOWED_IPS_INVALID);
 }
+
+#[tokio::test]
+async fn passes_a_request_from_an_ip_in_an_allowed_range() {
+    let router = router(&["192.0.2.0/24", "2001:db8::/32"]);
+    for ip in [
+        "192.0.2.0",
+        "192.0.2.255",
+        "2001:db8::1",
+        "2001:db8:ffff::1",
+    ] {
+        let response = router.clone().oneshot(request(Some(ip))).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT, "{ip}");
+    }
+}
+
+#[tokio::test]
+async fn rejects_a_request_from_an_ip_outside_the_allowed_range() {
+    let router = router(&["192.0.2.0/24", "2001:db8::/32"]);
+    for ip in [
+        "192.0.3.0",
+        "198.51.100.1",
+        "2001:db9::1",
+        "::ffff:192.0.2.1",
+    ] {
+        let response = router.clone().oneshot(request(Some(ip))).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{ip}");
+    }
+}
+
+#[tokio::test]
+async fn a_zero_prefix_allows_every_ip_of_that_family() {
+    let router = router(&["0.0.0.0/0"]);
+    let response = router
+        .clone()
+        .oneshot(request(Some("203.0.113.9")))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let response = router.oneshot(request(Some("2001:db8::1"))).await.unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[test]
+fn new_rejects_an_invalid_range() {
+    for range in [
+        "192.0.2.0/33",
+        "2001:db8::/129",
+        "192.0.2.0/",
+        "192.0.2.0/+24",
+        "192.0.2.0/abc",
+        "192.0.2.1/24",
+        "not-an-ip/24",
+    ] {
+        let err = AllowedIps::new([range]).unwrap_err();
+        assert_eq!(err.code(), ALLOWED_IPS_INVALID, "{range}");
+    }
+}
