@@ -14,5 +14,6 @@ mod result_type;
 pub(crate) mod source;
 mod source_order;
 mod sqlx_import;
+mod std_env;
 mod super_path;
 mod test_attr;

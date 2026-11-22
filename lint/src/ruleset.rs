@@ -85,6 +85,7 @@ const PROJECT: Rules = Rules {
         rs::no_nested_import::RS_RULE,
         rs::sqlx_import::RS_RULE,
         rs::config_import::RS_RULE,
+        rs::std_env::RS_RULE,
     ],
     folder: &[
         folder::fe_test_tree::FOLDER_RULE,

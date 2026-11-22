@@ -17,6 +17,7 @@ pub mod result_type;
 pub mod run;
 pub mod source_order;
 pub mod sqlx_import;
+pub mod std_env;
 pub mod super_path;
 pub mod test_attr;
 
