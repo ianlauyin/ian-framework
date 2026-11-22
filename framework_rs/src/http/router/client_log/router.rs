@@ -18,16 +18,15 @@ pub const RATE_CAPACITY: u32 = 300;
 pub const RATE_REFILL_PER_SEC: f64 = 10.0;
 const RATE_PRUNE_AT: usize = 10_000;
 
-pub fn client_log_router() -> Router {
-    let limiter = RateLimiter::new(RATE_CAPACITY, RATE_REFILL_PER_SEC, RATE_PRUNE_AT)
-        .expect("the client log rate limit is valid");
-    Router::new().route(
+pub fn client_log_router() -> Result<Router, Exception> {
+    let limiter = RateLimiter::new(RATE_CAPACITY, RATE_REFILL_PER_SEC, RATE_PRUNE_AT)?;
+    Ok(Router::new().route(
         CLIENT_LOG_PATH,
         post(receive)
             .route_layer(from_fn(require_same_origin))
             .route_layer(from_fn_with_state(limiter, rate_limit))
             .layer(DefaultBodyLimit::max(BODY_LIMIT)),
-    )
+    ))
 }
 
 async fn receive(headers: HeaderMap, Json(log): Json<ClientLog>) -> Result<StatusCode, Exception> {

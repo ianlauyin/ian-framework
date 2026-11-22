@@ -48,6 +48,7 @@ async fn send(headers: &[(&str, &str)], body: Body) -> StatusCode {
         request = request.header(*name, *value);
     }
     client_log_router()
+        .unwrap()
         .oneshot(request.body(body).unwrap())
         .await
         .unwrap()
@@ -212,7 +213,7 @@ async fn returns_bad_gateway_when_the_log_server_refuses_the_batch() {
 
 #[tokio::test]
 async fn other_methods_and_paths_are_not_accepted() {
-    let router = client_log_router();
+    let router = client_log_router().unwrap();
     let get = Request::builder().uri("/log").body(Body::empty()).unwrap();
     let response = router.clone().oneshot(get).await.unwrap();
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
@@ -229,7 +230,7 @@ async fn other_methods_and_paths_are_not_accepted() {
 async fn sends_client_events_and_buffers_the_request_event() {
     global_logger();
     let router = Router::new()
-        .merge(client_log_router())
+        .merge(client_log_router().unwrap())
         .layer(from_fn(access_log));
     let request = Request::builder()
         .method("POST")
@@ -254,7 +255,7 @@ async fn sends_client_events_and_buffers_the_request_event() {
 #[tokio::test]
 async fn limits_the_requests_of_one_ip() {
     global_logger();
-    let router = client_log_router();
+    let router = client_log_router().unwrap();
     let mut accepted = 0;
     let mut limited = false;
     for _ in 0..RATE_CAPACITY * 3 {
