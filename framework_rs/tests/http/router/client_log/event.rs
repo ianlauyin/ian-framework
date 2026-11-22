@@ -2,9 +2,10 @@ use axum::http::HeaderMap;
 use chrono::{DateTime, Duration, FixedOffset};
 use serde_json;
 
-use ian_framework_rs::logging::client_log::event::snake_case;
-use ian_framework_rs::logging::log_shipper::SHIP_CHUNK;
-use ian_framework_rs::logging::{ClientLog, LogEvent, LogLevel};
+use ian_framework_rs::http::router::ClientLog;
+use ian_framework_rs::http::router::client_log::event::snake_case;
+use ian_framework_rs::logging::logger::log_buffer::SHIP_CHUNK;
+use ian_framework_rs::logging::{LogEvent, LogLevel};
 use ian_framework_rs::time::hkt_now;
 
 use crate::logging::{assert_uuid_v7, client_log_event};
@@ -82,10 +83,10 @@ fn client_action_and_info_are_bounded() {
             .client_checked()
     };
     let forged = batch_event("a\nINFO forged\r", serde_json::json!({}));
-    assert!(!forged.action().contains(['\n', '\r']));
+    assert!(!forged.action.contains(['\n', '\r']));
     assert_eq!(
         batch_event(&"x".repeat(500), serde_json::json!({}))
-            .action()
+            .action
             .len(),
         128
     );
@@ -247,9 +248,9 @@ fn a_client_error_event_without_a_message_gets_a_placeholder() {
     let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
     value.as_object_mut().unwrap().remove("error_message");
     let parsed: LogEvent = serde_json::from_value(value.clone()).unwrap();
-    assert_eq!(parsed.error_message(), None);
+    assert_eq!(parsed.error_message.as_deref(), None);
     assert_eq!(
-        parsed.client_checked().error_message(),
+        parsed.client_checked().error_message.as_deref(),
         Some("unknown error")
     );
     for blank in [
@@ -261,13 +262,16 @@ fn a_client_error_event_without_a_message_gets_a_placeholder() {
         value["error_message"] = blank;
         let parsed: LogEvent = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(
-            parsed.client_checked().error_message(),
+            parsed.client_checked().error_message.as_deref(),
             Some("unknown error")
         );
     }
     value["error_message"] = serde_json::json!("boom");
     let parsed: LogEvent = serde_json::from_value(value).unwrap();
-    assert_eq!(parsed.client_checked().error_message(), Some("boom"));
+    assert_eq!(
+        parsed.client_checked().error_message.as_deref(),
+        Some("boom")
+    );
 }
 
 #[test]
@@ -275,12 +279,19 @@ fn new_keeps_a_bounded_error_message() {
     let mut client = LogEvent::error("x", "boom");
     client.error_message = Some(format!("a\nb{}", "c".repeat(1500)));
     let stored = client.client_checked();
-    let message = stored.error_message().unwrap();
+    let message = stored.error_message.as_deref().unwrap();
     assert!(!message.contains('\n'));
     assert_eq!(message.chars().count(), 1024);
     let mut warn = LogEvent::warn("x");
     warn.error_message = Some("y".repeat(2000));
-    assert_eq!(warn.client_checked().error_message().unwrap().len(), 1024);
+    assert_eq!(
+        warn.client_checked()
+            .error_message
+            .as_deref()
+            .unwrap()
+            .len(),
+        1024
+    );
 }
 
 #[test]
@@ -288,7 +299,11 @@ fn from_client_turns_a_blank_warn_message_into_none() {
     for blank in ["", "  ", "\u{1}\n\t"] {
         let mut warn = LogEvent::warn("x");
         warn.error_message = Some(blank.to_string());
-        assert_eq!(warn.client_checked().error_message(), None, "{blank:?}");
+        assert_eq!(
+            warn.client_checked().error_message.as_deref(),
+            None,
+            "{blank:?}"
+        );
     }
 }
 
@@ -296,10 +311,10 @@ fn from_client_turns_a_blank_warn_message_into_none() {
 fn from_client_drops_an_error_message_on_an_info_event() {
     let mut client = LogEvent::info("x");
     client.error_message = Some("boom".to_string());
-    assert_eq!(client.client_checked().error_message(), None);
+    assert_eq!(client.client_checked().error_message.as_deref(), None);
     let mut warn = LogEvent::warn("x");
     warn.error_message = Some("slow".to_string());
-    assert_eq!(warn.client_checked().error_message(), Some("slow"));
+    assert_eq!(warn.client_checked().error_message.as_deref(), Some("slow"));
 }
 
 #[test]
@@ -420,7 +435,8 @@ fn an_event_without_the_error_name_and_the_stack_is_accepted() {
         "context": {},
         "extra": {},
     });
-    let event: ian_framework_rs::logging::ClientLogEvent = serde_json::from_value(body).unwrap();
+    let event: ian_framework_rs::http::router::ClientLogEvent =
+        serde_json::from_value(body).unwrap();
     assert_eq!(event.error_name, None);
     assert_eq!(event.stack, None);
 }

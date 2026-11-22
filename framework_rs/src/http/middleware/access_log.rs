@@ -10,7 +10,8 @@ use axum::response::Response;
 
 use crate::exception::Exception;
 use crate::http::headers::client::{client_ip, user_agent};
-use crate::logging::{LogEvent, LogValue, Logger, with_log};
+use crate::logging::record;
+use crate::logging::{LogEvent, LogValue};
 use crate::mutex;
 
 pub const CANCELLED: &str = "request was cancelled";
@@ -51,89 +52,79 @@ impl<S: Send + Sync> FromRequestParts<S> for AccessLog {
 }
 
 pub async fn access_log(mut request: Request, next: Next) -> Response {
-    if Logger::get().is_none() {
-        return next.run(request).await;
-    }
-    let method = request.method().as_str().to_string();
-    let path = request_path(request.uri().path());
-    let route = request
-        .extensions()
-        .get::<MatchedPath>()
-        .map_or_else(|| path.clone(), |matched| matched.as_str().to_string());
-    let ip = client_ip(request.headers()).unwrap_or("-").to_string();
-    let user_agent = user_agent(request.headers()).unwrap_or("-").to_string();
-    let request_url = request
-        .uri()
-        .path_and_query()
-        .map_or_else(|| path.clone(), |url| url.as_str().to_string());
-
     let fields = AccessLog::default();
-    request.extensions_mut().insert(fields.clone());
-    let mut pending = Pending {
-        started: Instant::now(),
-        entry: Some(Entry {
-            action: action(&method, &route),
-            ip,
-            user_agent,
-            request_url,
-            fields,
-        }),
-    };
-    with_log(next.run(request), move |response| {
-        let status = response.status().as_u16();
-        let detail = response
-            .extensions_mut()
-            .remove::<Arc<Exception>>()
-            .map(|exception| format!("{exception}\n{}", String::from(exception.as_ref())));
-        match pending.entry.take() {
-            Some(entry) => entry.event(|action| new_event(action, status, detail)),
-            None => new_event("-".to_string(), status, detail),
-        }
-    })
-    .await
+    let pending = Pending::new(&request, fields.clone());
+    request.extensions_mut().insert(fields);
+    let mut response = next.run(request).await;
+    pending.finish(&mut response);
+    response
 }
 
 struct Pending {
     started: Instant,
-    entry: Option<Entry>,
-}
-
-impl Drop for Pending {
-    fn drop(&mut self) {
-        let Some(entry) = self.entry.take() else {
-            return;
-        };
-        let Some(logger) = Logger::get() else {
-            return;
-        };
-        let mut event = entry.event(|action| LogEvent::warn_with(action, CANCELLED));
-        event.latency_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
-        logger.record(event);
-    }
-}
-
-struct Entry {
     action: String,
     ip: String,
     user_agent: String,
     request_url: String,
     fields: AccessLog,
+    recorded: bool,
 }
 
-impl Entry {
-    fn event(self, build: impl FnOnce(String) -> LogEvent) -> LogEvent {
-        let mut event = build(self.action);
+impl Pending {
+    fn new(request: &Request, fields: AccessLog) -> Self {
+        let path = request_path(request.uri().path());
+        let route = request
+            .extensions()
+            .get::<MatchedPath>()
+            .map_or(path, MatchedPath::as_str);
+        let request_url = request
+            .uri()
+            .path_and_query()
+            .map_or(path, |url| url.as_str());
+        Self {
+            started: Instant::now(),
+            action: format!("API/{}:{route}", request.method()),
+            ip: client_ip(request.headers()).unwrap_or("-").to_string(),
+            user_agent: user_agent(request.headers()).unwrap_or("-").to_string(),
+            request_url: request_url.to_string(),
+            fields,
+            recorded: false,
+        }
+    }
+
+    fn finish(mut self, response: &mut Response) {
+        let status = response.status().as_u16();
+        let exception = response.extensions_mut().remove::<Arc<Exception>>();
+        let action = std::mem::take(&mut self.action);
+        self.emit(new_event(action, status, exception.as_deref()));
+    }
+
+    fn emit(&mut self, mut event: LogEvent) {
+        self.recorded = true;
         let Fields { context, extra } = self.fields.take();
         event.context = context;
         event.extra = extra;
-        event.context.insert("ip".to_string(), self.ip.into());
-        event
-            .context
-            .insert("user_agent".to_string(), self.user_agent.into());
-        event
-            .context
-            .insert("request_url".to_string(), self.request_url.into());
-        event
+        let reserved = [
+            ("ip", &mut self.ip),
+            ("user_agent", &mut self.user_agent),
+            ("request_url", &mut self.request_url),
+        ];
+        for (key, value) in reserved {
+            event
+                .context
+                .insert(key.to_string(), std::mem::take(value).into());
+        }
+        record(event.with_latency(self.started.elapsed()));
+    }
+}
+
+impl Drop for Pending {
+    fn drop(&mut self) {
+        if self.recorded {
+            return;
+        }
+        let action = std::mem::take(&mut self.action);
+        self.emit(LogEvent::warn_with(action, CANCELLED));
     }
 }
 
@@ -143,34 +134,16 @@ struct Fields {
     extra: BTreeMap<String, LogValue>,
 }
 
-fn action(method: &str, path: &str) -> String {
-    if method.is_empty() {
-        return "-".to_string();
-    }
-    let path = if path.is_empty() { "/" } else { path };
-    format!("API/{method}:{path}")
+fn request_path(path: &str) -> &str {
+    if path.is_empty() { "-" } else { path }
 }
 
-fn request_path(path: &str) -> String {
-    if path.is_empty() {
-        "-".to_string()
-    } else {
-        path.to_string()
-    }
-}
-
-fn new_event(action: String, status: u16, detail: Option<String>) -> LogEvent {
-    if status >= 500 {
-        LogEvent::error(
-            action,
-            detail.unwrap_or_else(|| format!("response status {status}")),
-        )
-    } else if status >= 400 {
-        match detail {
-            Some(detail) => LogEvent::warn_with(action, detail),
-            None => LogEvent::warn(action),
-        }
-    } else {
-        LogEvent::info(action)
+fn new_event(action: String, status: u16, exception: Option<&Exception>) -> LogEvent {
+    match (status, exception) {
+        (500.., Some(exception)) => LogEvent::error_from(action, exception),
+        (500.., None) => LogEvent::error(action, format!("response status {status}")),
+        (400.., Some(exception)) => LogEvent::warn_from(action, exception),
+        (400.., None) => LogEvent::warn(action),
+        _ => LogEvent::info(action),
     }
 }

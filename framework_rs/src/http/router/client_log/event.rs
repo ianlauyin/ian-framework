@@ -8,7 +8,7 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::headers::{client_ip, user_agent};
-use crate::logging::log_shipper::SHIP_CHUNK;
+use crate::logging::logger::log_buffer::SHIP_CHUNK;
 use crate::logging::{LogEvent, LogLevel, LogValue};
 use crate::time::hkt_now;
 

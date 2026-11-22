@@ -1,7 +1,7 @@
-use std::collections::BTreeMap;
 use std::time::Duration;
 
-use crate::logging::{LogEvent, Logger};
+use crate::logging::LogEvent;
+use crate::logging::record;
 use crate::monitor::alert::Alert;
 use crate::shutdown::ShutdownReceiver;
 
@@ -16,14 +16,13 @@ pub struct DiskMonitor {
 impl DiskMonitor {
     pub fn new(threshold_percent: f64, interval: Duration) -> Option<Self> {
         if !(threshold_percent > 0.0 && threshold_percent <= 100.0) || interval.is_zero() {
-            Logger::warn_with(
-                "DISK/invalidConfig",
-                BTreeMap::from([
-                    ("threshold_percent".to_string(), threshold_percent.into()),
-                    ("interval_seconds".to_string(), interval.as_secs_f64().into()),
-                ]),
-                "the threshold must be more than 0 and at most 100, and the interval must not be zero"
-                    .into(),
+            record(
+                LogEvent::warn_with(
+                    "DISK/invalidConfig",
+                    "the threshold must be more than 0 and at most 100, and the interval must not be zero",
+                )
+                .with_context("threshold_percent", threshold_percent)
+                .with_context("interval_seconds", interval.as_secs_f64()),
             );
             return None;
         }
@@ -39,11 +38,10 @@ impl DiskMonitor {
     {
         tokio::spawn(async move {
             if read_usage().is_none() {
-                Logger::error(
+                record(LogEvent::error(
                     "DISK/cannotReadUsage",
-                    BTreeMap::new(),
-                    "cannot read the disk usage".into(),
-                );
+                    "cannot read the disk usage",
+                ));
                 return;
             }
             let mut ticker = tokio::time::interval(self.interval);

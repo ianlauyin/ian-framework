@@ -8,10 +8,12 @@ use crate::exception::Exception;
 use crate::http::error_code;
 
 pub mod config;
+pub mod cookie;
 pub mod store;
 pub mod token;
 
 pub use config::{SESSION_CONFIG_INVALID, SessionConfig};
+pub use cookie::SessionCookie;
 pub use store::{SESSION_STORE_COMMAND_FAILED, SessionStore};
 pub use token::RANDOM_SOURCE_FAILED;
 

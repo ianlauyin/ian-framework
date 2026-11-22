@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::net::{IpAddr, Ipv6Addr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -12,7 +12,8 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::headers::client_ip;
-use crate::logging::Logger;
+use crate::logging::LogEvent;
+use crate::logging::record;
 use crate::mutex;
 
 pub const RATE_LIMIT_PRUNE_AT_INVALID: &str = "RATE_LIMIT_PRUNE_AT_INVALID";
@@ -99,12 +100,10 @@ impl RateLimiter {
         for (_, key) in used.into_iter().take(count) {
             buckets.remove(&key);
         }
-        Logger::warn(
-            "HTTP/rateLimitEvicted",
-            BTreeMap::from([
-                ("prune_at".to_string(), (self.prune_at as u64).into()),
-                ("evicted".to_string(), (count as u64).into()),
-            ]),
+        record(
+            LogEvent::warn("HTTP/rateLimitEvicted")
+                .with_context("prune_at", self.prune_at as u64)
+                .with_context("evicted", count as u64),
         );
     }
 

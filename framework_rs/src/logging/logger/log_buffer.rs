@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::logging::LogEvent;
 
 pub const CAPACITY: usize = 20_000;
+pub const SHIP_CHUNK: usize = 1_000;
 pub const CAPACITY_WARN_NOTE: &str = "SHIPPER/capacityMeets80%";
 
 pub struct LogBuffer {

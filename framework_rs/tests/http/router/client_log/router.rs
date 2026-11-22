@@ -7,8 +7,8 @@ use serde_json;
 use tower::ServiceExt;
 
 use ian_framework_rs::http::middleware::access_log;
+use ian_framework_rs::http::router::client_log::router::*;
 use ian_framework_rs::logging::LogLevel;
-use ian_framework_rs::logging::client_log::router::*;
 
 use crate::logging::{
     REFUSED_ACTION, assert_uuid_v7, buffered_events, global_logger, shipped_batches, wait_for,
@@ -90,8 +90,8 @@ async fn an_error_event_without_a_message_does_not_reject_the_batch() {
     wait_for(|| !shipped_batches("no-message").is_empty()).await;
     let events = shipped_batches("no-message").remove(0);
     assert_eq!(events.len(), 2);
-    assert_eq!(events[0].error_message(), Some("unknown error"));
-    assert_eq!(events[1].error_message(), Some("client failed"));
+    assert_eq!(events[0].error_message.as_deref(), Some("unknown error"));
+    assert_eq!(events[1].error_message.as_deref(), Some("client failed"));
 }
 
 #[tokio::test]

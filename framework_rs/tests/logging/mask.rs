@@ -34,29 +34,35 @@ fn record_masks_the_value_of_a_matching_key() {
 }
 
 #[test]
-fn record_masks_every_pattern_match_in_string_values() {
+fn record_masks_a_pair_of_a_project_pattern_in_string_values() {
     let shipper = Logger::new(
         default_shipper("api"),
-        vec![
-            r"password=\S+".to_string(),
-            r"(?i)bearer [A-Za-z0-9._-]+".to_string(),
-        ],
+        vec![r"(?i)sid".to_string(), r"(?i)otp".to_string()],
     )
     .unwrap();
-    let mut event = LogEvent::info("POST /login?password=x");
-    event.context.insert(
-        "user_agent".to_string(),
-        "agent BEARER abc.def".to_string().into(),
-    );
-    event.extra.insert(
-        "note".to_string(),
-        "user password=a, BEARER b.c done".into(),
-    );
+    let event = LogEvent::info("POST /login?otp=1")
+        .with_context("request_url", "/login?SID=abc&otp=1&page=2")
+        .with_extra("note", "user password=a, otp: 123456");
     shipper.record(event);
     let stored = buffered_events(&shipper).remove(0);
-    assert_eq!(stored.action, "POST /login?password=x");
-    assert_eq!(stored.context["user_agent"], "agent ***");
-    assert_eq!(stored.extra["note"], serde_json::json!("user *** *** done"));
+    assert_eq!(stored.action, "POST /login?otp=1");
+    assert_eq!(stored.context["request_url"], "/login?***&***&page=2");
+    assert_eq!(stored.extra["note"], "user password=a, ***");
+}
+
+#[test]
+fn record_keeps_a_pattern_word_that_is_not_in_a_pair() {
+    let shipper = buffered();
+    let event = LogEvent::info("GET /")
+        .with_context("request_url", "/api/tokens/list")
+        .with_extra("note", "the password rule and the Cookie banner");
+    shipper.record(event);
+    let stored = buffered_events(&shipper).remove(0);
+    assert_eq!(stored.context["request_url"], "/api/tokens/list");
+    assert_eq!(
+        stored.extra["note"],
+        "the password rule and the Cookie banner"
+    );
 }
 
 #[test]

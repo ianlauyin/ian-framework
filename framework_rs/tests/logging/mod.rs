@@ -1,16 +1,17 @@
-mod client_log;
 mod event;
 mod log_shipper;
 mod logger;
 mod mask;
+mod record;
 mod with_log;
 
 use std::sync::{Mutex, Once};
 
 use axum;
 
+use ian_framework_rs::http::router::ClientLogEvent;
 use ian_framework_rs::logging::{
-    ClientLogEvent, DEFAULT_MASK_PATTERNS, HttpLogShipper, LogEvent, LogRequest, Logger,
+    DEFAULT_MASK_PATTERNS, HttpLogShipper, LogEvent, LogRequest, Logger,
 };
 use ian_framework_rs::mutex;
 

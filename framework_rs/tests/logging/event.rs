@@ -1,6 +1,7 @@
 use chrono::DateTime;
 use serde_json;
 
+use ian_framework_rs::exception;
 use ian_framework_rs::logging::*;
 
 fn sample() -> LogEvent {
@@ -128,15 +129,21 @@ fn a_missing_schema_field_is_rejected() {
 #[test]
 fn constructors_set_the_level_and_the_message() {
     let info = LogEvent::info("a");
-    assert_eq!((info.level(), info.error_message()), (LogLevel::Info, None));
+    assert_eq!(
+        (info.level, info.error_message.as_deref()),
+        (LogLevel::Info, None)
+    );
     let warn = LogEvent::warn("a");
-    assert_eq!((warn.level(), warn.error_message()), (LogLevel::Warn, None));
+    assert_eq!(
+        (warn.level, warn.error_message.as_deref()),
+        (LogLevel::Warn, None)
+    );
     let warn = LogEvent::warn_with("a", "slow");
-    assert_eq!(warn.error_message(), Some("slow"));
+    assert_eq!(warn.error_message.as_deref(), Some("slow"));
     let error = LogEvent::error("a", "boom");
-    assert_eq!(error.level(), LogLevel::Error);
-    assert_eq!(error.error_message(), Some("boom"));
-    crate::logging::assert_uuid_v7(error.id());
+    assert_eq!(error.level, LogLevel::Error);
+    assert_eq!(error.error_message.as_deref(), Some("boom"));
+    crate::logging::assert_uuid_v7(&error.id);
     assert!(error.context.is_empty());
     assert!(error.extra.is_empty());
 }
@@ -144,9 +151,9 @@ fn constructors_set_the_level_and_the_message() {
 #[test]
 fn a_constructor_does_not_truncate_the_action() {
     let long = "x".repeat(500);
-    assert_eq!(LogEvent::info(long.clone()).action(), long);
+    assert_eq!(LogEvent::info(long.clone()).action, long);
     let message = LogEvent::error("a", long.clone());
-    assert_eq!(message.error_message(), Some(long.as_str()));
+    assert_eq!(message.error_message.as_deref(), Some(long.as_str()));
 }
 
 #[test]
@@ -156,12 +163,13 @@ fn a_warn_event_may_have_error_message() {
     assert_eq!(
         serde_json::from_value::<LogEvent>(value.clone())
             .unwrap()
-            .error_message(),
+            .error_message
+            .as_deref(),
         None
     );
     value["error_message"] = serde_json::json!("slow");
     let parsed: LogEvent = serde_json::from_value(value).unwrap();
-    assert_eq!(parsed.error_message(), Some("slow"));
+    assert_eq!(parsed.error_message.as_deref(), Some("slow"));
 }
 
 #[test]
@@ -179,5 +187,36 @@ fn a_non_string_error_message_is_rejected() {
     let mut value = serde_json::to_value(LogEvent::error("x", "boom")).unwrap();
     value["error_message"] = serde_json::json!(null);
     let parsed: LogEvent = serde_json::from_value(value).unwrap();
-    assert_eq!(parsed.error_message(), None);
+    assert_eq!(parsed.error_message.as_deref(), None);
+}
+
+#[test]
+fn the_builders_add_the_fields_and_the_latency() {
+    let event = LogEvent::info("a")
+        .with_context("user_id", "u-1")
+        .with_context("user_id", "u-2")
+        .with_extra("count", 2u64)
+        .with_extra("ok", true)
+        .with_latency(std::time::Duration::from_millis(1500));
+    assert_eq!(event.context.len(), 1);
+    assert_eq!(event.context["user_id"], "u-2");
+    assert_eq!(event.extra["count"], serde_json::json!(2));
+    assert_eq!(event.extra["ok"], serde_json::json!(true));
+    assert_eq!(event.latency_ms, 1500);
+    let long = LogEvent::info("a").with_latency(std::time::Duration::MAX);
+    assert_eq!(long.latency_ms, u64::MAX);
+}
+
+#[test]
+fn an_event_from_an_exception_has_the_message_and_the_trace() {
+    let root = exception!(code = "ENV_INVALID", "port is not a number");
+    let top = exception!(code = "ENV_MISSING", "app cannot start", source = root);
+    let error = LogEvent::error_from("a", &top);
+    assert_eq!(error.level, LogLevel::Error);
+    let text = error.error_message.as_deref().unwrap();
+    assert!(text.starts_with("app cannot start\n0: ERROR [ENV_MISSING] app cannot start at "));
+    assert!(text.contains("\n1: ERROR [ENV_INVALID] port is not a number at "));
+    let warn = LogEvent::warn_from("a", &top);
+    assert_eq!(warn.level, LogLevel::Warn);
+    assert_eq!(warn.error_message, error.error_message);
 }

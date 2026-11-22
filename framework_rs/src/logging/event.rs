@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use uuid::Uuid;
 
+use crate::exception::Exception;
 use crate::time::hkt_now;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,28 +100,35 @@ impl LogEvent {
         Self::build(action.into(), LogLevel::Error, Some(error_message.into()))
     }
 
-    pub fn ts(&self) -> DateTime<FixedOffset> {
-        self.ts
+    pub fn warn_from(action: impl Into<String>, exception: &Exception) -> LogEvent {
+        Self::build(
+            action.into(),
+            LogLevel::Warn,
+            Some(exception_text(exception)),
+        )
     }
 
-    pub fn id(&self) -> &str {
-        &self.id
+    pub fn error_from(action: impl Into<String>, exception: &Exception) -> LogEvent {
+        Self::build(
+            action.into(),
+            LogLevel::Error,
+            Some(exception_text(exception)),
+        )
     }
 
-    pub fn action(&self) -> &str {
-        &self.action
+    pub fn with_context(mut self, key: impl Into<String>, value: impl Into<LogValue>) -> LogEvent {
+        self.context.insert(key.into(), value.into());
+        self
     }
 
-    pub fn latency_ms(&self) -> u64 {
-        self.latency_ms
+    pub fn with_extra(mut self, key: impl Into<String>, value: impl Into<LogValue>) -> LogEvent {
+        self.extra.insert(key.into(), value.into());
+        self
     }
 
-    pub fn level(&self) -> LogLevel {
-        self.level
-    }
-
-    pub fn error_message(&self) -> Option<&str> {
-        self.error_message.as_deref()
+    pub fn with_latency(mut self, elapsed: Duration) -> LogEvent {
+        self.latency_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+        self
     }
 
     pub fn build(action: String, level: LogLevel, error_message: Option<String>) -> LogEvent {
@@ -138,4 +147,8 @@ impl LogEvent {
 
 fn new_id() -> String {
     Uuid::now_v7().to_string()
+}
+
+fn exception_text(exception: &Exception) -> String {
+    format!("{exception}\n{}", String::from(exception))
 }

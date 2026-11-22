@@ -13,6 +13,7 @@ pub(crate) async fn store_or_skip() -> Option<SessionStore> {
         prefix: format!("my-app-test:{}:", hex::encode(bytes)),
         cookie_name: "sid".to_string(),
         ttl_secs: 60,
+        absolute_ttl_secs: 3600,
         max_sessions_per_subject: LIMIT,
     };
     SessionStore::new(conn, config).ok()

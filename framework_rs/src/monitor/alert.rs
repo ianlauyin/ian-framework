@@ -24,15 +24,11 @@ impl Alert {
             return None;
         }
         self.active = true;
-        let mut event = LogEvent::warn(self.action);
-        event
-            .extra
-            .insert("percent".to_string(), round_one(percent).into());
-        event.extra.insert(
-            "threshold_percent".to_string(),
-            self.threshold_percent.into(),
-        );
-        Some(event)
+        Some(
+            LogEvent::warn(self.action)
+                .with_extra("percent", round_one(percent))
+                .with_extra("threshold_percent", self.threshold_percent),
+        )
     }
 }
 

@@ -1,16 +1,46 @@
-use axum::http::HeaderMap;
 use redis::aio::ConnectionManager;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::sync::Arc;
 
 use crate::auth::session::config::SessionConfig;
+use crate::auth::session::cookie::SessionCookie;
 use crate::auth::session::{Session, token};
 use crate::exception;
 use crate::exception::Exception;
-use crate::http::headers::read_cookie;
+use crate::time::hkt_now;
 
 pub const SESSION_STORE_COMMAND_FAILED: &str = "SESSION_STORE_COMMAND_FAILED";
+
+const CREATE_SCRIPT: &str = r"
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+redis.call('SADD', KEYS[2], KEYS[1])
+redis.call('EXPIRE', KEYS[2], ARGV[2])
+local max = tonumber(ARGV[3])
+if redis.call('SCARD', KEYS[2]) <= max then
+    return
+end
+local live = {}
+for _, member in ipairs(redis.call('SMEMBERS', KEYS[2])) do
+    local ttl = redis.call('TTL', member)
+    if ttl < 0 then
+        redis.call('SREM', KEYS[2], member)
+    elseif member ~= KEYS[1] then
+        live[#live + 1] = {ttl, member}
+    end
+end
+table.sort(live, function(a, b)
+    if a[1] ~= b[1] then
+        return a[1] < b[1]
+    end
+    return a[2] < b[2]
+end)
+for index = 1, #live + 1 - max do
+    redis.call('DEL', live[index][2])
+    redis.call('SREM', KEYS[2], live[index][2])
+end
+";
 
 const REMOVE_SUBJECT_SCRIPT: &str = r"
 local members = redis.call('SMEMBERS', KEYS[1])
@@ -30,66 +60,105 @@ pub struct SessionStore {
 impl SessionStore {
     pub fn new(conn: ConnectionManager, config: SessionConfig) -> Result<Self, Exception> {
         config.check()?;
+        let cookie = SessionCookie::new(config.cookie_name.clone(), config.ttl_secs);
         Ok(Self {
-            inner: Arc::new(Inner { conn, config }),
+            inner: Arc::new(Inner {
+                conn,
+                config,
+                cookie,
+            }),
         })
     }
 
     pub async fn create(&self, subject: &str) -> Result<Session, Exception> {
         let token = token::random_token()?;
-        let key = self.key(&token);
-        let subject_key = self.subject_key(subject);
-        let (size,): (usize,) = redis::pipe()
-            .atomic()
-            .cmd("SET")
-            .arg(&key)
-            .arg(subject)
-            .arg("EX")
+        let stored = Stored {
+            subject: subject.to_string(),
+            expires_at: now_secs().saturating_add(self.inner.config.absolute_ttl_secs),
+        };
+        redis::Script::new(CREATE_SCRIPT)
+            .key(self.key(&token))
+            .key(self.subject_key(subject))
+            .arg(stored.encode())
             .arg(self.inner.config.ttl_secs)
-            .ignore()
-            .cmd("SADD")
-            .arg(&subject_key)
-            .arg(&key)
-            .ignore()
-            .cmd("SCARD")
-            .arg(&subject_key)
-            .query_async(&mut self.conn())
+            .arg(self.inner.config.max_sessions_per_subject)
+            .invoke_async::<()>(&mut self.conn())
             .await
             .map_err(store_err)?;
-        if size > self.inner.config.max_sessions_per_subject {
-            self.trim_subject(&subject_key, &key).await?;
-        }
         Ok(Session {
             token,
-            subject: subject.to_string(),
+            subject: stored.subject,
         })
     }
 
     pub async fn load(&self, token: &str) -> Result<Option<Session>, Exception> {
-        let subject: Option<String> = redis::cmd("GETEX")
-            .arg(self.key(token))
-            .arg("EX")
-            .arg(self.inner.config.ttl_secs)
-            .query_async(&mut self.conn())
+        let key = self.key(token);
+        let mut conn = self.conn();
+        let raw: Option<String> = redis::cmd("GET")
+            .arg(&key)
+            .query_async(&mut conn)
             .await
             .map_err(store_err)?;
-        Ok(subject.map(|subject| Session {
+        let Some(raw) = raw else {
+            return Ok(None);
+        };
+        let now = now_secs();
+        let stored = match Stored::parse(&raw) {
+            Some(stored) => stored,
+            None => {
+                let stored = Stored {
+                    subject: raw,
+                    expires_at: now.saturating_add(self.inner.config.absolute_ttl_secs),
+                };
+                redis::cmd("SET")
+                    .arg(&key)
+                    .arg(stored.encode())
+                    .arg("XX")
+                    .arg("KEEPTTL")
+                    .query_async::<()>(&mut conn)
+                    .await
+                    .map_err(store_err)?;
+                stored
+            }
+        };
+        let left = stored.expires_at.saturating_sub(now);
+        if left == 0 {
+            self.remove(token).await?;
+            return Ok(None);
+        }
+        let (live,): (bool,) = redis::pipe()
+            .atomic()
+            .cmd("EXPIRE")
+            .arg(self.subject_key(&stored.subject))
+            .arg(self.inner.config.ttl_secs)
+            .ignore()
+            .cmd("EXPIRE")
+            .arg(&key)
+            .arg(left.min(self.inner.config.ttl_secs))
+            .query_async(&mut conn)
+            .await
+            .map_err(store_err)?;
+        if !live {
+            return Ok(None);
+        }
+        Ok(Some(Session {
             token: token.to_string(),
-            subject,
+            subject: stored.subject,
         }))
     }
 
     pub async fn remove(&self, token: &str) -> Result<(), Exception> {
         let key = self.key(token);
         let mut conn = self.conn();
-        let subject: Option<String> = redis::cmd("GETDEL")
+        let raw: Option<String> = redis::cmd("GETDEL")
             .arg(&key)
             .query_async(&mut conn)
             .await
             .map_err(store_err)?;
-        let Some(subject) = subject else {
+        let Some(raw) = raw else {
             return Ok(());
         };
+        let subject = Stored::parse(&raw).map_or(raw, |stored| stored.subject);
         redis::cmd("SREM")
             .arg(self.subject_key(&subject))
             .arg(&key)
@@ -111,24 +180,8 @@ impl SessionStore {
             .await
     }
 
-    pub fn token<'a>(&self, headers: &'a HeaderMap) -> Option<&'a str> {
-        read_cookie(headers, &self.inner.config.cookie_name).filter(|value| token::is_token(value))
-    }
-
-    pub fn cookie(&self, token: &str) -> String {
-        self.inner.config.cookie(token)
-    }
-
-    pub fn clear_cookie(&self) -> String {
-        self.inner.config.clear_cookie()
-    }
-
-    pub fn ttl_secs(&self) -> u64 {
-        self.inner.config.ttl_secs
-    }
-
-    pub fn cookie_name(&self) -> &str {
-        &self.inner.config.cookie_name
+    pub fn cookie(&self) -> &SessionCookie {
+        &self.inner.cookie
     }
 
     pub fn conn(&self) -> ConnectionManager {
@@ -143,47 +196,6 @@ impl SessionStore {
     pub fn subject_key(&self, subject: &str) -> String {
         let hash = hex::encode(Sha256::digest(subject.as_bytes()));
         format!("{}subject:{hash}", self.inner.config.prefix)
-    }
-
-    async fn trim_subject(&self, subject_key: &str, new_key: &str) -> Result<(), Exception> {
-        let mut conn = self.conn();
-        let members: Vec<String> = redis::cmd("SMEMBERS")
-            .arg(subject_key)
-            .query_async(&mut conn)
-            .await
-            .map_err(store_err)?;
-        let mut ttl_pipe = redis::pipe();
-        for member in &members {
-            ttl_pipe.cmd("TTL").arg(member);
-        }
-        let ttls: Vec<i64> = ttl_pipe.query_async(&mut conn).await.map_err(store_err)?;
-        let mut gone = Vec::new();
-        let mut live = Vec::new();
-        for (member, ttl) in members.iter().zip(ttls) {
-            if ttl < 0 {
-                gone.push(member);
-            } else if member != new_key {
-                live.push((ttl, member));
-            }
-        }
-        live.sort();
-        let excess = (live.len() + 1).saturating_sub(self.inner.config.max_sessions_per_subject);
-        let ended: Vec<&String> = live
-            .iter()
-            .take(excess)
-            .map(|(_, member)| *member)
-            .collect();
-        let mut pipe = redis::pipe();
-        pipe.atomic();
-        if !ended.is_empty() {
-            pipe.cmd("DEL").arg(&ended).ignore();
-        }
-        gone.extend(ended);
-        if gone.is_empty() {
-            return Ok(());
-        }
-        pipe.cmd("SREM").arg(subject_key).arg(&gone).ignore();
-        pipe.query_async::<()>(&mut conn).await.map_err(store_err)
     }
 
     async fn remove_subject_keys(
@@ -213,6 +225,28 @@ impl fmt::Debug for SessionStore {
 struct Inner {
     conn: ConnectionManager,
     config: SessionConfig,
+    cookie: SessionCookie,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Stored {
+    subject: String,
+    expires_at: u64,
+}
+
+impl Stored {
+    fn parse(raw: &str) -> Option<Self> {
+        serde_json::from_str(raw).ok()
+    }
+
+    fn encode(&self) -> String {
+        serde_json::json!({ "subject": self.subject, "expires_at": self.expires_at }).to_string()
+    }
+}
+
+fn now_secs() -> u64 {
+    u64::try_from(hkt_now().timestamp()).unwrap_or(0)
 }
 
 fn store_err(err: redis::RedisError) -> Exception {

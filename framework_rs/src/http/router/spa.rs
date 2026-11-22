@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use axum::Router;
@@ -9,7 +8,8 @@ use axum::response::{IntoResponse, Response};
 use crate::exception;
 use crate::exception::Severity;
 use crate::http::error_code::{INTERNAL_ERROR, NOT_FOUND};
-use crate::logging::Logger;
+use crate::logging::LogEvent;
+use crate::logging::record;
 
 const DIST: &str = "frontend/dist";
 
@@ -93,10 +93,6 @@ fn internal_error(
     error: std::io::Error,
 ) -> Response {
     let logged = exception!(code = INTERNAL_ERROR, message, source = error);
-    Logger::error(
-        action,
-        BTreeMap::from([("path".to_string(), path.display().to_string().into())]),
-        Box::new(logged),
-    );
+    record(LogEvent::error_from(action, &logged).with_context("path", path.display().to_string()));
     exception!(code = INTERNAL_ERROR, message).into_response()
 }

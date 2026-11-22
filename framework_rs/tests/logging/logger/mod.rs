@@ -1,47 +1,66 @@
 mod log_buffer;
 
-use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use ian_framework_rs::exception;
-use ian_framework_rs::logging::log_shipper::SHIP_CHUNK;
-use ian_framework_rs::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE};
-use ian_framework_rs::logging::{HttpLogShipper, LogEvent, LogRequest, Logger};
+use ian_framework_rs::exception::Exception;
+use ian_framework_rs::logging::logger::log_buffer::{CAPACITY, CAPACITY_WARN_NOTE, SHIP_CHUNK};
+use ian_framework_rs::logging::{HttpLogShipper, LogEvent, LogRequest, LogShipper, Logger};
+use ian_framework_rs::mutex;
 use ian_framework_rs::shutdown::ShutdownReceiver;
 
-use crate::logging::{buffered_events, default_shipper, global_logger, http_shipper, logger};
+use crate::logging::{
+    buffered_events, default_mask_patterns, default_shipper, global_logger, http_shipper, logger,
+};
 
 const LIMIT: usize = CAPACITY / 5 * 4;
 
 #[test]
-fn logs_without_a_shipper_and_keeps_the_first_shipper() {
-    Logger::error("TEST/error", BTreeMap::new(), "failed".into());
+fn init_keeps_the_first_logger() {
     let first = global_logger();
     let second = logger(default_shipper("my-app"));
-    assert!(Logger::init(second).is_err());
+    let err = Logger::init(second).unwrap_err();
+    assert_eq!(err.code(), "LOGGER_ALREADY_SET");
     assert!(std::ptr::eq(Logger::get().unwrap(), first));
-    Logger::warn("TEST/warn", BTreeMap::new());
-    Logger::warn_with("TEST/warn", BTreeMap::new(), "slow".into());
 }
 
-#[test]
-fn error_adds_the_exception_trace_to_the_message() {
-    let root = exception!(code = "ENV_INVALID", "port is not a number");
-    let top = exception!(code = "ENV_MISSING", "app cannot start", source = root);
-    global_logger();
-    Logger::error("TEST/exceptionTrace", BTreeMap::new(), Box::new(top));
-    Logger::error("TEST/plain", BTreeMap::new(), "slow".into());
-    let message = |action: &str| {
-        buffered_events(global_logger())
-            .into_iter()
-            .find(|event| event.action == action)
-            .and_then(|event| event.error_message)
-            .unwrap()
-    };
-    let text = message("TEST/exceptionTrace");
-    assert!(text.starts_with("app cannot start\n0: ERROR [ENV_MISSING] app cannot start at "));
-    assert!(text.contains("\n1: ERROR [ENV_INVALID] port is not a number at "));
-    assert_eq!(message("TEST/plain"), "slow");
+struct MemoryShipper {
+    shipped: Arc<Mutex<Vec<LogEvent>>>,
+}
+
+impl LogShipper for MemoryShipper {
+    fn ship<'a>(
+        &'a self,
+        events: &'a [LogEvent],
+    ) -> Pin<Box<dyn Future<Output = Result<(), Exception>> + Send + 'a>> {
+        Box::pin(async move {
+            mutex::lock(&self.shipped).extend_from_slice(events);
+            Ok(())
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_project_shipper_gets_the_masked_batch() {
+    let shipped = Arc::new(Mutex::new(Vec::new()));
+    let shipper = Logger::new(
+        MemoryShipper {
+            shipped: shipped.clone(),
+        },
+        default_mask_patterns(),
+    )
+    .unwrap();
+    shipper.record(LogEvent::info("one").with_extra("password", "hunter2"));
+    shipper.record(LogEvent::info("two"));
+    assert_eq!(shipper.send_buffer().await.unwrap(), 2);
+    assert_eq!(shipper.buffered_len(), 0);
+    let shipped = mutex::lock(&shipped);
+    assert_eq!(shipped.len(), 2);
+    assert_eq!(shipped[0].action, "one");
+    assert_eq!(shipped[0].extra["password"], "***");
+    assert_eq!(shipped[1].action, "two");
 }
 
 fn buffered() -> Logger {
@@ -87,7 +106,7 @@ fn record_keeps_the_event_and_omits_scope_keys() {
 #[tokio::test]
 async fn empty_buffer_does_not_post() {
     let shipper = logger(http_shipper("api", "http://127.0.0.1:9"));
-    shipper.send_buffer().await;
+    assert_eq!(shipper.send_buffer().await.unwrap(), 0);
     assert_eq!(shipper.buffered_len(), 0);
 }
 
@@ -98,7 +117,8 @@ async fn unreachable_endpoint_keeps_the_buffer() {
     drop(listener);
     let shipper = logger(http_shipper("api", &format!("http://{addr}")));
     shipper.record(LogEvent::error("down", "boom"));
-    shipper.send_buffer().await;
+    let err = shipper.send_buffer().await.unwrap_err();
+    assert_eq!(err.code(), "LOG_SHIP_FAILED");
     assert_eq!(shipper.buffered_len(), 1);
     assert_eq!(buffered_events(&shipper)[0].action, "down");
 }
@@ -110,7 +130,7 @@ async fn send_buffer_posts_json_to_the_app_path() {
     shipper.record(LogEvent::info("one"));
     shipper.record(LogEvent::warn("two"));
     shipper.record(LogEvent::error("three", "boom"));
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
     let captured = rx.recv().await.unwrap();
     assert_eq!(captured.app, "my-app");
@@ -128,7 +148,7 @@ async fn send_buffer_posts_json_to_the_app_path() {
         assert!(item.get("project").is_none());
         assert!(item.get("action").is_some());
     }
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
 }
 
@@ -137,7 +157,7 @@ async fn send_buffer_sends_the_post_api_key_as_a_bearer_token() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = logger(HttpLogShipper::new("api", endpoint, "log-post-key").unwrap());
     shipper.record(LogEvent::info("one"));
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     let captured = rx.recv().await.unwrap();
     assert_eq!(
         captured.authorization.as_deref(),
@@ -151,14 +171,14 @@ async fn send_buffer_posts_one_chunk_and_leaves_the_rest() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, SHIP_CHUNK + 1);
-    shipper.send_buffer().await;
+    assert_eq!(shipper.send_buffer().await.unwrap(), SHIP_CHUNK);
     assert_eq!(shipper.buffered_len(), 1);
     let events = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(events.len(), SHIP_CHUNK);
     assert_eq!(events[0].action, "0");
     assert_eq!(events[SHIP_CHUNK - 1].action, (SHIP_CHUNK - 1).to_string());
     assert_eq!(buffered_events(&shipper)[0].action, SHIP_CHUNK.to_string());
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     assert_eq!(shipper.buffered_len(), 0);
     let rest = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(rest.len(), 1);
@@ -170,7 +190,7 @@ async fn http_error_restores_the_batch() {
     let (endpoint, _rx) = capture_server(StatusAction::Unavailable).await;
     let shipper = logger(http_shipper("api", &endpoint));
     shipper.record(LogEvent::info("keep"));
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     assert_eq!(buffered_events(&shipper)[0].action, "keep");
 }
 
@@ -190,7 +210,7 @@ async fn in_flight_records_stay_out_of_a_successful_batch() {
     .await
     .unwrap();
     shipper.record(LogEvent::info("c"));
-    ship.await.unwrap();
+    assert_eq!(ship.await.unwrap().unwrap(), 2);
     let left = buffered_events(&shipper);
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].action, "c");
@@ -260,7 +280,7 @@ async fn failed_ship_does_not_repeat_the_capacity_warning() {
     let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, LIMIT);
     assert_eq!(warn_count(&buffered_events(&shipper)), 1);
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     shipper.record(LogEvent::info("more"));
     assert_eq!(warn_count(&buffered_events(&shipper)), 1);
 }
@@ -270,7 +290,7 @@ async fn successful_ship_below_80_percent_warns_on_the_next_crossing() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, LIMIT);
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     let posted = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(warn_count(&posted), 0);
     assert_eq!(shipper.buffered_len(), LIMIT + 1 - SHIP_CHUNK);
@@ -283,7 +303,7 @@ async fn successful_ship_at_80_percent_does_not_warn_again() {
     let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
     let shipper = logger(http_shipper("api", &endpoint));
     fill(&shipper, CAPACITY);
-    shipper.send_buffer().await;
+    let _ = shipper.send_buffer().await;
     let posted = parse_body(&rx.recv().await.unwrap().body);
     assert_eq!(warn_count(&posted), 0);
     assert!(shipper.buffered_len() >= LIMIT);

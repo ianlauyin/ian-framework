@@ -22,7 +22,8 @@ use crate::gcp::storage::signed_url::{
     build_signer, content_disposition_value, signed_get, validate_lifetime,
 };
 use crate::gcp::storage::validate::{validate_bucket, validate_metadata, validate_object_name};
-use crate::logging::{LogEvent, Logger};
+use crate::logging::LogEvent;
+use crate::logging::record;
 
 pub const MOVE_SAME_OBJECT: &str = "MOVE_SAME_OBJECT";
 pub const COPY_NO_OBJECT: &str = "COPY_NO_OBJECT";
@@ -354,11 +355,9 @@ impl GcsClient {
         let started = Instant::now();
         let result = work.await;
         if let Err(err) = &result
-            && let Some(mut event) = operation_log_event(operation, object, &self.bucket, err)
-            && let Some(logger) = Logger::get()
+            && let Some(event) = operation_log_event(operation, object, &self.bucket, err)
         {
-            event.latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-            logger.record(event);
+            record(event.with_latency(started.elapsed()));
         }
         result
     }
@@ -381,9 +380,10 @@ pub fn operation_log_event(
     if err.code() == RESOURCE_NOT_FOUND {
         return None;
     }
-    let mut event = LogEvent::error(format!("GCS/{operation}:/{object}"), String::from(err));
-    event.extra.insert("bucket".to_string(), bucket.into());
-    Some(event)
+    Some(
+        LogEvent::error(format!("GCS/{operation}:/{object}"), String::from(err))
+            .with_extra("bucket", bucket),
+    )
 }
 
 pub fn none_if_not_found<T>(result: Result<T, Exception>) -> Result<Option<T>, Exception> {

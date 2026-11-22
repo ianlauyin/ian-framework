@@ -52,7 +52,10 @@ async fn a_live_session_gets_its_cookie_again() {
         .oneshot(request(Some(&format!("sid={}", session.token))))
         .await
         .unwrap();
-    assert_eq!(set_cookies(&response), vec![store.cookie(&session.token)]);
+    assert_eq!(
+        set_cookies(&response),
+        vec![store.cookie().set(&session.token)]
+    );
 }
 
 #[tokio::test]
@@ -123,4 +126,35 @@ async fn a_cookie_set_by_the_handler_is_kept_alone() {
         .await
         .unwrap();
     assert_eq!(set_cookies(&response), vec!["sid=other".to_string()]);
+}
+
+#[tokio::test]
+async fn the_access_log_gets_the_subject() {
+    let Some(store) = store_or_skip().await else {
+        return;
+    };
+    let logger = crate::logging::global_logger();
+    let session = store.create("7").await.unwrap();
+    let app = router(store.clone(), axum::http::StatusCode::OK, false).layer(
+        axum::middleware::from_fn(ian_framework_rs::http::middleware::access_log),
+    );
+    let request = axum::extract::Request::builder()
+        .uri("/?case=subject")
+        .header(axum::http::header::COOKIE, format!("sid={}", session.token))
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let events: Vec<_> = crate::logging::buffered_events(logger)
+        .into_iter()
+        .filter(|event| {
+            event
+                .context
+                .get("request_url")
+                .is_some_and(|url| *url == "/?case=subject")
+        })
+        .collect();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].context["subject"], "7");
+    store.remove_subject("7").await.unwrap();
 }

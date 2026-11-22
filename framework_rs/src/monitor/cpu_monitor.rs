@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::logging::{LogEvent, Logger};
+use crate::logging::LogEvent;
+use crate::logging::record;
 use crate::monitor::alert::Alert;
 use crate::shutdown::ShutdownReceiver;
 
@@ -22,14 +22,13 @@ pub struct CpuMonitor {
 impl CpuMonitor {
     pub fn new(threshold_percent: f64, interval: Duration) -> Option<Self> {
         if !(threshold_percent > 0.0 && threshold_percent <= 100.0) || interval.is_zero() {
-            Logger::warn_with(
-                "CPU/invalidConfig",
-                BTreeMap::from([
-                    ("threshold_percent".to_string(), threshold_percent.into()),
-                    ("interval_seconds".to_string(), interval.as_secs_f64().into()),
-                ]),
-                "the threshold must be more than 0 and at most 100, and the interval must not be zero"
-                    .into(),
+            record(
+                LogEvent::warn_with(
+                    "CPU/invalidConfig",
+                    "the threshold must be more than 0 and at most 100, and the interval must not be zero",
+                )
+                .with_context("threshold_percent", threshold_percent)
+                .with_context("interval_seconds", interval.as_secs_f64()),
             );
             return None;
         }
@@ -54,11 +53,7 @@ impl CpuMonitor {
         S: FnMut() -> Option<CpuSample>,
     {
         let Some(mut previous) = sample() else {
-            Logger::error(
-                "CPU/cannotReadStat",
-                BTreeMap::from([("path".to_string(), STAT_PATH.into())]),
-                "cannot read the cpu stat file".into(),
-            );
+            record(cannot_read_stat());
             return;
         };
         let mut ticker = tokio::time::interval(self.interval);
@@ -77,11 +72,7 @@ impl CpuMonitor {
             let Some(current) = sample() else {
                 if !read_failed {
                     read_failed = true;
-                    Logger::error(
-                        "CPU/cannotReadStat",
-                        BTreeMap::from([("path".to_string(), STAT_PATH.into())]),
-                        "cannot read the cpu stat file".into(),
-                    );
+                    record(cannot_read_stat());
                 }
                 continue;
             };
@@ -152,4 +143,9 @@ pub fn usage_percent(previous: CpuSample, current: CpuSample) -> Result<f64, Exc
         ));
     }
     Ok(100.0 * (total - idle) as f64 / total as f64)
+}
+
+fn cannot_read_stat() -> LogEvent {
+    LogEvent::error("CPU/cannotReadStat", "cannot read the cpu stat file")
+        .with_context("path", STAT_PATH)
 }

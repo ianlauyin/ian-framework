@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{from_fn, from_fn_with_state};
@@ -10,7 +8,9 @@ use crate::exception;
 use crate::exception::Exception;
 use crate::http::error_code;
 use crate::http::middleware::{RateLimiter, rate_limit, require_same_origin};
-use crate::logging::{ClientLog, Logger};
+use crate::http::router::client_log::ClientLog;
+use crate::logging::record;
+use crate::logging::{LogEvent, Logger};
 
 const CLIENT_LOG_PATH: &str = "/log";
 pub const BODY_LIMIT: usize = 1024 * 1024;
@@ -34,11 +34,11 @@ async fn receive(headers: HeaderMap, Json(log): Json<ClientLog>) -> Result<Statu
     let events = match log.log_events(&headers) {
         Ok(events) => events,
         Err(error) => {
-            Logger::warn("CLIENT_LOG/rejected", BTreeMap::new());
+            record(LogEvent::warn("CLIENT_LOG/rejected"));
             return Err(error);
         }
     };
-    if let Err(error) = Logger::direct_send(&events).await {
+    if let Err(error) = Logger::direct_send(events).await {
         return Err(exception!(
             code = error_code::BAD_GATEWAY,
             "log server refused the batch",

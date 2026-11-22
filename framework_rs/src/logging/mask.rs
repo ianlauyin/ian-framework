@@ -17,25 +17,34 @@ pub const DEFAULT_MASK_PATTERNS: [&str; 7] = [
 ];
 
 pub struct Masks {
-    plains: Vec<regex::Regex>,
+    names: Option<regex::Regex>,
     pairs: Vec<regex::Regex>,
 }
 
 impl Masks {
     pub fn new(patterns: &[String]) -> Result<Self, Exception> {
-        let plains = patterns
+        if patterns.is_empty() {
+            return Ok(Self {
+                names: None,
+                pairs: Vec::new(),
+            });
+        }
+        for pattern in patterns {
+            compile(pattern, pattern)?;
+        }
+        let any = patterns
             .iter()
-            .map(|pattern| compile(pattern, pattern))
-            .collect::<Result<_, _>>()?;
+            .map(|pattern| format!("(?:{pattern})"))
+            .collect::<Vec<_>>()
+            .join("|");
         let pairs = [json_member, name_value, name_line]
             .iter()
-            .flat_map(|form| {
-                patterns
-                    .iter()
-                    .map(move |pattern| compile(pattern, &form(pattern)))
-            })
+            .map(|form| compile(&any, &form(&any)))
             .collect::<Result<_, _>>()?;
-        Ok(Self { plains, pairs })
+        Ok(Self {
+            names: Some(compile(&any, &any)?),
+            pairs,
+        })
     }
 
     pub fn mask_event(&self, event: &mut LogEvent) {
@@ -46,36 +55,36 @@ impl Masks {
             self.mask_entry(key, value);
         }
         if let Some(text) = &mut event.error_message {
-            mask_text(text, &self.pairs);
+            self.mask_text(text);
         }
     }
 
     fn mask_entry(&self, key: &str, value: &mut LogValue) {
-        if self.plains.iter().any(|plain| plain.is_match(key)) {
+        if self.names.as_ref().is_some_and(|names| names.is_match(key)) {
             *value = LogValue::String(MASK.to_string());
         } else if let LogValue::String(text) = value {
-            mask_text(text, self.pairs.iter().chain(&self.plains));
+            self.mask_text(text);
+        }
+    }
+
+    fn mask_text(&self, text: &mut String) {
+        for pair in &self.pairs {
+            if let std::borrow::Cow::Owned(masked) = pair.replace_all(text, MASK) {
+                *text = masked;
+            }
         }
     }
 }
 
-fn mask_text<'a>(text: &mut String, regexes: impl IntoIterator<Item = &'a regex::Regex>) {
-    for regex in regexes {
-        if let std::borrow::Cow::Owned(masked) = regex.replace_all(text, MASK) {
-            *text = masked;
-        }
-    }
-}
-
-fn json_member(pattern: &String) -> String {
+fn json_member(pattern: &str) -> String {
     format!(r#""[^"]*(?:{pattern})[^"]*"\s*:\s*(?:"(?:[^"\\]|\\.)*"|[^\s,}}\]]+)"#)
 }
 
-fn name_value(pattern: &String) -> String {
+fn name_value(pattern: &str) -> String {
     format!(r"[\w.\-]*(?:{pattern})[\w.\-]*=[^&\s;]*")
 }
 
-fn name_line(pattern: &String) -> String {
+fn name_line(pattern: &str) -> String {
     format!(r#"[\w.\-]*(?:{pattern})[\w.\-]*:[ \t]+[^\r\n"]*"#)
 }
 

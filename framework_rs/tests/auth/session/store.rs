@@ -126,7 +126,10 @@ async fn redis_holds_the_token_hash_and_the_subject() {
         .query_async(&mut conn)
         .await
         .unwrap();
-    assert_eq!(value, "7");
+    let stored: serde_json::Value = serde_json::from_str(&value).unwrap();
+    assert_eq!(stored["subject"], "7");
+    let left = stored["expires_at"].as_u64().unwrap() - now_secs();
+    assert!(left > 3590 && left <= 3600);
     store.remove_subject("7").await.unwrap();
 }
 
@@ -145,6 +148,129 @@ async fn load_slides_the_expiry_to_the_ttl() {
         .unwrap();
     assert!(ttl > 5 && ttl <= 60);
     store.remove(&token).await.unwrap();
+}
+
+async fn set_ttl(store: &SessionStore, subject: &str) -> i64 {
+    redis::cmd("TTL")
+        .arg(store.subject_key(subject))
+        .query_async(&mut store.conn())
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn the_subject_set_gets_the_ttl_at_each_create_and_load() {
+    let Some(store) = store_or_skip().await else {
+        return;
+    };
+    let session = store.create("7").await.unwrap();
+    let ttl = set_ttl(&store, "7").await;
+    assert!(ttl > 5 && ttl <= 60);
+
+    for start in [Start::Load(session.token.clone()), Start::Create] {
+        redis::cmd("EXPIRE")
+            .arg(store.subject_key("7"))
+            .arg(5)
+            .query_async::<()>(&mut store.conn())
+            .await
+            .unwrap();
+        match start {
+            Start::Load(token) => assert!(store.load(&token).await.unwrap().is_some()),
+            Start::Create => drop(store.create("7").await.unwrap()),
+        }
+        let ttl = set_ttl(&store, "7").await;
+        assert!(ttl > 5 && ttl <= 60);
+    }
+    store.remove_subject("7").await.unwrap();
+}
+
+#[tokio::test]
+async fn load_of_a_missing_session_makes_no_key() {
+    let Some(store) = store_or_skip().await else {
+        return;
+    };
+    let token = "d".repeat(64);
+    assert_eq!(store.load(&token).await.unwrap(), None);
+    let exists: bool = redis::cmd("EXISTS")
+        .arg(store.key(&token))
+        .query_async(&mut store.conn())
+        .await
+        .unwrap();
+    assert!(!exists);
+}
+
+enum Start {
+    Load(String),
+    Create,
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+async fn key_ttl(store: &SessionStore, token: &str) -> i64 {
+    redis::cmd("TTL")
+        .arg(store.key(token))
+        .query_async(&mut store.conn())
+        .await
+        .unwrap()
+}
+
+fn stored(subject: &str, expires_at: u64) -> String {
+    serde_json::json!({ "subject": subject, "expires_at": expires_at }).to_string()
+}
+
+#[tokio::test]
+async fn a_session_ends_at_the_absolute_limit_also_when_it_is_in_use() {
+    let Some(store) = store_or_skip().await else {
+        return;
+    };
+    let near = "e".repeat(64);
+    put_raw(&store, &near, &stored("7", now_secs() + 10), 30).await;
+    assert_eq!(subject_of(&store, &near).await.as_deref(), Some("7"));
+    let ttl = key_ttl(&store, &near).await;
+    assert!(ttl > 0 && ttl <= 10);
+
+    let past = "f".repeat(64);
+    put_raw(&store, &past, &stored("7", now_secs() - 1), 30).await;
+    assert_eq!(subject_of(&store, &past).await, None);
+    assert_eq!(key_ttl(&store, &past).await, -2);
+    store.remove(&near).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_session_without_an_end_time_gets_the_absolute_limit_at_its_first_load() {
+    let Some(store) = store_or_skip().await else {
+        return;
+    };
+    let token = "9".repeat(64);
+    put_raw(&store, &token, "7", 30).await;
+    assert_eq!(subject_of(&store, &token).await.as_deref(), Some("7"));
+    let value: String = redis::cmd("GET")
+        .arg(store.key(&token))
+        .query_async(&mut store.conn())
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_str(&value).unwrap();
+    assert_eq!(value["subject"], "7");
+    let first = value["expires_at"].as_u64().unwrap();
+    assert!(first > now_secs() + 3590 && first <= now_secs() + 3600);
+    let ttl = key_ttl(&store, &token).await;
+    assert!(ttl > 30 && ttl <= 60);
+
+    assert_eq!(subject_of(&store, &token).await.as_deref(), Some("7"));
+    let again: String = redis::cmd("GET")
+        .arg(store.key(&token))
+        .query_async(&mut store.conn())
+        .await
+        .unwrap();
+    let again: serde_json::Value = serde_json::from_str(&again).unwrap();
+    assert_eq!(again["expires_at"].as_u64().unwrap(), first);
+    store.remove(&token).await.unwrap();
+    assert_eq!(key_ttl(&store, &token).await, -2);
 }
 
 #[tokio::test]

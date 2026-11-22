@@ -1,12 +1,11 @@
-pub mod client_log;
 pub mod event;
 pub mod log_request;
 pub mod log_shipper;
 pub mod logger;
 pub mod mask;
+pub mod record;
 pub mod with_log;
 
-pub use client_log::{ClientLog, ClientLogEvent, client_log_router};
 pub use event::{LogEvent, LogLevel, LogValue};
 pub use log_request::LogRequest;
 pub use log_shipper::{
@@ -15,4 +14,5 @@ pub use log_shipper::{
 };
 pub use logger::{LOGGER_ALREADY_SET, Logger};
 pub use mask::{DEFAULT_MASK_PATTERNS, MASK_PATTERN_INVALID};
+pub use record::record;
 pub use with_log::with_log;
