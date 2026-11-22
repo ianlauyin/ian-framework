@@ -1,10 +1,17 @@
 use crate::file::ts::source::TsFile;
 use crate::rule::diagnostic::Diagnostic;
 
+pub mod ajax_name;
+pub mod capture_action_name;
+pub mod component_folder;
 pub mod declaration_order;
+pub mod import_alias;
 pub mod import_order;
+pub mod interface_object_shape;
+pub mod module_shape;
 pub mod no_arrow_method;
 pub mod no_comments;
+pub mod no_console;
 pub mod no_default_export;
 pub mod no_restricted_imports;
 pub mod test_path;

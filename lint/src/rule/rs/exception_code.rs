@@ -8,8 +8,8 @@ use proc_macro2::{Span, TokenStream, TokenTree};
 use syn::visit::Visit;
 use syn::{Expr, ExprLit, Lit, Macro};
 
+use crate::file::place::Place;
 use crate::file::rs::macro_body::stmts;
-use crate::file::rs::place::Place;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;

@@ -35,4 +35,11 @@ impl Place {
     pub(crate) fn is_file(&self, name: &str) -> bool {
         self.rel == Path::new(name)
     }
+
+    pub(crate) fn parts(&self) -> Vec<&str> {
+        self.rel
+            .components()
+            .filter_map(|part| part.as_os_str().to_str())
+            .collect()
+    }
 }

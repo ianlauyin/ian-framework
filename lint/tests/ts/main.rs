@@ -1,7 +1,14 @@
+mod ajax_name;
+mod capture_action_name;
+mod component_folder;
 mod declaration_order;
+mod import_alias;
 mod import_order;
+mod interface_object_shape;
+mod module_shape;
 mod no_arrow_method;
 mod no_comments;
+mod no_console;
 mod no_default_export;
 mod no_restricted_imports;
 pub(crate) mod source;

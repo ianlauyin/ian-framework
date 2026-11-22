@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::Program;
@@ -11,14 +11,21 @@ pub struct TsFile<'a> {
     pub(crate) path: &'a Path,
     pub(crate) source: &'a str,
     pub(crate) program: Option<&'a Program<'a>>,
+    pub(crate) srcs: &'a [PathBuf],
 }
 
 impl<'a> TsFile<'a> {
-    pub fn new(path: &'a Path, source: &'a str, program: Option<&'a Program<'a>>) -> Self {
+    pub fn new(
+        path: &'a Path,
+        source: &'a str,
+        program: Option<&'a Program<'a>>,
+        srcs: &'a [PathBuf],
+    ) -> Self {
         Self {
             path,
             source,
             program,
+            srcs,
         }
     }
 }

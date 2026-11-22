@@ -5,8 +5,8 @@
 use syn::spanned::Spanned;
 use syn::{Item, Visibility};
 
+use crate::file::place::Place;
 use crate::file::rs::item::{type_name, vis_of};
-use crate::file::rs::place::Place;
 use crate::file::rs::source::RsFile;
 use crate::files::file_name;
 use crate::rule::diagnostic::Diagnostic;

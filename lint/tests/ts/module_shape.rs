@@ -1,0 +1,88 @@
+use std::path::{Path, PathBuf};
+
+use crate::source::with_srcs;
+use ian_lint::rule::diagnostic::Diagnostic;
+use ian_lint::rule::ts::module_shape::check;
+
+fn diagnostics(path: &str, source: &str) -> Vec<Diagnostic> {
+    with_srcs(Path::new(path), source, &[PathBuf::from("web/src")], check)
+}
+
+const SOURCE: &str = "\
+import {Module} from \"ian-framework-fe\";
+import type {UserSettingStore} from \"./types\";
+
+const initialStore: UserSettingStore = {name: null};
+
+export class UserSettingModule extends Module<UserSettingStore> {
+    constructor() {
+        super(initialStore);
+    }
+}
+
+export const userSettingModule = new UserSettingModule();
+";
+
+#[test]
+fn a_module_with_the_class_and_the_instance_passes() {
+    assert!(diagnostics("web/src/module/user-setting/index.ts", SOURCE).is_empty());
+}
+
+#[test]
+fn a_file_that_is_not_the_index_of_a_module_passes() {
+    let source = "export interface UserSettingStore {}\n";
+    for path in [
+        "web/src/module/user-setting/types.ts",
+        "web/src/util/index.ts",
+        "web/src/module/index.ts",
+    ] {
+        assert!(diagnostics(path, source).is_empty());
+    }
+}
+
+#[test]
+fn a_type_in_the_index_of_a_module_fails() {
+    let source = SOURCE.replace(
+        "const initialStore",
+        "interface Local {}\nexport type Name = string;\nconst initialStore",
+    );
+    let found = diagnostics("web/src/module/user-setting/index.ts", &source);
+    assert_eq!(found.len(), 2);
+    assert_eq!(found[0].line, 4);
+    assert_eq!(found[0].rule, "module-shape");
+    assert_eq!(
+        found[0].problem,
+        "The type `Local` is in the `index.ts` of a module."
+    );
+    assert_eq!(found[0].fix, "Move the type to `types.ts`.");
+    assert_eq!(found[1].line, 5);
+}
+
+#[test]
+fn a_module_with_a_different_class_or_no_instance_fails() {
+    let source = "\
+export class Settings extends Module<Store> {}
+
+export const settings = new Settings();
+";
+    let found = diagnostics("web/src/module/user-setting/index.ts", source);
+    assert_eq!(found.len(), 2);
+    assert_eq!(found[0].line, 1);
+    assert_eq!(
+        found[0].problem,
+        "The module has no exported class `UserSettingModule` that extends `Module`."
+    );
+    assert_eq!(
+        found[0].fix,
+        "Write the module as `export class UserSettingModule extends Module<UserSettingStore>`."
+    );
+    assert_eq!(found[1].line, 3);
+    assert_eq!(
+        found[1].problem,
+        "The last statement does not export the instance `userSettingModule`."
+    );
+    assert_eq!(
+        found[1].fix,
+        "End the file with `export const userSettingModule = new UserSettingModule();`."
+    );
+}

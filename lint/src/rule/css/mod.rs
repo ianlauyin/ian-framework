@@ -1,8 +1,10 @@
 use crate::file::css::source::CssFile;
 use crate::rule::diagnostic::Diagnostic;
 
+pub mod class_prefix;
 pub mod empty_line_before;
 pub mod selector_nested_pattern;
+pub mod single_root;
 
 pub(crate) struct CssRule {
     pub(crate) check: fn(&CssFile<'_>) -> Vec<Diagnostic>,

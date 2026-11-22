@@ -16,14 +16,14 @@ pub fn check(path: &Path, srcs: &[PathBuf], ruleset: Ruleset) -> Result<Vec<Diag
     let mut diagnostics = Vec::new();
     if crate::files::file_name(path).ends_with(".css") {
         let items = crate::file::css::parse::parse(&source);
-        let file = CssFile::new(path, &source, &items);
+        let file = CssFile::new(path, &source, &items, srcs);
         for rule in rules.css {
             diagnostics.extend((rule.check)(&file));
         }
     } else {
         let allocator = Allocator::default();
         let program = crate::file::ts::source::parse_valid(&allocator, path, &source)?;
-        let file = TsFile::new(path, &source, Some(&program));
+        let file = TsFile::new(path, &source, Some(&program), srcs);
         let test = crate::files::in_tests(path, srcs);
         for rule in rules.ts.iter().filter(|rule| rule.tests || !test) {
             diagnostics.extend((rule.check)(&file));

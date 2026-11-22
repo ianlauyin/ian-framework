@@ -2,8 +2,8 @@
 // Use a class, an id, a `&` suffix, or a `>`, `+`, or `~` combinator.
 // Why a lint rule: A nested rule names a child by class or id, extends the parent with `&`, or uses a `>`, `+`, or `~` combinator. `&:where(&)` is not a nested selector.
 
-use crate::file::css::parse::{Kind, is_css_whitespace};
-use crate::file::css::scan::{char_len, comment_end, string_end};
+use crate::file::css::parse::Kind;
+use crate::file::css::selector::{is_css_ws_char, selectors};
 use crate::file::css::source::CssFile;
 use crate::rule::css::CssRule;
 use crate::rule::diagnostic::Diagnostic;
@@ -102,120 +102,4 @@ fn check_selector(source: &str, start: u32, selector_end: u32, report: &mut Rule
             "Use a class, an id, a `&` suffix, or a `>`, `+`, or `~` combinator.",
         );
     }
-}
-
-fn selectors(selector: &str) -> Vec<(usize, &str)> {
-    split_commas(selector)
-        .into_iter()
-        .map(|(offset, part)| strip(offset, part))
-        .collect()
-}
-
-fn split_commas(selector: &str) -> Vec<(usize, &str)> {
-    let bytes = selector.as_bytes();
-    let mut parts = Vec::new();
-    let mut start = 0;
-    let mut index = 0;
-    let mut paren = 0u32;
-    let mut bracket = 0u32;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if byte == b'\\' {
-            index += 1;
-            if index < bytes.len() {
-                index += char_len(selector, index);
-            }
-            continue;
-        }
-        if byte == b'"' || byte == b'\'' {
-            index = string_end(selector, index, selector.len());
-            continue;
-        }
-        if byte == b'/' && index + 1 < bytes.len() && bytes[index + 1] == b'*' {
-            index = comment_end(selector, index, selector.len());
-            continue;
-        }
-        if paren == 0 && bracket == 0 && byte == b',' {
-            parts.push((start, &selector[start..index]));
-            index += 1;
-            start = index;
-            continue;
-        }
-        match byte {
-            b'(' => paren += 1,
-            b')' => paren = paren.saturating_sub(1),
-            b'[' => bracket += 1,
-            b']' => bracket = bracket.saturating_sub(1),
-            _ => {}
-        }
-        index += char_len(selector, index);
-    }
-    parts.push((start, &selector[start..]));
-    parts
-}
-
-fn strip(part_start: usize, part: &str) -> (usize, &str) {
-    let mut text = part;
-    let mut offset = part_start;
-    loop {
-        let trimmed = text.trim_start_matches(is_css_ws_char);
-        offset += text.len() - trimmed.len();
-        text = trimmed;
-        let Some(rest) = strip_leading_comment(text) else {
-            break;
-        };
-        if rest.len() == text.len() {
-            break;
-        }
-        offset += text.len() - rest.len();
-        text = rest;
-    }
-    loop {
-        text = text.trim_end_matches(is_css_ws_char);
-        let Some(rest) = strip_trailing_comment(text) else {
-            break;
-        };
-        if rest.len() == text.len() {
-            break;
-        }
-        text = rest;
-    }
-    (offset, text)
-}
-
-fn strip_leading_comment(text: &str) -> Option<&str> {
-    if !text.starts_with("/*") {
-        return None;
-    }
-    Some(&text[comment_end(text, 0, text.len())..])
-}
-
-fn strip_trailing_comment(text: &str) -> Option<&str> {
-    let bytes = text.as_bytes();
-    if !text.ends_with("*/") {
-        return None;
-    }
-    let mut index = 0;
-    let mut comment_start = None;
-    while index + 1 < bytes.len() {
-        if bytes[index] == b'"' || bytes[index] == b'\'' {
-            index = string_end(text, index, text.len());
-            continue;
-        }
-        if bytes[index] == b'/' && bytes[index + 1] == b'*' {
-            let start = index;
-            index = comment_end(text, index, text.len());
-            if index == bytes.len() {
-                comment_start = Some(start);
-                break;
-            }
-            continue;
-        }
-        index += char_len(text, index);
-    }
-    comment_start.map(|start| &text[..start])
-}
-
-fn is_css_ws_char(char: char) -> bool {
-    char.is_ascii() && is_css_whitespace(char as u8)
 }

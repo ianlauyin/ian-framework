@@ -5,7 +5,7 @@
 use syn::spanned::Spanned;
 use syn::{GenericArgument, ImplItem, Item, PathArguments, PathSegment, ReturnType, Type};
 
-use crate::file::rs::place::Place;
+use crate::file::place::Place;
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
