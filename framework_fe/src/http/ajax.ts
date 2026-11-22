@@ -8,7 +8,7 @@ type PathParamValues<Url extends string> = Url extends `${string}{${infer Name}}
 
 type PathParamsArgument<Url extends string> = keyof PathParamValues<Url> extends never ? [pathParams?: PathParams] : [pathParams: PathParamValues<Url>];
 
-export const ajax = async <Req extends AJAXRequest, Res extends AJAXResponse, Url extends string = string>(
+export const ajax = async <Url extends string, Req extends AJAXRequest = AJAXRequest, Res extends AJAXResponse = AJAXResponse>(
     url: Url,
     method: "GET" | "DELETE" | "POST" | "PUT" | "PATCH",
     request?: Req,
@@ -43,8 +43,11 @@ export const ajax = async <Req extends AJAXRequest, Res extends AJAXResponse, Ur
 function queryString(request: object): string {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(request)) {
-        if (value === undefined) continue;
-        query.append(key, value instanceof Date ? value.toISOString() : String(value));
+        for (const item of Array.isArray(value) ? value : [value]) {
+            if (item === undefined || item === null) continue;
+            if (typeof item === "object" && !(item instanceof Date)) throw new Error(`Query param ${key} is not valid`);
+            query.append(key, item instanceof Date ? item.toISOString() : String(item));
+        }
     }
     const text = query.toString();
     return text === "" ? "" : `?${text}`;

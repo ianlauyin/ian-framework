@@ -1,3 +1,5 @@
+const NETWORK_ERROR_STATUS_CODES = [0, 502, 504];
+
 export interface ErrorBody {
     message: string;
 }
@@ -24,4 +26,17 @@ export class NetworkConnectionException extends Error {
 
 export function networkError(error: unknown, requestURL: string): NetworkConnectionException {
     return new NetworkConnectionException(error instanceof Error ? error.message : String(error), requestURL);
+}
+
+export function responseError(status: number, body: string, requestURL: string): ApiError | NetworkConnectionException {
+    if (NETWORK_ERROR_STATUS_CODES.includes(status)) return new NetworkConnectionException(`HTTP ${status}`, requestURL);
+    return new ApiError(status, parseErrorBody(body), requestURL);
+}
+
+function parseErrorBody(body: string): ErrorBody | null {
+    try {
+        return body ? JSON.parse(body) : null;
+    } catch {
+        return null;
+    }
 }

@@ -24,7 +24,7 @@ export class Mask {
     }
 
     public fields(fields: LogFields): LogFields {
-        if (this.patterns.length === 0) return fields;
+        if (this.patterns.length === 0) return {...fields};
 
         const masked: LogFields = {};
         for (const [key, value] of Object.entries(fields)) {

@@ -11,7 +11,7 @@ export class VersionChecker {
     private static onUpdated: (() => void) | undefined;
 
     public static init(options: VersionCheckerOptions): void {
-        if (VersionChecker.initialized) return;
+        if (VersionChecker.initialized) throw new Error("VersionChecker.init() is called twice");
         VersionChecker.initialized = true;
         VersionChecker.onUpdated = options.onUpdated;
 
@@ -36,18 +36,20 @@ export class VersionChecker {
             const response = await fetch(VERSION_URL, {
                 method: "GET",
                 credentials: "same-origin",
+                cache: "no-store",
             });
             if (!response.ok) return;
 
-            const body: {version: string} = await response.json();
+            const body: {version?: unknown} | null = await response.json();
+            const version = body?.version;
+            if (typeof version !== "string") return;
             if (VersionChecker.currentVersion === null) {
-                VersionChecker.currentVersion = body.version;
+                VersionChecker.currentVersion = version;
                 return;
             }
+            if (version === VersionChecker.currentVersion) return;
 
-            if (VersionChecker.currentVersion !== body.version) {
-                VersionChecker.onUpdated?.();
-            }
+            VersionChecker.onUpdated?.();
         } catch {
             return;
         }

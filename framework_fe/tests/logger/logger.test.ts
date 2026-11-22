@@ -38,6 +38,7 @@ beforeEach(() => {
     };
     sendBeacon = vi.fn().mockReturnValue(true);
     vi.stubGlobal("document", fakeDocument);
+    vi.stubGlobal("window", {addEventListener() {}});
     vi.stubGlobal("location", {pathname: "/home", href: "https://app.example/home?a=1"});
     vi.stubGlobal("navigator", {sendBeacon});
     vi.stubGlobal(
@@ -59,7 +60,7 @@ afterEach(() => {
 describe("Logger", () => {
     it("sends the queued events as one batch on each 1 minute interval", async () => {
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         Logger.info("started");
         Logger.error("boom", new Error("it broke"), {code: 42});
         await vi.advanceTimersByTimeAsync(59_999);
@@ -97,9 +98,27 @@ describe("Logger", () => {
         expect(sentEvents(1)).toHaveLength(1);
     });
 
+    it("sends on the interval that the options give", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: [], sendInterval: 5000});
+        Logger.info("started");
+        await vi.advanceTimersByTimeAsync(4999);
+        expect(sendBeacon).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(sendBeacon).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws and does not start when the interval is less than 1 second", async () => {
+        const Logger = await loadLogger();
+        for (const sendInterval of [999, 0, Number.NaN]) {
+            expect(() => Logger.init({maskPatterns: [], sendInterval})).toThrow("sendInterval must be 1000 or more");
+        }
+        Logger.init({maskPatterns: [], sendInterval: 1000});
+    });
+
     it("sends the queue when the page is hidden", async () => {
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         Logger.warn("leaving");
         hidePage();
         expect(sendBeacon).toHaveBeenCalledTimes(1);
@@ -110,7 +129,7 @@ describe("Logger", () => {
 
     it("masks the value of a matching extra key and each match in a string value", async () => {
         const Logger = await loadLogger();
-        Logger.init([/^(password|token)$/i, /secret=\S+/]);
+        Logger.init({maskPatterns: [/^(password|token)$/i, /secret=\S+/]});
         Logger.info("login secret=keep", {
             password: "hunter2",
             TOKEN: 1234,
@@ -130,15 +149,25 @@ describe("Logger", () => {
 
     it("keeps the extra values when no mask pattern is set", async () => {
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         Logger.info("login", {password: "hunter2"});
         hidePage();
         expect(sentEvents(0)[0].extra).toEqual({password: "hunter2"});
     });
 
+    it("keeps the extra of an event when the caller changes the object later", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: []});
+        const extra = {step: 1};
+        Logger.info("login", extra);
+        extra.step = 2;
+        hidePage();
+        expect(sentEvents(0)[0].extra).toEqual({step: 1});
+    });
+
     it("sends the events again after a refused beacon, before the newer events", async () => {
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         sendBeacon.mockReturnValueOnce(false);
         Logger.info("first");
         await vi.advanceTimersByTimeAsync(60_000);
@@ -146,6 +175,53 @@ describe("Logger", () => {
         await vi.advanceTimersByTimeAsync(60_000);
         expect(sendBeacon).toHaveBeenCalledTimes(2);
         expect(sentEvents(1).map((event: {action: string}) => event.action)).toEqual(["first", "second"]);
+    });
+
+    it("sends a large queue in batches that are each below the beacon limit", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: []});
+        for (let index = 0; index < 30; index += 1) Logger.info(`event-${index}`, {text: "é".repeat(2000)});
+        hidePage();
+
+        expect(sendBeacon.mock.calls.length).toBeGreaterThan(1);
+        const actions: string[] = [];
+        sendBeacon.mock.calls.forEach((call, index) => {
+            expect(new TextEncoder().encode(call[1].parts[0]).length).toBeLessThanOrEqual(60_000);
+            actions.push(...sentEvents(index).map((event: {action: string}) => event.action));
+        });
+        expect(actions).toEqual(Array.from({length: 30}, (_, index) => `event-${index}`));
+    });
+
+    it("drops an event that is larger than the beacon limit and sends the other events", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: []});
+        Logger.info("large", {text: "x".repeat(70_000)});
+        Logger.info("small");
+        hidePage();
+
+        expect(sendBeacon).toHaveBeenCalledOnce();
+        expect(sentEvents(0).map((event: {action: string}) => event.action)).toEqual(["small"]);
+    });
+
+    it("drops the oldest events when the queue is full", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: []});
+        sendBeacon.mockReturnValue(false);
+        for (let index = 0; index < 1001; index += 1) Logger.info(`event-${index}`);
+        hidePage();
+        sendBeacon.mockReturnValue(true);
+        hidePage();
+
+        const actions = sendBeacon.mock.calls.slice(1).flatMap((_, index) => sentEvents(index + 1).map((event: {action: string}) => event.action));
+        expect(actions).toHaveLength(1000);
+        expect(actions[0]).toBe("event-1");
+        expect(actions.at(-1)).toBe("event-1000");
+    });
+
+    it("throws when init is called twice", async () => {
+        const Logger = await loadLogger();
+        Logger.init({maskPatterns: []});
+        expect(() => Logger.init({maskPatterns: []})).toThrow("called twice");
     });
 
     it("sends the queue on pagehide", async () => {
@@ -156,7 +232,7 @@ describe("Logger", () => {
             },
         });
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         Logger.info("started");
         windowListeners.pagehide();
         expect(sendBeacon).toHaveBeenCalledOnce();
@@ -173,7 +249,7 @@ describe("Logger", () => {
             },
         });
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         windowListeners.error({message: "boom"});
         windowListeners.error({message: ""});
         windowListeners.unhandledrejection({reason: new Error("rejected")});
@@ -184,7 +260,7 @@ describe("Logger", () => {
             ["error", "WINDOW/error", "boom"],
             ["error", "WINDOW/error", "window error"],
             ["error", "WINDOW/unhandledrejection", "rejected"],
-            ["error", "WINDOW/unhandledrejection", "unhandled rejection"],
+            ["error", "WINDOW/unhandledrejection", "42"],
         ]);
     });
 
@@ -203,7 +279,7 @@ describe("Logger", () => {
             },
         });
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         windowListeners.error({message: "", target: new FakeElement()});
         hidePage();
         expect(sentEvents(0)[0].errorMessage).toBe("DOM source error: <script> /assets/app.js");
@@ -217,7 +293,7 @@ describe("Logger", () => {
             },
         });
         const Logger = await loadLogger();
-        Logger.init([/secret-\d+/]);
+        Logger.init({maskPatterns: [/secret-\d+/]});
         windowListeners.error({message: `bad secret-42 ${"x".repeat(5000)}`});
         hidePage();
         const [event] = sentEvents(0);
@@ -228,9 +304,9 @@ describe("Logger", () => {
 
     it("records warn with the error text and masks the call extra", async () => {
         const Logger = await loadLogger();
-        Logger.init([/^token$/]);
-        Logger.warn("slow", {token: "abc", step: 1}, new Error("timeout"));
-        Logger.warn("odd", {}, new Error("plain"));
+        Logger.init({maskPatterns: [/^token$/]});
+        Logger.warn("slow", new Error("timeout"), {token: "abc", step: 1});
+        Logger.warn("odd", new Error("plain"));
         Logger.warn("none");
         hidePage();
         const [first, second, third] = sentEvents(0);
@@ -242,7 +318,7 @@ describe("Logger", () => {
 
     it("sends a fallback error message when the message is empty", async () => {
         const Logger = await loadLogger();
-        Logger.init([]);
+        Logger.init({maskPatterns: []});
         Logger.error("a", new Error(""));
         Logger.error("b", new Error("   "));
         Logger.error("c", new Error(""));
@@ -282,7 +358,7 @@ describe("Logger", () => {
 
         it("stores the page URL and records no event", async () => {
             const Logger = await loadLogger();
-            Logger.init([]);
+            Logger.init({maskPatterns: []});
             Logger.trackNavigation();
             window.history.pushState({}, "", "/next");
             Logger.info("later");
@@ -293,7 +369,7 @@ describe("Logger", () => {
 
         it("stores the new page URL after pushState, replaceState and popstate", async () => {
             const Logger = await loadLogger();
-            Logger.init([]);
+            Logger.init({maskPatterns: []});
             Logger.trackNavigation();
             expect(await requestUrl(Logger, 0)).toBe("https://app.example/home?a=1");
             window.history.pushState({}, "", "/next");
@@ -308,7 +384,7 @@ describe("Logger", () => {
         it("masks the value of a secret parameter in the page URL", async () => {
             go("/home?token=abc");
             const Logger = await loadLogger();
-            Logger.init([/token/i]);
+            Logger.init({maskPatterns: [/token/i]});
             Logger.trackNavigation();
 
             expect(await requestUrl(Logger, 0)).toBe("https://app.example/home?token=***");
@@ -316,7 +392,7 @@ describe("Logger", () => {
 
         it("wraps history one time when it is called two times", async () => {
             const Logger = await loadLogger();
-            Logger.init([]);
+            Logger.init({maskPatterns: []});
             Logger.trackNavigation();
             const pushState = window.history.pushState;
             Logger.trackNavigation();
@@ -328,7 +404,7 @@ describe("Logger", () => {
     describe("capture", () => {
         it("records an info event with the latency and returns the output", async () => {
             const Logger = await loadLogger();
-            Logger.init([]);
+            Logger.init({maskPatterns: []});
             const pending = Logger.capture("cart/count", async extra => {
                 await new Promise(resolve => setTimeout(resolve, 25));
                 extra.count = 7;
@@ -346,14 +422,16 @@ describe("Logger", () => {
 
         it("records an error event and rethrows when the work rejects", async () => {
             const Logger = await loadLogger();
-            Logger.init([]);
+            Logger.init({maskPatterns: []});
             await expect(Logger.capture("save", () => Promise.reject(new Error("denied")))).rejects.toThrow("denied");
             await expect(Logger.capture("save", () => Promise.reject(new Error("")))).rejects.toThrow();
+            await expect(Logger.capture("save", () => Promise.reject("text reason"))).rejects.toBe("text reason");
             hidePage();
             const events = sentEvents(0);
             expect(events.map((event: {level: string; errorMessage: string}) => [event.level, event.errorMessage])).toEqual([
                 ["error", "denied"],
                 ["error", "unknown error"],
+                ["error", "text reason"],
             ]);
         });
     });
@@ -361,7 +439,7 @@ describe("Logger", () => {
     describe("context", () => {
         it("puts the added context in each later event", async () => {
             const Logger = await loadLogger();
-            Logger.init([]);
+            Logger.init({maskPatterns: []});
             Logger.info("before");
             Logger.addContext("user", "u1");
             Logger.addContext("beta", "on");
@@ -376,7 +454,7 @@ describe("Logger", () => {
 
         it("removes the named keys", async () => {
             const Logger = await loadLogger();
-            Logger.init([]);
+            Logger.init({maskPatterns: []});
             Logger.addContext("user", "u1");
             Logger.addContext("beta", "on");
             Logger.removeContext("user", "missing");

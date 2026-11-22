@@ -59,6 +59,7 @@ describe("VersionChecker", () => {
         expect(fetchMock).toHaveBeenCalledWith("/version", {
             method: "GET",
             credentials: "same-origin",
+            cache: "no-store",
         });
 
         respondWith("a");
@@ -72,10 +73,56 @@ describe("VersionChecker", () => {
         expect(handler).toHaveBeenCalledTimes(1);
     });
 
-    it("checks only when the page becomes visible", async () => {
+    it("calls the handler on each check that gets a new version", async () => {
+        const VersionChecker = await loadChecker();
+        const handler = vi.fn();
+
+        respondWith("a");
+        VersionChecker.init({onUpdated: handler});
+        await flush();
+
+        for (const version of ["b", "b", "a", "c"]) {
+            respondWith(version);
+            showPage();
+            await flush();
+        }
+        expect(handler).toHaveBeenCalledTimes(3);
+    });
+
+    it("ignores a body that has no version text", async () => {
+        const VersionChecker = await loadChecker();
+        const handler = vi.fn();
+
+        fetchMock.mockResolvedValueOnce({ok: true, json: async () => ({})});
+        VersionChecker.init({onUpdated: handler});
+        await flush();
+        respondWith("a");
+        showPage();
+        await flush();
+        for (const body of [{}, null, {version: 2}]) {
+            fetchMock.mockResolvedValueOnce({ok: true, json: async () => body});
+            showPage();
+            await flush();
+        }
+        expect(handler).not.toHaveBeenCalled();
+
+        respondWith("b");
+        showPage();
+        await flush();
+        expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws when init is called twice", async () => {
         const VersionChecker = await loadChecker();
         respondWith("a");
         VersionChecker.init({onUpdated: vi.fn()});
+        expect(() => VersionChecker.init({onUpdated: vi.fn()})).toThrow("called twice");
+        await flush();
+    });
+
+    it("checks only when the page becomes visible", async () => {
+        const VersionChecker = await loadChecker();
+        respondWith("a");
         VersionChecker.init({onUpdated: vi.fn()});
         await flush();
         expect(fetchMock).toHaveBeenCalledTimes(1);

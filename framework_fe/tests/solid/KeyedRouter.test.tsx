@@ -121,6 +121,15 @@ describe("KeyedRouter", () => {
         expect(root.textContent).toBe("");
     });
 
+    it("renders nothing and goes to the fallback path when there is no group", async () => {
+        window.history.pushState({}, "", "/landing");
+        const root = document.createElement("div");
+        dispose = render(() => <KeyedRouter activeKeys={[]} keyed={[]} fallbackPath="/" />, root);
+        await settle();
+        expect(window.location.pathname).toBe("/");
+        expect(root.textContent).toBe("");
+    });
+
     it("navigates between routes", async () => {
         const root = mount("/login", () => false);
         navigate?.("/landing");

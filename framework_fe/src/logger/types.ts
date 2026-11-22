@@ -10,3 +10,8 @@ export type ClientLogEvent = {
     context: LogFields;
     extra: LogFields;
 };
+
+export type LoggerOptions = {
+    maskPatterns: RegExp[];
+    sendInterval?: number;
+};

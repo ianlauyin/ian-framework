@@ -1,6 +1,4 @@
-import {ApiError, type ErrorBody, NetworkConnectionException, networkError} from "./network";
-
-const NETWORK_ERROR_STATUS_CODES = [0, 502, 504];
+import {NetworkConnectionException, networkError, responseError} from "./network";
 
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -14,25 +12,12 @@ export async function rawSend(url: string, init: RequestInit): Promise<any> {
         throw networkError(error, url);
     }
 
-    if (!response.ok) {
-        if (NETWORK_ERROR_STATUS_CODES.includes(response.status)) {
-            throw new NetworkConnectionException(`HTTP ${response.status}`, url);
-        }
-        throw new ApiError(response.status, parseErrorBody(body), url);
-    }
+    if (!response.ok) throw responseError(response.status, body, url);
     if (!body) return null;
     try {
         return JSON.parse(body, reviveDate);
     } catch {
         throw new NetworkConnectionException(`response is not JSON, status ${response.status}`, url);
-    }
-}
-
-function parseErrorBody(body: string): ErrorBody | null {
-    try {
-        return body ? JSON.parse(body) : null;
-    } catch {
-        return null;
     }
 }
 

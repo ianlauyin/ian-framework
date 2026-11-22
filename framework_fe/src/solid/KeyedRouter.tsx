@@ -14,19 +14,22 @@ export interface KeyedRouterProps<Key extends string> {
 }
 
 export function KeyedRouter<Key extends string>(props: KeyedRouterProps<Key>): JSX.Element {
-    const active = createMemo(() => props.keyed.map(group => (props.activeKeys.includes(group.key) ? "1" : "0")).join(""));
+    const activeGroups = createMemo(() => props.keyed.filter(group => props.activeKeys.includes(group.key)), {equals: sameKeys});
 
     return (
-        <Show when={active()} keyed>
-            {active => {
-                const routes = props.keyed.filter((_, index) => active[index] === "1").flatMap(group => group.routes);
+        <Show when={activeGroups()} keyed>
+            {groups => {
                 const Router = createRouter({
-                    routes: [...routes, {path: "*", component: () => <Fallback path={props.fallbackPath} />}],
+                    routes: [...groups.flatMap(group => group.routes), {path: "*", component: () => <Fallback path={props.fallbackPath} />}],
                 });
                 return <Router />;
             }}
         </Show>
     );
+}
+
+function sameKeys<Key extends string>(previous: readonly KeyedRoutes<Key>[], next: readonly KeyedRoutes<Key>[]): boolean {
+    return previous.length === next.length && previous.every((group, index) => group.key === next[index].key);
 }
 
 function Fallback(props: {path: string}): JSX.Element {
