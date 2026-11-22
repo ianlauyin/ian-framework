@@ -9,6 +9,8 @@ pub const PROJECT_ID_INVALID: &str = "PROJECT_ID_INVALID";
 const METADATA_PROJECT_URL: &str = "http://169.254.169.254/computeMetadata/v1/project/project-id";
 const PROJECT_ENV: &str = "GOOGLE_CLOUD_PROJECT";
 const METADATA_TIMEOUT: Duration = Duration::from_secs(2);
+const METADATA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
+const METADATA_ATTEMPTS: u8 = 3;
 
 pub async fn resolve_project() -> Result<Option<String>, Exception> {
     let project = match env::optional(PROJECT_ENV)? {
@@ -36,15 +38,25 @@ pub fn is_safe_name(segment: &str) -> bool {
 }
 
 async fn fetch_metadata_project() -> Option<String> {
-    let response = reqwest::Client::new()
-        .get(METADATA_PROJECT_URL)
-        .header("Metadata-Flavor", "Google")
+    let client = reqwest::Client::builder()
+        .connect_timeout(METADATA_CONNECT_TIMEOUT)
         .timeout(METADATA_TIMEOUT)
-        .send()
-        .await
+        .build()
         .ok()?;
-    if !response.status().is_success() {
-        return None;
+    for _ in 0..METADATA_ATTEMPTS {
+        let request = client
+            .get(METADATA_PROJECT_URL)
+            .header("Metadata-Flavor", "Google");
+        match request.send().await {
+            Ok(response) if response.status().is_success() => {
+                if let Ok(project) = response.text().await {
+                    return Some(project);
+                }
+            }
+            Ok(_) => {}
+            Err(err) if err.is_connect() => return None,
+            Err(_) => {}
+        }
     }
-    response.text().await.ok()
+    None
 }

@@ -298,6 +298,31 @@ enum StatusAction {
     UnavailableThenOk(u8),
 }
 
+#[tokio::test]
+async fn send_all_posts_every_chunk() {
+    let (endpoint, mut rx) = capture_server(StatusAction::NoContent).await;
+    let shipper = logger(http_shipper("api", &format!("{endpoint}/")));
+    fill(&shipper, SHIP_CHUNK * 2 + 1);
+    shipper.send_all().await;
+    assert_eq!(shipper.buffered_len(), 0);
+    for count in [SHIP_CHUNK, SHIP_CHUNK, 1] {
+        let captured = rx.recv().await.unwrap();
+        assert_eq!(captured.path, "/log/api");
+        assert_eq!(parse_body(&captured.body).len(), count);
+    }
+}
+
+#[tokio::test]
+async fn send_all_stops_at_a_failed_chunk() {
+    let (endpoint, mut rx) = capture_server(StatusAction::Unavailable).await;
+    let shipper = logger(http_shipper("api", &endpoint));
+    fill(&shipper, SHIP_CHUNK + 1);
+    shipper.send_all().await;
+    assert_eq!(shipper.buffered_len(), SHIP_CHUNK + 1);
+    assert!(rx.recv().await.is_some());
+    assert!(rx.try_recv().is_err());
+}
+
 struct Captured {
     app: String,
     path: String,

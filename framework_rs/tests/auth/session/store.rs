@@ -63,7 +63,7 @@ async fn remove_subject_leaves_no_set() {
     store.create("7").await.unwrap();
     assert_eq!(set_size(&store, "7").await, 2);
     store.remove(&first.token).await.unwrap();
-    assert_eq!(set_size(&store, "7").await, 2);
+    assert_eq!(set_size(&store, "7").await, 1);
     store.remove_subject("7").await.unwrap();
     let exists: bool = redis::cmd("EXISTS")
         .arg(store.subject_key("7"))

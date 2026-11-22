@@ -15,8 +15,8 @@ pub const CPU_USAGE_INVALID: &str = "CPU_USAGE_INVALID";
 
 #[derive(Debug, Clone)]
 pub struct CpuMonitor {
-    pub threshold_percent: f64,
-    pub interval: Duration,
+    threshold_percent: f64,
+    interval: Duration,
 }
 
 impl CpuMonitor {

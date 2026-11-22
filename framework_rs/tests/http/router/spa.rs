@@ -70,10 +70,25 @@ async fn missing_file_serves_index() {
 }
 
 #[tokio::test]
-async fn path_outside_dist_serves_index() {
+async fn missing_file_name_is_not_found() {
+    let root = make_root("missing-file", true);
+    for uri in ["/assets/old.js", "/favicon.ico"] {
+        let (status, content_type, body) = get(&root, uri).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(content_type, "application/json");
+        assert!(!body.contains("index"));
+    }
+}
+
+#[tokio::test]
+async fn path_outside_dist_is_not_served() {
     let root = make_root("outside", true);
     std::fs::write(root.join("secret.txt"), "secret").unwrap();
+    std::fs::write(root.join("secret"), "secret").unwrap();
     let (status, _, body) = get(&root, "/../../secret.txt").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(!body.contains("secret"));
+    let (status, _, body) = get(&root, "/../../secret").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, "index");
 }

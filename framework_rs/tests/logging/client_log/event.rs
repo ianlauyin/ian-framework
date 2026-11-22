@@ -44,7 +44,7 @@ fn log_events_returns_sanitized_events() {
     assert_eq!(stored[0].level, LogLevel::Info);
     assert_uuid_v7(&stored[0].id);
     assert_eq!(stored[0].context.len(), 2);
-    assert_eq!(stored[0].context["ip"], "");
+    assert_eq!(stored[0].context["ip"], "-");
     assert_eq!(stored[0].latency_ms, 0);
     assert_eq!(stored[1].action, "#frag");
     assert_eq!(stored[1].level, LogLevel::Error);
@@ -129,7 +129,7 @@ fn new_drops_untrusted_fields() {
     assert_uuid_v7(&stored.id);
     assert_ne!(stored.id, event.id);
     assert_eq!(stored.context.len(), 2);
-    assert_eq!(stored.context["ip"], "");
+    assert_eq!(stored.context["ip"], "-");
     assert_eq!(stored.latency_ms, 42);
     assert_eq!(stored.level, LogLevel::Warn);
     assert_eq!(stored.action, "GET /download?sig=abc#top");
@@ -346,9 +346,81 @@ fn client_context_is_kept_and_the_request_ip_and_user_agent_win() {
     let stored = event.client_checked();
     assert_eq!(stored.context["tenant"], "my-app");
     assert_eq!(stored.context["count"], serde_json::json!(3));
-    assert_eq!(stored.context["ip"], "");
-    assert_eq!(stored.context["user_agent"], "");
+    assert_eq!(stored.context["ip"], "-");
+    assert_eq!(stored.context["user_agent"], "-");
     assert!(!stored.context.contains_key("bad key"));
     assert!(!stored.context.contains_key("line"));
     assert_eq!(stored.context.len(), 4);
+}
+
+fn with_error_fields(event: &LogEvent, name: Option<&str>, stack: Option<&str>) -> Option<String> {
+    let mut client = client_log_event(event);
+    client.error_name = name.map(str::to_string);
+    client.stack = stack.map(str::to_string);
+    let log = ClientLog {
+        events: vec![client],
+    };
+    let mut events = log.log_events(&HeaderMap::new()).unwrap();
+    events.remove(0).error_message
+}
+
+#[test]
+fn error_name_and_stack_go_in_the_error_message() {
+    let error = LogEvent::error("x", "boom");
+    assert_eq!(
+        with_error_fields(
+            &error,
+            Some("TypeError"),
+            Some("at a (app.js:1:2)\r\n\tat b\n")
+        )
+        .as_deref(),
+        Some("TypeError: boom\nat a (app.js:1:2) \n at b")
+    );
+    assert_eq!(
+        with_error_fields(&error, Some(" \n"), Some("  ")).as_deref(),
+        Some("boom")
+    );
+    let warn = LogEvent::warn_with("x", "slow");
+    assert_eq!(
+        with_error_fields(&warn, Some("ApiError"), None).as_deref(),
+        Some("ApiError: slow")
+    );
+}
+
+#[test]
+fn error_name_and_stack_are_bounded_and_need_a_message() {
+    let error = LogEvent::error("x", "boom");
+    let message =
+        with_error_fields(&error, Some(&"N".repeat(100)), Some(&"s".repeat(5000))).unwrap();
+    assert_eq!(message.len(), 64 + ": boom\n".len() + 4096);
+    assert_eq!(
+        with_error_fields(&LogEvent::info("x"), Some("TypeError"), Some("at a")),
+        None
+    );
+    assert_eq!(
+        with_error_fields(&LogEvent::warn("x"), Some("TypeError"), Some("at a")),
+        None
+    );
+    let mut blank = LogEvent::error("x", "boom");
+    blank.error_message = None;
+    assert_eq!(
+        with_error_fields(&blank, Some("TypeError"), None).as_deref(),
+        Some("TypeError: unknown error")
+    );
+}
+
+#[test]
+fn an_event_without_the_error_name_and_the_stack_is_accepted() {
+    let body = serde_json::json!({
+        "ts": "2026-10-25T12:00:00Z",
+        "action": "x",
+        "latencyMs": null,
+        "level": "error",
+        "errorMessage": "boom",
+        "context": {},
+        "extra": {},
+    });
+    let event: ian_framework_rs::logging::ClientLogEvent = serde_json::from_value(body).unwrap();
+    assert_eq!(event.error_name, None);
+    assert_eq!(event.stack, None);
 }

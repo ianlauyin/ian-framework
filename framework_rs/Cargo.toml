@@ -28,38 +28,38 @@ redis = [
 ]
 
 [dependencies]
-axum = "*"
-chrono = { version = "*", default-features = false, features = ["clock", "serde", "std"] }
-getrandom = "*"
-hex = "*"
-http-body-util = "*"
-regex = "*"
-reqwest = { version = "*", default-features = false, features = ["rustls"] }
-serde = { version = "*", features = ["derive"] }
-serde_json = "*"
-sha2 = "*"
-subtle = "*"
-tokio = { version = "*", default-features = false, features = ["fs", "macros", "rt", "signal", "sync", "time"] }
-tracing = { version = "*", default-features = false, features = ["std"] }
-uuid = { version = "*", features = ["v7"] }
+axum = "0.8"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+getrandom = "0.4"
+hex = "0.4"
+http-body-util = "0.1"
+regex = "1"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+subtle = "2"
+tokio = { version = "1", default-features = false, features = ["fs", "macros", "rt", "signal", "sync", "time"] }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+uuid = { version = "1", features = ["v7"] }
 
-argon2 = { version = "*", optional = true }
-bytes = { version = "*", optional = true }
-futures-util = { version = "*", default-features = false, features = ["async-await", "std"], optional = true }
-google-cloud-auth = { version = "*", optional = true }
-google-cloud-gax = { version = "*", optional = true }
-google-cloud-secretmanager-v1 = { version = "*", optional = true }
-google-cloud-storage = { version = "*", optional = true }
-google-cloud-wkt = { version = "*", optional = true }
-redis = { version = "*", features = ["connection-manager", "tokio-comp"], optional = true }
-rustix = { version = "*", features = ["fs"], optional = true }
+argon2 = { version = "0.6", optional = true }
+bytes = { version = "1", optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["async-await", "std"], optional = true }
+google-cloud-auth = { version = "1", optional = true }
+google-cloud-gax = { version = "1", optional = true }
+google-cloud-secretmanager-v1 = { version = "2", optional = true }
+google-cloud-storage = { version = "1", optional = true }
+google-cloud-wkt = { version = "1", optional = true }
+redis = { version = "1", features = ["connection-manager", "tokio-comp"], optional = true }
+rustix = { version = "1", features = ["fs"], optional = true }
 
 [dev-dependencies]
-axum = "*"
-chrono = { version = "*", default-features = false, features = ["clock"] }
-getrandom = "*"
-hex = "*"
-serde_json = "*"
-tokio = { version = "*", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-tower = { version = "*", features = ["util"] }
-uuid = { version = "*", features = ["v7"] }
+axum = "0.8"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+getrandom = "0.4"
+hex = "0.4"
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+tower = { version = "0.5", features = ["util"] }
+uuid = { version = "1", features = ["v7"] }

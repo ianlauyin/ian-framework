@@ -85,3 +85,60 @@ fn record_without_mask_patterns_keeps_the_text() {
     let stored = buffered_events(&shipper).remove(0);
     assert_eq!(stored.extra["note"], serde_json::json!("password=hunter2"));
 }
+
+#[test]
+fn default_patterns_mask_the_value_of_a_json_member() {
+    let shipper = buffered();
+    let mut event = LogEvent::info("POST /login");
+    event.extra.insert(
+        "body".to_string(),
+        r#"{"user":"a","password":"hun\"ter2","n":{"apiKey": 12345,"page":2}}"#.into(),
+    );
+    shipper.record(event);
+    let stored = buffered_events(&shipper).remove(0);
+    assert_eq!(
+        stored.extra["body"],
+        serde_json::json!(r#"{"user":"a",***,"n":{***,"page":2}}"#)
+    );
+}
+
+#[test]
+fn default_patterns_mask_the_value_after_a_name_and_a_colon() {
+    let shipper = buffered();
+    let mut event = LogEvent::info("GET /");
+    event.extra.insert(
+        "headers".to_string(),
+        "Accept: text/html\nAuthorization: Bearer abc.def\nCookie: a=1; sid=xyz".into(),
+    );
+    event.extra.insert(
+        "note".to_string(),
+        r#"{"msg":"X-Api-Key: abc","id":5}"#.into(),
+    );
+    shipper.record(event);
+    let stored = buffered_events(&shipper).remove(0);
+    assert_eq!(
+        stored.extra["headers"],
+        serde_json::json!("Accept: text/html\n***\n***")
+    );
+    assert_eq!(
+        stored.extra["note"],
+        serde_json::json!(r#"{"msg":"***","id":5}"#)
+    );
+}
+
+#[test]
+fn record_masks_a_pair_in_the_error_message_and_keeps_the_other_text() {
+    let shipper = buffered();
+    let event = LogEvent::error(
+        "GET /",
+        "password hash failed for /x?token=abc123\n0: ERROR [PASSWORD_HASH_FAILED] failed at src/auth/token.rs:12",
+    );
+    shipper.record(event);
+    let stored = buffered_events(&shipper).remove(0);
+    assert_eq!(
+        stored.error_message.as_deref(),
+        Some(
+            "password hash failed for /x?***\n0: ERROR [PASSWORD_HASH_FAILED] failed at src/auth/token.rs:12"
+        )
+    );
+}

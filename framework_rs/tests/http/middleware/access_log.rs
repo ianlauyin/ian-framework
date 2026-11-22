@@ -125,7 +125,7 @@ async fn middleware_records_the_request_schema() {
     assert!(response.headers().get("x-request-id").is_none());
     let event = recorded("/status/204?***");
     assert_uuid_v7(&event.id);
-    assert_eq!(event.action, "API/GET:/status/204");
+    assert_eq!(event.action, "API/GET:/status/{code}");
     assert_eq!(event.context["ip"], "-");
     assert_eq!(event.context["user_agent"], "-");
     assert_eq!(event.level, LogLevel::Info);
@@ -134,7 +134,7 @@ async fn middleware_records_the_request_schema() {
     assert!(value.get("app").is_none());
     assert!(value.get("project").is_none());
     assert_uuid_v7(value["id"].as_str().unwrap());
-    assert_eq!(value["action"], "API/GET:/status/204");
+    assert_eq!(value["action"], "API/GET:/status/{code}");
     assert!(!json.contains("req-1"));
     assert!(value.get("request").is_none());
     assert_eq!(value["extra"], serde_json::json!({}));
@@ -261,7 +261,7 @@ async fn middleware_reads_ip_and_user_agent() {
     let event = recorded("/status/200?case=cloudflare");
     assert_eq!(event.context["ip"], "203.0.113.9");
     assert_eq!(event.context["user_agent"], "demo-agent");
-    assert_eq!(event.action, "API/GET:/status/200");
+    assert_eq!(event.action, "API/GET:/status/{code}");
 }
 
 #[tokio::test]
@@ -284,4 +284,35 @@ async fn middleware_ignores_every_source_but_cloudflare() {
     let event = recorded("/status/200?case=other-sources");
     assert_eq!(event.context["ip"], "-");
     assert_eq!(event.context["user_agent"], "-");
+}
+
+#[tokio::test]
+async fn a_path_that_no_route_matches_is_the_action() {
+    let response = send(app(), "/no-route?case=unmatched").await;
+    assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+    let event = recorded("/no-route?case=unmatched");
+    assert_eq!(event.action, "API/GET:/no-route");
+}
+
+#[tokio::test]
+async fn a_cancelled_request_is_recorded_as_a_warning() {
+    global_logger();
+    let app = axum::Router::new()
+        .route(
+            "/slow/{id}",
+            axum::routing::get(|log: AccessLog| async move {
+                log.extra("step", "started");
+                std::future::pending::<()>().await;
+            }),
+        )
+        .layer(axum::middleware::from_fn(access_log));
+    let request = send(app, "/slow/7?case=cancelled");
+    let cancelled = tokio::time::timeout(std::time::Duration::from_millis(50), request).await;
+    assert!(cancelled.is_err());
+    let event = recorded("/slow/7?case=cancelled");
+    assert_eq!(event.action, "API/GET:/slow/{id}");
+    assert_eq!(event.level, LogLevel::Warn);
+    assert_eq!(event.error_message.as_deref(), Some(CANCELLED));
+    assert_eq!(event.extra["step"], "started");
+    assert_eq!(event.context["ip"], "-");
 }

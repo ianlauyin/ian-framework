@@ -39,7 +39,7 @@ impl DiskMonitor {
     {
         tokio::spawn(async move {
             if read_usage().is_none() {
-                Logger::warn_with(
+                Logger::error(
                     "DISK/cannotReadUsage",
                     BTreeMap::new(),
                     "cannot read the disk usage".into(),

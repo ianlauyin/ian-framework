@@ -18,18 +18,22 @@ async fn hash_round_trips_and_uses_a_new_salt() {
 }
 
 #[tokio::test]
-async fn invalid_passwords_are_refused_by_hash_and_verify() {
-    let hash = hash_password("correct horse 1").await.unwrap();
+async fn hash_refuses_an_invalid_password() {
     assert!(hash_password("short1").await.is_err());
     assert!(hash_password("onlyletters").await.is_err());
-    let short = verify_password("short1", &hash).await.unwrap_err();
-    assert_eq!(short.code(), error_code::VALIDATION_ERROR);
-    assert_eq!(short.message(), "password must not be shorter than 8 bytes");
-    let letters = verify_password("onlyletters", &hash).await.unwrap_err();
-    assert_eq!(letters.code(), error_code::VALIDATION_ERROR);
+}
+
+#[tokio::test]
+async fn verify_checks_a_password_that_the_rules_refuse() {
+    let hash = hash_password("correct horse 1").await.unwrap();
+    assert!(!verify_password("short1", &hash).await.unwrap());
+    assert!(!verify_password("onlyletters", &hash).await.unwrap());
+    let long = format!("{}1", "a".repeat(MAX_PASSWORD_BYTES));
+    let error = verify_password(&long, &hash).await.unwrap_err();
+    assert_eq!(error.code(), error_code::VALIDATION_ERROR);
     assert_eq!(
-        letters.message(),
-        "password must mix english letters with digits"
+        error.message(),
+        "password must not be longer than 256 bytes"
     );
 }
 

@@ -18,7 +18,10 @@ impl ShutdownReceiver {
             tokio::select! {
                 Ok(()) = tokio::signal::ctrl_c() => {}
                 Some(()) = async { sigterm.as_mut()?.recv().await } => {}
-                else => return,
+                else => {
+                    tracing::error!("cannot listen for a shutdown signal");
+                    return;
+                }
             }
             tracing::info!("shutdown signal received");
             listener.trigger();

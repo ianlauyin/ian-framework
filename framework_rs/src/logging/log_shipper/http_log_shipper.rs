@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use crate::exception;
 use crate::exception::Exception;
+use crate::logging::LogEvent;
 use crate::logging::log_shipper::LogShipper;
 use crate::logging::mask::MASK;
-use crate::logging::{LogEvent, LogRequest};
 
 pub const API_KEY_HEADER_INVALID: &str = "API_KEY_HEADER_INVALID";
 pub const HTTP_CLIENT_BUILD_FAILED: &str = "HTTP_CLIENT_BUILD_FAILED";
@@ -50,7 +50,7 @@ impl HttpLogShipper {
         Ok(Self {
             inner: Arc::new(Inner {
                 app,
-                endpoint,
+                endpoint: endpoint.trim_end_matches('/').to_string(),
                 post_api_key,
                 http,
             }),
@@ -64,10 +64,7 @@ impl HttpLogShipper {
 
 impl LogShipper for HttpLogShipper {
     async fn ship(&self, events: &[LogEvent]) -> Result<(), Exception> {
-        let log_request = LogRequest {
-            events: events.to_vec(),
-        };
-        let body = serde_json::to_string(&log_request).map_err(|err| {
+        let body = serde_json::to_string(&Batch { events }).map_err(|err| {
             exception!(
                 code = LOG_ENCODE_FAILED,
                 "log batch is not json",
@@ -114,4 +111,9 @@ struct Inner {
     endpoint: String,
     post_api_key: reqwest::header::HeaderValue,
     http: reqwest::Client,
+}
+
+#[derive(serde::Serialize)]
+struct Batch<'a> {
+    events: &'a [LogEvent],
 }

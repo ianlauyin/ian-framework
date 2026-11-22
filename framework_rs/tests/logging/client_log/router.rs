@@ -116,7 +116,7 @@ async fn ignores_every_ip_source_but_cloudflare() {
     let status = send(&headers, batch_body(&["ip-sources"])).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     wait_for(|| !shipped_batches("ip-sources").is_empty()).await;
-    assert_eq!(shipped_batches("ip-sources")[0][0].context["ip"], "");
+    assert_eq!(shipped_batches("ip-sources")[0][0].context["ip"], "-");
 }
 
 #[tokio::test]
@@ -249,4 +249,32 @@ async fn sends_client_events_and_buffers_the_request_event() {
         .filter(|event| event.action == "API/POST:/log")
         .collect();
     assert_eq!(request_events.len(), 1);
+}
+
+#[tokio::test]
+async fn limits_the_requests_of_one_ip() {
+    global_logger();
+    let router = client_log_router();
+    let mut accepted = 0;
+    let mut limited = false;
+    for _ in 0..RATE_CAPACITY * 3 {
+        let request = Request::builder()
+            .method("POST")
+            .uri("/log")
+            .header("content-type", "application/json")
+            .header("sec-fetch-site", "same-origin")
+            .header("cf-connecting-ip", "203.0.113.77")
+            .body(batch_body(&["rate-limited"]))
+            .unwrap();
+        match router.clone().oneshot(request).await.unwrap().status() {
+            StatusCode::NO_CONTENT => accepted += 1,
+            StatusCode::TOO_MANY_REQUESTS => {
+                limited = true;
+                break;
+            }
+            status => panic!("the status {status} is not expected"),
+        }
+    }
+    assert!(limited);
+    assert!(accepted >= RATE_CAPACITY);
 }

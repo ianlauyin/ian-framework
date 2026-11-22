@@ -27,9 +27,13 @@ impl Masks {
             .iter()
             .map(|pattern| compile(pattern, pattern))
             .collect::<Result<_, _>>()?;
-        let pairs = patterns
+        let pairs = [json_member, name_value, name_line]
             .iter()
-            .map(|pattern| compile(pattern, &format!(r"[\w.\-]*(?:{pattern})[\w.\-]*=[^&\s;]*")))
+            .flat_map(|form| {
+                patterns
+                    .iter()
+                    .map(move |pattern| compile(pattern, &form(pattern)))
+            })
             .collect::<Result<_, _>>()?;
         Ok(Self { plains, pairs })
     }
@@ -41,19 +45,38 @@ impl Masks {
         for (key, value) in event.extra.iter_mut() {
             self.mask_entry(key, value);
         }
+        if let Some(text) = &mut event.error_message {
+            mask_text(text, &self.pairs);
+        }
     }
 
     fn mask_entry(&self, key: &str, value: &mut LogValue) {
         if self.plains.iter().any(|plain| plain.is_match(key)) {
             *value = LogValue::String(MASK.to_string());
         } else if let LogValue::String(text) = value {
-            for regex in self.pairs.iter().chain(&self.plains) {
-                if let std::borrow::Cow::Owned(masked) = regex.replace_all(text, MASK) {
-                    *text = masked;
-                }
-            }
+            mask_text(text, self.pairs.iter().chain(&self.plains));
         }
     }
+}
+
+fn mask_text<'a>(text: &mut String, regexes: impl IntoIterator<Item = &'a regex::Regex>) {
+    for regex in regexes {
+        if let std::borrow::Cow::Owned(masked) = regex.replace_all(text, MASK) {
+            *text = masked;
+        }
+    }
+}
+
+fn json_member(pattern: &String) -> String {
+    format!(r#""[^"]*(?:{pattern})[^"]*"\s*:\s*(?:"(?:[^"\\]|\\.)*"|[^\s,}}\]]+)"#)
+}
+
+fn name_value(pattern: &String) -> String {
+    format!(r"[\w.\-]*(?:{pattern})[\w.\-]*=[^&\s;]*")
+}
+
+fn name_line(pattern: &String) -> String {
+    format!(r#"[\w.\-]*(?:{pattern})[\w.\-]*:[ \t]+[^\r\n"]*"#)
 }
 
 fn compile(pattern: &str, source: &str) -> Result<regex::Regex, Exception> {

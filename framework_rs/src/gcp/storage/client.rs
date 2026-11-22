@@ -12,7 +12,9 @@ use google_cloud_wkt::FieldMask;
 
 use crate::exception;
 use crate::exception::Exception;
-use crate::gcp::error::{CLIENT_BUILD_FAILED, RESOURCE_NOT_FOUND, to_exception};
+use crate::gcp::error::{
+    CLIENT_BUILD_FAILED, PRECONDITION_FAILED, RESOURCE_NOT_FOUND, to_exception,
+};
 use crate::gcp::storage::list::{ListPage, ListQuery};
 use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
 use crate::gcp::storage::put_request::{PutBody, PutRequest, open_upload_file};
@@ -29,6 +31,7 @@ pub const COPY_TOKEN_STUCK: &str = "COPY_TOKEN_STUCK";
 pub const SIGN_URL_FAILED: &str = "SIGN_URL_FAILED";
 
 const MAX_COPY_STEPS: u32 = 10_000;
+const MAX_MERGE_ATTEMPTS: u32 = 3;
 
 #[derive(Clone)]
 pub struct GcsClient {
@@ -206,29 +209,17 @@ impl GcsClient {
         validate_object_name(name)?;
         validate_metadata(metadata)?;
         self.with_operation_log("merge_metadata", name, async {
-            let current = self
-                .control
-                .get_object()
-                .set_bucket(&self.bucket_path)
-                .set_object(name)
-                .send()
-                .await
-                .map_err(|err| to_exception("read object metadata failed", err))?;
-            let mut merged = current.metadata;
-            merged.extend(metadata.clone());
-            let object = Object::new()
-                .set_bucket(&self.bucket_path)
-                .set_name(name)
-                .set_metadata(merged);
-            let updated = self
-                .control
-                .update_object()
-                .set_object(object)
-                .set_update_mask(FieldMask::default().set_paths(["metadata"]))
-                .send()
-                .await
-                .map_err(|err| to_exception("patch object metadata failed", err))?;
-            Ok(ObjectMeta::from(updated))
+            let mut attempt = 1;
+            loop {
+                match self.merge_metadata_once(name, metadata).await {
+                    Err(err)
+                        if err.code() == PRECONDITION_FAILED && attempt < MAX_MERGE_ATTEMPTS =>
+                    {
+                        attempt += 1;
+                    }
+                    result => return result,
+                }
+            }
         })
         .await
     }
@@ -301,6 +292,38 @@ impl GcsClient {
             ))
         })
         .await
+    }
+
+    async fn merge_metadata_once(
+        &self,
+        name: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> Result<ObjectMeta, Exception> {
+        let current = self
+            .control
+            .get_object()
+            .set_bucket(&self.bucket_path)
+            .set_object(name)
+            .send()
+            .await
+            .map_err(|err| to_exception("read object metadata failed", err))?;
+        let metageneration = current.metageneration;
+        let mut merged = current.metadata;
+        merged.extend(metadata.clone());
+        let object = Object::new()
+            .set_bucket(&self.bucket_path)
+            .set_name(name)
+            .set_metadata(merged);
+        let updated = self
+            .control
+            .update_object()
+            .set_object(object)
+            .set_if_metageneration_match(metageneration)
+            .set_update_mask(FieldMask::default().set_paths(["metadata"]))
+            .send()
+            .await
+            .map_err(|err| to_exception("patch object metadata failed", err))?;
+        Ok(ObjectMeta::from(updated))
     }
 
     async fn rollback_failed_move(&self, from: &str, to: &str, delete_err: Exception) -> Exception {

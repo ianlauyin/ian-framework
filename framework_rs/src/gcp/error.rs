@@ -6,6 +6,7 @@ use crate::exception::Exception;
 pub const API_FAILED: &str = "API_FAILED";
 pub const AUTH_FAILED: &str = "AUTH_FAILED";
 pub const CLIENT_BUILD_FAILED: &str = "CLIENT_BUILD_FAILED";
+pub const PRECONDITION_FAILED: &str = "PRECONDITION_FAILED";
 pub const RESOURCE_NOT_FOUND: &str = "RESOURCE_NOT_FOUND";
 pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
 pub const TRANSPORT_FAILED: &str = "TRANSPORT_FAILED";
@@ -16,6 +17,7 @@ const RPC_UNAUTHENTICATED: i32 = 16;
 const RPC_DEADLINE_EXCEEDED: i32 = 4;
 const RPC_RESOURCE_EXHAUSTED: i32 = 8;
 const RPC_UNAVAILABLE: i32 = 14;
+const RPC_FAILED_PRECONDITION: i32 = 9;
 
 pub fn to_exception(message: &'static str, err: Error) -> Exception {
     exception!(code = error_code(&err), message, source = err)
@@ -29,6 +31,7 @@ pub fn error_code(err: &Error) -> &'static str {
         return match status {
             401 | 403 => AUTH_FAILED,
             404 => RESOURCE_NOT_FOUND,
+            412 => PRECONDITION_FAILED,
             408 | 429 | 500 | 502 | 503 | 504 => SERVICE_UNAVAILABLE,
             _ => API_FAILED,
         };
@@ -37,6 +40,7 @@ pub fn error_code(err: &Error) -> &'static str {
         return match status.code as i32 {
             RPC_UNAUTHENTICATED | RPC_PERMISSION_DENIED => AUTH_FAILED,
             RPC_NOT_FOUND => RESOURCE_NOT_FOUND,
+            RPC_FAILED_PRECONDITION => PRECONDITION_FAILED,
             RPC_DEADLINE_EXCEEDED | RPC_RESOURCE_EXHAUSTED | RPC_UNAVAILABLE => SERVICE_UNAVAILABLE,
             _ => API_FAILED,
         };

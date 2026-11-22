@@ -101,7 +101,7 @@ impl Logger {
                 tokio::select! {
                     biased;
                     _ = &mut stop => break,
-                    _ = ticker.tick() => logger.send_buffer().await,
+                    _ = ticker.tick() => logger.send_all().await,
                 }
             }
             logger.flush().await;
@@ -116,17 +116,22 @@ impl Logger {
         self.lock_buffer().len()
     }
 
-    pub async fn send_buffer(&self) {
+    pub async fn send_buffer(&self) -> bool {
         let _shipping = self.inner.shipping.lock().await;
         let batch = self.lock_buffer().take_chunk(SHIP_CHUNK);
         if batch.is_empty() {
-            return;
+            return false;
         }
         if self.inner.shipper.ship(&batch).await.is_err() {
             self.lock_buffer().restore(batch);
-        } else {
-            self.lock_buffer().shipped();
+            return false;
         }
+        self.lock_buffer().shipped();
+        true
+    }
+
+    pub async fn send_all(&self) {
+        while self.send_buffer().await {}
     }
 
     async fn flush(&self) {

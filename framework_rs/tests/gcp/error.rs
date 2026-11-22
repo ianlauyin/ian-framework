@@ -22,7 +22,7 @@ fn an_http_status_gives_its_code() {
         (500, "SERVICE_UNAVAILABLE"),
         (503, "SERVICE_UNAVAILABLE"),
         (400, "API_FAILED"),
-        (412, "API_FAILED"),
+        (412, "PRECONDITION_FAILED"),
     ] {
         assert_eq!(error_code(&http(status)), code, "status {status}");
     }

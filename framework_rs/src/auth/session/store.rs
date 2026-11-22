@@ -12,6 +12,16 @@ use crate::http::headers::read_cookie;
 
 pub const SESSION_STORE_COMMAND_FAILED: &str = "SESSION_STORE_COMMAND_FAILED";
 
+const REMOVE_SUBJECT_SCRIPT: &str = r"
+local members = redis.call('SMEMBERS', KEYS[1])
+for _, member in ipairs(members) do
+    if member ~= ARGV[1] then
+        redis.call('DEL', member)
+        redis.call('SREM', KEYS[1], member)
+    end
+end
+";
+
 #[derive(Clone)]
 pub struct SessionStore {
     inner: Arc<Inner>,
@@ -70,9 +80,20 @@ impl SessionStore {
     }
 
     pub async fn remove(&self, token: &str) -> Result<(), Exception> {
-        redis::cmd("DEL")
-            .arg(self.key(token))
-            .query_async::<()>(&mut self.conn())
+        let key = self.key(token);
+        let mut conn = self.conn();
+        let subject: Option<String> = redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(store_err)?;
+        let Some(subject) = subject else {
+            return Ok(());
+        };
+        redis::cmd("SREM")
+            .arg(self.subject_key(&subject))
+            .arg(&key)
+            .query_async::<()>(&mut conn)
             .await
             .map_err(store_err)
     }
@@ -170,30 +191,10 @@ impl SessionStore {
         subject: &str,
         keep_key: Option<&str>,
     ) -> Result<(), Exception> {
-        let subject_key = self.subject_key(subject);
-        let mut conn = self.conn();
-        let members: Vec<String> = redis::cmd("SMEMBERS")
-            .arg(&subject_key)
-            .query_async(&mut conn)
-            .await
-            .map_err(store_err)?;
-        let removed: Vec<&String> = members
-            .iter()
-            .filter(|member| keep_key != Some(member.as_str()))
-            .collect();
-        if removed.is_empty() {
-            return Ok(());
-        }
-        redis::pipe()
-            .atomic()
-            .cmd("DEL")
-            .arg(&removed)
-            .ignore()
-            .cmd("SREM")
-            .arg(&subject_key)
-            .arg(&removed)
-            .ignore()
-            .query_async::<()>(&mut conn)
+        redis::Script::new(REMOVE_SUBJECT_SCRIPT)
+            .key(self.subject_key(subject))
+            .arg(keep_key.unwrap_or_default())
+            .invoke_async::<()>(&mut self.conn())
             .await
             .map_err(store_err)
     }

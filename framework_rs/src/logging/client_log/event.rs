@@ -14,6 +14,8 @@ use crate::time::hkt_now;
 
 const CLIENT_ACTION_MAX_CHARS: usize = 128;
 const CLIENT_ERROR_MESSAGE_MAX_CHARS: usize = 1024;
+const CLIENT_ERROR_NAME_MAX_CHARS: usize = 64;
+const CLIENT_STACK_MAX_CHARS: usize = 4096;
 const CLIENT_EXTRA_MAX_KEYS: usize = 32;
 const CLIENT_EXTRA_VALUE_MAX_BYTES: usize = 2048;
 const CLIENT_TS_MAX_AGE_HOURS: i64 = 24;
@@ -38,8 +40,8 @@ impl ClientLog {
                 "client log has too many events"
             ));
         }
-        let ip = client_ip(headers).unwrap_or_default();
-        let user_agent = user_agent(headers).unwrap_or_default();
+        let ip = client_ip(headers).unwrap_or("-");
+        let user_agent = user_agent(headers).unwrap_or("-");
         Ok(self
             .events
             .iter()
@@ -57,6 +59,10 @@ pub struct ClientLogEvent {
     pub level: LogLevel,
     #[serde(default)]
     pub error_message: Option<String>,
+    #[serde(default)]
+    pub error_name: Option<String>,
+    #[serde(default)]
+    pub stack: Option<String>,
     pub context: BTreeMap<String, LogValue>,
     pub extra: BTreeMap<String, LogValue>,
 }
@@ -98,25 +104,43 @@ fn client_event(event: &ClientLogEvent, ip: &str, user_agent: &str) -> LogEvent 
 }
 
 fn client_error_message(event: &ClientLogEvent) -> Option<String> {
-    match event.level {
-        LogLevel::Info => None,
-        LogLevel::Warn => event
-            .error_message
-            .as_deref()
-            .map(|text| client_text(text, CLIENT_ERROR_MESSAGE_MAX_CHARS))
-            .filter(|text| !text.trim().is_empty()),
-        LogLevel::Error => {
-            let text = client_text(
-                event.error_message.as_deref().unwrap_or_default(),
-                CLIENT_ERROR_MESSAGE_MAX_CHARS,
-            );
-            Some(if text.trim().is_empty() {
-                CLIENT_ERROR_PLACEHOLDER.to_string()
-            } else {
-                text
-            })
-        }
+    let text = client_text(
+        event.error_message.as_deref().unwrap_or_default(),
+        CLIENT_ERROR_MESSAGE_MAX_CHARS,
+    );
+    let mut message = match event.level {
+        LogLevel::Info => return None,
+        LogLevel::Warn if text.trim().is_empty() => return None,
+        LogLevel::Error if text.trim().is_empty() => CLIENT_ERROR_PLACEHOLDER.to_string(),
+        LogLevel::Warn | LogLevel::Error => text,
+    };
+    let name = client_text(
+        event.error_name.as_deref().unwrap_or_default(),
+        CLIENT_ERROR_NAME_MAX_CHARS,
+    );
+    if !name.trim().is_empty() {
+        message = format!("{}: {message}", name.trim());
     }
+    let stack = client_stack(event.stack.as_deref().unwrap_or_default());
+    if !stack.is_empty() {
+        message = format!("{message}\n{stack}");
+    }
+    Some(message)
+}
+
+fn client_stack(stack: &str) -> String {
+    let text: String = stack
+        .chars()
+        .map(|ch| {
+            if ch.is_control() && ch != '\n' {
+                ' '
+            } else {
+                ch
+            }
+        })
+        .take(CLIENT_STACK_MAX_CHARS)
+        .collect();
+    text.trim().to_string()
 }
 
 fn client_ts(ts: DateTime<FixedOffset>, now: DateTime<FixedOffset>) -> DateTime<FixedOffset> {
