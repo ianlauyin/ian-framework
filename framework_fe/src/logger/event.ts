@@ -5,14 +5,14 @@ import type {ClientLogEvent, LogFields, LogLevel} from "./types";
 const UNKNOWN_ERROR = "unknown error";
 const MAX_STACK_CHARS = 4096;
 
-export type EventInput = {
+export interface EventInput {
     action: string;
     level: LogLevel;
     context: LogFields;
     extra: LogFields;
     error?: Error;
     latencyMs?: number;
-};
+}
 
 export function buildEvent(mask: Mask, input: EventInput): ClientLogEvent {
     const error = input.error;

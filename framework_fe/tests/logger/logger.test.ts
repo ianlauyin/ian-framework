@@ -1,10 +1,10 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from "vitest";
 
-type FakeDocument = {
+interface FakeDocument {
     visibilityState: DocumentVisibilityState;
     listeners: (() => void)[];
     addEventListener: (type: string, listener: () => void) => void;
-};
+}
 
 let fakeDocument: FakeDocument;
 let sendBeacon: ReturnType<typeof vi.fn>;

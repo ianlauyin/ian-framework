@@ -1,9 +1,9 @@
 const VERSION_URL = "/version";
 
-export type VersionCheckerOptions = {
+export interface VersionCheckerOptions {
     onUpdated: () => void;
     checkInterval?: number;
-};
+}
 
 export class VersionChecker {
     private static currentVersion: string | null = null;

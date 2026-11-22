@@ -1,7 +1,7 @@
 export type LogLevel = "info" | "warn" | "error";
 export type LogFields = Record<string, string | number | boolean>;
 
-export type ClientLogEvent = {
+export interface ClientLogEvent {
     ts: string;
     action: string;
     latencyMs: number | null;
@@ -11,9 +11,9 @@ export type ClientLogEvent = {
     stack: string | null;
     context: LogFields;
     extra: LogFields;
-};
+}
 
-export type LoggerOptions = {
+export interface LoggerOptions {
     maskPatterns: RegExp[];
     sendInterval?: number;
-};
+}

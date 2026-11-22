@@ -2,7 +2,10 @@ import {describe, expect, it} from "vitest";
 
 import {createLocale, type Locales} from "../../src/solid/locale";
 
-type TestDictionary = {action: {save: string; cancel: string}; state: {loading: string}};
+interface TestDictionary {
+    action: {save: string; cancel: string};
+    state: {loading: string};
+}
 
 const locales: Locales<"en" | "zh-Hant", TestDictionary> = {
     en: {action: {save: "Save", cancel: "Cancel"}, state: {loading: "Loading"}},

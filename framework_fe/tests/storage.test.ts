@@ -2,7 +2,10 @@ import {afterEach, describe, expect, it, vi} from "vitest";
 
 import {createStorage} from "../src/storage";
 
-type Schema = {user: {name: string}; count: number};
+interface Schema {
+    user: {name: string};
+    count: number;
+}
 
 function fakeStorage(overrides: Partial<Storage> = {}) {
     const data = new Map<string, string>();
