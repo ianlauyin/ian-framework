@@ -3,6 +3,8 @@ use std::path::{Component, Path, PathBuf};
 
 use ignore::WalkBuilder;
 
+const NODE_MODULES: &str = "node_modules";
+
 #[derive(Default)]
 pub struct FileSet {
     files: BTreeSet<PathBuf>,
@@ -14,7 +16,11 @@ impl FileSet {
         let mut errors = Vec::new();
         let mut paths = Vec::new();
         let mut dir_paths = Vec::new();
-        for entry in WalkBuilder::new(root).require_git(false).build() {
+        let walk = WalkBuilder::new(root)
+            .require_git(false)
+            .filter_entry(|entry| entry.file_name() != NODE_MODULES)
+            .build();
+        for entry in walk {
             match entry {
                 Ok(entry) => {
                     let is_file = entry.file_type().is_some_and(|kind| kind.is_file());

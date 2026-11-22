@@ -15,7 +15,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/check.rs` | The check of one root folder | The linter checks the files in `src` and in `tests` of each package. It does not check the other files in a package. A folder rule starts only at a folder in `src`. A file that the linter cannot read is a failure. A TypeScript or Rust file that does not parse is a failure. The rules do not check that file. |
 | `lint/src/main.rs` | The `ian-lint` program | |
 | `lint/src/args.rs` | The arguments of the `ian-lint` program | `fe` checks only the frontend. `be` checks only Rust. No side argument checks both. The other argument is the root. The root is `.` when it is omitted. The arguments can be in either order. Two roots, or two sides, stops the run. `-h` or `--help` gives the usage. A different argument that starts with `-` stops the run. |
-| `lint/src/files.rs` | The file tree and the file kinds | |
+| `lint/src/files.rs` | The file tree and the file kinds | The walk skips each `node_modules` folder, also when no ignore file names it. |
 | `lint/src/ruleset.rs` | The rules in each ruleset | `FRAMEWORK` and `PROJECT` each hold `css`, `ts`, `rs`, and `folder`. The `framework` ruleset runs `FRAMEWORK`. The `project` ruleset runs `PROJECT`. |
 | `lint/src/file/mod.rs` | The data for one source file | |
 | `lint/src/file/css/mod.rs` | The CSS parser | |

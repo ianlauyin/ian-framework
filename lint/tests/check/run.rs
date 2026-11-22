@@ -57,6 +57,26 @@ fn each_side_checks_only_its_src_and_tests_folders() {
 }
 
 #[test]
+fn a_node_modules_folder_is_not_checked() {
+    let files: &[(&str, &[u8])] = &[
+        ("web/src/a.ts", b"export const a = 1;\n"),
+        ("web/src/node_modules/pkg/index.ts", b"export default 1;\n"),
+        (
+            "web/tests/node_modules/pkg/index.ts",
+            b"export default 1;\n",
+        ),
+        ("api/src/lib.rs", b"pub fn run() {}\n"),
+        (
+            "api/src/node_modules/lib.rs",
+            b"pub static NAME: u32 = 1;\n",
+        ),
+    ];
+    let report = report("run-node-modules", files, Side::All);
+    assert!(report.diagnostics.is_empty(), "{:?}", rules(&report));
+    assert!(report.failures.is_empty());
+}
+
+#[test]
 fn a_rust_test_file_is_checked() {
     let files: &[(&str, &[u8])] = &[
         ("api/src/lib.rs", b"pub fn run() {}\n"),
