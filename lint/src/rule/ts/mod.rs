@@ -14,6 +14,7 @@ pub mod no_comments;
 pub mod no_console;
 pub mod no_default_export;
 pub mod no_restricted_imports;
+pub mod page_context;
 pub mod test_path;
 
 pub(crate) struct TsRule {

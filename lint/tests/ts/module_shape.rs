@@ -61,6 +61,11 @@ fn a_type_in_the_index_of_a_module_fails() {
 #[test]
 fn a_module_with_a_different_class_or_no_instance_fails() {
     let source = "\
+import {Module} from \"ian-framework-fe\";
+import type {Store} from \"./types\";
+
+const initialStore: Store = {};
+
 export class Settings extends Module<Store> {}
 
 export const settings = new Settings();
@@ -76,7 +81,7 @@ export const settings = new Settings();
         found[0].fix,
         "Write the module as `export class UserSettingModule extends Module<UserSettingStore>`."
     );
-    assert_eq!(found[1].line, 3);
+    assert_eq!(found[1].line, 8);
     assert_eq!(
         found[1].problem,
         "The last statement does not export the instance `userSettingModule`."
@@ -85,4 +90,56 @@ export const settings = new Settings();
         found[1].fix,
         "End the file with `export const userSettingModule = new UserSettingModule();`."
     );
+}
+
+#[test]
+fn a_module_with_no_module_import_or_no_initial_store_fails() {
+    let source = SOURCE
+        .replace("import {Module} from", "import {Module as Base} from")
+        .replace("const initialStore: UserSettingStore = {name: null};\n", "");
+    let found = diagnostics("web/src/module/user-setting/index.ts", &source);
+    let problems: Vec<_> = found.iter().map(|item| item.problem.as_str()).collect();
+    assert_eq!(
+        problems,
+        [
+            "The module does not import `Module` from `ian-framework-fe`.",
+            "The module has no constant `initialStore`.",
+        ]
+    );
+    assert_eq!(found[0].fix, "Import `Module` from `ian-framework-fe`.");
+    assert_eq!(
+        found[1].fix,
+        "Declare `const initialStore` with the store type from `./types`."
+    );
+}
+
+#[test]
+fn an_initial_store_with_a_type_that_is_not_from_types_fails() {
+    for line in [
+        "const initialStore = {name: null};",
+        "const initialStore: Local = {name: null};",
+        "const initialStore: {name: null} = {name: null};",
+    ] {
+        let source = SOURCE.replace("const initialStore: UserSettingStore = {name: null};", line);
+        let found = diagnostics("web/src/module/user-setting/index.ts", &source);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].line, 4);
+        assert_eq!(
+            found[0].problem,
+            "The type of `initialStore` does not come from `./types`."
+        );
+        assert_eq!(
+            found[0].fix,
+            "Give `initialStore` the store type from `./types`."
+        );
+    }
+}
+
+#[test]
+fn an_initial_store_that_is_a_function_passes() {
+    let source = SOURCE.replace(
+        "const initialStore: UserSettingStore = {name: null};",
+        "const initialStore = (): UserSettingStore => ({name: null});",
+    );
+    assert!(diagnostics("web/src/module/user-setting/index.ts", &source).is_empty());
 }

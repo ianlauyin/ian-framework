@@ -6,6 +6,7 @@ use crate::rule::diagnostic::Diagnostic;
 
 pub mod fe_component_folder;
 pub mod fe_index_file;
+pub mod fe_module_folder;
 pub mod fe_root_reexport;
 pub mod fe_test_tree;
 pub mod rs_test_tree;

@@ -11,5 +11,6 @@ mod no_comments;
 mod no_console;
 mod no_default_export;
 mod no_restricted_imports;
+mod page_context;
 pub(crate) mod source;
 mod test_path;

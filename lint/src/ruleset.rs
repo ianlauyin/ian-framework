@@ -81,6 +81,7 @@ const PROJECT: Rules = Rules {
         ts::component_folder::TS_RULE,
         ts::ajax_name::TS_RULE,
         ts::capture_action_name::TS_RULE,
+        ts::page_context::TS_RULE,
     ],
     rs: &[
         rs::env_name::RS_RULE,
@@ -111,6 +112,7 @@ const PROJECT: Rules = Rules {
     ],
     folder: &[
         folder::fe_component_folder::FOLDER_RULE,
+        folder::fe_module_folder::FOLDER_RULE,
         folder::fe_test_tree::FOLDER_RULE,
         folder::rs_test_tree::FOLDER_RULE,
     ],

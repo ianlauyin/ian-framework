@@ -4,12 +4,19 @@
 // Write the module as `export class {Module}Module extends Module<{Module}Store>`.
 // The last statement does not export the instance `{module}Module`.
 // End the file with `export const {module}Module = new {Module}Module();`.
+// The module does not import `Module` from `ian-framework-fe`.
+// Import `Module` from `ian-framework-fe`.
+// The module has no constant `initialStore`.
+// Declare `const initialStore` with the store type from `./types`.
+// The type of `initialStore` does not come from `./types`.
+// Give `initialStore` the store type from `./types`.
 // Why a lint rule: Each module has the same shape, and other files use only the instance.
 
 use oxc_ast::ast::{BindingPattern, Declaration, Expression, Statement};
 use oxc_span::GetSpan;
 
 use crate::file::place::Place;
+use crate::file::ts::declaration::{Constant, constant, extends, imports};
 use crate::file::ts::source::TsFile;
 use crate::rule::diagnostic::Diagnostic;
 use crate::rule::report::RuleReport;
@@ -18,6 +25,9 @@ use crate::rule::ts::TsRule;
 const RULE: &str = "module-shape";
 
 const BASE: &str = "Module";
+const PACKAGE: &str = "ian-framework-fe";
+const INITIAL: &str = "initialStore";
+const TYPES: &str = "./types";
 
 pub(crate) const TS_RULE: TsRule = TsRule::source(check);
 
@@ -32,6 +42,32 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
     let class = format!("{}{BASE}", pascal_case(folder));
     let instance = format!("{}{BASE}", camel_case(folder));
     let mut report = RuleReport::new(file.path, file.source, RULE);
+    if !imports(program, PACKAGE)
+        .iter()
+        .any(|(imported, local)| *imported == BASE && *local == BASE)
+    {
+        report.at_offset(
+            0,
+            format!("The module does not import `{BASE}` from `{PACKAGE}`."),
+            format!("Import `{BASE}` from `{PACKAGE}`."),
+        );
+    }
+    match constant(program, INITIAL) {
+        Constant::Absent => report.at_offset(
+            0,
+            format!("The module has no constant `{INITIAL}`."),
+            format!("Declare `const {INITIAL}` with the store type from `{TYPES}`."),
+        ),
+        Constant::Untyped(offset) => report_type(&mut report, offset),
+        Constant::Typed(offset, name) => {
+            if !imports(program, TYPES)
+                .iter()
+                .any(|(_, local)| *local == name)
+            {
+                report_type(&mut report, offset);
+            }
+        }
+    }
     let mut has_class = false;
     for statement in &program.body {
         if let Some(name) = type_name(statement) {
@@ -67,6 +103,14 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
     report.finish()
 }
 
+fn report_type(report: &mut RuleReport<'_>, offset: u32) {
+    report.at_offset(
+        offset,
+        format!("The type of `{INITIAL}` does not come from `{TYPES}`."),
+        format!("Give `{INITIAL}` the store type from `{TYPES}`."),
+    );
+}
+
 fn type_name<'a>(statement: &'a Statement<'_>) -> Option<&'a str> {
     match statement {
         Statement::TSTypeAliasDeclaration(item) => Some(item.id.name.as_str()),
@@ -87,15 +131,7 @@ fn is_module_class(statement: &Statement<'_>, name: &str) -> bool {
     let Declaration::ClassDeclaration(class) = &export.declaration else {
         return false;
     };
-    let extends = match class
-        .heritage
-        .as_ref()
-        .map(|heritage| heritage.expression.without_parentheses())
-    {
-        Some(Expression::Identifier(base)) => base.name.as_str() == BASE,
-        _ => false,
-    };
-    extends && class.id.as_ref().is_some_and(|id| id.name.as_str() == name)
+    extends(class, BASE) && class.id.as_ref().is_some_and(|id| id.name.as_str() == name)
 }
 
 fn is_instance(statement: &Statement<'_>, class: &str, instance: &str) -> bool {
