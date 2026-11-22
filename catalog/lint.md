@@ -28,7 +28,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/file/ts/source.rs` | The TypeScript source and syntax tree for one file | |
 | `lint/src/file/rs/mod.rs` | The Rust parser | |
 | `lint/src/file/rs/item.rs` | The type name and the visibility of a Rust item | |
-| `lint/src/file/rs/macro_body.rs` | The code in a macro call | The arguments are read as expressions with commas between them. When that fails, the arguments are read as statements. When the two fail, the code in the macro call is not checked. The rules `env-name`, `exception-code`, `exception-new`, `mutex-lock`, and `super-path` check the code in a macro call. |
+| `lint/src/file/rs/macro_body.rs` | The code in a macro call | The arguments are read as expressions with commas between them. When that fails, the arguments are read as statements. When the two fail, the code in the macro call is not checked. The rules `config-import`, `env-name`, `exception-code`, `exception-new`, `mutex-lock`, `sqlx-import`, and `super-path` check the code in a macro call. |
 | `lint/src/file/rs/place.rs` | The src-relative place of a Rust file | A file in `tests` adjacent to the src folder has a place in the `tests` folder. |
 | `lint/src/file/rs/source.rs` | The Rust source and syntax tree for one file | |
 | `lint/src/rule/mod.rs` | The rule modules | The `mod.rs` in `lint/src/rule/css/`, `lint/src/rule/ts/`, `lint/src/rule/rs/`, and `lint/src/rule/folder/` holds the module declarations and the rule type. Each other `mod.rs` holds only module declarations. The rules that check one file are in `lint/src/rule/css/`, `lint/src/rule/ts/`, and `lint/src/rule/rs/`. The rules that check one folder are in `lint/src/rule/folder/`. CSS has no folder rule. The CSS file data is in `lint/src/file/css/`. The TypeScript file data is in `lint/src/file/ts/`. The Rust file data is in `lint/src/file/rs/`. There is no `support` folder. |
@@ -53,6 +53,7 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/ts/test_path.rs` | A test file is in the source folder | |
 | `lint/src/rule/rs/mod.rs` | The Rust rules and the Rust file rule type | |
 | `lint/src/rule/rs/run.rs` | The run of the Rust rules on one file | |
+| `lint/src/rule/rs/config_import.rs` | The framework env helpers and Secret Manager outside `config.rs` | Only the `project` ruleset runs it. `config.rs` is directly in the src folder. A `use` and a path are each checked. A path that starts with `ian_framework_rs::env` is an error. `secret_manager` or `SecretManager` directly after `gcp` is an error. `std::env` is not checked, because `env-name` checks it. A `use` that ends with `*` is checked only to the `*`. A test file is not checked. |
 | `lint/src/rule/rs/env_name.rs` | An env value and an env-name literal | A test file can read an env value and can contain an env-name literal. The framework ruleset allows `GOOGLE_CLOUD_PROJECT` under `gcp`. The project ruleset allows no env name. |
 | `lint/src/rule/rs/exception_code.rs` | A string literal error code in `exception!` | A test file is not checked. |
 | `lint/src/rule/rs/exception_new.rs` | `Exception::__new` outside `exception.rs` | The framework ruleset allows `exception.rs`. The project ruleset checks every file. |
@@ -66,5 +67,6 @@ This file is the catalog of the linter in `lint/`.
 | `lint/src/rule/rs/private_static.rs` | A private static | |
 | `lint/src/rule/rs/result_type.rs` | A fallible function returns `Result<T, Exception>` | A test file is not checked. A `Result` with no type argument is an error. |
 | `lint/src/rule/rs/source_order.rs` | The source order | A private `macro_rules!` is in the same group as a constant. A `macro_rules!` must come before the items that use it. |
+| `lint/src/rule/rs/sqlx_import.rs` | `sqlx` outside the `db` folder | Only the `project` ruleset runs it. The `db` folder is `db` directly in the src folder. `db.rs` is not in the `db` folder. A `use` of `sqlx`, a path that starts with `sqlx`, and a `sqlx` path in a `derive` are each an error. A test file is not checked. |
 | `lint/src/rule/rs/super_path.rs` | A `super::super` path | |
 | `lint/src/rule/rs/test_attr.rs` | A test outside the `tests` folder | `mod tests` in `lib.rs` or `main.rs` stays. A `cfg` that names `test` is a test. A `test` in `not(...)` is not a test. An attribute with the last segment `test`, `rstest`, or `test_case` is a test. |

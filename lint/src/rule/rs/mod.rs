@@ -1,6 +1,7 @@
 use crate::file::rs::source::RsFile;
 use crate::rule::diagnostic::Diagnostic;
 
+pub mod config_import;
 pub mod env_name;
 pub mod exception_code;
 pub mod exception_new;
@@ -15,6 +16,7 @@ pub mod private_static;
 pub mod result_type;
 pub mod run;
 pub mod source_order;
+pub mod sqlx_import;
 pub mod super_path;
 pub mod test_attr;
 

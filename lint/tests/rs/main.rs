@@ -1,3 +1,4 @@
+mod config_import;
 mod env_name;
 mod exception_code;
 mod exception_new;
@@ -12,5 +13,6 @@ mod private_static;
 mod result_type;
 pub(crate) mod source;
 mod source_order;
+mod sqlx_import;
 mod super_path;
 mod test_attr;

@@ -83,6 +83,8 @@ const PROJECT: Rules = Rules {
         rs::test_attr::RS_RULE,
         rs::import_order::RS_RULE,
         rs::no_nested_import::RS_RULE,
+        rs::sqlx_import::RS_RULE,
+        rs::config_import::RS_RULE,
     ],
     folder: &[
         folder::fe_test_tree::FOLDER_RULE,
