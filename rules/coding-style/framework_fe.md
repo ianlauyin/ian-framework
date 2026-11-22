@@ -1,9 +1,10 @@
 # framework_fe coding style
 
 After a refactor,
-1. run `pnpm format` in `framework_fe/`
-2. run `pnpm typecheck` in `framework_fe/`, fix all the errors that they show.
-3. run `cargo run --manifest-path lint/Cargo.toml --quiet -- fe` on root, fix all the errors that they show.
+1. cd to `framework_fe/`.
+1. run `pnpm format`
+2. run `pnpm typecheck`, fix all the errors that they show.
+3. run `cargo run --manifest-path lint/Cargo.toml --quiet -- fe ..`, fix all the errors that they show.
 
 ## General
 

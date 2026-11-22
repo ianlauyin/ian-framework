@@ -1,8 +1,9 @@
 # framework_rs coding style
 
 After a refactor,
-1. Run `cargo fmt` in `framework_rs/` after you change the code.
-2. run `cargo run --manifest-path lint/Cargo.toml --quiet -- be` on root, fix all the errors that they show.
+1. cd to `framework_rs/`.
+1. Run `cargo fmt`.
+2. run `cargo run --manifest-path lint/Cargo.toml --quiet -- be ..`, fix all the errors that they show.
 
 ## General
 
