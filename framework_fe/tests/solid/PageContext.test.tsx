@@ -20,7 +20,7 @@ class TestPage extends PageContext<{name: string}> {
 }
 
 function Name(props: {page: TestPage}) {
-    const page = props.page.use();
+    const page = props.page.use;
     return <p>name {page.name}</p>;
 }
 

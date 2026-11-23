@@ -10,8 +10,12 @@ export abstract class PageContext<State extends object> {
         [this.state, this.setState] = createStore<State>(initialState);
     }
 
-    use(): Omit<this, "use" | "provide"> {
+    get use(): Omit<this, "use" | "provide"> {
         return useContext(this.context);
+    }
+
+    get store(): Store<State> {
+        return this.state;
     }
 
     provide(children: () => JSX.Element): JSX.Element {

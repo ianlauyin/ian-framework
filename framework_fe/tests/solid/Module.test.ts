@@ -17,13 +17,13 @@ class TestModule extends Module<{count: number}> {
 describe("Module", () => {
     it("starts with the initial state", () => {
         const module = new TestModule();
-        expect(module.store().count).toBe(0);
+        expect(module.store.count).toBe(0);
     });
 
     it("shows a write of the extended class in the store", () => {
         const module = new TestModule();
         module.add();
         flush();
-        expect(module.store().count).toBe(1);
+        expect(module.store.count).toBe(1);
     });
 });
