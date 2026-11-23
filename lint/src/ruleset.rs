@@ -29,6 +29,7 @@ const FRAMEWORK: Rules = Rules {
         ts::import_order::TS_RULE,
         ts::interface_object_shape::TS_RULE,
         ts::no_console::TS_RULE,
+        ts::private_method_order::TS_RULE,
     ],
     rs: &[
         rs::private_static::RS_RULE,
@@ -82,6 +83,7 @@ const PROJECT: Rules = Rules {
         ts::ajax_name::TS_RULE,
         ts::capture_action_name::TS_RULE,
         ts::page_context::TS_RULE,
+        ts::private_method_order::TS_RULE,
     ],
     rs: &[
         rs::env_name::RS_RULE,
