@@ -7,6 +7,8 @@ Before you read or change a file in `framework_rs/`, read `catalog/framework_rs.
 Before you read or change a file in `framework_fe/`, read `catalog/framework_fe.md`.
 Before you read or change a file in `lint/`, read `catalog/lint.md`.
 
+Always value performance/efficiency/simplicity over strictly correctness/defensive design, let me know if there is any trade off to make.
+
 ## Rules
 
 | File | When to read |
