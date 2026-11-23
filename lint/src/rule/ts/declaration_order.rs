@@ -1,7 +1,5 @@
 // This item is out of declaration order.
 // Put imports first, then private types and constants, then exported items, then private interfaces, then private functions.
-// This statement is not allowed at the top level of the file.
-// Use an import, a type, a constant, an export, an interface, or a function.
 // Why a lint rule: That order keeps the exported items in one place.
 
 use oxc_ast::ast::Statement;
@@ -30,11 +28,6 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
     let mut last: Option<u8> = None;
     for statement in &program.body {
         let Some(group) = group(statement) else {
-            report.at_offset(
-                statement.span().start,
-                "This statement is not allowed at the top level of the file.",
-                "Use an import, a type, a constant, an export, an interface, or a function.",
-            );
             continue;
         };
         if last.is_some_and(|previous| group < previous) {

@@ -53,26 +53,30 @@ interface Hidden {
 }
 
 #[test]
-fn a_statement_with_no_group_fails() {
+fn a_statement_with_no_group_passes_and_does_not_change_the_order() {
     let source = "\
+import { read } from \"pkg\";
+run();
+const value = 1;
 class Local {}
 enum Kind {
   A,
 }
+export const name = \"a\";
+register();
+function helper(): void {}
+";
+    assert!(diagnostics(source).is_empty());
+}
+
+#[test]
+fn an_item_out_of_order_after_a_statement_with_no_group_fails() {
+    let source = "\
+export const name = \"a\";
 run();
+const value = 1;
 ";
     let found = diagnostics(source);
     let lines: Vec<_> = found.iter().map(|item| item.line).collect();
-    assert_eq!(lines, vec![1, 2, 5]);
-    assert_eq!(found[0].rule, "declaration-order");
-    assert_eq!(
-        found[0].problem,
-        "This statement is not allowed at the top level of the file."
-    );
-    assert_eq!(
-        found[0].fix,
-        "Use an import, a type, a constant, an export, an interface, or a function."
-    );
-    assert!(found.iter().all(|item| item.problem == found[0].problem));
-    assert!(found.iter().all(|item| item.fix == found[0].fix));
+    assert_eq!(lines, vec![3]);
 }

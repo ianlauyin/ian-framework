@@ -112,7 +112,7 @@ fn a_rust_test_file_is_checked() {
 
 #[test]
 fn a_test_file_in_the_tests_folder_skips_the_source_rules() {
-    let source = b"import { it } from \"vitest\";\n\nit(\"runs\", () => {});\n";
+    let source = b"import { it } from \"vitest\";\n\nexport const name = \"a\";\nconst value = 1;\n\nit(\"runs\", () => {});\n";
     let passes: &[(&str, &[u8])] = &[
         ("web/src/a.ts", b"export const a = 1;\n"),
         ("web/tests/a.test.ts", source),
