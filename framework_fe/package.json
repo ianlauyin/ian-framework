@@ -10,7 +10,9 @@
     "scripts": {
         "typecheck": "tsc -p tsconfig.json",
         "test": "vitest run",
-        "format": "biome format --write"
+        "format": "biome format --write",
+        "lint": "cargo run --manifest-path ../lint/Cargo.toml --quiet -- fe ..",
+        "check": "pnpm format && pnpm typecheck && pnpm test && pnpm lint"
     },
     "devDependencies": {
         "@biomejs/biome": "2.6.4",
