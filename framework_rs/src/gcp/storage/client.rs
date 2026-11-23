@@ -17,6 +17,7 @@ use crate::gcp::error::{
 };
 use crate::gcp::storage::list::{ListPage, ListQuery};
 use crate::gcp::storage::object::{ObjectMeta, ObjectReader};
+use crate::gcp::storage::public_url::public_url;
 use crate::gcp::storage::put_request::{PutBody, PutRequest, open_upload_file};
 use crate::gcp::storage::signed_url::{
     build_signer, content_disposition_value, signed_get, validate_lifetime,
@@ -30,6 +31,7 @@ pub const COPY_NO_OBJECT: &str = "COPY_NO_OBJECT";
 pub const COPY_STEP_LIMIT: &str = "COPY_STEP_LIMIT";
 pub const COPY_TOKEN_STUCK: &str = "COPY_TOKEN_STUCK";
 pub const SIGN_URL_FAILED: &str = "SIGN_URL_FAILED";
+pub const SIGNER_MISSING: &str = "SIGNER_MISSING";
 
 const MAX_COPY_STEPS: u32 = 10_000;
 const MAX_MERGE_ATTEMPTS: u32 = 3;
@@ -40,7 +42,7 @@ pub struct GcsClient {
     bucket_path: String,
     storage: Storage,
     control: StorageControl,
-    signer: Signer,
+    signer: Option<Signer>,
 }
 
 impl GcsClient {
@@ -48,27 +50,19 @@ impl GcsClient {
         bucket_name: impl Into<String>,
         signer_email: Option<&str>,
     ) -> Result<Self, Exception> {
-        let bucket = bucket_name.into();
-        validate_bucket(&bucket)?;
-        let build_failed = |err| {
-            exception!(
-                code = CLIENT_BUILD_FAILED,
-                "cannot build the client",
-                source = err
-            )
-        };
-        let storage = Storage::builder().build().await.map_err(build_failed)?;
-        let control = StorageControl::builder()
-            .build()
-            .await
-            .map_err(build_failed)?;
-        Ok(Self {
-            bucket_path: format!("projects/_/buckets/{bucket}"),
-            bucket,
-            storage,
-            control,
-            signer: build_signer(signer_email)?,
-        })
+        let signer = build_signer(signer_email)?;
+        Self::connect(bucket_name.into(), Some(signer)).await
+    }
+
+    pub async fn connect_public_with_adc(
+        bucket_name: impl Into<String>,
+    ) -> Result<Self, Exception> {
+        Self::connect(bucket_name.into(), None).await
+    }
+
+    pub fn public_url(&self, name: &str) -> Result<String, Exception> {
+        validate_object_name(name)?;
+        Ok(public_url(&self.bucket, name))
     }
 
     pub async fn read_object(&self, name: &str) -> Result<Option<ObjectReader>, Exception> {
@@ -267,8 +261,14 @@ impl GcsClient {
             Some(filename) => Some(content_disposition_value(filename)?),
             None => None,
         };
+        let Some(signer) = &self.signer else {
+            return Err(exception!(
+                code = SIGNER_MISSING,
+                "a public bucket client has no URL signer"
+            ));
+        };
         self.with_operation_log("sign", name, async {
-            let email = self.signer.client_email().await.map_err(|err| {
+            let email = signer.client_email().await.map_err(|err| {
                 exception!(code = SIGN_URL_FAILED, "sign URL failed", source = err)
             })?;
             let signed = signed_get(
@@ -279,8 +279,7 @@ impl GcsClient {
                 Utc::now(),
                 disposition.as_deref(),
             );
-            let raw = self
-                .signer
+            let raw = signer
                 .sign(signed.string_to_sign.as_str())
                 .await
                 .map_err(|err| {
@@ -293,6 +292,29 @@ impl GcsClient {
             ))
         })
         .await
+    }
+
+    async fn connect(bucket: String, signer: Option<Signer>) -> Result<Self, Exception> {
+        validate_bucket(&bucket)?;
+        let build_failed = |err| {
+            exception!(
+                code = CLIENT_BUILD_FAILED,
+                "cannot build the client",
+                source = err
+            )
+        };
+        let storage = Storage::builder().build().await.map_err(build_failed)?;
+        let control = StorageControl::builder()
+            .build()
+            .await
+            .map_err(build_failed)?;
+        Ok(Self {
+            bucket_path: format!("projects/_/buckets/{bucket}"),
+            bucket,
+            storage,
+            control,
+            signer,
+        })
     }
 
     async fn merge_metadata_once(
