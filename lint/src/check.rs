@@ -59,13 +59,14 @@ fn check_files(
 fn check_folders(files: &FileSet, config: &Config, side: Side) -> Vec<Diagnostic> {
     let fe = src_folders(&config.fe);
     let be = src_folders(&config.be);
+    let all: Vec<_> = fe.iter().chain(&be).cloned().collect();
     let mut diagnostics = Vec::new();
     for path in files.dirs() {
         for rule in crate::ruleset::rules(config.ruleset).folder {
             let (checked, srcs) = match rule.side {
                 Side::Fe => (side.checks_fe(), &fe),
                 Side::Be => (side.checks_be(), &be),
-                Side::All => continue,
+                Side::All => (true, &all),
             };
             if checked && crate::files::in_src(path, srcs) {
                 diagnostics.extend((rule.check)(path, files, srcs));

@@ -4,7 +4,7 @@ use crate::source::with_srcs;
 use ian_lint::rule::diagnostic::Diagnostic;
 use ian_lint::rule::ts::ajax_name::check;
 
-const PATH: &str = "web/src/util/ajax/api/public/account/register_verify.ts";
+const PATH: &str = "web/src/util/ajax/api/account/register_verify.ts";
 
 fn diagnostics(path: &str, source: &str) -> Vec<Diagnostic> {
     with_srcs(Path::new(path), source, &[PathBuf::from("web/src")], check)
@@ -35,7 +35,7 @@ fn a_call_with_the_name_of_its_path_passes() {
     assert!(diagnostics(PATH, SOURCE).is_empty());
     let source = "export function accountLogoutAjax() {}\n";
     for path in [
-        "web/src/util/ajax/api/protected/account/logout.ts",
+        "web/src/util/ajax/api/account/logout.ts",
         "web/src/util/ajax/account/logout.ts",
     ] {
         assert!(diagnostics(path, source).is_empty());
@@ -66,6 +66,19 @@ fn a_function_with_a_different_name_fails() {
     assert_eq!(
         found[0].fix,
         "Name the function from the path of the file, and end the name with `Ajax`."
+    );
+}
+
+#[test]
+fn an_access_tier_folder_is_a_part_of_the_name() {
+    let found = diagnostics(
+        "web/src/util/ajax/api/public/account/logout.ts",
+        "export function accountLogoutAjax() {}\n",
+    );
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        found[0].problem,
+        "The function `accountLogoutAjax` does not have the name `publicAccountLogoutAjax`."
     );
 }
 

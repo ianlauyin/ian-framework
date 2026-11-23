@@ -43,7 +43,7 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
         return Vec::new();
     }
     let rest = match rest {
-        ["api", "public" | "protected", tail @ ..] if !tail.is_empty() => tail,
+        ["api", tail @ ..] if !tail.is_empty() => tail,
         _ => rest,
     };
     let base = pascal_case(rest);

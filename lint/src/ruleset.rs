@@ -115,6 +115,8 @@ const PROJECT: Rules = Rules {
         folder::fe_module_folder::FOLDER_RULE,
         folder::fe_test_tree::FOLDER_RULE,
         folder::rs_test_tree::FOLDER_RULE,
+        folder::rs_router_folder::FOLDER_RULE,
+        folder::fe_ajax_tree::FOLDER_RULE,
     ],
 };
 

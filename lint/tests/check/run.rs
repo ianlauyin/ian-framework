@@ -57,6 +57,25 @@ fn each_side_checks_only_its_src_and_tests_folders() {
 }
 
 #[test]
+fn a_rule_for_the_two_sides_runs_on_each_side() {
+    let files: &[(&str, &[u8])] = &[
+        ("api/src/lib.rs", b"pub fn run() {}\n"),
+        ("api/src/router/api/mod.rs", b""),
+        (
+            "web/src/util/ajax/api/account/login.ts",
+            b"export function accountLoginAjax() {}\n",
+        ),
+    ];
+    for (name, side) in [
+        ("run-two-all", Side::All),
+        ("run-two-fe", Side::Fe),
+        ("run-two-be", Side::Be),
+    ] {
+        assert_eq!(rules(&report(name, files, side)), vec!["ajax-tree"]);
+    }
+}
+
+#[test]
 fn a_node_modules_folder_is_not_checked() {
     let files: &[(&str, &[u8])] = &[
         ("web/src/a.ts", b"export const a = 1;\n"),
