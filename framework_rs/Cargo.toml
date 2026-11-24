@@ -26,6 +26,7 @@ redis = [
   "dep:redis",
   "redis/tokio-rustls-comp",
 ]
+sse = ["dep:futures-util"]
 
 [dependencies]
 axum = "0.8"
