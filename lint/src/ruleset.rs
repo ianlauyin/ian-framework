@@ -81,6 +81,7 @@ const PROJECT: Rules = Rules {
         ts::module_shape::TS_RULE,
         ts::component_folder::TS_RULE,
         ts::ajax_name::TS_RULE,
+        ts::ajax_no_extends::TS_RULE,
         ts::capture_action_name::TS_RULE,
         ts::page_context::TS_RULE,
         ts::private_method_order::TS_RULE,

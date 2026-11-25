@@ -1,4 +1,5 @@
 mod ajax_name;
+mod ajax_no_extends;
 mod capture_action_name;
 mod component_folder;
 mod declaration_order;

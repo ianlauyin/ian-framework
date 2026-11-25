@@ -2,6 +2,7 @@ use crate::file::ts::source::TsFile;
 use crate::rule::diagnostic::Diagnostic;
 
 pub mod ajax_name;
+pub mod ajax_no_extends;
 pub mod capture_action_name;
 pub mod component_folder;
 pub mod declaration_order;
