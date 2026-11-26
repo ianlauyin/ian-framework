@@ -3,6 +3,8 @@ use std::future::Future;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::watch;
 
+use crate::logging::{LogEvent, record};
+
 #[derive(Clone, Debug)]
 pub struct ShutdownReceiver {
     signal: watch::Sender<bool>,
@@ -23,7 +25,6 @@ impl ShutdownReceiver {
                     return;
                 }
             }
-            tracing::info!("shutdown signal received");
             listener.trigger();
         });
         receiver
@@ -41,6 +42,13 @@ impl ShutdownReceiver {
     }
 
     pub fn trigger(&self) {
-        self.signal.send_replace(true);
+        self.signal.send_if_modified(|down| {
+            if *down {
+                return false;
+            }
+            record(LogEvent::info("SHUTDOWN/started"));
+            *down = true;
+            true
+        });
     }
 }
