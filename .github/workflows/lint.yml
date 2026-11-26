@@ -1,0 +1,40 @@
+name: Lint
+
+on:
+  workflow_call:
+    inputs:
+      side:
+        description: "fe, be, or empty for both"
+        type: string
+        default: ""
+      root:
+        description: "Root folder to lint, relative to the repository"
+        type: string
+        default: "."
+      ref:
+        description: "Branch, tag, or sha of ian-framework that provides ian-lint"
+        type: string
+        default: main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container: debian:13
+    steps:
+      - name: Install base packages
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git build-essential
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ianlauyin/ian-framework
+          ref: ${{ inputs.ref }}
+          path: .ian-framework
+          sparse-checkout: lint
+      - name: Move ian-lint out of the workspace
+        run: mv .ian-framework/lint "$RUNNER_TEMP/ian-lint" && rm -rf .ian-framework
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ runner.temp }}/ian-lint
+      - name: ian-lint
+        run: cargo run --release --quiet --manifest-path "$RUNNER_TEMP/ian-lint/Cargo.toml" -- ${{ inputs.side }} "${{ inputs.root }}"
