@@ -22,7 +22,10 @@ Always value performance/efficiency/simplicity over strict correctness/defensive
 
 ### framework_fe
 
-- After a refactor, run `pnpm check` on `framework_fe/`, fix all the errors that it shows.
+- After a refactor:
+  1. cd to `framework_fe/`.
+  2. Run `pnpm format --write`.
+  3. Run `pnpm check`, fix all the errors that it shows.
 
 ### framework_rs
 

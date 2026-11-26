@@ -56,9 +56,5 @@ jobs:
           cache-dependency-path: framework_fe/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: framework_fe
-      - run: pnpm typecheck
-        working-directory: framework_fe
-      - run: pnpm test
-        working-directory: framework_fe
-      - run: pnpm lint
+      - run: pnpm check
         working-directory: framework_fe
