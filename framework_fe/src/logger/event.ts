@@ -1,4 +1,3 @@
-import {hktIsoString} from "../util/time";
 import type {Mask} from "./mask";
 import type {ClientLogEvent, LogFields, LogLevel} from "./types";
 
@@ -17,7 +16,7 @@ export interface EventInput {
 export function buildEvent(mask: Mask, input: EventInput): ClientLogEvent {
     const error = input.error;
     return {
-        ts: hktIsoString(new Date()),
+        ts: new Date().toISOString(),
         action: input.action,
         latencyMs: input.latencyMs ?? null,
         level: input.level,

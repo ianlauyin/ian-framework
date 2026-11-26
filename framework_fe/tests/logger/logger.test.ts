@@ -72,7 +72,7 @@ describe("Logger", () => {
         expect(sendBeacon.mock.calls[0][1].options).toEqual({type: "application/json"});
         expect(sentEvents(0)).toEqual([
             {
-                ts: "2026-10-25T20:00:00.000+08:00",
+                ts: "2026-10-25T12:00:00.000Z",
                 action: "started",
                 latencyMs: null,
                 level: "info",

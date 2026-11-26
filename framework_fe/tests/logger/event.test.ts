@@ -17,7 +17,7 @@ describe("buildEvent", () => {
         const event = buildEvent(new Mask([]), {action: "started", level: "info", context, extra: {page: 2}});
         context.user = "u-2";
         expect(event).toEqual({
-            ts: "2026-10-25T20:00:00.000+08:00",
+            ts: "2026-10-25T12:00:00.000Z",
             action: "started",
             latencyMs: null,
             level: "info",
