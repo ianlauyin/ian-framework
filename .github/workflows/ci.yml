@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    container: debian:13
+    steps:
+      - name: Install base packages
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git build-essential
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            framework_rs
+            lint
+      - name: framework_rs fmt
+        working-directory: framework_rs
+        run: cargo fmt --check
+      - name: framework_rs test
+        working-directory: framework_rs
+        run: cargo test
+      - name: lint crate fmt
+        working-directory: lint
+        run: cargo fmt --check
+      - name: lint crate test
+        working-directory: lint
+        run: cargo test
+      - name: lint be
+        working-directory: framework_rs
+        run: cargo run --manifest-path ../lint/Cargo.toml --quiet -- be ..
+
+  frontend:
+    runs-on: ubuntu-latest
+    container: debian:13
+    steps:
+      - name: Install base packages
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git build-essential
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: lint
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: framework_fe/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: framework_fe/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: framework_fe
+      - run: pnpm typecheck
+        working-directory: framework_fe
+      - run: pnpm test
+        working-directory: framework_fe
+      - run: pnpm lint
+        working-directory: framework_fe
