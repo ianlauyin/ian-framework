@@ -112,6 +112,7 @@ const PROJECT: Rules = Rules {
         rs::no_framework_alias::RS_RULE,
         rs::ops_import::RS_RULE,
         rs::handler_file::RS_RULE,
+        rs::json_camel_case::RS_RULE,
     ],
     folder: &[
         folder::fe_component_folder::FOLDER_RULE,

@@ -7,6 +7,7 @@ mod handler_file;
 mod impl_order;
 mod import_order;
 mod inherent_impl;
+mod json_camel_case;
 mod mod_file;
 mod mutex_lock;
 mod no_comments;

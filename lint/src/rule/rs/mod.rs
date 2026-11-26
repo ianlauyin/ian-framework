@@ -10,6 +10,7 @@ pub mod handler_file;
 pub mod impl_order;
 pub mod import_order;
 pub mod inherent_impl;
+pub mod json_camel_case;
 pub mod mod_file;
 pub mod mutex_lock;
 pub mod no_comments;
