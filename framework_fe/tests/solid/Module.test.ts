@@ -12,18 +12,22 @@ class TestModule extends Module<{count: number}> {
             state.count += 1;
         });
     }
+
+    get count() {
+        return this.store.count;
+    }
 }
 
 describe("Module", () => {
     it("starts with the initial state", () => {
         const module = new TestModule();
-        expect(module.store.count).toBe(0);
+        expect(module.count).toBe(0);
     });
 
-    it("shows a write of the extended class in the store", () => {
+    it("shows a write of the extended class in a read of the extended class", () => {
         const module = new TestModule();
         module.add();
         flush();
-        expect(module.store.count).toBe(1);
+        expect(module.count).toBe(1);
     });
 });
