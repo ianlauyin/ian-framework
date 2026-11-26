@@ -1,0 +1,24 @@
+name: Install ian-lint
+description: Install the ian-lint binary from ian-framework. The runner needs cargo.
+
+inputs:
+  ref:
+    description: Branch, tag, or sha of ian-framework
+    default: main
+
+runs:
+  using: composite
+  steps:
+    - id: sha
+      shell: bash
+      run: |
+        sha=$(git ls-remote https://github.com/ianlauyin/ian-framework "${{ inputs.ref }}" | cut -f1 | head -1)
+        echo "sha=${sha:-${{ inputs.ref }}}" >> "$GITHUB_OUTPUT"
+    - id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/ian-lint
+        key: ian-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.sha.outputs.sha }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install --locked --git https://github.com/ianlauyin/ian-framework --rev "${{ steps.sha.outputs.sha }}" ian-lint
