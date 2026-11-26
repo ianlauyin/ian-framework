@@ -9,7 +9,7 @@ class TestPage extends PageContext<{name: string}> {
     }
 
     get name() {
-        return this.state.name;
+        return this.store.name;
     }
 
     rename(name: string) {

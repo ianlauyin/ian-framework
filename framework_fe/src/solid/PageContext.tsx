@@ -3,7 +3,7 @@ import {type Context, createContext, createStore, type Store, type StoreSetter, 
 
 export abstract class PageContext<State extends object> {
     private readonly context: Context<this> = createContext<this>();
-    protected readonly state: Store<State>;
+    private readonly state: Store<State>;
     protected readonly setState: StoreSetter<State>;
 
     constructor(initialState: State extends Function ? never : State) {
@@ -14,7 +14,7 @@ export abstract class PageContext<State extends object> {
         return useContext(this.context);
     }
 
-    get store(): Store<State> {
+    protected get store(): Store<State> {
         return this.state;
     }
 
