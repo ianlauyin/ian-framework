@@ -241,12 +241,22 @@ async fn shutdown_flush_stops_after_three_failed_retries() {
     shipper.record(LogEvent::info("keep"));
     let shutdown = ShutdownReceiver::new();
     shutdown.trigger();
+    let traced = Arc::new(Mutex::new(Vec::new()));
+    let _guard = tracing::subscriber::set_default(FlushReport {
+        events: traced.clone(),
+    });
     let handle = shipper.spawn_ship_loop(shutdown);
     tokio::time::timeout(Duration::from_secs(5), handle)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(buffered_events(&shipper)[0].action, "keep");
+    let reports = mutex::lock(&traced);
+    assert!(reports.iter().any(|report| {
+        report.message == "cannot flush buffered log events before shutdown"
+            && report.buffered == Some(1)
+    }));
+    drop(reports);
     let mut attempts = 0;
     while rx.try_recv().is_ok() {
         attempts += 1;
@@ -427,4 +437,62 @@ async fn capture_server(
         let _ = axum::serve(listener, app).await;
     });
     (format!("http://{addr}"), rx)
+}
+
+struct FlushReport {
+    events: Arc<Mutex<Vec<TracedFlush>>>,
+}
+
+struct TracedFlush {
+    buffered: Option<u64>,
+    message: String,
+}
+
+impl tracing::Subscriber for FlushReport {
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        *metadata.level() == tracing::Level::ERROR
+    }
+
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+
+    fn event(&self, event: &tracing::Event<'_>) {
+        let mut traced = TracedFlush {
+            buffered: None,
+            message: String::new(),
+        };
+        event.record(&mut traced);
+        mutex::lock(&self.events).push(traced);
+    }
+
+    fn enter(&self, _: &tracing::span::Id) {}
+
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+impl tracing::field::Visit for TracedFlush {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "message" {
+            self.message = value.to_string();
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        match field.name() {
+            "message" => self.message = format!("{value:?}").trim_matches('"').to_string(),
+            "buffered" => self.buffered = format!("{value:?}").parse().ok(),
+            _ => {}
+        }
+    }
+
+    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+        if field.name() == "buffered" {
+            self.buffered = Some(value);
+        }
+    }
 }

@@ -116,6 +116,13 @@ impl Logger {
                 Err(_) => {
                     failed += 1;
                     if failed >= FLUSH_RETRY_LIMIT {
+                        let buffered = self.buffered_len();
+                        if buffered > 0 {
+                            tracing::error!(
+                                buffered,
+                                "cannot flush buffered log events before shutdown"
+                            );
+                        }
                         return;
                     }
                     tokio::time::sleep(FLUSH_RETRY_EVERY).await;
