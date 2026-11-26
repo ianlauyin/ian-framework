@@ -15,6 +15,7 @@ pub mod no_comments;
 pub mod no_console;
 pub mod no_default_export;
 pub mod no_restricted_imports;
+pub mod no_snake_case_field;
 pub mod page_context;
 pub mod private_method_order;
 pub mod test_path;
