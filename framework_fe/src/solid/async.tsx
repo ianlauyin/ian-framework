@@ -2,16 +2,16 @@ import {useIsRouting} from "@solidjs/router";
 import type {JSX} from "@solidjs/web";
 import {type Component, lazy, Loading as Suspense} from "solid-js";
 
-export interface PageContentProps {
+export interface AsyncContentProps {
     children?: JSX.Element;
     loadingOverlay: JSX.Element;
 }
 
-export function page<T extends Component<any>>(load: () => Promise<T>): T {
+export function async<T extends Component<any>>(load: () => Promise<T>): T {
     return lazy(() => load().then(component => ({default: component})));
 }
 
-export function PageContent(props: PageContentProps): JSX.Element {
+export function AsyncContent(props: AsyncContentProps): JSX.Element {
     const isRouting = useIsRouting();
     const pending = () => isRouting();
     return (

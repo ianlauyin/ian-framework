@@ -3,7 +3,7 @@ import {createRouter, type RouteSectionProps, useNavigate} from "@solidjs/router
 import {render} from "@solidjs/web";
 import {flush} from "solid-js";
 
-import {page, PageContent} from "../../src/solid/page";
+import {async, AsyncContent} from "../../src/solid/async";
 
 let dispose: (() => void) | undefined;
 let navigate: ((path: string) => void) | undefined;
@@ -33,7 +33,7 @@ function Layout(props: RouteSectionProps) {
     return (
         <div>
             <p>chrome</p>
-            <PageContent loadingOverlay={<p>loading overlay</p>}>{props.children}</PageContent>
+            <AsyncContent loadingOverlay={<p>loading overlay</p>}>{props.children}</AsyncContent>
         </div>
     );
 }
@@ -46,8 +46,8 @@ function mount(path: string, home: () => Promise<typeof Home>, account: () => Pr
                 path: "/",
                 component: Layout,
                 children: [
-                    {path: "/", component: page(home)},
-                    {path: "/account", component: page(account)},
+                    {path: "/", component: async(home)},
+                    {path: "/account", component: async(account)},
                 ],
             },
         ],
@@ -78,7 +78,7 @@ afterEach(() => {
     window.history.pushState({}, "", "/");
 });
 
-describe("page", () => {
+describe("async", () => {
     it("shows the loading overlay for the outlet and keeps the chrome until the named page loads", async () => {
         const home = defer<typeof Home>();
         const root = mount(
@@ -150,16 +150,16 @@ describe("page", () => {
     });
 
     it("renders a named page that receives props", async () => {
-        const Center = page(() => Promise.resolve(AccountCenter));
+        const Center = async(() => Promise.resolve(AccountCenter));
         window.history.pushState({}, "", "/");
         const Router = createRouter({
             routes: [
                 {
                     path: "/",
                     component: () => (
-                        <PageContent loadingOverlay={<p>loading overlay</p>}>
+                        <AsyncContent loadingOverlay={<p>loading overlay</p>}>
                             <Center id="7" />
-                        </PageContent>
+                        </AsyncContent>
                     ),
                 },
             ],
