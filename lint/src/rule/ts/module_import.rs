@@ -1,5 +1,5 @@
-// `{specifier}` imports a module outside `index.tsx`.
-// Use the module through `this.module` in a page context. Only `index.tsx` in the src folder imports a module.
+// `{specifier}` imports a module outside `index.tsx` and `module/index.ts`.
+// Use the module through `this.module` in a page context. Only `index.tsx` in the src folder and `index.ts` in the module folder import a module.
 // Why a lint rule: Only a page reaches a module, so a component cannot call a module directly.
 
 use oxc_ast::ast::{
@@ -19,6 +19,7 @@ const RULE: &str = "module-import";
 
 const FOLDER: &str = "module";
 const ENTRY: &str = "index.tsx";
+const MODULE_ENTRY: &str = "module/index.ts";
 
 pub(crate) const TS_RULE: TsRule = TsRule::source(check);
 
@@ -27,7 +28,7 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
         return Vec::new();
     };
     let place = Place::new(file.path, file.srcs);
-    if place.is_file(ENTRY) {
+    if place.is_file(ENTRY) || place.is_file(MODULE_ENTRY) {
         return Vec::new();
     }
     let parts = place.parts();
@@ -102,9 +103,9 @@ impl Imports<'_, '_> {
         }
         self.report.at_offset(
             literal.span.start,
-            format!("`{text}` imports a module outside `{ENTRY}`."),
+            format!("`{text}` imports a module outside `{ENTRY}` and `{MODULE_ENTRY}`."),
             format!(
-                "Use the module through `this.module` in a page context. Only `{ENTRY}` in the src folder imports a module."
+                "Use the module through `this.module` in a page context. Only `{ENTRY}` in the src folder and `{MODULE_ENTRY}` import a module."
             ),
         );
     }

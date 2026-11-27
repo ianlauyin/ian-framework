@@ -18,6 +18,15 @@ import {cartModule} from \"./module/cart\";
 }
 
 #[test]
+fn the_index_in_the_module_folder_passes() {
+    let source = "\
+import {AccountModule} from \"./account\";
+import {CartModule} from \"module/cart\";
+";
+    assert!(diagnostics("web/src/module/index.ts", source).is_empty());
+}
+
+#[test]
 fn a_file_in_the_same_module_passes() {
     let source = "\
 import type {AccountStore} from \"./types\";
@@ -63,11 +72,11 @@ const lazy = import(\"module/account\");
     assert_eq!(found[0].rule, "module-import");
     assert_eq!(
         found[0].problem,
-        "`module/account` imports a module outside `index.tsx`."
+        "`module/account` imports a module outside `index.tsx` and `module/index.ts`."
     );
     assert_eq!(
         found[0].fix,
-        "Use the module through `this.module` in a page context. Only `index.tsx` in the src folder imports a module."
+        "Use the module through `this.module` in a page context. Only `index.tsx` in the src folder and `module/index.ts` import a module."
     );
 }
 
