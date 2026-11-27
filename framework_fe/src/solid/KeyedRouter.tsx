@@ -1,6 +1,7 @@
-import {createRouter, type RouteDefinition, useLocation, useNavigate} from "@solidjs/router";
+import {createRouter, type RouteDefinition, type RouteSectionProps, useLocation, useNavigate} from "@solidjs/router";
 import type {JSX} from "@solidjs/web";
 import {createEffect, createMemo, Show} from "solid-js";
+import {AsyncContent} from "./async";
 
 export interface KeyedRoutes<Key extends string> {
     key: Key;
@@ -11,6 +12,7 @@ export interface KeyedRouterProps<Key extends string> {
     activeKeys: readonly Key[];
     keyed: readonly KeyedRoutes<Key>[];
     fallbackPath: string;
+    loadingOverlay: JSX.Element;
 }
 
 export function KeyedRouter<Key extends string>(props: KeyedRouterProps<Key>): JSX.Element {
@@ -19,8 +21,15 @@ export function KeyedRouter<Key extends string>(props: KeyedRouterProps<Key>): J
     return (
         <Show when={activeGroups()} keyed>
             {groups => {
+                const Layout = (layoutProps: RouteSectionProps) => <AsyncContent loadingOverlay={props.loadingOverlay}>{layoutProps.children}</AsyncContent>;
                 const Router = createRouter({
-                    routes: [...groups.flatMap(group => group.routes), {path: "*", component: () => <Fallback path={props.fallbackPath} />}],
+                    routes: [
+                        {
+                            path: "/",
+                            component: Layout,
+                            children: [...groups.flatMap(group => group.routes), {path: "*", component: () => <Fallback path={props.fallbackPath} />}],
+                        },
+                    ],
                 });
                 return <Router />;
             }}
