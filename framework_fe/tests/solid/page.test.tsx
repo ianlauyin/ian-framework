@@ -7,8 +7,6 @@ import {page, PageContent} from "../../src/solid/page";
 
 let dispose: (() => void) | undefined;
 let navigate: ((path: string) => void) | undefined;
-let fallbackText: string | undefined;
-let overlayText: string | undefined;
 
 function Home() {
     return <p>home page</p>;
@@ -35,9 +33,7 @@ function Layout(props: RouteSectionProps) {
     return (
         <div>
             <p>chrome</p>
-            <PageContent fallback={fallbackText ? <p>{fallbackText}</p> : undefined} overlay={overlayText ? <p>{overlayText}</p> : undefined}>
-                {props.children}
-            </PageContent>
+            <PageContent loadingOverlay={<p>loading overlay</p>}>{props.children}</PageContent>
         </div>
     );
 }
@@ -79,15 +75,11 @@ afterEach(() => {
     dispose?.();
     dispose = undefined;
     navigate = undefined;
-    fallbackText = undefined;
-    overlayText = undefined;
     window.history.pushState({}, "", "/");
 });
 
 describe("page", () => {
-    it("shows the fallback for the outlet and keeps the chrome until the named page loads", async () => {
-        fallbackText = "loading page";
-        overlayText = "routing overlay";
+    it("shows the loading overlay for the outlet and keeps the chrome until the named page loads", async () => {
         const home = defer<typeof Home>();
         const root = mount(
             "/",
@@ -95,8 +87,7 @@ describe("page", () => {
             () => Promise.resolve(Account)
         );
         expect(root.textContent).toContain("chrome");
-        expect(root.textContent).toContain("loading page");
-        expect(root.textContent).not.toContain("routing overlay");
+        expect(root.textContent).toContain("loading overlay");
         expect(root.textContent).not.toContain("home page");
         expect(fadedOutlet(root)).toBeUndefined();
 
@@ -104,14 +95,12 @@ describe("page", () => {
         await settle();
         expect(root.textContent).toContain("chrome");
         expect(root.textContent).toContain("home page");
-        expect(root.textContent).not.toContain("loading page");
-        expect(root.textContent).not.toContain("routing overlay");
+        expect(root.textContent).not.toContain("loading overlay");
         expect(fadedOutlet(root)).toBeUndefined();
+        expect(root.querySelector("[aria-busy='false']")).toBeTruthy();
     });
 
-    it("keeps the current page, dims the outlet, and shows the overlay on a later navigation", async () => {
-        fallbackText = "loading page";
-        overlayText = "routing overlay";
+    it("keeps the current page, dims the outlet, and shows the loading overlay on a later navigation", async () => {
         const home = defer<typeof Home>();
         const account = defer<typeof Account>();
         const root = mount(
@@ -122,15 +111,14 @@ describe("page", () => {
         home.resolve(Home);
         await settle();
         expect(root.textContent).toContain("home page");
-        expect(root.textContent).not.toContain("loading page");
+        expect(root.textContent).not.toContain("loading overlay");
 
         navigate?.("/account");
         await settle();
         const faded = fadedOutlet(root);
         expect(root.textContent).toContain("chrome");
         expect(root.textContent).toContain("home page");
-        expect(root.textContent).toContain("routing overlay");
-        expect(root.textContent).not.toContain("loading page");
+        expect(root.textContent).toContain("loading overlay");
         expect(root.textContent).not.toContain("account page");
         expect(faded?.textContent).toContain("home page");
         expect(faded?.style.pointerEvents).toBe("none");
@@ -142,63 +130,13 @@ describe("page", () => {
         expect(root.textContent).toContain("chrome");
         expect(root.textContent).toContain("account page");
         expect(root.textContent).not.toContain("home page");
-        expect(root.textContent).not.toContain("routing overlay");
-        expect(root.textContent).not.toContain("loading page");
+        expect(root.textContent).not.toContain("loading overlay");
         expect(fadedOutlet(root)).toBeUndefined();
         expect(root.querySelector("[aria-busy='true']")).toBeNull();
-    });
-
-    it("keeps the current page without an overlay when overlay is omitted", async () => {
-        fallbackText = "loading page";
-        const home = defer<typeof Home>();
-        const account = defer<typeof Account>();
-        const root = mount(
-            "/",
-            () => home.promise,
-            () => account.promise
-        );
-        expect(root.textContent).toContain("chrome");
-        expect(root.textContent).toContain("loading page");
-        expect(root.textContent).not.toContain("home page");
-
-        home.resolve(Home);
-        await settle();
-        navigate?.("/account");
-        await settle();
-        expect(root.textContent).toContain("chrome");
-        expect(root.textContent).toContain("home page");
-        expect(root.textContent).not.toContain("loading page");
-        expect(root.textContent).not.toContain("account page");
-        expect(fadedOutlet(root)).toBeUndefined();
-        expect(root.querySelector("[aria-busy='true']")).toBeNull();
-
-        account.resolve(Account);
-        await settle();
-        expect(root.textContent).toContain("account page");
-        expect(root.textContent).not.toContain("home page");
-    });
-
-    it("uses the overlay as the first-load fallback when fallback is absent", async () => {
-        overlayText = "routing overlay";
-        const home = defer<typeof Home>();
-        const root = mount(
-            "/",
-            () => home.promise,
-            () => Promise.resolve(Account)
-        );
-        expect(root.textContent).toContain("chrome");
-        expect(root.textContent).toContain("routing overlay");
-        expect(root.textContent).not.toContain("home page");
-        expect(fadedOutlet(root)).toBeUndefined();
-
-        home.resolve(Home);
-        await settle();
-        expect(root.textContent).toContain("home page");
-        expect(root.textContent).not.toContain("routing overlay");
+        expect(root.querySelector("[aria-busy='false']")).toBeTruthy();
     });
 
     it("shows a ready outlet and keeps the chrome", async () => {
-        fallbackText = "loading page";
         const root = mount(
             "/account",
             () => Promise.resolve(Home),
@@ -207,7 +145,7 @@ describe("page", () => {
         await settle();
         expect(root.textContent).toContain("chrome");
         expect(root.textContent).toContain("account page");
-        expect(root.textContent).not.toContain("loading page");
+        expect(root.textContent).not.toContain("loading overlay");
         expect(fadedOutlet(root)).toBeUndefined();
     });
 
@@ -219,7 +157,7 @@ describe("page", () => {
                 {
                     path: "/",
                     component: () => (
-                        <PageContent fallback={<p>loading page</p>}>
+                        <PageContent loadingOverlay={<p>loading overlay</p>}>
                             <Center id="7" />
                         </PageContent>
                     ),
@@ -230,6 +168,6 @@ describe("page", () => {
         dispose = render(() => <Router />, root);
         await settle();
         expect(root.textContent).toContain("center 7");
-        expect(root.textContent).not.toContain("loading page");
+        expect(root.textContent).not.toContain("loading overlay");
     });
 });
