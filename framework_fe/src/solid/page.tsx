@@ -4,8 +4,7 @@ import {type Component, lazy, Loading as Suspense} from "solid-js";
 
 export interface PageContentProps {
     children?: JSX.Element;
-    fallback?: JSX.Element;
-    overlay?: JSX.Element;
+    loadingOverlay: JSX.Element;
 }
 
 export function page<T extends Component<any>>(load: () => Promise<T>): T {
@@ -14,9 +13,9 @@ export function page<T extends Component<any>>(load: () => Promise<T>): T {
 
 export function PageContent(props: PageContentProps): JSX.Element {
     const isRouting = useIsRouting();
-    const pending = () => !!props.overlay && isRouting();
+    const pending = () => isRouting();
     return (
-        <Suspense fallback={props.fallback ?? props.overlay}>
+        <Suspense fallback={props.loadingOverlay}>
             <div style={{position: "relative"}} aria-busy={pending() ? "true" : "false"}>
                 <div
                     style={{
@@ -36,7 +35,7 @@ export function PageContent(props: PageContentProps): JSX.Element {
                             "justify-content": "center",
                         }}
                     >
-                        {props.overlay}
+                        {props.loadingOverlay}
                     </div>
                 ) : null}
             </div>
