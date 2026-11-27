@@ -19,7 +19,7 @@ use crate::rule::ts::TsRule;
 
 const RULE: &str = "import-alias";
 
-const ALIASES: [&str; 4] = ["component", "util", "module", "i18n"];
+const ALIASES: [&str; 3] = ["component", "util", "i18n"];
 const RELATIVE_INSIDE: [&str; 1] = ["component"];
 
 pub(crate) const TS_RULE: TsRule = TsRule::source(check);

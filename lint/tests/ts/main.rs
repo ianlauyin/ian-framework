@@ -6,6 +6,7 @@ mod declaration_order;
 mod import_alias;
 mod import_order;
 mod interface_object_shape;
+mod module_import;
 mod module_shape;
 mod no_arrow_method;
 mod no_comments;

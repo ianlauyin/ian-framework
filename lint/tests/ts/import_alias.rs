@@ -13,7 +13,6 @@ fn an_alias_path_from_outside_the_folder_passes() {
     let source = "\
 import {Card} from \"component/Card\";
 import {format} from \"util/format\";
-import {accountModule} from \"module/account\";
 import {i18n} from \"i18n\";
 import {en} from \"i18n/en\";
 import {loginPage} from \"../context\";
@@ -45,12 +44,11 @@ fn a_relative_path_into_an_alias_folder_fails() {
     let source = "\
 import {Card} from \"../../../component/Card\";
 export {format} from \"../../../util/format\";
-export * from \"../../../module/account\";
 const i18n = import(\"../../../i18n\");
 ";
     let found = diagnostics("web/src/page/login/Main/index.tsx", source);
     let lines: Vec<_> = found.iter().map(|item| item.line).collect();
-    assert_eq!(lines, [1, 2, 3, 4]);
+    assert_eq!(lines, [1, 2, 3]);
     assert_eq!(found[0].rule, "import-alias");
     assert_eq!(
         found[0].problem,
@@ -73,4 +71,14 @@ fn an_alias_path_in_the_component_folder_fails() {
         "`component/Icon` is an alias path in `component/`."
     );
     assert_eq!(found[0].fix, "Use a relative path.");
+}
+
+#[test]
+fn a_path_into_the_module_folder_is_not_checked() {
+    let source = "\
+import {accountModule} from \"module/account\";
+export * from \"../../../module/account\";
+";
+    assert!(diagnostics("web/src/page/login/Main/index.tsx", source).is_empty());
+    assert!(diagnostics("web/src/index.tsx", "import \"./module/account\";\n").is_empty());
 }

@@ -9,6 +9,7 @@ pub mod declaration_order;
 pub mod import_alias;
 pub mod import_order;
 pub mod interface_object_shape;
+pub mod module_import;
 pub mod module_shape;
 pub mod no_arrow_method;
 pub mod no_comments;
