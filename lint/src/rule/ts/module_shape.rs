@@ -2,8 +2,6 @@
 // Move the type to `types.ts`.
 // The module has no exported class `{Module}Module` that extends `Module`.
 // Write the module as `export class {Module}Module extends Module<{Module}Store>`.
-// The last statement does not register the module `{module}`.
-// End the file with `registerModule("{module}", new {Module}Module());`.
 // The module does not import `Module` from `ian-framework-fe`.
 // Import `Module` from `ian-framework-fe`.
 // The module has no constant `initialStore`.
@@ -12,7 +10,7 @@
 // Give `initialStore` the store type from `./types`.
 // Why a lint rule: Each module has the same shape, and only a page gets the module, through `this.module`.
 
-use oxc_ast::ast::{Argument, Declaration, Expression, Statement};
+use oxc_ast::ast::{Declaration, Statement};
 use oxc_span::GetSpan;
 
 use crate::file::place::Place;
@@ -25,7 +23,6 @@ use crate::rule::ts::TsRule;
 const RULE: &str = "module-shape";
 
 const BASE: &str = "Module";
-const REGISTER: &str = "registerModule";
 const PACKAGE: &str = "ian-framework-fe";
 const INITIAL: &str = "initialStore";
 const TYPES: &str = "./types";
@@ -41,7 +38,6 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
         return Vec::new();
     };
     let class = format!("{}{BASE}", pascal_case(folder));
-    let name = camel_case(folder);
     let mut report = RuleReport::new(file.path, file.source, RULE);
     if !imports(program, PACKAGE)
         .iter()
@@ -90,17 +86,6 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
             ),
         );
     }
-    if !program
-        .body
-        .last()
-        .is_some_and(|statement| is_register(statement, &class, &name))
-    {
-        report.at_offset(
-            program.body.last().map_or(0, |last| last.span().start),
-            format!("The last statement does not register the module `{name}`."),
-            format!("End the file with `{REGISTER}(\"{name}\", new {class}());`."),
-        );
-    }
     report.finish()
 }
 
@@ -135,28 +120,6 @@ fn is_module_class(statement: &Statement<'_>, name: &str) -> bool {
     extends(class, BASE) && class.id.as_ref().is_some_and(|id| id.name.as_str() == name)
 }
 
-fn is_register(statement: &Statement<'_>, class: &str, name: &str) -> bool {
-    let Statement::ExpressionStatement(statement) = statement else {
-        return false;
-    };
-    let Expression::CallExpression(call) = &statement.expression else {
-        return false;
-    };
-    let Expression::Identifier(callee) = &call.callee else {
-        return false;
-    };
-    let [Argument::StringLiteral(key), Argument::NewExpression(new)] = call.arguments.as_slice()
-    else {
-        return false;
-    };
-    let Expression::Identifier(module) = &new.callee else {
-        return false;
-    };
-    callee.name.as_str() == REGISTER
-        && key.value.as_str() == Some(name)
-        && module.name.as_str() == class
-}
-
 fn pascal_case(name: &str) -> String {
     let mut out = String::new();
     for word in name.split(['-', '_']) {
@@ -168,13 +131,4 @@ fn pascal_case(name: &str) -> String {
         out.push_str(chars.as_str());
     }
     out
-}
-
-fn camel_case(name: &str) -> String {
-    let pascal = pascal_case(name);
-    let mut chars = pascal.chars();
-    let Some(first) = chars.next() else {
-        return pascal;
-    };
-    first.to_lowercase().chain(chars).collect()
 }

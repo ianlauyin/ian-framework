@@ -9,7 +9,7 @@ fn diagnostics(path: &str, source: &str) -> Vec<Diagnostic> {
 }
 
 const SOURCE: &str = "\
-import {Module, registerModule} from \"ian-framework-fe\";
+import {Module} from \"ian-framework-fe\";
 import type {UserSettingStore} from \"./types\";
 
 const initialStore: UserSettingStore = {name: null};
@@ -19,12 +19,10 @@ export class UserSettingModule extends Module<UserSettingStore> {
         super(initialStore);
     }
 }
-
-registerModule(\"userSetting\", new UserSettingModule());
 ";
 
 #[test]
-fn a_module_with_the_class_and_the_register_passes() {
+fn a_module_with_the_class_passes() {
     assert!(diagnostics("web/src/module/user-setting/index.ts", SOURCE).is_empty());
 }
 
@@ -59,7 +57,7 @@ fn a_type_in_the_index_of_a_module_fails() {
 }
 
 #[test]
-fn a_module_with_a_different_class_or_no_register_fails() {
+fn a_module_with_a_different_class_fails() {
     let source = "\
 import {Module} from \"ian-framework-fe\";
 import type {Store} from \"./types\";
@@ -67,11 +65,9 @@ import type {Store} from \"./types\";
 const initialStore: Store = {};
 
 export class Settings extends Module<Store> {}
-
-export const settings = new Settings();
 ";
     let found = diagnostics("web/src/module/user-setting/index.ts", source);
-    assert_eq!(found.len(), 2);
+    assert_eq!(found.len(), 1);
     assert_eq!(found[0].line, 1);
     assert_eq!(
         found[0].problem,
@@ -81,21 +77,12 @@ export const settings = new Settings();
         found[0].fix,
         "Write the module as `export class UserSettingModule extends Module<UserSettingStore>`."
     );
-    assert_eq!(found[1].line, 8);
-    assert_eq!(
-        found[1].problem,
-        "The last statement does not register the module `userSetting`."
-    );
-    assert_eq!(
-        found[1].fix,
-        "End the file with `registerModule(\"userSetting\", new UserSettingModule());`."
-    );
 }
 
 #[test]
 fn a_module_with_no_module_import_or_no_initial_store_fails() {
     let source = SOURCE
-        .replace("import {Module,", "import {Module as Base,")
+        .replace("import {Module}", "import {Module as Base}")
         .replace("const initialStore: UserSettingStore = {name: null};\n", "");
     let found = diagnostics("web/src/module/user-setting/index.ts", &source);
     let problems: Vec<_> = found.iter().map(|item| item.problem.as_str()).collect();
@@ -145,23 +132,7 @@ fn an_initial_store_that_is_a_function_passes() {
 }
 
 #[test]
-fn a_register_with_a_different_name_or_an_exported_instance_fails() {
-    for line in [
-        "registerModule(\"settings\", new UserSettingModule());",
-        "registerModule(\"userSetting\", new Other());",
-        "register(\"userSetting\", new UserSettingModule());",
-        "export const userSettingModule = new UserSettingModule();",
-    ] {
-        let source = SOURCE.replace(
-            "registerModule(\"userSetting\", new UserSettingModule());",
-            line,
-        );
-        let found = diagnostics("web/src/module/user-setting/index.ts", &source);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].line, 12);
-        assert_eq!(
-            found[0].problem,
-            "The last statement does not register the module `userSetting`."
-        );
-    }
+fn a_module_that_is_not_registered_passes() {
+    let source = format!("{SOURCE}\nexport const other = 1;\n");
+    assert!(diagnostics("web/src/module/user-setting/index.ts", &source).is_empty());
 }
