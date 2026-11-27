@@ -8,7 +8,7 @@ export abstract class Module<State extends object> {
         [this.state, this.setState] = createStore<State>(initialState);
     }
 
-    protected get store(): Store<State> {
+    get store(): Store<State> {
         return this.state;
     }
 }

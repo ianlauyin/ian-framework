@@ -1,7 +1,7 @@
-import {afterEach, describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 import {render} from "@solidjs/web";
 import {flush} from "solid-js";
-import {PageContext} from "../../src/solid/PageContext";
+import {PageContext, register} from "../../src/solid/PageContext";
 
 class TestPage extends PageContext<{name: string}> {
     constructor(name: string) {
@@ -9,7 +9,7 @@ class TestPage extends PageContext<{name: string}> {
     }
 
     get name() {
-        return this.store.name;
+        return this.state.name;
     }
 
     rename(name: string) {
@@ -20,8 +20,28 @@ class TestPage extends PageContext<{name: string}> {
 }
 
 function Name(props: {page: TestPage}) {
-    const page = props.page.use;
+    const page = props.page.action;
     return <p>name {page.name}</p>;
+}
+
+class LifecyclePage extends PageContext<{events: string[]}> {
+    readonly events: string[] = [];
+
+    constructor() {
+        super({events: []});
+    }
+
+    protected override async onEnter() {
+        this.events.push("enter");
+    }
+
+    protected override async onTick(second: number) {
+        this.events.push(`tick ${second}`);
+    }
+
+    protected override async onLeave() {
+        this.events.push("leave");
+    }
 }
 
 let dispose: (() => void) | undefined;
@@ -29,6 +49,7 @@ let dispose: (() => void) | undefined;
 afterEach(() => {
     dispose?.();
     dispose = undefined;
+    vi.useRealTimers();
 });
 
 describe("PageContext", () => {
@@ -70,5 +91,39 @@ describe("PageContext", () => {
         expect(() => {
             dispose = render(() => other.provide(() => <Name page={page} />), root);
         }).toThrow();
+    });
+
+    it("gives the page through register", () => {
+        const page = register(new TestPage("first"));
+        function RegisteredName() {
+            const action = page.action;
+            return (
+                <p>
+                    name {action.name} state {page.state.name}
+                </p>
+            );
+        }
+        const root = document.createElement("div");
+        dispose = render(() => page.provide(() => <RegisteredName />), root);
+        expect(root.textContent).toContain("name first state first");
+
+        expect(() => page.action).toThrow();
+    });
+
+    it("calls onEnter, onTick each second, and onLeave", () => {
+        vi.useFakeTimers();
+        const page = new LifecyclePage();
+        const root = document.createElement("div");
+        dispose = render(() => page.provide(() => <p />), root);
+        flush();
+        expect(page.events).toEqual(["enter"]);
+
+        vi.advanceTimersByTime(2000);
+        expect(page.events).toEqual(["enter", "tick 1", "tick 2"]);
+
+        dispose();
+        dispose = undefined;
+        vi.advanceTimersByTime(1000);
+        expect(page.events).toEqual(["enter", "tick 1", "tick 2", "leave"]);
     });
 });
