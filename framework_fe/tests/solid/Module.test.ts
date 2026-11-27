@@ -1,8 +1,10 @@
 import {describe, expect, it} from "vitest";
 import {flush} from "solid-js";
-import {Module} from "../../src/solid/Module";
+import {Module, PageContext, registerModule} from "../../src/index";
 
-class TestModule extends Module<{count: number}> {
+class CounterModule extends Module<{count: number}> {
+    readonly events: string[] = [];
+
     constructor() {
         super({count: 0});
     }
@@ -13,21 +15,56 @@ class TestModule extends Module<{count: number}> {
         });
     }
 
-    get count() {
-        return this.store.count;
+    override async onInit() {
+        this.events.push("init");
     }
 }
 
+declare module "../../src/index" {
+    interface ModuleMap {
+        counter: CounterModule;
+    }
+}
+
+class CounterPage extends PageContext<{}> {
+    protected readonly name = "counter";
+
+    constructor() {
+        super({});
+    }
+
+    get count() {
+        return this.module.counter.state.count;
+    }
+
+    add() {
+        this.module.counter.add();
+    }
+}
+
+const counter = new CounterModule();
+
 describe("Module", () => {
-    it("starts with the initial state", () => {
-        const module = new TestModule();
-        expect(module.count).toBe(0);
+    it("throws when the page reads a module that is not registered", () => {
+        const page = new CounterPage();
+        expect(() => page.count).toThrow();
     });
 
-    it("shows a write of the extended class in a read of the extended class", () => {
-        const module = new TestModule();
-        module.add();
+    it("calls onInit when the module is registered", () => {
+        registerModule("counter", counter);
+        expect(counter.events).toEqual(["init"]);
+    });
+
+    it("throws when a name is registered again", () => {
+        expect(() => registerModule("counter", new CounterModule())).toThrow();
+    });
+
+    it("gives the module to the page and shows a write", () => {
+        const page = new CounterPage();
+        expect(page.count).toBe(0);
+
+        page.add();
         flush();
-        expect(module.count).toBe(1);
+        expect(page.count).toBe(1);
     });
 });

@@ -1,7 +1,8 @@
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {render} from "@solidjs/web";
 import {flush} from "solid-js";
-import {PageContext, register} from "../../src/solid/PageContext";
+import {Logger} from "../../src/logger";
+import {PageContext, registerPage} from "../../src/solid/PageContext";
 
 class TestPage extends PageContext<{name: string}> {
     constructor(name: string) {
@@ -25,22 +26,38 @@ function Name(props: {page: TestPage}) {
 }
 
 class LifecyclePage extends PageContext<{events: string[]}> {
+    protected readonly name = "lifecycle";
     readonly events: string[] = [];
 
-    constructor() {
+    constructor(tickInterval = 1000) {
         super({events: []});
+        this.tickInterval = tickInterval;
     }
 
     protected override async onEnter() {
         this.events.push("enter");
     }
 
-    protected override async onTick(second: number) {
-        this.events.push(`tick ${second}`);
+    protected override async onTick() {
+        this.events.push("tick");
     }
 
     protected override async onLeave() {
         this.events.push("leave");
+    }
+}
+
+class DefaultTickPage extends PageContext<{}> {
+    protected readonly name = "default";
+    ticks = 0;
+
+    constructor() {
+        super({});
+    }
+
+    protected override async onTick() {
+        this.ticks++;
+        throw new Error("tick failed");
     }
 }
 
@@ -50,6 +67,7 @@ afterEach(() => {
     dispose?.();
     dispose = undefined;
     vi.useRealTimers();
+    vi.restoreAllMocks();
 });
 
 describe("PageContext", () => {
@@ -93,8 +111,8 @@ describe("PageContext", () => {
         }).toThrow();
     });
 
-    it("gives the page through register", () => {
-        const page = register(new TestPage("first"));
+    it("gives the page through registerPage", () => {
+        const page = registerPage(new TestPage("first"));
         function RegisteredName() {
             const action = page.action;
             return (
@@ -110,6 +128,16 @@ describe("PageContext", () => {
         expect(() => page.action).toThrow();
     });
 
+    it("calls onTick each tickInterval", () => {
+        vi.useFakeTimers();
+        const page = new LifecyclePage(500);
+        const root = document.createElement("div");
+        dispose = render(() => page.provide(() => <p />), root);
+        flush();
+        vi.advanceTimersByTime(1000);
+        expect(page.events).toEqual(["enter", "tick", "tick"]);
+    });
+
     it("calls onEnter, onTick each second, and onLeave", () => {
         vi.useFakeTimers();
         const page = new LifecyclePage();
@@ -119,11 +147,41 @@ describe("PageContext", () => {
         expect(page.events).toEqual(["enter"]);
 
         vi.advanceTimersByTime(2000);
-        expect(page.events).toEqual(["enter", "tick 1", "tick 2"]);
+        expect(page.events).toEqual(["enter", "tick", "tick"]);
 
         dispose();
         dispose = undefined;
         vi.advanceTimersByTime(1000);
-        expect(page.events).toEqual(["enter", "tick 1", "tick 2", "leave"]);
+        expect(page.events).toEqual(["enter", "tick", "tick", "leave"]);
+    });
+
+    it("logs each hook with the page name", () => {
+        vi.useFakeTimers();
+        const capture = vi.spyOn(Logger, "capture");
+        const page = new LifecyclePage();
+        const root = document.createElement("div");
+        dispose = render(() => page.provide(() => <p />), root);
+        flush();
+        vi.advanceTimersByTime(1000);
+        dispose();
+        dispose = undefined;
+
+        expect(capture.mock.calls.map(call => call[0])).toEqual(["lifecycle.onEnter", "lifecycle.onTick", "lifecycle.onLeave"]);
+    });
+
+    it("calls onTick each minute by default and catches a hook error after the log", async () => {
+        vi.useFakeTimers();
+        const page = new DefaultTickPage();
+        const root = document.createElement("div");
+        dispose = render(() => page.provide(() => <p />), root);
+        flush();
+
+        vi.advanceTimersByTime(59_999);
+        expect(page.ticks).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(page.ticks).toBe(1);
+
+        vi.useRealTimers();
+        await new Promise(resolve => setTimeout(resolve, 0));
     });
 });
