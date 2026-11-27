@@ -28,12 +28,16 @@ function defer<T>() {
     return {promise, resolve};
 }
 
+const loadingDelay = 40;
+
 function Layout(props: RouteSectionProps) {
     navigate = useNavigate();
     return (
         <div>
             <p>chrome</p>
-            <AsyncContent loadingOverlay={<p>loading overlay</p>}>{props.children}</AsyncContent>
+            <AsyncContent loadingOverlay={<p>loading overlay</p>} loadingDelay={loadingDelay}>
+                {props.children}
+            </AsyncContent>
         </div>
     );
 }
@@ -67,7 +71,11 @@ function chrome(root: HTMLElement): HTMLElement | undefined {
 }
 
 async function settle() {
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await wait(20);
+}
+
+async function wait(ms: number) {
+    await new Promise(resolve => setTimeout(resolve, ms));
     flush();
 }
 
@@ -91,6 +99,12 @@ describe("async", () => {
         expect(root.textContent).not.toContain("home page");
         expect(fadedOutlet(root)).toBeUndefined();
 
+        await wait(loadingDelay + 20);
+        expect(root.textContent).toContain("chrome");
+        expect(root.textContent).toContain("loading overlay");
+        expect(root.textContent).not.toContain("home page");
+        expect(fadedOutlet(root)).toBeUndefined();
+
         home.resolve(Home);
         await settle();
         expect(root.textContent).toContain("chrome");
@@ -100,7 +114,7 @@ describe("async", () => {
         expect(root.querySelector("[aria-busy='false']")).toBeTruthy();
     });
 
-    it("keeps the current page, dims the outlet, and shows the loading overlay on a later navigation", async () => {
+    it("keeps the current page and shows the dim overlay after the delay on a slow navigation", async () => {
         const home = defer<typeof Home>();
         const account = defer<typeof Account>();
         const root = mount(
@@ -115,6 +129,14 @@ describe("async", () => {
 
         navigate?.("/account");
         await settle();
+        expect(root.textContent).toContain("chrome");
+        expect(root.textContent).toContain("home page");
+        expect(root.textContent).not.toContain("loading overlay");
+        expect(root.textContent).not.toContain("account page");
+        expect(fadedOutlet(root)).toBeUndefined();
+        expect(root.querySelector("[aria-busy='true']")).toBeNull();
+
+        await wait(loadingDelay);
         const faded = fadedOutlet(root);
         expect(root.textContent).toContain("chrome");
         expect(root.textContent).toContain("home page");
@@ -123,6 +145,7 @@ describe("async", () => {
         expect(faded?.textContent).toContain("home page");
         expect(faded?.style.pointerEvents).toBe("none");
         expect(faded?.contains(chrome(root)!)).toBe(false);
+        expect(chrome(root)?.style.opacity).not.toBe("0.5");
         expect(faded?.parentElement?.getAttribute("aria-busy")).toBe("true");
 
         account.resolve(Account);
@@ -134,6 +157,30 @@ describe("async", () => {
         expect(fadedOutlet(root)).toBeUndefined();
         expect(root.querySelector("[aria-busy='true']")).toBeNull();
         expect(root.querySelector("[aria-busy='false']")).toBeTruthy();
+    });
+
+    it("does not show the overlay on a navigation that is already loaded", async () => {
+        const root = mount(
+            "/",
+            () => Promise.resolve(Home),
+            () => Promise.resolve(Account)
+        );
+        await settle();
+        expect(root.textContent).toContain("home page");
+
+        navigate?.("/account");
+        await settle();
+        expect(root.textContent).toContain("account page");
+        expect(root.textContent).not.toContain("loading overlay");
+        expect(fadedOutlet(root)).toBeUndefined();
+
+        await wait(loadingDelay + 20);
+        expect(root.textContent).toContain("chrome");
+        expect(root.textContent).toContain("account page");
+        expect(root.textContent).not.toContain("home page");
+        expect(root.textContent).not.toContain("loading overlay");
+        expect(fadedOutlet(root)).toBeUndefined();
+        expect(root.querySelector("[aria-busy='true']")).toBeNull();
     });
 
     it("shows a ready outlet and keeps the chrome", async () => {
