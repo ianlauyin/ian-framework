@@ -70,7 +70,34 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+class LoadingPage extends PageContext<{}> {
+    protected readonly name = "loading";
+    seen: boolean[] = [];
+
+    constructor() {
+        super({});
+    }
+
+    load(fail: boolean) {
+        return this.withLoading(async () => {
+            flush();
+            this.seen.push(this.loading);
+            if (fail) throw new Error("load failed");
+            return 1;
+        });
+    }
+}
+
 describe("PageContext", () => {
+    it("sets loading while the work runs and clears it after", async () => {
+        const page = new LoadingPage();
+        await expect(page.load(false)).resolves.toBe(1);
+        await expect(page.load(true)).rejects.toThrow("load failed");
+        flush();
+        expect(page.seen).toEqual([true, true]);
+        expect(page.loading).toBe(false);
+    });
+
     it("gives the page to the children and shows a write", () => {
         const page = new TestPage("first");
         const root = document.createElement("div");

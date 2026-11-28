@@ -1,12 +1,13 @@
 import type {JSX} from "@solidjs/web";
-import {type Context, createContext, createStore, onSettled, type Store, type StoreSetter, useContext} from "solid-js";
+import {type Accessor, type Context, createContext, createSignal, createStore, type Setter, onSettled, type Store, type StoreSetter, useContext} from "solid-js";
 import {Logger} from "../logger";
 import {type ModuleMap, moduleMap} from "./Module";
 
-export type PageAction<P> = Omit<P, "action" | "provide" | "state">;
+export type PageAction<P> = Omit<P, "action" | "provide" | "state" | "loading">;
 
 export interface Page<P extends PageContext<any>> {
     readonly state: P["state"];
+    readonly loading: boolean;
     readonly action: PageAction<P>;
     readonly provide: (children: () => JSX.Element) => JSX.Element;
 }
@@ -15,6 +16,9 @@ export function registerPage<P extends PageContext<any>>(page: P): Page<P> {
     return {
         state: page.state,
         provide: page.provide,
+        get loading() {
+            return page.loading;
+        },
         get action() {
             return page.action;
         },
@@ -26,10 +30,13 @@ export abstract class PageContext<State extends object> {
     protected tickInterval: number = 60_000;
     readonly state: Store<State>;
     protected readonly setState: StoreSetter<State>;
+    private readonly loadingSignal: Accessor<boolean>;
+    private readonly setLoadingSignal: Setter<boolean>;
     private readonly context: Context<this> = createContext<this>();
 
     constructor(initialState: State extends Function ? never : State) {
         [this.state, this.setState] = createStore<State>(initialState);
+        [this.loadingSignal, this.setLoadingSignal] = createSignal(false);
     }
 
     protected get modules(): ModuleMap {
@@ -41,6 +48,19 @@ export abstract class PageContext<State extends object> {
     protected async onTick(): Promise<void> {}
 
     protected async onLeave(): Promise<void> {}
+
+    protected async withLoading<T>(work: () => Promise<T>): Promise<T> {
+        this.setLoadingSignal(true);
+        try {
+            return await work();
+        } finally {
+            this.setLoadingSignal(false);
+        }
+    }
+
+    get loading(): boolean {
+        return this.loadingSignal();
+    }
 
     get action(): PageAction<this> {
         return useContext(this.context);
