@@ -10,6 +10,7 @@ fn srcs() -> Vec<PathBuf> {
 #[test]
 fn a_module_folder_with_the_two_files_passes() {
     let files = FileSet::from_paths([
+        PathBuf::from("web/src/module/index.ts"),
         PathBuf::from("web/src/module/account/index.ts"),
         PathBuf::from("web/src/module/account/types.ts"),
     ]);
@@ -17,16 +18,30 @@ fn a_module_folder_with_the_two_files_passes() {
 }
 
 #[test]
+fn a_module_folder_with_the_index_passes() {
+    let files = FileSet::from_paths([PathBuf::from("web/src/module/index.ts")]);
+    assert!(check(Path::new("web/src/module"), &files, &srcs()).is_empty());
+}
+
+#[test]
+fn a_module_folder_without_the_index_fails() {
+    let files = FileSet::from_paths([PathBuf::from("web/src/module/account/index.ts")]);
+    let found = check(Path::new("web/src/module"), &files, &srcs());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].path, PathBuf::from("web/src/module"));
+    assert_eq!(found[0].rule, "module-shape");
+    assert_eq!(found[0].problem, "The `module` folder has no `index.ts`.");
+    assert_eq!(found[0].fix, "Add `index.ts` for the module registration.");
+}
+
+#[test]
 fn a_folder_that_is_not_a_module_folder_passes() {
     let files = FileSet::from_paths([
+        PathBuf::from("web/src/module/index.ts"),
         PathBuf::from("web/src/module/account/part/helper.ts"),
         PathBuf::from("web/src/page/login/context.ts"),
     ]);
-    for path in [
-        "web/src/module",
-        "web/src/module/account/part",
-        "web/src/page/login",
-    ] {
+    for path in ["web/src/module/account/part", "web/src/page/login"] {
         assert!(check(Path::new(path), &files, &srcs()).is_empty());
     }
 }
