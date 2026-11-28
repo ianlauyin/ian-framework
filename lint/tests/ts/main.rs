@@ -16,6 +16,7 @@ mod no_default_export;
 mod no_restricted_imports;
 mod no_snake_case_field;
 mod page_context;
+mod page_import;
 mod private_method_order;
 pub(crate) mod source;
 mod test_path;

@@ -82,6 +82,7 @@ const PROJECT: Rules = Rules {
         ts::module_shape::TS_RULE,
         ts::module_registration::TS_RULE,
         ts::module_import::TS_RULE,
+        ts::page_import::TS_RULE,
         ts::component_folder::TS_RULE,
         ts::ajax_name::TS_RULE,
         ts::ajax_no_extends::TS_RULE,
