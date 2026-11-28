@@ -3,10 +3,16 @@ import {type Accessor, type Context, createContext, createSignal, createStore, t
 import {Logger} from "../logger";
 import {type ModuleMap, moduleMap} from "./Module";
 
-export type PageAction<P> = Omit<P, "action" | "provide" | "state" | "loading">;
+type Fn = (...args: any[]) => any;
+type Own<P> = Exclude<keyof P, "action" | "data" | "provide" | "state" | "loading">;
+
+export type PageAction<P> = {[K in Own<P> as P[K] extends Fn ? K : never]: P[K]};
+
+export type PageData<P> = {[K in Own<P> as P[K] extends Fn ? never : K]: P[K]};
 
 export interface Page<P extends PageContext<any>> {
     readonly state: P["state"];
+    readonly data: PageData<P>;
     readonly loading: boolean;
     readonly action: PageAction<P>;
     readonly provide: (children: () => JSX.Element) => JSX.Element;
@@ -15,6 +21,7 @@ export interface Page<P extends PageContext<any>> {
 export function registerPage<P extends PageContext<any>>(page: P): Page<P> {
     return {
         state: page.state,
+        data: page as PageData<P>,
         provide: page.provide,
         get loading() {
             return page.loading;

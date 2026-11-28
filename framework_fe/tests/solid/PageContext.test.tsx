@@ -1,8 +1,8 @@
-import {afterEach, describe, expect, it, vi} from "vitest";
+import {afterEach, describe, expect, expectTypeOf, it, vi} from "vitest";
 import {render} from "@solidjs/web";
 import {flush} from "solid-js";
 import {Logger} from "../../src/logger";
-import {PageContext, registerPage} from "../../src/solid/PageContext";
+import {PageContext, type PageAction, type PageData, registerPage} from "../../src/solid/PageContext";
 
 class TestPage extends PageContext<{name: string}> {
     constructor(name: string) {
@@ -11,6 +11,10 @@ class TestPage extends PageContext<{name: string}> {
 
     get name() {
         return this.state.name;
+    }
+
+    label() {
+        return `name ${this.state.name}`;
     }
 
     rename(name: string) {
@@ -22,7 +26,7 @@ class TestPage extends PageContext<{name: string}> {
 
 function Name(props: {page: TestPage}) {
     const page = props.page.action;
-    return <p>name {page.name}</p>;
+    return <p>{page.label()}</p>;
 }
 
 class LifecyclePage extends PageContext<{events: string[]}> {
@@ -144,15 +148,25 @@ describe("PageContext", () => {
             const action = page.action;
             return (
                 <p>
-                    name {action.name} state {page.state.name}
+                    {action.label()} data {page.data.name} state {page.state.name}
                 </p>
             );
         }
         const root = document.createElement("div");
         dispose = render(() => page.provide(() => <RegisteredName />), root);
-        expect(root.textContent).toContain("name first state first");
+        expect(root.textContent).toContain("name first data first state first");
 
         expect(() => page.action).toThrow();
+    });
+
+    it("gives data outside the page", () => {
+        const page = registerPage(new TestPage("first"));
+        expect(page.data.name).toBe("first");
+    });
+
+    it("puts each method in action and each getter in data", () => {
+        expectTypeOf<PageAction<TestPage>>().toEqualTypeOf<{label: () => string; rename: (name: string) => void}>();
+        expectTypeOf<PageData<TestPage>>().toEqualTypeOf<{name: string}>();
     });
 
     it("calls onTick each tickInterval", () => {
