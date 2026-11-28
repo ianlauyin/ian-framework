@@ -23,8 +23,10 @@ fn load() {
 ";
 
 #[test]
-fn env_and_secret_in_config_rs_pass() {
-    assert!(with_source(Path::new("api/src/config.rs"), SOURCE, &srcs(), check).is_empty());
+fn env_and_secret_in_config_rs_and_log_config_rs_pass() {
+    for path in ["api/src/config.rs", "api/src/log_config.rs"] {
+        assert!(with_source(Path::new(path), SOURCE, &srcs(), check).is_empty());
+    }
 }
 
 #[test]
@@ -58,6 +60,7 @@ fn env_and_secret_outside_config_rs_fail() {
         "api/src/app.rs",
         "api/src/config/mod.rs",
         "api/src/db/config.rs",
+        "api/src/db/log_config.rs",
     ] {
         let found = with_source(Path::new(path), SOURCE, &srcs(), check);
         let lines: Vec<_> = found.iter().map(|item| item.line).collect();

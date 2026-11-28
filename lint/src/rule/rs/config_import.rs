@@ -20,7 +20,7 @@ const SECRETS: &[&str] = &["secret_manager", "SecretManager"];
 
 pub fn check(file: &RsFile) -> Vec<Diagnostic> {
     let place = Place::new(file.path, file.srcs);
-    if place.is_file("config.rs") || place.in_folder("tests") {
+    if place.is_file("config.rs") || place.is_file("log_config.rs") || place.in_folder("tests") {
         return Vec::new();
     }
     let Some(ast) = file.ast else {
