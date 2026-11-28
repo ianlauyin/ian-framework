@@ -18,6 +18,7 @@ pub mod no_console;
 pub mod no_default_export;
 pub mod no_restricted_imports;
 pub mod no_snake_case_field;
+pub mod override_method_order;
 pub mod page_context;
 pub mod page_import;
 pub mod private_method_order;

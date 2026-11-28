@@ -30,6 +30,7 @@ const FRAMEWORK: Rules = Rules {
         ts::interface_object_shape::TS_RULE,
         ts::no_console::TS_RULE,
         ts::private_method_order::TS_RULE,
+        ts::override_method_order::TS_RULE,
         ts::no_snake_case_field::TS_RULE,
     ],
     rs: &[
@@ -89,6 +90,7 @@ const PROJECT: Rules = Rules {
         ts::capture_action_name::TS_RULE,
         ts::page_context::TS_RULE,
         ts::private_method_order::TS_RULE,
+        ts::override_method_order::TS_RULE,
         ts::no_snake_case_field::TS_RULE,
     ],
     rs: &[

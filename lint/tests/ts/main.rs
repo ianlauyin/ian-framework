@@ -15,6 +15,7 @@ mod no_console;
 mod no_default_export;
 mod no_restricted_imports;
 mod no_snake_case_field;
+mod override_method_order;
 mod page_context;
 mod page_import;
 mod private_method_order;
