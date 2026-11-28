@@ -32,7 +32,7 @@ export abstract class PageContext<State extends object> {
         [this.state, this.setState] = createStore<State>(initialState);
     }
 
-    protected get module(): ModuleMap {
+    protected get modules(): ModuleMap {
         return moduleMap();
     }
 

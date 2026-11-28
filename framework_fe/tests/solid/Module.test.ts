@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest";
 import {flush} from "solid-js";
 import {Module, PageContext, registerModule} from "../../src/index";
 
-class CounterModule extends Module<{count: number}> {
+class CounterModule extends Module<{count: number}, "counter"> {
     readonly events: string[] = [];
 
     constructor() {
@@ -18,12 +18,38 @@ class CounterModule extends Module<{count: number}> {
     override async onInit() {
         this.events.push("init");
     }
+
+    readsItself() {
+        const modules = this.modules;
+        const readsItself: "counter" extends keyof typeof modules ? true : false = false;
+        return readsItself;
+    }
+}
+
+class NamedReaderModule extends Module<{}, "counter"> {
+    constructor() {
+        super({});
+    }
+
+    get count() {
+        return 0;
+    }
+}
+
+class ReaderModule extends Module<{}, "toString"> {
+    constructor() {
+        super({});
+    }
+
+    get count() {
+        return this.modules.counter.state.count;
+    }
 }
 
 declare module "../../src/index" {
     interface ModuleMap {
         counter: CounterModule;
-        toString: CounterModule;
+        toString: ReaderModule;
     }
 }
 
@@ -35,11 +61,11 @@ class CounterPage extends PageContext<{}> {
     }
 
     get count() {
-        return this.module.counter.state.count;
+        return this.modules.counter.state.count;
     }
 
     add() {
-        this.module.counter.add();
+        this.modules.counter.add();
     }
 }
 
@@ -60,8 +86,21 @@ describe("Module", () => {
         expect(() => registerModule("counter", new CounterModule())).toThrow();
     });
 
+    it("does not give a module to itself", () => {
+        expect(counter.readsItself()).toBe(false);
+    });
+
+    it("does not take a module under the name of a different module", () => {
+        const takes: NamedReaderModule extends Parameters<typeof registerModule<"toString">>[1] ? true : false = false;
+        expect(takes).toBe(false);
+    });
+
     it("registers a module whose name is an object prototype property", () => {
-        expect(() => registerModule("toString", new CounterModule())).not.toThrow();
+        expect(() => registerModule("toString", new ReaderModule())).not.toThrow();
+    });
+
+    it("gives the module to a different module", () => {
+        expect(new ReaderModule().count).toBe(0);
     });
 
     it("gives the module to the page and shows a write", () => {

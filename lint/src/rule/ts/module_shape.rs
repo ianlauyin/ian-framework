@@ -10,7 +10,7 @@
 // Give `initialStore` the store type from `./types`.
 // The `index.ts` of a module has code that is not `initialStore` or the module class.
 // Keep only `initialStore` and the module class in the file.
-// Why a lint rule: Each module has the same shape, and only a page gets the module, through `this.module`.
+// Why a lint rule: Each module has the same shape, and only a page or a module gets the module, through `this.modules`.
 
 use oxc_ast::ast::{
     BindingPattern, Declaration, Statement, VariableDeclaration, VariableDeclarationKind,

@@ -1,5 +1,5 @@
 // `{specifier}` imports a module outside `index.tsx` and `module/index.ts`.
-// Use the module through `this.module` in a page context. Only `index.tsx` in the src folder and `index.ts` in the module folder import a module.
+// Use the module through `this.modules` in a page context or a module. Only `index.tsx` in the src folder and `index.ts` in the module folder import a module.
 // Why a lint rule: Only a page reaches a module, so a component cannot call a module directly.
 
 use oxc_ast::ast::{
@@ -105,7 +105,7 @@ impl Imports<'_, '_> {
             literal.span.start,
             format!("`{text}` imports a module outside `{ENTRY}` and `{MODULE_ENTRY}`."),
             format!(
-                "Use the module through `this.module` in a page context. Only `{ENTRY}` in the src folder and `{MODULE_ENTRY}` import a module."
+                "Use the module through `this.modules` in a page context or a module. Only `{ENTRY}` in the src folder and `{MODULE_ENTRY}` import a module."
             ),
         );
     }

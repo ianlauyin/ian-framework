@@ -76,7 +76,7 @@ const lazy = import(\"module/account\");
     );
     assert_eq!(
         found[0].fix,
-        "Use the module through `this.module` in a page context. Only `index.tsx` in the src folder and `module/index.ts` import a module."
+        "Use the module through `this.modules` in a page context or a module. Only `index.tsx` in the src folder and `module/index.ts` import a module."
     );
 }
 
