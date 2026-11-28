@@ -35,6 +35,25 @@ fn a_module_folder_without_the_index_fails() {
 }
 
 #[test]
+fn a_typescript_file_directly_in_the_module_folder_fails() {
+    let files = FileSet::from_paths([
+        PathBuf::from("web/src/module/index.ts"),
+        PathBuf::from("web/src/module/account.ts"),
+    ]);
+    let found = check(Path::new("web/src/module"), &files, &srcs());
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].path, PathBuf::from("web/src/module/account.ts"));
+    assert_eq!(
+        found[0].problem,
+        "The file `account.ts` is directly in the `module` folder."
+    );
+    assert_eq!(
+        found[0].fix,
+        "Move the file into a module folder, or remove it."
+    );
+}
+
+#[test]
 fn a_folder_that_is_not_a_module_folder_passes() {
     let files = FileSet::from_paths([
         PathBuf::from("web/src/module/index.ts"),
