@@ -3,9 +3,9 @@
 // The page context has no exported class that extends `PageContext`.
 // Write the page context as an exported class that extends `PageContext`.
 // The page context has no constant `initialState`.
-// Declare `const initialState` with the store type from `./types`.
-// The type of `initialState` does not come from `./types`.
-// Give `initialState` the store type from `./types`.
+// Declare `const initialState` with the store type from `./type`.
+// The type of `initialState` does not come from `./type`.
+// Give `initialState` the store type from `./type`.
 // Why a lint rule: Each page context has the same shape, and the store type of a page is in one file.
 
 use oxc_ast::ast::{Class, Declaration, Statement, TSType};
@@ -22,7 +22,7 @@ const RULE: &str = "page-context";
 const BASE: &str = "PageContext";
 const PACKAGE: &str = "ian-framework-fe";
 const INITIAL: &str = "initialState";
-const TYPES: &str = "./types";
+const TYPES: &str = "./type";
 
 pub(crate) const TS_RULE: TsRule = TsRule::source(check);
 

@@ -1,13 +1,13 @@
 // The type `{name}` is in the `index.ts` of a module.
-// Move the type to `types.ts`.
+// Move the type to `type.ts`.
 // The module has no exported class `{Module}Module` that extends `Module`.
 // Write the module as `export class {Module}Module extends Module<{Module}Store>`.
 // The module does not import `Module` from `ian-framework-fe`.
 // Import `Module` from `ian-framework-fe`.
 // The module has no constant `initialStore`.
-// Declare `const initialStore` with the store type from `./types`.
-// The type of `initialStore` does not come from `./types`.
-// Give `initialStore` the store type from `./types`.
+// Declare `const initialStore` with the store type from `./type`.
+// The type of `initialStore` does not come from `./type`.
+// Give `initialStore` the store type from `./type`.
 // The `index.ts` of a module has code that is not `initialStore` or the module class.
 // Keep only `initialStore` and the module class in the file.
 // Why a lint rule: Each module has the same shape, and only a page or a module gets the module, through `this.modules`.
@@ -29,7 +29,7 @@ const RULE: &str = "module-shape";
 const BASE: &str = "Module";
 const PACKAGE: &str = "ian-framework-fe";
 const INITIAL: &str = "initialStore";
-const TYPES: &str = "./types";
+const TYPES: &str = "./type";
 
 pub(crate) const TS_RULE: TsRule = TsRule::source(check);
 
@@ -81,7 +81,7 @@ pub fn check(file: &TsFile) -> Vec<Diagnostic> {
             report.at_offset(
                 statement.span().start,
                 format!("The type `{name}` is in the `index.ts` of a module."),
-                "Move the type to `types.ts`.",
+                "Move the type to `type.ts`.",
             );
             continue;
         }

@@ -12,7 +12,7 @@ fn a_module_folder_with_the_two_files_passes() {
     let files = FileSet::from_paths([
         PathBuf::from("web/src/module/index.ts"),
         PathBuf::from("web/src/module/account/index.ts"),
-        PathBuf::from("web/src/module/account/types.ts"),
+        PathBuf::from("web/src/module/account/type.ts"),
     ]);
     assert!(check(Path::new("web/src/module/account"), &files, &srcs()).is_empty());
 }
@@ -74,13 +74,13 @@ fn a_module_folder_without_a_file_fails() {
         problems,
         [
             "The module folder has no `index.ts`.",
-            "The module folder has no `types.ts`.",
+            "The module folder has no `type.ts`.",
         ]
     );
     assert_eq!(found[0].path, PathBuf::from("web/src/module/account"));
     assert_eq!(found[0].rule, "module-shape");
     assert_eq!(
         found[0].fix,
-        "Add `index.ts` for the code of the module and `types.ts` for its types."
+        "Add `index.ts` for the code of the module and `type.ts` for its types."
     );
 }

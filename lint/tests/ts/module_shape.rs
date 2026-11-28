@@ -10,7 +10,7 @@ fn diagnostics(path: &str, source: &str) -> Vec<Diagnostic> {
 
 const SOURCE: &str = "\
 import {Module} from \"ian-framework-fe\";
-import type {UserSettingStore} from \"./types\";
+import type {UserSettingStore} from \"./type\";
 
 const initialStore: UserSettingStore = {name: null};
 
@@ -30,7 +30,7 @@ fn a_module_with_the_class_passes() {
 fn a_file_that_is_not_the_index_of_a_module_passes() {
     let source = "export interface UserSettingStore {}\n";
     for path in [
-        "web/src/module/user-setting/types.ts",
+        "web/src/module/user-setting/type.ts",
         "web/src/module/index.ts",
         "web/src/util/index.ts",
     ] {
@@ -52,7 +52,7 @@ fn a_type_in_the_index_of_a_module_fails() {
         found[0].problem,
         "The type `Local` is in the `index.ts` of a module."
     );
-    assert_eq!(found[0].fix, "Move the type to `types.ts`.");
+    assert_eq!(found[0].fix, "Move the type to `type.ts`.");
     assert_eq!(found[1].line, 5);
 }
 
@@ -60,7 +60,7 @@ fn a_type_in_the_index_of_a_module_fails() {
 fn a_module_with_a_different_class_fails() {
     let source = "\
 import {Module} from \"ian-framework-fe\";
-import type {Store} from \"./types\";
+import type {Store} from \"./type\";
 
 const initialStore: Store = {};
 
@@ -96,7 +96,7 @@ fn a_module_with_no_module_import_or_no_initial_store_fails() {
     assert_eq!(found[0].fix, "Import `Module` from `ian-framework-fe`.");
     assert_eq!(
         found[1].fix,
-        "Declare `const initialStore` with the store type from `./types`."
+        "Declare `const initialStore` with the store type from `./type`."
     );
 }
 
@@ -113,11 +113,11 @@ fn an_initial_store_with_a_type_that_is_not_from_types_fails() {
         assert_eq!(found[0].line, 4);
         assert_eq!(
             found[0].problem,
-            "The type of `initialStore` does not come from `./types`."
+            "The type of `initialStore` does not come from `./type`."
         );
         assert_eq!(
             found[0].fix,
-            "Give `initialStore` the store type from `./types`."
+            "Give `initialStore` the store type from `./type`."
         );
     }
 }

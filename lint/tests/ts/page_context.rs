@@ -14,7 +14,7 @@ fn problems(found: &[Diagnostic]) -> Vec<&str> {
 
 const SOURCE: &str = "\
 import {Logger, PageContext} from \"ian-framework-fe\";
-import type {LoginPageStore} from \"./types\";
+import type {LoginPageStore} from \"./type\";
 
 const initialState = (): LoginPageStore => ({email: \"\"});
 
@@ -41,7 +41,7 @@ fn a_page_context_with_the_class_and_the_initial_state_passes() {
 fn a_file_that_is_not_a_page_context_passes() {
     let source = "export const value = 1;\n";
     for path in [
-        "web/src/page/login/types.ts",
+        "web/src/page/login/type.ts",
         "web/src/page/context.ts",
         "web/src/page/layout/home/context.ts",
         "web/src/module/login/context.ts",
@@ -77,7 +77,7 @@ class LoginPage extends PageContext<object> {}
     );
     assert_eq!(
         found[2].fix,
-        "Declare `const initialState` with the store type from `./types`."
+        "Declare `const initialState` with the store type from `./type`."
     );
 }
 
@@ -95,12 +95,12 @@ fn an_initial_state_with_a_type_that_is_not_from_types_fails() {
         let found = diagnostics("web/src/page/login/context.ts", &source);
         assert_eq!(
             problems(&found),
-            ["The type of `initialState` does not come from `./types`."]
+            ["The type of `initialState` does not come from `./type`."]
         );
         assert_eq!(found[0].line, 4);
         assert_eq!(
             found[0].fix,
-            "Give `initialState` the store type from `./types`."
+            "Give `initialState` the store type from `./type`."
         );
     }
 }
@@ -123,7 +123,7 @@ export class LayoutPage extends PageContext<object> {
 fn a_page_context_with_a_store_and_no_initial_state_fails() {
     let source = "\
 import {PageContext} from \"ian-framework-fe\";
-import type {LoginPageStore} from \"./types\";
+import type {LoginPageStore} from \"./type\";
 
 export class LoginPage extends PageContext<LoginPageStore> {}
 ";

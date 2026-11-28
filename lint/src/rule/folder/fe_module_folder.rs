@@ -1,10 +1,10 @@
 // The module folder has no `{name}`.
-// Add `index.ts` for the code of the module and `types.ts` for its types.
+// Add `index.ts` for the code of the module and `type.ts` for its types.
 // The `module` folder has no `index.ts`.
 // Add `index.ts` for the module registration.
 // The file `{name}` is directly in the `module` folder.
 // Move the file into a module folder, or remove it.
-// Why a lint rule: Each module is a folder, so a file imports the module by the folder name and its types from `types.ts`.
+// Why a lint rule: Each module is a folder, so a file imports the module by the folder name and its types from `type.ts`.
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ use crate::rule::folder::FolderRule;
 
 const RULE: &str = "module-shape";
 
-const FILES: [&str; 2] = ["index.ts", "types.ts"];
+const FILES: [&str; 2] = ["index.ts", "type.ts"];
 
 pub(crate) const FOLDER_RULE: FolderRule = FolderRule::new(Side::Fe, check);
 
@@ -49,7 +49,7 @@ pub fn check(path: &Path, files: &FileSet, srcs: &[PathBuf]) -> Vec<Diagnostic> 
                 1,
                 RULE,
                 format!("The module folder has no `{name}`."),
-                "Add `index.ts` for the code of the module and `types.ts` for its types.",
+                "Add `index.ts` for the code of the module and `type.ts` for its types.",
             )
         })
         .collect()
