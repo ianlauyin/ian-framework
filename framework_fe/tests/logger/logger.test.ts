@@ -422,6 +422,27 @@ describe("Logger", () => {
             expect(events[0].extra).toEqual({count: 7});
         });
 
+        it("takes a sync work and records its output or its thrown error", async () => {
+            const Logger = await loadLogger();
+            Logger.init({maskPatterns: []});
+            expect(
+                await Logger.capture("sum", extra => {
+                    extra.total = 3;
+                    return 3;
+                })
+            ).toBe(3);
+            await expect(
+                Logger.capture("parse", () => {
+                    throw new Error("bad input");
+                })
+            ).rejects.toThrow("bad input");
+            hidePage();
+            const events = sentEvents(0);
+            expect(events[0]).toMatchObject({action: "sum", level: "info", errorMessage: null});
+            expect(events[0].extra).toEqual({total: 3});
+            expect(events[1]).toMatchObject({action: "parse", level: "error", errorMessage: "bad input"});
+        });
+
         it("records an error event and rethrows when the work rejects", async () => {
             const Logger = await loadLogger();
             Logger.init({maskPatterns: []});

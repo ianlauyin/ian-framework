@@ -57,7 +57,7 @@ export class Logger {
         Logger.record({action, level: "error", error, extra});
     }
 
-    public static async capture<T>(actionName: string, work: (extra: LogFields) => Promise<T>): Promise<T> {
+    public static async capture<T>(actionName: string, work: (extra: LogFields) => T): Promise<Awaited<T>> {
         const start = performance.now();
         const extra: LogFields = {};
         const latencyMs = () => Math.round(performance.now() - start);
