@@ -23,6 +23,7 @@ class CounterModule extends Module<{count: number}> {
 declare module "../../src/index" {
     interface ModuleMap {
         counter: CounterModule;
+        toString: CounterModule;
     }
 }
 
@@ -57,6 +58,10 @@ describe("Module", () => {
 
     it("throws when a name is registered again", () => {
         expect(() => registerModule("counter", new CounterModule())).toThrow();
+    });
+
+    it("registers a module whose name is an object prototype property", () => {
+        expect(() => registerModule("toString", new CounterModule())).not.toThrow();
     });
 
     it("gives the module to the page and shows a write", () => {

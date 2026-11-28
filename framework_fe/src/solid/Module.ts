@@ -5,7 +5,7 @@ const modules: Partial<ModuleMap> = {};
 export interface ModuleMap {}
 
 export function registerModule<K extends keyof ModuleMap>(name: K, module: ModuleMap[K]): void {
-    if (modules[name] !== undefined) throw new Error(`module ${String(name)} is already registered`);
+    if (Object.hasOwn(modules, name)) throw new Error(`module ${String(name)} is already registered`);
     modules[name] = module;
     void (module as Module<object>).onInit();
 }
